@@ -14,12 +14,17 @@
 - [x] Progressive (typing-style) reveal of the pool reply
 - [x] Multi-turn context, agent naming
 
-## P1 — next
-- [ ] Confirm the transcript-page shape renders in the live UI; iterate `entries[]` if needed.
-- [ ] Tool-call + widget entry kinds; approval pipeline (respondToWidget, resolveLocalToolPermission, resolveAutoReviewApproval, submitSecret).
-- [ ] Attachments/images (schema has `images[]`); agent avatars; per-agent notifications; trays content.
+## P1 — in progress
+- [x] Approval pipeline plumbing: `resolveLocalToolPermission`, `resolveAutoReviewApproval`,
+  `respondToWidget`, `submitSecret`, `dismissWidget` (state machine HTTP-verified).
+- [x] Tool-call + `send-message` (permission card) transcript entry kinds, with a SAFE demo tool
+  registry (`echo`/`time`/`reverse`/`upper`, no system access) triggered by `/tool <name> <arg>`.
+- [ ] **Live-verify** the card render in the app UI; iterate the entry shape if the coordinator
+  doesn't map `kind:"tool-call"` / `kind:"send-message"` as expected.
+- [ ] Attachments/images (pool supports `image`; schema has `images[]`); agent avatars; per-agent notifications; trays content.
 - [ ] Real token streaming (needs a streaming pool endpoint; current reveal is client-side).
 - [ ] Settings write-back (`setHostSettings` currently discards).
+- [ ] A real tool-emitting agent loop (so tool-calls fire without the `/tool` trigger).
 
 ## Later — the real box (workspace / VNC / exec)
 The workspace pane is a VNC view of a Linux desktop. Reuse the OpenClaw VPS recipe:

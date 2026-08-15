@@ -21,6 +21,11 @@ import {
   voteFeedback,
   promptAcceptanceStatus,
   getConversationOutline,
+  resolveLocalToolPermission,
+  resolveAutoReviewApproval,
+  respondToWidget,
+  submitSecret,
+  dismissWidget,
   type SendArgs,
 } from "./chat.js";
 
@@ -80,6 +85,11 @@ const methods: Record<string, (args: any) => unknown> = {
   reactToMessage: (a) => reactToMessage(a),
   voteFeedback: () => voteFeedback(),
   getConversationOutline: (a) => getConversationOutline(a),
+  resolveLocalToolPermission: (a) => resolveLocalToolPermission(a),
+  resolveAutoReviewApproval: (a) => resolveAutoReviewApproval(a),
+  respondToWidget: (a) => respondToWidget(a),
+  submitSecret: (a) => submitSecret(a),
+  dismissWidget: (a) => dismissWidget(a),
   getAgentTranscriptTail: (a) => transcriptTail(a?.agentId),
   openAgentTail: (a) => transcriptTail(a?.agentId),
   getAgentTranscript: (a) => transcriptTail(a?.agentId),
