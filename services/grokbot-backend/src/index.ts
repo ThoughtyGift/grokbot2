@@ -23,6 +23,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   const url = req.url ?? "";
   const body = await readBody(req);
   const ct = String(req.headers["content-type"] ?? "");
+  if (process.env.GROKBOT2_LOG) console.log(`${req.method} ${url} (${ct.split(";")[0]})`);
 
   // ── auth ──
   if (url.startsWith("/oauth/token") || url.includes("/auth/") || url.endsWith("/token")) {

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(pnpm build)",
+      "Bash(pnpm backend)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm --filter*)",
+      "Bash(node --check:*)",
+      "Bash(npx tsx:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ]
+  }
+}

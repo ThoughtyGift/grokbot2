@@ -1,0 +1,9 @@
+{
+  "name": "@grokbot2/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Launch config for the stock Grok Bot desktop app pointed at the local backend (no build step).",
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File ../../infra/scripts/run.ps1"
+  }
+}
