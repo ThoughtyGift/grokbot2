@@ -6,10 +6,20 @@
 - [x] Box gateway + SSE (main window shows)
 - [x] Chat bridge → Claude pool (`admin.halcion.vn/v1/claude`)
 
-## Next — chat polish
+## P0 — core chat + roster (done)
+- [x] Roster mutations: updateAgent (rename), deleteAgents, duplicateAgent, setAgentUnread, setAgentHiddenFromSidebar
+- [x] interruptAgentRun — abortable in-flight pool call
+- [x] reactToMessage / voteFeedback / promptAcceptanceStatus
+- [x] getConversationOutline
+- [x] Progressive (typing-style) reveal of the pool reply
+- [x] Multi-turn context, agent naming
+
+## P1 — next
 - [ ] Confirm the transcript-page shape renders in the live UI; iterate `entries[]` if needed.
-- [ ] Streaming: push assistant deltas over `/gw/events` instead of one-shot.
-- [ ] Multi-turn context, agent naming, avatars.
+- [ ] Tool-call + widget entry kinds; approval pipeline (respondToWidget, resolveLocalToolPermission, resolveAutoReviewApproval, submitSecret).
+- [ ] Attachments/images (schema has `images[]`); agent avatars; per-agent notifications; trays content.
+- [ ] Real token streaming (needs a streaming pool endpoint; current reveal is client-side).
+- [ ] Settings write-back (`setHostSettings` currently discards).
 
 ## Later — the real box (workspace / VNC / exec)
 The workspace pane is a VNC view of a Linux desktop. Reuse the OpenClaw VPS recipe:

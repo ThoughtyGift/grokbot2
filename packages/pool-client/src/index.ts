@@ -21,6 +21,8 @@ export interface PoolOptions {
   system?: string;
   maxTokens?: number;
   timeoutMs?: number;
+  /** external abort signal (e.g. from interruptAgentRun) */
+  signal?: AbortSignal;
 }
 
 export interface PoolResult {
@@ -41,6 +43,11 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
   });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
+  // let an external signal (interrupt) abort this request too
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
   try {
     const res = await fetch(opts.url, {
       method: "POST",
@@ -60,7 +67,7 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
     }
     return { ok: false, status: res.status, error: json.error ?? `pool HTTP ${res.status}`, account: json.account };
   } catch (e: any) {
-    return { ok: false, error: e?.name === "AbortError" ? "pool timeout" : String(e) };
+    return { ok: false, error: e?.name === "AbortError" ? "aborted" : String(e) };
   } finally {
     clearTimeout(timer);
   }
