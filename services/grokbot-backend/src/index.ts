@@ -1,0 +1,67 @@
+/**
+ * Grok Bot 2 — self-host backend.
+ *
+ * Launch the stock Grok Bot desktop app with CURSOR_API_BASE_URL pointed here and
+ * this backend serves everything the app needs: auth, the bootstrap ConnectRPC
+ * gates, the box gateway (so the UI renders), and chat routed to your Claude pool.
+ */
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { config } from "./config.js";
+import { handleAuth } from "./auth.js";
+import { handleGateway } from "./gateway.js";
+import { bootstrapResponses, connectStreamEnd } from "@grokbot2/proto";
+
+function readBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c as Buffer));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const url = req.url ?? "";
+  const body = await readBody(req);
+  const ct = String(req.headers["content-type"] ?? "");
+
+  // ── auth ──
+  if (url.startsWith("/oauth/token") || url.includes("/auth/") || url.endsWith("/token")) {
+    return handleAuth(res);
+  }
+  // ── local exec daemon credential ──
+  if (url.includes("local-exec-daemon-credential")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ token: "exec", authToken: "exec", url: `http://localhost:${config.port}/exec` }));
+  }
+  // ── box gateway (JSON + SSE + chat) ──
+  if (handleGateway(url, body, res)) return;
+
+  // ── ConnectRPC bootstrap (protobuf) ──
+  const rpc = url.match(/\/([a-z0-9_.]+\.v\d+\.[A-Za-z]+)\/([A-Za-z]+)/i);
+  if (rpc) {
+    const method = rpc[2];
+    const isStream = ct.includes("connect+") || ct.includes("grpc");
+    const isJson = ct.includes("json");
+    const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;
+    const payload = build ? build() : undefined;
+    if (isStream) {
+      res.writeHead(200, { "content-type": ct });
+      return res.end(connectStreamEnd(payload));
+    }
+    if (isJson) {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end("{}");
+    }
+    res.writeHead(200, { "content-type": "application/proto" });
+    return res.end(payload ?? Buffer.alloc(0));
+  }
+
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end("{}");
+});
+
+server.listen(config.port, "127.0.0.1", () => {
+  console.log(`[grokbot2] backend on http://localhost:${config.port}`);
+  console.log(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
+  console.log(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
+});

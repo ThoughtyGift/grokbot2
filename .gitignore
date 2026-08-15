@@ -1,0 +1,23 @@
+# deps / build
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# secrets — NEVER commit
+.env
+.env.local
+*-key.txt
+pool-key.txt
+anthropic-key.txt
+
+# logs / scratch
+*.log
+spike-log.txt
+*.png
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

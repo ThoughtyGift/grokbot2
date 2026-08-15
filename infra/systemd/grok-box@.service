@@ -1,0 +1,21 @@
+# Future: run the Grok Bot box host on a Linux VPS (mirrors OpenClaw's flow-chrome@).
+# Provides the Xvfb + x11vnc desktop the workspace VNC pane streams. Not used for chat.
+#
+# Install: /etc/systemd/system/grok-box@.service ; start: systemctl start grok-box@1
+# Companion script boots: Xvfb :<disp> -> xfwm4 -> host-main.cjs -> x11vnc -> websockify.
+
+[Unit]
+Description=Grok Bot box host (Xvfb + host-main + x11vnc) for instance %i
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:%i
+Environment=GROKBOX_ID=%i
+# ExecStart calls a boot script you provide, e.g. /opt/grok-box.sh %i
+ExecStart=/opt/grok-box.sh %i
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
