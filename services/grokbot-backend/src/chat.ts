@@ -552,11 +552,16 @@ const MCP_PROTOCOL = isMcpConfigured()
 // Registered only once the browser has actually answered. Configured-but-unreachable is
 // the expensive case: the tool is offered, the model calls it, and the user waits out a
 // socket timeout for "fetch failed".
+// Registration follows CONFIGURATION, not a one-shot reachability probe.
+//
+// Gating on the probe meant a tunnel that happened to be down for those few seconds removed
+// the browser tools for the whole life of the process — they never came back when the tunnel
+// did, and the model simply answered as if it had no browser. A per-call failure is honest and
+// recoverable ("no page target - is Chrome running on the box?"); a silently missing tool is
+// neither. The probe stays, but only to say so in the startup line.
 if (isBrowserConfigured()) {
-  void browserProbe().then(() => {
-    if (!isBrowserReachable()) return;
-    for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
-  });
+  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
+  void browserProbe();
 }
 
 // Tools under their real ClientSideToolV2 names. availableTools() drops the shell/file ones
