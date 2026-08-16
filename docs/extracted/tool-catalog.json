@@ -1,0 +1,1473 @@
+{
+  "source": "C:/Users/admin/Desktop/grokbot-fe-extracted/renderer/assets/index-DNC736IO.js",
+  "note": "Tool schemas only. The system prompt and agent loop are server-side and are not present in this bundle.",
+  "counts": {
+    "toolsInEnum": 54,
+    "toolsWithParams": 48,
+    "protoMessages": 2496,
+    "protoEnums": 182
+  },
+  "tools": [
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_SEMSEARCH_FILES",
+      "number": 1,
+      "name": "read_semsearch_files",
+      "paramsMessage": "aiserver.v1.ReadSemsearchFilesParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "repository_info",
+          "kind": "message",
+          "type": "aiserver.v1.RepositoryInfo"
+        },
+        {
+          "no": 2,
+          "name": "code_results",
+          "kind": "message",
+          "type": "aiserver.v1.CodeResult",
+          "repeated": true
+        },
+        {
+          "no": 3,
+          "name": "query",
+          "kind": "scalar"
+        },
+        {
+          "no": 4,
+          "name": "pr_references",
+          "kind": "message",
+          "type": "aiserver.v1.PullRequestReference",
+          "repeated": true
+        },
+        {
+          "no": 5,
+          "name": "pr_search_on",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReadSemsearchFilesResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_RIPGREP_SEARCH",
+      "number": 3,
+      "name": "ripgrep_search",
+      "paramsMessage": "aiserver.v1.RipgrepSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "options",
+          "kind": "message",
+          "type": "aiserver.v1.RipgrepSearchParams.ITextQueryBuilderOptionsProto"
+        },
+        {
+          "no": 2,
+          "name": "pattern_info",
+          "kind": "message",
+          "type": "aiserver.v1.RipgrepSearchParams.IPatternInfoProto"
+        }
+      ],
+      "resultMessage": "aiserver.v1.RipgrepSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_FILE",
+      "number": 5,
+      "name": "read_file",
+      "paramsMessage": "aiserver.v1.ReadFileParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "relative_workspace_path",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "read_entire_file",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "start_line_one_indexed",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "end_line_one_indexed_inclusive",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 5,
+          "name": "file_is_allowed_to_be_read_entirely",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "max_lines",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 7,
+          "name": "max_chars",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "min_lines",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReadFileResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_LIST_DIR",
+      "number": 6,
+      "name": "list_dir",
+      "paramsMessage": "aiserver.v1.ListDirParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "directory_path",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.ListDirResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_EDIT_FILE",
+      "number": 7,
+      "name": "edit_file",
+      "paramsMessage": "aiserver.v1.EditFileParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "relative_workspace_path",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "language",
+          "kind": "scalar"
+        },
+        {
+          "no": 4,
+          "name": "blocking",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "contents",
+          "kind": "scalar"
+        },
+        {
+          "no": 5,
+          "name": "instructions",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 12,
+          "name": "should_edit_file_fail_for_large_files",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 6,
+          "name": "old_string",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 7,
+          "name": "new_string",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "allow_multiple_matches",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 10,
+          "name": "use_whitespace_insensitive_fallback",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 11,
+          "name": "use_did_you_mean_fuzzy_match",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 16,
+          "name": "gracefully_handle_recoverable_errors",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 9,
+          "name": "line_ranges",
+          "kind": "message",
+          "type": "aiserver.v1.LineRange",
+          "repeated": true
+        },
+        {
+          "no": 13,
+          "name": "notebook_cell_idx",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 14,
+          "name": "is_new_cell",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 15,
+          "name": "cell_language",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 17,
+          "name": "edit_category",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 18,
+          "name": "should_eagerly_process_lints",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.EditFileResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_FILE_SEARCH",
+      "number": 8,
+      "name": "file_search",
+      "paramsMessage": "aiserver.v1.ToolCallFileSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "query",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.ToolCallFileSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_SEMANTIC_SEARCH_FULL",
+      "number": 9,
+      "name": "semantic_search_full",
+      "paramsMessage": "aiserver.v1.SemanticSearchFullParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "repository_info",
+          "kind": "message",
+          "type": "aiserver.v1.RepositoryInfo"
+        },
+        {
+          "no": 2,
+          "name": "query",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "include_pattern",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "exclude_pattern",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 5,
+          "name": "top_k",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "pr_references",
+          "kind": "message",
+          "type": "aiserver.v1.PullRequestReference",
+          "repeated": true
+        },
+        {
+          "no": 7,
+          "name": "pr_search_on",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "explanation",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 9,
+          "name": "code_results",
+          "kind": "message",
+          "type": "aiserver.v1.CodeResult",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.SemanticSearchFullResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_DELETE_FILE",
+      "number": 11,
+      "name": "delete_file",
+      "paramsMessage": "aiserver.v1.DeleteFileParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "relative_workspace_path",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.DeleteFileResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_REAPPLY",
+      "number": 12,
+      "name": "reapply",
+      "paramsMessage": "aiserver.v1.ReapplyParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "relative_workspace_path",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReapplyResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_RUN_TERMINAL_COMMAND_V2",
+      "number": 15,
+      "name": "run_terminal_command_v2",
+      "paramsMessage": "aiserver.v1.RunTerminalCommandV2Params",
+      "params": [
+        {
+          "no": 1,
+          "name": "command",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "cwd",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "new_session",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "options",
+          "kind": "message",
+          "type": "aiserver.v1.RunTerminalCommandV2Params.ExecutionOptions",
+          "optional": true
+        },
+        {
+          "no": 5,
+          "name": "is_background",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "require_user_approval",
+          "kind": "scalar"
+        },
+        {
+          "no": 7,
+          "name": "parsing_result",
+          "kind": "message",
+          "type": "aiserver.v1.ShellCommandParsingResult",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "idle_timeout_seconds",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 9,
+          "name": "requested_sandbox_policy",
+          "kind": "message",
+          "type": "agent.v1.SandboxPolicy",
+          "optional": true
+        },
+        {
+          "no": 10,
+          "name": "file_output_threshold_bytes",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 11,
+          "name": "command_description",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 12,
+          "name": "classifier_result",
+          "kind": "message",
+          "type": "agent.v1.CommandClassifierResult",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.RunTerminalCommandV2Result"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_FETCH_RULES",
+      "number": 16,
+      "name": "fetch_rules",
+      "paramsMessage": "aiserver.v1.FetchRulesParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "rule_names",
+          "kind": "scalar",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.FetchRulesResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_WEB_SEARCH",
+      "number": 18,
+      "name": "web_search",
+      "paramsMessage": "aiserver.v1.WebSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "search_term",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.WebSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_MCP",
+      "number": 19,
+      "name": "mcp",
+      "paramsMessage": "aiserver.v1.MCPParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "tools",
+          "kind": "message",
+          "type": "aiserver.v1.MCPParams.Tool",
+          "repeated": true
+        },
+        {
+          "no": 2,
+          "name": "file_output_threshold_bytes",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.MCPResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_SEARCH_SYMBOLS",
+      "number": 23,
+      "name": "search_symbols",
+      "paramsMessage": "aiserver.v1.SearchSymbolsParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "query",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.SearchSymbolsResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_BACKGROUND_COMPOSER_FOLLOWUP",
+      "number": 24,
+      "name": "background_composer_followup",
+      "paramsMessage": "aiserver.v1.BackgroundComposerFollowupParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "proposed_followup",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "bc_id",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.BackgroundComposerFollowupResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_KNOWLEDGE_BASE",
+      "number": 25,
+      "name": "knowledge_base",
+      "paramsMessage": "aiserver.v1.KnowledgeBaseParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "knowledge_to_store",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "title",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "existing_knowledge_id",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "action",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.KnowledgeBaseResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_FETCH_PULL_REQUEST",
+      "number": 26,
+      "name": "fetch_pull_request",
+      "paramsMessage": "aiserver.v1.FetchPullRequestParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "pull_number_or_commit_hash",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "repo",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "is_github",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.FetchPullRequestResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_DEEP_SEARCH",
+      "number": 27,
+      "name": "deep_search",
+      "paramsMessage": "aiserver.v1.DeepSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "query",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.DeepSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_CREATE_DIAGRAM",
+      "number": 28,
+      "name": "create_diagram",
+      "paramsMessage": "aiserver.v1.CreateDiagramParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "content",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.CreateDiagramResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_FIX_LINTS",
+      "number": 29,
+      "name": "fix_lints",
+      "paramsMessage": "aiserver.v1.FixLintsParams",
+      "params": [],
+      "resultMessage": "aiserver.v1.FixLintsResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_LINTS",
+      "number": 30,
+      "name": "read_lints",
+      "paramsMessage": "aiserver.v1.ReadLintsParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "path",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "paths",
+          "kind": "scalar",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReadLintsResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_GO_TO_DEFINITION",
+      "number": 31,
+      "name": "go_to_definition",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": null
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_TASK",
+      "number": 32,
+      "name": "task",
+      "paramsMessage": "aiserver.v1.TaskParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "task_description",
+          "kind": "scalar"
+        },
+        {
+          "no": 4,
+          "name": "task_title",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "async",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "allowed_write_directories",
+          "kind": "scalar",
+          "repeated": true
+        },
+        {
+          "no": 5,
+          "name": "model_override",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 6,
+          "name": "max_mode_override",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 7,
+          "name": "default_expanded_while_running",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.TaskResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_AWAIT_TASK",
+      "number": 33,
+      "name": "await_task",
+      "paramsMessage": "aiserver.v1.AwaitTaskParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "ids",
+          "kind": "scalar",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.AwaitTaskResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_TODO_READ",
+      "number": 34,
+      "name": "todo_read",
+      "paramsMessage": "aiserver.v1.TodoReadParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "read",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.TodoReadResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_TODO_WRITE",
+      "number": 35,
+      "name": "todo_write",
+      "paramsMessage": "aiserver.v1.TodoWriteParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "todos",
+          "kind": "message",
+          "type": "aiserver.v1.TodoItem",
+          "repeated": true
+        },
+        {
+          "no": 2,
+          "name": "merge",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.TodoWriteResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_EDIT_FILE_V2",
+      "number": 38,
+      "name": "edit_file_v2",
+      "paramsMessage": "aiserver.v1.EditFileV2Params",
+      "params": [
+        {
+          "no": 1,
+          "name": "relative_workspace_path",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "contents_after_edit",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "waiting_for_file_contents",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "text",
+          "kind": "message",
+          "type": "aiserver.v1.EditFileV2Params.StreamingEditText",
+          "oneof": "streaming_edit"
+        },
+        {
+          "no": 5,
+          "name": "code",
+          "kind": "message",
+          "type": "aiserver.v1.EditFileV2Params.StreamingEditCode",
+          "oneof": "streaming_edit"
+        },
+        {
+          "no": 6,
+          "name": "should_send_back_linter_errors",
+          "kind": "scalar"
+        },
+        {
+          "no": 7,
+          "name": "diff",
+          "kind": "message",
+          "type": "aiserver.v1.EditFileResult.FileDiff",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "result_for_model",
+          "kind": "scalar"
+        },
+        {
+          "no": 9,
+          "name": "streaming_content",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 10,
+          "name": "no_codeblock",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 11,
+          "name": "cloud_agent_edit",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.EditFileV2Result"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_LIST_DIR_V2",
+      "number": 39,
+      "name": "list_dir_v2",
+      "paramsMessage": "aiserver.v1.ListDirV2Params",
+      "params": [
+        {
+          "no": 1,
+          "name": "target_directory",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "ignore_globs",
+          "kind": "scalar",
+          "repeated": true
+        },
+        {
+          "no": 3,
+          "name": "should_enrich_terminal_metadata",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ListDirV2Result"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_FILE_V2",
+      "number": 40,
+      "name": "read_file_v2",
+      "paramsMessage": "aiserver.v1.ReadFileV2Params",
+      "params": [
+        {
+          "no": 1,
+          "name": "target_file",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "offset",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "limit",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "chars_limit",
+          "kind": "scalar"
+        },
+        {
+          "no": 5,
+          "name": "effective_uri",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "enable_line_numbers",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReadFileV2Result"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_RIPGREP_RAW_SEARCH",
+      "number": 41,
+      "name": "ripgrep_raw_search",
+      "paramsMessage": "aiserver.v1.RipgrepRawSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "pattern",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "path",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "glob",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 4,
+          "name": "output_mode",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 5,
+          "name": "context_before",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 6,
+          "name": "context_after",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 7,
+          "name": "context",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 8,
+          "name": "case_insensitive",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 9,
+          "name": "type",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 10,
+          "name": "head_limit",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 11,
+          "name": "multiline",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 12,
+          "name": "sort",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 13,
+          "name": "sort_ascending",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 14,
+          "name": "ignore_globs",
+          "kind": "scalar",
+          "repeated": true
+        },
+        {
+          "no": 15,
+          "name": "offset",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.RipgrepRawSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_GLOB_FILE_SEARCH",
+      "number": 42,
+      "name": "glob_file_search",
+      "paramsMessage": "aiserver.v1.GlobFileSearchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "target_directory",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "glob_pattern",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.GlobFileSearchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_CREATE_PLAN",
+      "number": 43,
+      "name": "create_plan",
+      "paramsMessage": "aiserver.v1.CreatePlanParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "plan",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "title",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "summary",
+          "kind": "scalar"
+        },
+        {
+          "no": 4,
+          "name": "steps",
+          "kind": "message",
+          "type": "aiserver.v1.Step",
+          "repeated": true
+        },
+        {
+          "no": 5,
+          "name": "old_str",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "new_str",
+          "kind": "scalar"
+        },
+        {
+          "no": 7,
+          "name": "name",
+          "kind": "scalar"
+        },
+        {
+          "no": 8,
+          "name": "todos",
+          "kind": "message",
+          "type": "aiserver.v1.TodoItem",
+          "repeated": true
+        },
+        {
+          "no": 9,
+          "name": "overview",
+          "kind": "scalar"
+        },
+        {
+          "no": 10,
+          "name": "is_spec",
+          "kind": "scalar"
+        },
+        {
+          "no": 11,
+          "name": "is_project",
+          "kind": "scalar"
+        },
+        {
+          "no": 12,
+          "name": "phases",
+          "kind": "message",
+          "type": "aiserver.v1.PlanPhase",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.CreatePlanResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_LIST_MCP_RESOURCES",
+      "number": 44,
+      "name": "list_mcp_resources",
+      "paramsMessage": "aiserver.v1.ListMcpResourcesParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "server",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ListMcpResourcesResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_MCP_RESOURCE",
+      "number": 45,
+      "name": "read_mcp_resource",
+      "paramsMessage": "aiserver.v1.ReadMcpResourceParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "server",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "uri",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "download_path",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReadMcpResourceResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_READ_PROJECT",
+      "number": 46,
+      "name": "read_project",
+      "paramsMessage": "aiserver.v1.ReadProjectParams",
+      "params": [],
+      "resultMessage": "aiserver.v1.ReadProjectResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_UPDATE_PROJECT",
+      "number": 47,
+      "name": "update_project",
+      "paramsMessage": "aiserver.v1.UpdateProjectParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "string_replacements",
+          "kind": "message",
+          "type": "aiserver.v1.UpdateProjectStringReplacement",
+          "repeated": true
+        },
+        {
+          "no": 2,
+          "name": "summary",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.UpdateProjectResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_TASK_V2",
+      "number": 48,
+      "name": "task_v2",
+      "paramsMessage": "aiserver.v1.TaskV2Params",
+      "params": [
+        {
+          "no": 1,
+          "name": "description",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "prompt",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "subagent_type",
+          "kind": "scalar"
+        },
+        {
+          "no": 4,
+          "name": "model",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 5,
+          "name": "name",
+          "kind": "scalar"
+        },
+        {
+          "no": 6,
+          "name": "mode",
+          "kind": "enum",
+          "type": "a"
+        }
+      ],
+      "resultMessage": "aiserver.v1.TaskV2Result"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_CALL_MCP_TOOL",
+      "number": 49,
+      "name": "call_mcp_tool",
+      "paramsMessage": "aiserver.v1.CallMcpToolParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "server",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "tool_name",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "tool_args",
+          "kind": "message",
+          "type": "google.protobuf.Struct"
+        }
+      ],
+      "resultMessage": "aiserver.v1.CallMcpToolResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_APPLY_AGENT_DIFF",
+      "number": 50,
+      "name": "apply_agent_diff",
+      "paramsMessage": "aiserver.v1.ApplyAgentDiffParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "agent_id",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "agent.v1.ApplyAgentDiffResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_ASK_QUESTION",
+      "number": 51,
+      "name": "ask_question",
+      "paramsMessage": "aiserver.v1.AskQuestionParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "title",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "questions",
+          "kind": "message",
+          "type": "aiserver.v1.AskQuestionParams.Question",
+          "repeated": true
+        },
+        {
+          "no": 3,
+          "name": "run_async",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.AskQuestionResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_SWITCH_MODE",
+      "number": 52,
+      "name": "switch_mode",
+      "paramsMessage": "aiserver.v1.SwitchModeParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "from_mode_id",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "to_mode_id",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "explanation",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.SwitchModeResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_GENERATE_IMAGE",
+      "number": 53,
+      "name": "generate_image",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": "agent.v1.GenerateImageResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_COMPUTER_USE",
+      "number": 54,
+      "name": "computer_use",
+      "paramsMessage": "aiserver.v1.ComputerUseParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "actions",
+          "kind": "message",
+          "type": "agent.v1.ComputerUseAction",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ComputerUseResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_WRITE_SHELL_STDIN",
+      "number": 55,
+      "name": "write_shell_stdin",
+      "paramsMessage": "agent.v1.WriteShellStdinArgs",
+      "params": [
+        {
+          "no": 1,
+          "name": "shell_id",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "chars",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "agent.v1.WriteShellStdinResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_RECORD_SCREEN",
+      "number": 56,
+      "name": "record_screen",
+      "paramsMessage": "agent.v1.RecordScreenArgs",
+      "params": [
+        {
+          "no": 1,
+          "name": "mode",
+          "kind": "enum",
+          "type": "a"
+        },
+        {
+          "no": 2,
+          "name": "tool_call_id",
+          "kind": "scalar"
+        },
+        {
+          "no": 3,
+          "name": "save_as_filename",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "agent.v1.RecordScreenResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_WEB_FETCH",
+      "number": 57,
+      "name": "web_fetch",
+      "paramsMessage": "aiserver.v1.WebFetchParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "url",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.WebFetchResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_REPORT_BUGFIX_RESULTS",
+      "number": 58,
+      "name": "report_bugfix_results",
+      "paramsMessage": "aiserver.v1.ReportBugfixResultsParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "summary",
+          "kind": "scalar"
+        },
+        {
+          "no": 2,
+          "name": "results",
+          "kind": "message",
+          "type": "agent.v1.BugfixResultItem",
+          "repeated": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.ReportBugfixResultsResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_AI_ATTRIBUTION",
+      "number": 59,
+      "name": "ai_attribution",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": "agent.v1.AiAttributionResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_MCP_AUTH",
+      "number": 60,
+      "name": "mcp_auth",
+      "paramsMessage": "aiserver.v1.McpAuthParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "server_identifier",
+          "kind": "scalar"
+        }
+      ],
+      "resultMessage": "aiserver.v1.McpAuthResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_REFLECT",
+      "number": 61,
+      "name": "reflect",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": null
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_AWAIT",
+      "number": 62,
+      "name": "await",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": null
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_GET_MCP_TOOLS",
+      "number": 63,
+      "name": "get_mcp_tools",
+      "paramsMessage": "aiserver.v1.GetMcpToolsParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "server",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 2,
+          "name": "tool_name",
+          "kind": "scalar",
+          "optional": true
+        },
+        {
+          "no": 3,
+          "name": "pattern",
+          "kind": "scalar",
+          "optional": true
+        }
+      ],
+      "resultMessage": "aiserver.v1.GetMcpToolsResult"
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_SEND_TO_USER",
+      "number": 65,
+      "name": "send_to_user",
+      "paramsMessage": null,
+      "params": null,
+      "resultMessage": null
+    },
+    {
+      "enum": "CLIENT_SIDE_TOOL_V2_CONNECT_SCM",
+      "number": 66,
+      "name": "connect_scm",
+      "paramsMessage": "aiserver.v1.ConnectScmParams",
+      "params": [
+        {
+          "no": 1,
+          "name": "github",
+          "kind": "message",
+          "type": "aiserver.v1.ConnectScmGithub"
+        }
+      ],
+      "resultMessage": "aiserver.v1.ConnectScmResult"
+    }
+  ]
+}

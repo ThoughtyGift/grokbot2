@@ -1,0 +1,4520 @@
+{
+  "agent.v1.AdoptOutcome": [
+    {
+      "no": 0,
+      "name": "ADOPT_OUTCOME_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "ADOPT_OUTCOME_ALREADY_PARENTED"
+    },
+    {
+      "no": 2,
+      "name": "ADOPT_OUTCOME_EDGE_ONLY"
+    },
+    {
+      "no": 3,
+      "name": "ADOPT_OUTCOME_STORE_IMPORT_COMPLETED"
+    }
+  ],
+  "agent.v1.AgentMode": [
+    {
+      "no": 0,
+      "name": "AGENT_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "AGENT_MODE_AGENT"
+    },
+    {
+      "no": 2,
+      "name": "AGENT_MODE_ASK"
+    },
+    {
+      "no": 3,
+      "name": "AGENT_MODE_PLAN"
+    },
+    {
+      "no": 4,
+      "name": "AGENT_MODE_DEBUG"
+    },
+    {
+      "no": 5,
+      "name": "AGENT_MODE_TRIAGE"
+    },
+    {
+      "no": 6,
+      "name": "AGENT_MODE_PROJECT"
+    },
+    {
+      "no": 7,
+      "name": "AGENT_MODE_MULTITASK"
+    },
+    {
+      "no": 8,
+      "name": "AGENT_MODE_CUSTOM"
+    }
+  ],
+  "agent.v1.AppliedAgentChange.ChangeType": [
+    {
+      "no": 0,
+      "name": "CHANGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CHANGE_TYPE_CREATED"
+    },
+    {
+      "no": 2,
+      "name": "CHANGE_TYPE_MODIFIED"
+    },
+    {
+      "no": 3,
+      "name": "CHANGE_TYPE_DELETED"
+    }
+  ],
+  "agent.v1.BackgroundTaskCompletionReason": [
+    {
+      "no": 0,
+      "name": "BACKGROUND_TASK_COMPLETION_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BACKGROUND_TASK_COMPLETION_REASON_TASK_FINISHED"
+    },
+    {
+      "no": 2,
+      "name": "BACKGROUND_TASK_COMPLETION_REASON_TASK_PROGRESS"
+    },
+    {
+      "no": 3,
+      "name": "BACKGROUND_TASK_COMPLETION_REASON_WORKER_REPARENTED"
+    }
+  ],
+  "agent.v1.BackgroundTaskKind": [
+    {
+      "no": 0,
+      "name": "BACKGROUND_TASK_KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BACKGROUND_TASK_KIND_SHELL"
+    },
+    {
+      "no": 2,
+      "name": "BACKGROUND_TASK_KIND_SUBAGENT"
+    }
+  ],
+  "agent.v1.BackgroundTaskNotificationContext": [
+    {
+      "no": 0,
+      "name": "BACKGROUND_TASK_NOTIFICATION_CONTEXT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BACKGROUND_TASK_NOTIFICATION_CONTEXT_USER_DRIVEN_INTERACTIVE_CHILD"
+    }
+  ],
+  "agent.v1.BackgroundTaskStatus": [
+    {
+      "no": 0,
+      "name": "BACKGROUND_TASK_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BACKGROUND_TASK_STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "BACKGROUND_TASK_STATUS_ERROR"
+    },
+    {
+      "no": 3,
+      "name": "BACKGROUND_TASK_STATUS_ABORTED"
+    }
+  ],
+  "agent.v1.BugfixVerdict": [
+    {
+      "no": 0,
+      "name": "BUGFIX_VERDICT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUGFIX_VERDICT_FIXED"
+    },
+    {
+      "no": 2,
+      "name": "BUGFIX_VERDICT_FALSE_POSITIVE"
+    },
+    {
+      "no": 3,
+      "name": "BUGFIX_VERDICT_COULD_NOT_FIX"
+    },
+    {
+      "no": 4,
+      "name": "BUGFIX_VERDICT_RESOLVED_BY_OTHER_FIX"
+    }
+  ],
+  "agent.v1.CommandClassifierResult.SuggestedSandboxMode": [
+    {
+      "no": 0,
+      "name": "SUGGESTED_SANDBOX_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUGGESTED_SANDBOX_MODE_SANDBOX"
+    },
+    {
+      "no": 2,
+      "name": "SUGGESTED_SANDBOX_MODE_NO_SANDBOX"
+    },
+    {
+      "no": 3,
+      "name": "SUGGESTED_SANDBOX_MODE_UNDETERMINED"
+    }
+  ],
+  "agent.v1.ConversationSearchSource": [
+    {
+      "no": 0,
+      "name": "CONVERSATION_SEARCH_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CONVERSATION_SEARCH_SOURCE_LOCAL"
+    },
+    {
+      "no": 2,
+      "name": "CONVERSATION_SEARCH_SOURCE_CLOUD_CACHE"
+    }
+  ],
+  "agent.v1.CursorRuleSource": [
+    {
+      "no": 0,
+      "name": "CURSOR_RULE_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CURSOR_RULE_SOURCE_TEAM"
+    },
+    {
+      "no": 2,
+      "name": "CURSOR_RULE_SOURCE_USER"
+    }
+  ],
+  "agent.v1.CustomModeSource": [
+    {
+      "no": 0,
+      "name": "CUSTOM_MODE_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CUSTOM_MODE_SOURCE_AGENT_SKILL"
+    },
+    {
+      "no": 2,
+      "name": "CUSTOM_MODE_SOURCE_PLUGIN_SKILL"
+    },
+    {
+      "no": 3,
+      "name": "CUSTOM_MODE_SOURCE_REPO_SKILL"
+    },
+    {
+      "no": 4,
+      "name": "CUSTOM_MODE_SOURCE_MANAGED_SKILL"
+    }
+  ],
+  "agent.v1.CustomSubagentPermissionMode": [
+    {
+      "no": 0,
+      "name": "CUSTOM_SUBAGENT_PERMISSION_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CUSTOM_SUBAGENT_PERMISSION_MODE_DEFAULT"
+    },
+    {
+      "no": 2,
+      "name": "CUSTOM_SUBAGENT_PERMISSION_MODE_READONLY"
+    },
+    {
+      "no": 3,
+      "name": "CUSTOM_SUBAGENT_PERMISSION_MODE_AGENT_ONLY"
+    }
+  ],
+  "agent.v1.DiagnosticSeverity": [
+    {
+      "no": 0,
+      "name": "DIAGNOSTIC_SEVERITY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DIAGNOSTIC_SEVERITY_ERROR"
+    },
+    {
+      "no": 2,
+      "name": "DIAGNOSTIC_SEVERITY_WARNING"
+    },
+    {
+      "no": 3,
+      "name": "DIAGNOSTIC_SEVERITY_INFORMATION"
+    },
+    {
+      "no": 4,
+      "name": "DIAGNOSTIC_SEVERITY_HINT"
+    }
+  ],
+  "agent.v1.ForceBackgroundShellStatus": [
+    {
+      "no": 0,
+      "name": "FORCE_BACKGROUND_SHELL_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FORCE_BACKGROUND_SHELL_STATUS_ACCEPTED"
+    },
+    {
+      "no": 2,
+      "name": "FORCE_BACKGROUND_SHELL_STATUS_NOT_FOUND"
+    }
+  ],
+  "agent.v1.ForceBackgroundSubagentStatus": [
+    {
+      "no": 0,
+      "name": "FORCE_BACKGROUND_SUBAGENT_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FORCE_BACKGROUND_SUBAGENT_STATUS_ACCEPTED"
+    },
+    {
+      "no": 2,
+      "name": "FORCE_BACKGROUND_SUBAGENT_STATUS_NOT_FOUND"
+    }
+  ],
+  "agent.v1.GoalStatus": [
+    {
+      "no": 0,
+      "name": "GOAL_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "GOAL_STATUS_ACTIVE"
+    },
+    {
+      "no": 2,
+      "name": "GOAL_STATUS_PAUSED"
+    },
+    {
+      "no": 3,
+      "name": "GOAL_STATUS_COMPLETE"
+    },
+    {
+      "no": 4,
+      "name": "GOAL_STATUS_CLEARED"
+    }
+  ],
+  "agent.v1.LocalPromptQualityInvocationStatus": [
+    {
+      "no": 0,
+      "name": "LOCAL_PROMPT_QUALITY_INVOCATION_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "LOCAL_PROMPT_QUALITY_INVOCATION_STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "LOCAL_PROMPT_QUALITY_INVOCATION_STATUS_ERRORED"
+    },
+    {
+      "no": 3,
+      "name": "LOCAL_PROMPT_QUALITY_INVOCATION_STATUS_ABORTED"
+    }
+  ],
+  "agent.v1.MountedAgentStoreKind": [
+    {
+      "no": 0,
+      "name": "MOUNTED_AGENT_STORE_KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MOUNTED_AGENT_STORE_KIND_SELF"
+    },
+    {
+      "no": 2,
+      "name": "MOUNTED_AGENT_STORE_KIND_PEER"
+    },
+    {
+      "no": 3,
+      "name": "MOUNTED_AGENT_STORE_KIND_SHARE"
+    },
+    {
+      "no": 4,
+      "name": "MOUNTED_AGENT_STORE_KIND_PRINCIPAL"
+    }
+  ],
+  "agent.v1.MouseButton": [
+    {
+      "no": 0,
+      "name": "MOUSE_BUTTON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MOUSE_BUTTON_LEFT"
+    },
+    {
+      "no": 2,
+      "name": "MOUSE_BUTTON_RIGHT"
+    },
+    {
+      "no": 3,
+      "name": "MOUSE_BUTTON_MIDDLE"
+    },
+    {
+      "no": 4,
+      "name": "MOUSE_BUTTON_BACK"
+    },
+    {
+      "no": 5,
+      "name": "MOUSE_BUTTON_FORWARD"
+    }
+  ],
+  "agent.v1.NetworkPolicy.DefaultAction": [
+    {
+      "no": 0,
+      "name": "DEFAULT_ACTION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DEFAULT_ACTION_ALLOW"
+    },
+    {
+      "no": 2,
+      "name": "DEFAULT_ACTION_DENY"
+    }
+  ],
+  "agent.v1.PackageType": [
+    {
+      "no": 0,
+      "name": "PACKAGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PACKAGE_TYPE_CURSOR_PROJECT"
+    },
+    {
+      "no": 2,
+      "name": "PACKAGE_TYPE_CURSOR_PERSONAL"
+    },
+    {
+      "no": 3,
+      "name": "PACKAGE_TYPE_CLAUDE_SKILL"
+    },
+    {
+      "no": 4,
+      "name": "PACKAGE_TYPE_CLAUDE_PLUGIN"
+    }
+  ],
+  "agent.v1.PullRequestStatus": [
+    {
+      "no": 0,
+      "name": "PULL_REQUEST_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PULL_REQUEST_STATUS_OPEN"
+    },
+    {
+      "no": 2,
+      "name": "PULL_REQUEST_STATUS_CLOSED"
+    }
+  ],
+  "agent.v1.RecordingMode": [
+    {
+      "no": 0,
+      "name": "RECORDING_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RECORDING_MODE_START_RECORDING"
+    },
+    {
+      "no": 2,
+      "name": "RECORDING_MODE_SAVE_RECORDING"
+    },
+    {
+      "no": 3,
+      "name": "RECORDING_MODE_DISCARD_RECORDING"
+    }
+  ],
+  "agent.v1.ReplaceEnvMode": [
+    {
+      "no": 0,
+      "name": "REPLACE_ENV_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "REPLACE_ENV_MODE_CUSTOM"
+    },
+    {
+      "no": 2,
+      "name": "REPLACE_ENV_MODE_CLEAN_SLATE"
+    },
+    {
+      "no": 3,
+      "name": "REPLACE_ENV_MODE_DEFAULT"
+    }
+  ],
+  "agent.v1.RequestedFilePathRejectedReason": [
+    {
+      "no": 0,
+      "name": "REQUESTED_FILE_PATH_REJECTED_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "REQUESTED_FILE_PATH_REJECTED_REASON_SLASHES_NOT_ALLOWED"
+    }
+  ],
+  "agent.v1.ResponseComparisonDisplayOrder": [
+    {
+      "no": 0,
+      "name": "RESPONSE_COMPARISON_DISPLAY_ORDER_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RESPONSE_COMPARISON_DISPLAY_ORDER_PARENT_FIRST"
+    },
+    {
+      "no": 2,
+      "name": "RESPONSE_COMPARISON_DISPLAY_ORDER_ALTERNATE_FIRST"
+    }
+  ],
+  "agent.v1.ResponseComparisonSkipReason": [
+    {
+      "no": 0,
+      "name": "RESPONSE_COMPARISON_SKIP_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RESPONSE_COMPARISON_SKIP_REASON_ALTERNATE_TOOL_CALL"
+    },
+    {
+      "no": 2,
+      "name": "RESPONSE_COMPARISON_SKIP_REASON_INFERENCE_ERROR"
+    },
+    {
+      "no": 3,
+      "name": "RESPONSE_COMPARISON_SKIP_REASON_TIMEOUT"
+    },
+    {
+      "no": 4,
+      "name": "RESPONSE_COMPARISON_SKIP_REASON_CANCELLED"
+    }
+  ],
+  "agent.v1.SandboxPolicy.ReadBoundaryMode": [
+    {
+      "no": 0,
+      "name": "READ_BOUNDARY_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "READ_BOUNDARY_MODE_SYSTEM"
+    },
+    {
+      "no": 2,
+      "name": "READ_BOUNDARY_MODE_WORKSPACE"
+    },
+    {
+      "no": 3,
+      "name": "READ_BOUNDARY_MODE_CUSTOM"
+    }
+  ],
+  "agent.v1.SandboxPolicy.Type": [
+    {
+      "no": 0,
+      "name": "TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TYPE_INSECURE_NONE"
+    },
+    {
+      "no": 2,
+      "name": "TYPE_WORKSPACE_READWRITE"
+    },
+    {
+      "no": 3,
+      "name": "TYPE_WORKSPACE_READONLY"
+    }
+  ],
+  "agent.v1.ScrollDirection": [
+    {
+      "no": 0,
+      "name": "SCROLL_DIRECTION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SCROLL_DIRECTION_UP"
+    },
+    {
+      "no": 2,
+      "name": "SCROLL_DIRECTION_DOWN"
+    },
+    {
+      "no": 3,
+      "name": "SCROLL_DIRECTION_LEFT"
+    },
+    {
+      "no": 4,
+      "name": "SCROLL_DIRECTION_RIGHT"
+    }
+  ],
+  "agent.v1.SelectedPluginCapabilityType": [
+    {
+      "no": 0,
+      "name": "SELECTED_PLUGIN_CAPABILITY_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SELECTED_PLUGIN_CAPABILITY_TYPE_COMMAND"
+    },
+    {
+      "no": 2,
+      "name": "SELECTED_PLUGIN_CAPABILITY_TYPE_SKILL"
+    },
+    {
+      "no": 3,
+      "name": "SELECTED_PLUGIN_CAPABILITY_TYPE_SUBAGENT"
+    }
+  ],
+  "agent.v1.ShellAbortReason": [
+    {
+      "no": 0,
+      "name": "SHELL_ABORT_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SHELL_ABORT_REASON_USER_ABORT"
+    },
+    {
+      "no": 2,
+      "name": "SHELL_ABORT_REASON_TIMEOUT"
+    }
+  ],
+  "agent.v1.ShellBackgroundReason": [
+    {
+      "no": 0,
+      "name": "SHELL_BACKGROUND_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SHELL_BACKGROUND_REASON_TIMEOUT"
+    },
+    {
+      "no": 2,
+      "name": "SHELL_BACKGROUND_REASON_USER_REQUEST"
+    }
+  ],
+  "agent.v1.ShellHookApprovalRequirement.Kind": [
+    {
+      "no": 0,
+      "name": "KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "KIND_FORCE_PROMPT"
+    }
+  ],
+  "agent.v1.SimulatedMsgReason": [
+    {
+      "no": 0,
+      "name": "SIMULATED_MSG_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SIMULATED_MSG_REASON_PLAN_EXECUTION"
+    },
+    {
+      "no": 2,
+      "name": "SIMULATED_MSG_REASON_COMMIT_REMINDER"
+    },
+    {
+      "no": 3,
+      "name": "SIMULATED_MSG_REASON_BACKGROUND_TASK_COMPLETION"
+    },
+    {
+      "no": 4,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_COMMIT"
+    },
+    {
+      "no": 5,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_COMMIT_AND_PUSH"
+    },
+    {
+      "no": 6,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_PUSH"
+    },
+    {
+      "no": 7,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_CREATE_PR"
+    },
+    {
+      "no": 8,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_FIX_MERGE_CONFLICTS"
+    },
+    {
+      "no": 9,
+      "name": "SIMULATED_MSG_REASON_USER_SENT_TO_SUBAGENT"
+    },
+    {
+      "no": 10,
+      "name": "SIMULATED_MSG_REASON_USER_INTERRUPTED_SUBAGENT"
+    },
+    {
+      "no": 11,
+      "name": "SIMULATED_MSG_REASON_USER_QUEUED_TO_SUBAGENT"
+    },
+    {
+      "no": 12,
+      "name": "SIMULATED_MSG_REASON_BABYSIT_PR_IN_CLOUD"
+    },
+    {
+      "no": 13,
+      "name": "SIMULATED_MSG_REASON_CI_PANEL_INVESTIGATE_FAILURE"
+    },
+    {
+      "no": 14,
+      "name": "SIMULATED_MSG_REASON_MULTITASK"
+    },
+    {
+      "no": 15,
+      "name": "SIMULATED_MSG_REASON_BUILD_IN_PARALLEL"
+    },
+    {
+      "no": 16,
+      "name": "SIMULATED_MSG_REASON_MULTITASK_SPLIT_PRS"
+    },
+    {
+      "no": 17,
+      "name": "SIMULATED_MSG_REASON_APPLY_LOCALLY"
+    },
+    {
+      "no": 18,
+      "name": "SIMULATED_MSG_REASON_CHECKOUT_BRANCH"
+    },
+    {
+      "no": 19,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_UPDATE_BRANCH"
+    },
+    {
+      "no": 20,
+      "name": "SIMULATED_MSG_REASON_PR_TAB_BUGBOT_FIX"
+    },
+    {
+      "no": 22,
+      "name": "SIMULATED_MSG_REASON_RUN_BUGBOT_REVIEW"
+    },
+    {
+      "no": 23,
+      "name": "SIMULATED_MSG_REASON_RUN_SECURITY_REVIEW"
+    },
+    {
+      "no": 24,
+      "name": "SIMULATED_MSG_REASON_FSD_APPLY_FINDING"
+    },
+    {
+      "no": 25,
+      "name": "SIMULATED_MSG_REASON_FSD_UNDO_FINDING"
+    },
+    {
+      "no": 26,
+      "name": "SIMULATED_MSG_REASON_FSD_START"
+    },
+    {
+      "no": 27,
+      "name": "SIMULATED_MSG_REASON_FSD_PR_INTERRUPT"
+    },
+    {
+      "no": 28,
+      "name": "SIMULATED_MSG_REASON_SUBSCRIPTION"
+    },
+    {
+      "no": 29,
+      "name": "SIMULATED_MSG_REASON_DIFF_TAB_CREATE_BRANCH"
+    },
+    {
+      "no": 30,
+      "name": "SIMULATED_MSG_REASON_AGENT_STORE_CONFLICT"
+    },
+    {
+      "no": 31,
+      "name": "SIMULATED_MSG_REASON_GOAL_CONTINUATION"
+    },
+    {
+      "no": 32,
+      "name": "SIMULATED_MSG_REASON_PROJECT_KICKOFF"
+    },
+    {
+      "no": 33,
+      "name": "SIMULATED_MSG_REASON_MARKDOWN_PROMPT_BUTTON"
+    },
+    {
+      "no": 34,
+      "name": "SIMULATED_MSG_REASON_USER_QUICK_ACTION"
+    }
+  ],
+  "agent.v1.SmartModeClassifierDecision": [
+    {
+      "no": 0,
+      "name": "SMART_MODE_CLASSIFIER_DECISION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SMART_MODE_CLASSIFIER_DECISION_ALLOW"
+    },
+    {
+      "no": 2,
+      "name": "SMART_MODE_CLASSIFIER_DECISION_BLOCK"
+    }
+  ],
+  "agent.v1.SubagentBackgroundReason": [
+    {
+      "no": 0,
+      "name": "SUBAGENT_BACKGROUND_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUBAGENT_BACKGROUND_REASON_AGENT_REQUEST"
+    },
+    {
+      "no": 2,
+      "name": "SUBAGENT_BACKGROUND_REASON_USER_REQUEST"
+    },
+    {
+      "no": 3,
+      "name": "SUBAGENT_BACKGROUND_REASON_QUEUED_FOLLOW_UP"
+    }
+  ],
+  "agent.v1.SubagentExecutionEnvironment": [
+    {
+      "no": 0,
+      "name": "SUBAGENT_EXECUTION_ENVIRONMENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUBAGENT_EXECUTION_ENVIRONMENT_LOCAL"
+    },
+    {
+      "no": 2,
+      "name": "SUBAGENT_EXECUTION_ENVIRONMENT_CLOUD"
+    }
+  ],
+  "agent.v1.SubagentRunStatus": [
+    {
+      "no": 0,
+      "name": "SUBAGENT_RUN_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUBAGENT_RUN_STATUS_RUNNING"
+    },
+    {
+      "no": 2,
+      "name": "SUBAGENT_RUN_STATUS_BACKGROUNDED"
+    },
+    {
+      "no": 3,
+      "name": "SUBAGENT_RUN_STATUS_SUCCESS"
+    },
+    {
+      "no": 4,
+      "name": "SUBAGENT_RUN_STATUS_ERROR"
+    },
+    {
+      "no": 5,
+      "name": "SUBAGENT_RUN_STATUS_ABORTED"
+    }
+  ],
+  "agent.v1.SubscriptionSource": [
+    {
+      "no": 0,
+      "name": "SUBSCRIPTION_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUBSCRIPTION_SOURCE_SLACK"
+    },
+    {
+      "no": 2,
+      "name": "SUBSCRIPTION_SOURCE_GITHUB"
+    },
+    {
+      "no": 3,
+      "name": "SUBSCRIPTION_SOURCE_LINEAR"
+    },
+    {
+      "no": 4,
+      "name": "SUBSCRIPTION_SOURCE_ORIGIN"
+    }
+  ],
+  "agent.v1.TaskMode": [
+    {
+      "no": 0,
+      "name": "TASK_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TASK_MODE_AGENT"
+    },
+    {
+      "no": 2,
+      "name": "TASK_MODE_PLAN"
+    }
+  ],
+  "agent.v1.ThinkingStyle": [
+    {
+      "no": 0,
+      "name": "THINKING_STYLE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "THINKING_STYLE_DEFAULT"
+    },
+    {
+      "no": 2,
+      "name": "THINKING_STYLE_CODEX"
+    },
+    {
+      "no": 3,
+      "name": "THINKING_STYLE_GPT5"
+    }
+  ],
+  "agent.v1.TimeoutBehavior": [
+    {
+      "no": 0,
+      "name": "TIMEOUT_BEHAVIOR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TIMEOUT_BEHAVIOR_CANCEL"
+    },
+    {
+      "no": 2,
+      "name": "TIMEOUT_BEHAVIOR_BACKGROUND"
+    }
+  ],
+  "agent.v1.TodoStatus": [
+    {
+      "no": 0,
+      "name": "TODO_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TODO_STATUS_PENDING"
+    },
+    {
+      "no": 2,
+      "name": "TODO_STATUS_IN_PROGRESS"
+    },
+    {
+      "no": 3,
+      "name": "TODO_STATUS_COMPLETED"
+    },
+    {
+      "no": 4,
+      "name": "TODO_STATUS_CANCELLED"
+    }
+  ],
+  "agent.v1.UpdatePrCodeTourExecutionMode": [
+    {
+      "no": 0,
+      "name": "UPDATE_PR_CODE_TOUR_EXECUTION_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "UPDATE_PR_CODE_TOUR_EXECUTION_MODE_SERVER_SCHEDULED"
+    },
+    {
+      "no": 2,
+      "name": "UPDATE_PR_CODE_TOUR_EXECUTION_MODE_CLIENT_REQUIRED"
+    },
+    {
+      "no": 3,
+      "name": "UPDATE_PR_CODE_TOUR_EXECUTION_MODE_SKIPPED"
+    }
+  ],
+  "aiserver.v1.AiRequestEvent.RequestType": [
+    {
+      "no": 0,
+      "name": "REQUEST_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "REQUEST_TYPE_START"
+    },
+    {
+      "no": 2,
+      "name": "REQUEST_TYPE_END"
+    }
+  ],
+  "aiserver.v1.AiRequestEvent.Source": [
+    {
+      "no": 0,
+      "name": "SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SOURCE_CHAT"
+    },
+    {
+      "no": 2,
+      "name": "SOURCE_CMDK"
+    },
+    {
+      "no": 3,
+      "name": "SOURCE_APPLY"
+    },
+    {
+      "no": 4,
+      "name": "SOURCE_COMPOSER"
+    },
+    {
+      "no": 5,
+      "name": "SOURCE_TASK"
+    },
+    {
+      "no": 6,
+      "name": "SOURCE_CODE_INTERPRETER"
+    },
+    {
+      "no": 7,
+      "name": "SOURCE_INTERPRETER_EXECUTION"
+    },
+    {
+      "no": 8,
+      "name": "SOURCE_BUGBOT"
+    }
+  ],
+  "aiserver.v1.AvailableModelsResponse.ConfirmationDialogue.Presentation": [
+    {
+      "no": 0,
+      "name": "PRESENTATION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PRESENTATION_POST_PICKER_WARNING"
+    }
+  ],
+  "aiserver.v1.AvailableModelsResponse.DegradationStatus": [
+    {
+      "no": 0,
+      "name": "DEGRADATION_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DEGRADATION_STATUS_DEGRADED"
+    },
+    {
+      "no": 2,
+      "name": "DEGRADATION_STATUS_DISABLED"
+    }
+  ],
+  "aiserver.v1.AvailableModelsResponse.ModelPickerBadge.Variant": [
+    {
+      "no": 0,
+      "name": "VARIANT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "VARIANT_ACCENT"
+    },
+    {
+      "no": 2,
+      "name": "VARIANT_NEUTRAL"
+    },
+    {
+      "no": 3,
+      "name": "VARIANT_SUCCESS"
+    },
+    {
+      "no": 4,
+      "name": "VARIANT_WARN"
+    },
+    {
+      "no": 5,
+      "name": "VARIANT_DANGER"
+    }
+  ],
+  "aiserver.v1.AvailableModelsResponse.ModelVendorId": [
+    {
+      "no": 0,
+      "name": "MODEL_VENDOR_ID_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MODEL_VENDOR_ID_ANTHROPIC"
+    },
+    {
+      "no": 2,
+      "name": "MODEL_VENDOR_ID_OPENAI"
+    },
+    {
+      "no": 3,
+      "name": "MODEL_VENDOR_ID_GOOGLE"
+    },
+    {
+      "no": 4,
+      "name": "MODEL_VENDOR_ID_XAI"
+    },
+    {
+      "no": 5,
+      "name": "MODEL_VENDOR_ID_MOONSHOT"
+    },
+    {
+      "no": 6,
+      "name": "MODEL_VENDOR_ID_CURSOR"
+    },
+    {
+      "no": 7,
+      "name": "MODEL_VENDOR_ID_NVIDIA"
+    },
+    {
+      "no": 8,
+      "name": "MODEL_VENDOR_ID_ZAI"
+    },
+    {
+      "no": 9,
+      "name": "MODEL_VENDOR_ID_META"
+    }
+  ],
+  "aiserver.v1.AvailableModelsScope": [
+    {
+      "no": 0,
+      "name": "AVAILABLE_MODELS_SCOPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "AVAILABLE_MODELS_SCOPE_USER_AVAILABLE"
+    },
+    {
+      "no": 2,
+      "name": "AVAILABLE_MODELS_SCOPE_AUTOMATIONS"
+    },
+    {
+      "no": 3,
+      "name": "AVAILABLE_MODELS_SCOPE_ADMIN_SETTINGS_ALL_APPLICATION_MODELS"
+    }
+  ],
+  "aiserver.v1.BackgroundCmdKEvalRequest.Experiment": [
+    {
+      "no": 0,
+      "name": "EXPERIMENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EXPERIMENT_REFLECT"
+    },
+    {
+      "no": 2,
+      "name": "EXPERIMENT_CMD_K_ORIGINAL_RADIUS"
+    },
+    {
+      "no": 3,
+      "name": "EXPERIMENT_LOOP_ON_LINTS"
+    },
+    {
+      "no": 4,
+      "name": "EXPERIMENT_CHAT_AND_APPLY"
+    },
+    {
+      "no": 5,
+      "name": "EXPERIMENT_COMMIT_NOTES"
+    },
+    {
+      "no": 6,
+      "name": "EXPERIMENT_COALESCE_GENERATIONS"
+    },
+    {
+      "no": 7,
+      "name": "EXPERIMENT_REWORD_INSTRUCTIONS"
+    },
+    {
+      "no": 8,
+      "name": "EXPERIMENT_CODEBASE_CHUNKS"
+    },
+    {
+      "no": 9,
+      "name": "EXPERIMENT_SPEC_AND_APPLY"
+    },
+    {
+      "no": 10,
+      "name": "EXPERIMENT_ASK_CODEBASE"
+    }
+  ],
+  "aiserver.v1.BackgroundCmdKRequest.Type": [
+    {
+      "no": 0,
+      "name": "TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TYPE_REFLECT"
+    },
+    {
+      "no": 2,
+      "name": "TYPE_LOOP_ON_LINTS"
+    },
+    {
+      "no": 3,
+      "name": "TYPE_CHAT_AND_APPLY"
+    },
+    {
+      "no": 4,
+      "name": "TYPE_COALESCE_GENERATIONS"
+    },
+    {
+      "no": 5,
+      "name": "TYPE_CODEBASE_CHUNKS"
+    },
+    {
+      "no": 6,
+      "name": "TYPE_SPEC_AND_APPLY"
+    },
+    {
+      "no": 7,
+      "name": "TYPE_ASK_CODEBASE"
+    },
+    {
+      "no": 8,
+      "name": "TYPE_FINETUNED_INSTRUCTIONS"
+    },
+    {
+      "no": 9,
+      "name": "TYPE_USEFUL_TYPES"
+    },
+    {
+      "no": 10,
+      "name": "TYPE_CHAT_AND_APPLY_UNDERSPECIFIED"
+    }
+  ],
+  "aiserver.v1.BrowserEvent.ToolAction.Source": [
+    {
+      "no": 0,
+      "name": "SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SOURCE_MCP_TOOL"
+    },
+    {
+      "no": 2,
+      "name": "SOURCE_MANUAL_USER"
+    }
+  ],
+  "aiserver.v1.BugBotEvent.BackgroundIntervalInterruptedReason": [
+    {
+      "no": 0,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_DISABLED"
+    },
+    {
+      "no": 2,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_TOO_RECENT"
+    },
+    {
+      "no": 3,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_UNVIEWED_BUG_REPORTS"
+    },
+    {
+      "no": 4,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_NOT_IN_GIT_REPO"
+    },
+    {
+      "no": 5,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_DEFAULT_BRANCH_IS_NOT_CURRENT_BRANCH"
+    },
+    {
+      "no": 6,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_NO_GIT_USER"
+    },
+    {
+      "no": 7,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_NO_LAST_COMMIT"
+    },
+    {
+      "no": 8,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_LAST_COMMIT_NOT_MADE_BY_USER"
+    },
+    {
+      "no": 9,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_LAST_COMMIT_TOO_OLD"
+    },
+    {
+      "no": 10,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_DIFF_TOO_LONG"
+    },
+    {
+      "no": 11,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_DIFF_TOO_SHORT"
+    },
+    {
+      "no": 12,
+      "name": "BACKGROUND_INTERVAL_INTERRUPTED_REASON_TELEMETRY_UNHEALTHY"
+    }
+  ],
+  "aiserver.v1.BugBotLinterEvent.NotShownBecauseHeuristic.Heuristic": [
+    {
+      "no": 0,
+      "name": "HEURISTIC_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "HEURISTIC_LINT_OVERLAP"
+    },
+    {
+      "no": 2,
+      "name": "HEURISTIC_LINES_MISMATCH"
+    }
+  ],
+  "aiserver.v1.BugBotRunStatus": [
+    {
+      "no": 0,
+      "name": "BUG_BOT_RUN_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUG_BOT_RUN_STATUS_NO_RUN"
+    },
+    {
+      "no": 2,
+      "name": "BUG_BOT_RUN_STATUS_IN_PROGRESS"
+    },
+    {
+      "no": 3,
+      "name": "BUG_BOT_RUN_STATUS_COMPLETED"
+    }
+  ],
+  "aiserver.v1.BugBotStatus.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_IN_PROGRESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_IN_PROGRESS_ITERATIONS"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_DONE"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_ERROR"
+    }
+  ],
+  "aiserver.v1.BugbotDeeplinkEventKind": [
+    {
+      "no": 0,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_CLICKED"
+    },
+    {
+      "no": 2,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_HANDLED_DIALOG_SHOWN"
+    },
+    {
+      "no": 3,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_HANDLED_CHAT_CREATED"
+    },
+    {
+      "no": 4,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_ERROR"
+    },
+    {
+      "no": 5,
+      "name": "BUGBOT_DEEPLINK_EVENT_KIND_HANDLED_FIX_IN_WEB"
+    }
+  ],
+  "aiserver.v1.BugbotFeedbackReaction": [
+    {
+      "no": 0,
+      "name": "BUGBOT_FEEDBACK_REACTION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUGBOT_FEEDBACK_REACTION_THUMBS_UP"
+    },
+    {
+      "no": 2,
+      "name": "BUGBOT_FEEDBACK_REACTION_THUMBS_DOWN"
+    }
+  ],
+  "aiserver.v1.BuiltinTool": [
+    {
+      "no": 0,
+      "name": "BUILTIN_TOOL_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUILTIN_TOOL_SEARCH"
+    },
+    {
+      "no": 2,
+      "name": "BUILTIN_TOOL_READ_CHUNK"
+    },
+    {
+      "no": 3,
+      "name": "BUILTIN_TOOL_GOTODEF"
+    },
+    {
+      "no": 4,
+      "name": "BUILTIN_TOOL_EDIT"
+    },
+    {
+      "no": 5,
+      "name": "BUILTIN_TOOL_UNDO_EDIT"
+    },
+    {
+      "no": 6,
+      "name": "BUILTIN_TOOL_END"
+    },
+    {
+      "no": 7,
+      "name": "BUILTIN_TOOL_NEW_FILE"
+    },
+    {
+      "no": 8,
+      "name": "BUILTIN_TOOL_ADD_TEST"
+    },
+    {
+      "no": 9,
+      "name": "BUILTIN_TOOL_RUN_TEST"
+    },
+    {
+      "no": 10,
+      "name": "BUILTIN_TOOL_DELETE_TEST"
+    },
+    {
+      "no": 11,
+      "name": "BUILTIN_TOOL_SAVE_FILE"
+    },
+    {
+      "no": 12,
+      "name": "BUILTIN_TOOL_GET_TESTS"
+    },
+    {
+      "no": 13,
+      "name": "BUILTIN_TOOL_GET_SYMBOLS"
+    },
+    {
+      "no": 14,
+      "name": "BUILTIN_TOOL_SEMANTIC_SEARCH"
+    },
+    {
+      "no": 15,
+      "name": "BUILTIN_TOOL_GET_PROJECT_STRUCTURE"
+    },
+    {
+      "no": 16,
+      "name": "BUILTIN_TOOL_CREATE_RM_FILES"
+    },
+    {
+      "no": 17,
+      "name": "BUILTIN_TOOL_RUN_TERMINAL_COMMANDS"
+    },
+    {
+      "no": 18,
+      "name": "BUILTIN_TOOL_NEW_EDIT"
+    },
+    {
+      "no": 19,
+      "name": "BUILTIN_TOOL_READ_WITH_LINTER"
+    }
+  ],
+  "aiserver.v1.ChunkType": [
+    {
+      "no": 0,
+      "name": "CHUNK_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CHUNK_TYPE_CODEBASE"
+    },
+    {
+      "no": 2,
+      "name": "CHUNK_TYPE_LONG_FILE"
+    },
+    {
+      "no": 3,
+      "name": "CHUNK_TYPE_DOCS"
+    }
+  ],
+  "aiserver.v1.ChunkingStrategy": [
+    {
+      "no": 0,
+      "name": "CHUNKING_STRATEGY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CHUNKING_STRATEGY_DEFAULT"
+    }
+  ],
+  "aiserver.v1.ClientSideToolV2": [
+    {
+      "no": 0,
+      "name": "CLIENT_SIDE_TOOL_V2_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_SEMSEARCH_FILES"
+    },
+    {
+      "no": 3,
+      "name": "CLIENT_SIDE_TOOL_V2_RIPGREP_SEARCH"
+    },
+    {
+      "no": 5,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_FILE"
+    },
+    {
+      "no": 6,
+      "name": "CLIENT_SIDE_TOOL_V2_LIST_DIR"
+    },
+    {
+      "no": 7,
+      "name": "CLIENT_SIDE_TOOL_V2_EDIT_FILE"
+    },
+    {
+      "no": 8,
+      "name": "CLIENT_SIDE_TOOL_V2_FILE_SEARCH"
+    },
+    {
+      "no": 9,
+      "name": "CLIENT_SIDE_TOOL_V2_SEMANTIC_SEARCH_FULL"
+    },
+    {
+      "no": 11,
+      "name": "CLIENT_SIDE_TOOL_V2_DELETE_FILE"
+    },
+    {
+      "no": 12,
+      "name": "CLIENT_SIDE_TOOL_V2_REAPPLY"
+    },
+    {
+      "no": 15,
+      "name": "CLIENT_SIDE_TOOL_V2_RUN_TERMINAL_COMMAND_V2"
+    },
+    {
+      "no": 16,
+      "name": "CLIENT_SIDE_TOOL_V2_FETCH_RULES"
+    },
+    {
+      "no": 18,
+      "name": "CLIENT_SIDE_TOOL_V2_WEB_SEARCH"
+    },
+    {
+      "no": 19,
+      "name": "CLIENT_SIDE_TOOL_V2_MCP"
+    },
+    {
+      "no": 23,
+      "name": "CLIENT_SIDE_TOOL_V2_SEARCH_SYMBOLS"
+    },
+    {
+      "no": 24,
+      "name": "CLIENT_SIDE_TOOL_V2_BACKGROUND_COMPOSER_FOLLOWUP"
+    },
+    {
+      "no": 25,
+      "name": "CLIENT_SIDE_TOOL_V2_KNOWLEDGE_BASE"
+    },
+    {
+      "no": 26,
+      "name": "CLIENT_SIDE_TOOL_V2_FETCH_PULL_REQUEST"
+    },
+    {
+      "no": 27,
+      "name": "CLIENT_SIDE_TOOL_V2_DEEP_SEARCH"
+    },
+    {
+      "no": 28,
+      "name": "CLIENT_SIDE_TOOL_V2_CREATE_DIAGRAM"
+    },
+    {
+      "no": 29,
+      "name": "CLIENT_SIDE_TOOL_V2_FIX_LINTS"
+    },
+    {
+      "no": 30,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_LINTS"
+    },
+    {
+      "no": 31,
+      "name": "CLIENT_SIDE_TOOL_V2_GO_TO_DEFINITION"
+    },
+    {
+      "no": 32,
+      "name": "CLIENT_SIDE_TOOL_V2_TASK"
+    },
+    {
+      "no": 33,
+      "name": "CLIENT_SIDE_TOOL_V2_AWAIT_TASK"
+    },
+    {
+      "no": 34,
+      "name": "CLIENT_SIDE_TOOL_V2_TODO_READ"
+    },
+    {
+      "no": 35,
+      "name": "CLIENT_SIDE_TOOL_V2_TODO_WRITE"
+    },
+    {
+      "no": 38,
+      "name": "CLIENT_SIDE_TOOL_V2_EDIT_FILE_V2"
+    },
+    {
+      "no": 39,
+      "name": "CLIENT_SIDE_TOOL_V2_LIST_DIR_V2"
+    },
+    {
+      "no": 40,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_FILE_V2"
+    },
+    {
+      "no": 41,
+      "name": "CLIENT_SIDE_TOOL_V2_RIPGREP_RAW_SEARCH"
+    },
+    {
+      "no": 42,
+      "name": "CLIENT_SIDE_TOOL_V2_GLOB_FILE_SEARCH"
+    },
+    {
+      "no": 43,
+      "name": "CLIENT_SIDE_TOOL_V2_CREATE_PLAN"
+    },
+    {
+      "no": 44,
+      "name": "CLIENT_SIDE_TOOL_V2_LIST_MCP_RESOURCES"
+    },
+    {
+      "no": 45,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_MCP_RESOURCE"
+    },
+    {
+      "no": 46,
+      "name": "CLIENT_SIDE_TOOL_V2_READ_PROJECT"
+    },
+    {
+      "no": 47,
+      "name": "CLIENT_SIDE_TOOL_V2_UPDATE_PROJECT"
+    },
+    {
+      "no": 48,
+      "name": "CLIENT_SIDE_TOOL_V2_TASK_V2"
+    },
+    {
+      "no": 49,
+      "name": "CLIENT_SIDE_TOOL_V2_CALL_MCP_TOOL"
+    },
+    {
+      "no": 50,
+      "name": "CLIENT_SIDE_TOOL_V2_APPLY_AGENT_DIFF"
+    },
+    {
+      "no": 51,
+      "name": "CLIENT_SIDE_TOOL_V2_ASK_QUESTION"
+    },
+    {
+      "no": 52,
+      "name": "CLIENT_SIDE_TOOL_V2_SWITCH_MODE"
+    },
+    {
+      "no": 53,
+      "name": "CLIENT_SIDE_TOOL_V2_GENERATE_IMAGE"
+    },
+    {
+      "no": 54,
+      "name": "CLIENT_SIDE_TOOL_V2_COMPUTER_USE"
+    },
+    {
+      "no": 55,
+      "name": "CLIENT_SIDE_TOOL_V2_WRITE_SHELL_STDIN"
+    },
+    {
+      "no": 56,
+      "name": "CLIENT_SIDE_TOOL_V2_RECORD_SCREEN"
+    },
+    {
+      "no": 57,
+      "name": "CLIENT_SIDE_TOOL_V2_WEB_FETCH"
+    },
+    {
+      "no": 58,
+      "name": "CLIENT_SIDE_TOOL_V2_REPORT_BUGFIX_RESULTS"
+    },
+    {
+      "no": 59,
+      "name": "CLIENT_SIDE_TOOL_V2_AI_ATTRIBUTION"
+    },
+    {
+      "no": 60,
+      "name": "CLIENT_SIDE_TOOL_V2_MCP_AUTH"
+    },
+    {
+      "no": 61,
+      "name": "CLIENT_SIDE_TOOL_V2_REFLECT"
+    },
+    {
+      "no": 62,
+      "name": "CLIENT_SIDE_TOOL_V2_AWAIT"
+    },
+    {
+      "no": 63,
+      "name": "CLIENT_SIDE_TOOL_V2_GET_MCP_TOOLS"
+    },
+    {
+      "no": 65,
+      "name": "CLIENT_SIDE_TOOL_V2_SEND_TO_USER"
+    },
+    {
+      "no": 66,
+      "name": "CLIENT_SIDE_TOOL_V2_CONNECT_SCM"
+    }
+  ],
+  "aiserver.v1.CloudAgentEffortMode": [
+    {
+      "no": 0,
+      "name": "CLOUD_AGENT_EFFORT_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CLOUD_AGENT_EFFORT_MODE_STANDARD"
+    },
+    {
+      "no": 2,
+      "name": "CLOUD_AGENT_EFFORT_MODE_GRIND"
+    }
+  ],
+  "aiserver.v1.CodeChunk.Intent": [
+    {
+      "no": 0,
+      "name": "INTENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INTENT_COMPOSER_FILE"
+    },
+    {
+      "no": 2,
+      "name": "INTENT_COMPRESSED_COMPOSER_FILE"
+    }
+  ],
+  "aiserver.v1.CodeChunk.SummarizationStrategy": [
+    {
+      "no": 0,
+      "name": "SUMMARIZATION_STRATEGY_NONE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUMMARIZATION_STRATEGY_SUMMARIZED"
+    },
+    {
+      "no": 2,
+      "name": "SUMMARIZATION_STRATEGY_EMBEDDED"
+    }
+  ],
+  "aiserver.v1.CodeChunkContextInclusionInfo.InclusionType": [
+    {
+      "no": 0,
+      "name": "INCLUSION_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INCLUSION_TYPE_FULL"
+    },
+    {
+      "no": 2,
+      "name": "INCLUSION_TYPE_OUTLINE"
+    },
+    {
+      "no": 3,
+      "name": "INCLUSION_TYPE_FILENAME"
+    }
+  ],
+  "aiserver.v1.CodeChunkContextInclusionInfo.Intent": [
+    {
+      "no": 0,
+      "name": "INTENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INTENT_FILE"
+    },
+    {
+      "no": 2,
+      "name": "INTENT_SELECTION"
+    }
+  ],
+  "aiserver.v1.CodeChunkContextInclusionInfoV2.InclusionType": [
+    {
+      "no": 0,
+      "name": "INCLUSION_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INCLUSION_TYPE_FULL"
+    },
+    {
+      "no": 2,
+      "name": "INCLUSION_TYPE_OUTLINE"
+    },
+    {
+      "no": 3,
+      "name": "INCLUSION_TYPE_FILENAME"
+    }
+  ],
+  "aiserver.v1.CodeChunkContextInclusionInfoV2.Intent": [
+    {
+      "no": 0,
+      "name": "INTENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INTENT_FILE"
+    },
+    {
+      "no": 2,
+      "name": "INTENT_SELECTION"
+    }
+  ],
+  "aiserver.v1.CodeSymbolWithAction.CodeSymbolAction": [
+    {
+      "no": 0,
+      "name": "CODE_SYMBOL_ACTION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CODE_SYMBOL_ACTION_GO_TO_DEFINITION"
+    },
+    {
+      "no": 2,
+      "name": "CODE_SYMBOL_ACTION_GO_TO_IMPLEMENTATION"
+    },
+    {
+      "no": 3,
+      "name": "CODE_SYMBOL_ACTION_REFERENCES"
+    }
+  ],
+  "aiserver.v1.ComposerCapabilityRequest.ComposerCapabilityType": [
+    {
+      "no": 0,
+      "name": "COMPOSER_CAPABILITY_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "COMPOSER_CAPABILITY_TYPE_LOOP_ON_LINTS"
+    },
+    {
+      "no": 2,
+      "name": "COMPOSER_CAPABILITY_TYPE_LOOP_ON_TESTS"
+    },
+    {
+      "no": 3,
+      "name": "COMPOSER_CAPABILITY_TYPE_MEGA_PLANNER"
+    },
+    {
+      "no": 4,
+      "name": "COMPOSER_CAPABILITY_TYPE_LOOP_ON_COMMAND"
+    },
+    {
+      "no": 5,
+      "name": "COMPOSER_CAPABILITY_TYPE_TOOL_CALL"
+    },
+    {
+      "no": 6,
+      "name": "COMPOSER_CAPABILITY_TYPE_DIFF_REVIEW"
+    },
+    {
+      "no": 7,
+      "name": "COMPOSER_CAPABILITY_TYPE_CONTEXT_PICKING"
+    },
+    {
+      "no": 8,
+      "name": "COMPOSER_CAPABILITY_TYPE_EDIT_TRAIL"
+    },
+    {
+      "no": 9,
+      "name": "COMPOSER_CAPABILITY_TYPE_AUTO_CONTEXT"
+    },
+    {
+      "no": 10,
+      "name": "COMPOSER_CAPABILITY_TYPE_CONTEXT_PLANNER"
+    },
+    {
+      "no": 11,
+      "name": "COMPOSER_CAPABILITY_TYPE_DIFF_HISTORY"
+    },
+    {
+      "no": 12,
+      "name": "COMPOSER_CAPABILITY_TYPE_REMEMBER_THIS"
+    },
+    {
+      "no": 13,
+      "name": "COMPOSER_CAPABILITY_TYPE_DECOMPOSER"
+    },
+    {
+      "no": 14,
+      "name": "COMPOSER_CAPABILITY_TYPE_USES_CODEBASE"
+    },
+    {
+      "no": 15,
+      "name": "COMPOSER_CAPABILITY_TYPE_TOOL_FORMER"
+    },
+    {
+      "no": 16,
+      "name": "COMPOSER_CAPABILITY_TYPE_CURSOR_RULES"
+    },
+    {
+      "no": 17,
+      "name": "COMPOSER_CAPABILITY_TYPE_TOKEN_COUNTER"
+    },
+    {
+      "no": 18,
+      "name": "COMPOSER_CAPABILITY_TYPE_USAGE_DATA"
+    },
+    {
+      "no": 19,
+      "name": "COMPOSER_CAPABILITY_TYPE_CHIMES"
+    },
+    {
+      "no": 20,
+      "name": "COMPOSER_CAPABILITY_TYPE_CODE_DECAY_TRACKER"
+    },
+    {
+      "no": 21,
+      "name": "COMPOSER_CAPABILITY_TYPE_BACKGROUND_COMPOSER"
+    },
+    {
+      "no": 22,
+      "name": "COMPOSER_CAPABILITY_TYPE_SUMMARIZATION"
+    },
+    {
+      "no": 23,
+      "name": "COMPOSER_CAPABILITY_TYPE_AI_CODE_TRACKING"
+    },
+    {
+      "no": 24,
+      "name": "COMPOSER_CAPABILITY_TYPE_QUEUING"
+    },
+    {
+      "no": 25,
+      "name": "COMPOSER_CAPABILITY_TYPE_MEMORIES"
+    },
+    {
+      "no": 26,
+      "name": "COMPOSER_CAPABILITY_TYPE_RCP_LOGS"
+    },
+    {
+      "no": 27,
+      "name": "COMPOSER_CAPABILITY_TYPE_KNOWLEDGE_FETCH"
+    },
+    {
+      "no": 28,
+      "name": "COMPOSER_CAPABILITY_TYPE_SLACK_INTEGRATION"
+    },
+    {
+      "no": 29,
+      "name": "COMPOSER_CAPABILITY_TYPE_SUB_COMPOSER"
+    },
+    {
+      "no": 30,
+      "name": "COMPOSER_CAPABILITY_TYPE_THINKING"
+    },
+    {
+      "no": 31,
+      "name": "COMPOSER_CAPABILITY_TYPE_CONTEXT_WINDOW"
+    },
+    {
+      "no": 32,
+      "name": "COMPOSER_CAPABILITY_TYPE_ONLINE_METRICS"
+    },
+    {
+      "no": 33,
+      "name": "COMPOSER_CAPABILITY_TYPE_NOTIFICATIONS"
+    },
+    {
+      "no": 34,
+      "name": "COMPOSER_CAPABILITY_TYPE_SPEC"
+    },
+    {
+      "no": 35,
+      "name": "COMPOSER_CAPABILITY_TYPE_BROWSER_AGENT"
+    }
+  ],
+  "aiserver.v1.ComposerCapabilityRequest.ToolType": [
+    {
+      "no": 0,
+      "name": "TOOL_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TOOL_TYPE_ADD_FILE_TO_CONTEXT"
+    },
+    {
+      "no": 3,
+      "name": "TOOL_TYPE_ITERATE"
+    },
+    {
+      "no": 4,
+      "name": "TOOL_TYPE_REMOVE_FILE_FROM_CONTEXT"
+    },
+    {
+      "no": 5,
+      "name": "TOOL_TYPE_SEMANTIC_SEARCH_CODEBASE"
+    }
+  ],
+  "aiserver.v1.ComposerFileDiff.Editor": [
+    {
+      "no": 0,
+      "name": "EDITOR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EDITOR_AI"
+    },
+    {
+      "no": 2,
+      "name": "EDITOR_HUMAN"
+    }
+  ],
+  "aiserver.v1.ContextIntent.File.Mode": [
+    {
+      "no": 0,
+      "name": "MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MODE_FULL"
+    },
+    {
+      "no": 2,
+      "name": "MODE_OUTLINE"
+    },
+    {
+      "no": 3,
+      "name": "MODE_CHUNKS"
+    }
+  ],
+  "aiserver.v1.ContextIntent.Type": [
+    {
+      "no": 0,
+      "name": "TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TYPE_USER_ADDED"
+    },
+    {
+      "no": 2,
+      "name": "TYPE_AUTOMATIC"
+    }
+  ],
+  "aiserver.v1.ContextItemStatus.PostGenerationEvaluation": [
+    {
+      "no": 0,
+      "name": "POST_GENERATION_EVALUATION_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "POST_GENERATION_EVALUATION_USEFUL"
+    },
+    {
+      "no": 2,
+      "name": "POST_GENERATION_EVALUATION_USELESS"
+    }
+  ],
+  "aiserver.v1.ConversationMessage.CodeChunk.Intent": [
+    {
+      "no": 0,
+      "name": "INTENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "INTENT_COMPOSER_FILE"
+    },
+    {
+      "no": 2,
+      "name": "INTENT_COMPRESSED_COMPOSER_FILE"
+    },
+    {
+      "no": 3,
+      "name": "INTENT_RECENTLY_VIEWED_FILE"
+    },
+    {
+      "no": 4,
+      "name": "INTENT_OUTLINE"
+    },
+    {
+      "no": 5,
+      "name": "INTENT_MENTIONED_FILE"
+    },
+    {
+      "no": 6,
+      "name": "INTENT_CODE_SELECTION"
+    },
+    {
+      "no": 7,
+      "name": "INTENT_AI_EDITED_FILE"
+    },
+    {
+      "no": 8,
+      "name": "INTENT_VISIBLE_FILE"
+    },
+    {
+      "no": 9,
+      "name": "INTENT_TERMINAL_SELECTION"
+    }
+  ],
+  "aiserver.v1.ConversationMessage.CodeChunk.SummarizationStrategy": [
+    {
+      "no": 0,
+      "name": "SUMMARIZATION_STRATEGY_NONE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUMMARIZATION_STRATEGY_SUMMARIZED"
+    },
+    {
+      "no": 2,
+      "name": "SUMMARIZATION_STRATEGY_EMBEDDED"
+    }
+  ],
+  "aiserver.v1.ConversationMessage.MessageType": [
+    {
+      "no": 0,
+      "name": "MESSAGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MESSAGE_TYPE_HUMAN"
+    },
+    {
+      "no": 2,
+      "name": "MESSAGE_TYPE_AI"
+    }
+  ],
+  "aiserver.v1.ConversationMessage.ThinkingStyle": [
+    {
+      "no": 0,
+      "name": "THINKING_STYLE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "THINKING_STYLE_DEFAULT"
+    },
+    {
+      "no": 2,
+      "name": "THINKING_STYLE_CODEX"
+    },
+    {
+      "no": 3,
+      "name": "THINKING_STYLE_GPT5"
+    }
+  ],
+  "aiserver.v1.CppConfigResponse.Heuristic": [
+    {
+      "no": 0,
+      "name": "HEURISTIC_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "HEURISTIC_LOTS_OF_ADDED_TEXT"
+    },
+    {
+      "no": 2,
+      "name": "HEURISTIC_DUPLICATING_LINE_AFTER_SUGGESTION"
+    },
+    {
+      "no": 3,
+      "name": "HEURISTIC_DUPLICATING_MULTIPLE_LINES_AFTER_SUGGESTION"
+    },
+    {
+      "no": 4,
+      "name": "HEURISTIC_REVERTING_USER_CHANGE"
+    },
+    {
+      "no": 5,
+      "name": "HEURISTIC_OUTPUT_EXTENDS_BEYOND_RANGE_AND_IS_REPEATED"
+    },
+    {
+      "no": 6,
+      "name": "HEURISTIC_SUGGESTING_RECENTLY_REJECTED_EDIT"
+    }
+  ],
+  "aiserver.v1.CppFate": [
+    {
+      "no": 0,
+      "name": "CPP_FATE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CPP_FATE_ACCEPT"
+    },
+    {
+      "no": 2,
+      "name": "CPP_FATE_REJECT"
+    },
+    {
+      "no": 3,
+      "name": "CPP_FATE_PARTIAL_ACCEPT"
+    }
+  ],
+  "aiserver.v1.CppSource": [
+    {
+      "no": 0,
+      "name": "CPP_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CPP_SOURCE_LINE_CHANGE"
+    },
+    {
+      "no": 2,
+      "name": "CPP_SOURCE_TYPING"
+    },
+    {
+      "no": 3,
+      "name": "CPP_SOURCE_OPTION_HOLD"
+    },
+    {
+      "no": 4,
+      "name": "CPP_SOURCE_LINTER_ERRORS"
+    },
+    {
+      "no": 5,
+      "name": "CPP_SOURCE_PARAMETER_HINTS"
+    },
+    {
+      "no": 6,
+      "name": "CPP_SOURCE_CURSOR_PREDICTION"
+    },
+    {
+      "no": 7,
+      "name": "CPP_SOURCE_MANUAL_TRIGGER"
+    },
+    {
+      "no": 8,
+      "name": "CPP_SOURCE_EDITOR_CHANGE"
+    },
+    {
+      "no": 9,
+      "name": "CPP_SOURCE_LSP_SUGGESTIONS"
+    }
+  ],
+  "aiserver.v1.CppStoppedTrackingModelEvent.StoppedTrackingModelReason": [
+    {
+      "no": 0,
+      "name": "STOPPED_TRACKING_MODEL_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STOPPED_TRACKING_MODEL_REASON_FILE_TOO_BIG"
+    },
+    {
+      "no": 2,
+      "name": "STOPPED_TRACKING_MODEL_REASON_FILE_DISPOSED"
+    },
+    {
+      "no": 3,
+      "name": "STOPPED_TRACKING_MODEL_REASON_CHANGE_TOO_BIG"
+    }
+  ],
+  "aiserver.v1.CppTimelineEvent.Change.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_CORRECT"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_UNVALIDATED"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_INCORRECT"
+    }
+  ],
+  "aiserver.v1.CursorPrediction.CursorPredictionSource": [
+    {
+      "no": 0,
+      "name": "CURSOR_PREDICTION_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CURSOR_PREDICTION_SOURCE_ALWAYS_ON"
+    },
+    {
+      "no": 2,
+      "name": "CURSOR_PREDICTION_SOURCE_ACCEPT"
+    },
+    {
+      "no": 3,
+      "name": "CURSOR_PREDICTION_SOURCE_UNDO"
+    },
+    {
+      "no": 4,
+      "name": "CURSOR_PREDICTION_SOURCE_EDITOR_CHANGE"
+    }
+  ],
+  "aiserver.v1.DatabaseProvider": [
+    {
+      "no": 0,
+      "name": "DATABASE_PROVIDER_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DATABASE_PROVIDER_AURORA"
+    },
+    {
+      "no": 2,
+      "name": "DATABASE_PROVIDER_PLANETSCALE"
+    }
+  ],
+  "aiserver.v1.Diagnostic.DiagnosticSeverity": [
+    {
+      "no": 0,
+      "name": "DIAGNOSTIC_SEVERITY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DIAGNOSTIC_SEVERITY_ERROR"
+    },
+    {
+      "no": 2,
+      "name": "DIAGNOSTIC_SEVERITY_WARNING"
+    },
+    {
+      "no": 3,
+      "name": "DIAGNOSTIC_SEVERITY_INFORMATION"
+    },
+    {
+      "no": 4,
+      "name": "DIAGNOSTIC_SEVERITY_HINT"
+    }
+  ],
+  "aiserver.v1.DocumentSymbol.SymbolKind": [
+    {
+      "no": 0,
+      "name": "SYMBOL_KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SYMBOL_KIND_FILE"
+    },
+    {
+      "no": 2,
+      "name": "SYMBOL_KIND_MODULE"
+    },
+    {
+      "no": 3,
+      "name": "SYMBOL_KIND_NAMESPACE"
+    },
+    {
+      "no": 4,
+      "name": "SYMBOL_KIND_PACKAGE"
+    },
+    {
+      "no": 5,
+      "name": "SYMBOL_KIND_CLASS"
+    },
+    {
+      "no": 6,
+      "name": "SYMBOL_KIND_METHOD"
+    },
+    {
+      "no": 7,
+      "name": "SYMBOL_KIND_PROPERTY"
+    },
+    {
+      "no": 8,
+      "name": "SYMBOL_KIND_FIELD"
+    },
+    {
+      "no": 9,
+      "name": "SYMBOL_KIND_CONSTRUCTOR"
+    },
+    {
+      "no": 10,
+      "name": "SYMBOL_KIND_ENUM"
+    },
+    {
+      "no": 11,
+      "name": "SYMBOL_KIND_INTERFACE"
+    },
+    {
+      "no": 12,
+      "name": "SYMBOL_KIND_FUNCTION"
+    },
+    {
+      "no": 13,
+      "name": "SYMBOL_KIND_VARIABLE"
+    },
+    {
+      "no": 14,
+      "name": "SYMBOL_KIND_CONSTANT"
+    },
+    {
+      "no": 15,
+      "name": "SYMBOL_KIND_STRING"
+    },
+    {
+      "no": 16,
+      "name": "SYMBOL_KIND_NUMBER"
+    },
+    {
+      "no": 17,
+      "name": "SYMBOL_KIND_BOOLEAN"
+    },
+    {
+      "no": 18,
+      "name": "SYMBOL_KIND_ARRAY"
+    },
+    {
+      "no": 19,
+      "name": "SYMBOL_KIND_OBJECT"
+    },
+    {
+      "no": 20,
+      "name": "SYMBOL_KIND_KEY"
+    },
+    {
+      "no": 21,
+      "name": "SYMBOL_KIND_NULL"
+    },
+    {
+      "no": 22,
+      "name": "SYMBOL_KIND_ENUM_MEMBER"
+    },
+    {
+      "no": 23,
+      "name": "SYMBOL_KIND_STRUCT"
+    },
+    {
+      "no": 24,
+      "name": "SYMBOL_KIND_EVENT"
+    },
+    {
+      "no": 25,
+      "name": "SYMBOL_KIND_OPERATOR"
+    },
+    {
+      "no": 26,
+      "name": "SYMBOL_KIND_TYPE_PARAMETER"
+    }
+  ],
+  "aiserver.v1.DocumentationQueryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.EditFate": [
+    {
+      "no": 0,
+      "name": "EDIT_FATE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EDIT_FATE_ACCEPTED"
+    },
+    {
+      "no": 2,
+      "name": "EDIT_FATE_REJECTED"
+    },
+    {
+      "no": 3,
+      "name": "EDIT_FATE_PARTIALLY_ACCEPTED"
+    }
+  ],
+  "aiserver.v1.EditFileResult.FileDiff.Editor": [
+    {
+      "no": 0,
+      "name": "EDITOR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EDITOR_AI"
+    },
+    {
+      "no": 2,
+      "name": "EDITOR_HUMAN"
+    }
+  ],
+  "aiserver.v1.EditFileResult.RecoverableError.RecoverableErrorType": [
+    {
+      "no": 0,
+      "name": "RECOVERABLE_ERROR_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RECOVERABLE_ERROR_TYPE_SEARCH_STRING_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "RECOVERABLE_ERROR_TYPE_AMBIGUOUS_SEARCH_STRING"
+    }
+  ],
+  "aiserver.v1.EditHistoryAppendChangesRequest.PrivacyModeStatus": [
+    {
+      "no": 0,
+      "name": "PRIVACY_MODE_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PRIVACY_MODE_STATUS_PRIVACY_ENABLED"
+    },
+    {
+      "no": 2,
+      "name": "PRIVACY_MODE_STATUS_IMPLICIT_NO_PRIVACY"
+    },
+    {
+      "no": 3,
+      "name": "PRIVACY_MODE_STATUS_EXPLICIT_NO_PRIVACY"
+    }
+  ],
+  "aiserver.v1.EditParams.FrontendEditType": [
+    {
+      "no": 0,
+      "name": "FRONTEND_EDIT_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FRONTEND_EDIT_TYPE_INLINE_DIFFS"
+    },
+    {
+      "no": 2,
+      "name": "FRONTEND_EDIT_TYPE_SIMPLE"
+    }
+  ],
+  "aiserver.v1.EmbeddingModel": [
+    {
+      "no": 0,
+      "name": "EMBEDDING_MODEL_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EMBEDDING_MODEL_VOYAGE_CODE_2"
+    },
+    {
+      "no": 2,
+      "name": "EMBEDDING_MODEL_TEXT_EMBEDDINGS_LARGE_3"
+    },
+    {
+      "no": 3,
+      "name": "EMBEDDING_MODEL_QWEN_1_5B_CUSTOM"
+    },
+    {
+      "no": 4,
+      "name": "EMBEDDING_MODEL_MOCK_CHUNKER_ERROR"
+    },
+    {
+      "no": 5,
+      "name": "EMBEDDING_MODEL_QWEN_1_5B_0618_CUSTOM"
+    },
+    {
+      "no": 6,
+      "name": "EMBEDDING_MODEL_QWEN_1_5B_0618_FP8_MM_CUSTOM"
+    }
+  ],
+  "aiserver.v1.ErrorDetails.Error": [
+    {
+      "no": 0,
+      "name": "ERROR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "ERROR_BAD_API_KEY"
+    },
+    {
+      "no": 42,
+      "name": "ERROR_BAD_USER_API_KEY"
+    },
+    {
+      "no": 2,
+      "name": "ERROR_NOT_LOGGED_IN"
+    },
+    {
+      "no": 3,
+      "name": "ERROR_INVALID_AUTH_ID"
+    },
+    {
+      "no": 4,
+      "name": "ERROR_NOT_HIGH_ENOUGH_PERMISSIONS"
+    },
+    {
+      "no": 18,
+      "name": "ERROR_AGENT_REQUIRES_LOGIN"
+    },
+    {
+      "no": 5,
+      "name": "ERROR_BAD_MODEL_NAME"
+    },
+    {
+      "no": 39,
+      "name": "ERROR_NOT_FOUND"
+    },
+    {
+      "no": 40,
+      "name": "ERROR_DEPRECATED"
+    },
+    {
+      "no": 6,
+      "name": "ERROR_USER_NOT_FOUND"
+    },
+    {
+      "no": 7,
+      "name": "ERROR_FREE_USER_RATE_LIMIT_EXCEEDED"
+    },
+    {
+      "no": 8,
+      "name": "ERROR_PRO_USER_RATE_LIMIT_EXCEEDED"
+    },
+    {
+      "no": 9,
+      "name": "ERROR_FREE_USER_USAGE_LIMIT"
+    },
+    {
+      "no": 10,
+      "name": "ERROR_PRO_USER_USAGE_LIMIT"
+    },
+    {
+      "no": 41,
+      "name": "ERROR_RESOURCE_EXHAUSTED"
+    },
+    {
+      "no": 11,
+      "name": "ERROR_AUTH_TOKEN_NOT_FOUND"
+    },
+    {
+      "no": 12,
+      "name": "ERROR_AUTH_TOKEN_EXPIRED"
+    },
+    {
+      "no": 13,
+      "name": "ERROR_OPENAI"
+    },
+    {
+      "no": 14,
+      "name": "ERROR_OPENAI_RATE_LIMIT_EXCEEDED"
+    },
+    {
+      "no": 20,
+      "name": "ERROR_MAX_TOKENS"
+    },
+    {
+      "no": 23,
+      "name": "ERROR_PRO_USER_ONLY"
+    },
+    {
+      "no": 21,
+      "name": "ERROR_USER_ABORTED_REQUEST"
+    },
+    {
+      "no": 25,
+      "name": "ERROR_TIMEOUT"
+    },
+    {
+      "no": 22,
+      "name": "ERROR_GENERIC_RATE_LIMIT_EXCEEDED"
+    },
+    {
+      "no": 28,
+      "name": "ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT"
+    },
+    {
+      "no": 29,
+      "name": "ERROR_CUSTOM_MESSAGE"
+    },
+    {
+      "no": 30,
+      "name": "ERROR_OUTDATED_CLIENT"
+    },
+    {
+      "no": 31,
+      "name": "ERROR_CLAUDE_IMAGE_TOO_LARGE"
+    },
+    {
+      "no": 33,
+      "name": "ERROR_FILE_NOT_FOUND"
+    },
+    {
+      "no": 34,
+      "name": "ERROR_API_KEY_RATE_LIMIT"
+    },
+    {
+      "no": 35,
+      "name": "ERROR_DEBOUNCED"
+    },
+    {
+      "no": 36,
+      "name": "ERROR_BAD_REQUEST"
+    },
+    {
+      "no": 37,
+      "name": "ERROR_REPOSITORY_SERVICE_REPOSITORY_IS_NOT_INITIALIZED"
+    },
+    {
+      "no": 38,
+      "name": "ERROR_UNAUTHORIZED"
+    },
+    {
+      "no": 43,
+      "name": "ERROR_CONVERSATION_TOO_LONG"
+    },
+    {
+      "no": 44,
+      "name": "ERROR_USAGE_PRICING_REQUIRED"
+    },
+    {
+      "no": 45,
+      "name": "ERROR_USAGE_PRICING_REQUIRED_CHANGEABLE"
+    },
+    {
+      "no": 46,
+      "name": "ERROR_GITHUB_NO_USER_CREDENTIALS"
+    },
+    {
+      "no": 47,
+      "name": "ERROR_GITHUB_USER_NO_ACCESS"
+    },
+    {
+      "no": 48,
+      "name": "ERROR_GITHUB_APP_NO_ACCESS"
+    },
+    {
+      "no": 49,
+      "name": "ERROR_GITHUB_MULTIPLE_OWNERS"
+    },
+    {
+      "no": 50,
+      "name": "ERROR_RATE_LIMITED"
+    },
+    {
+      "no": 51,
+      "name": "ERROR_RATE_LIMITED_CHANGEABLE"
+    },
+    {
+      "no": 52,
+      "name": "ERROR_CUSTOM"
+    },
+    {
+      "no": 53,
+      "name": "ERROR_HOOKS_BLOCKED"
+    },
+    {
+      "no": 54,
+      "name": "ERROR_SUSPICIOUS_USAGE_BLOCKED"
+    },
+    {
+      "no": 55,
+      "name": "ERROR_EXTENSION_HOST_TIMEOUT"
+    },
+    {
+      "no": 56,
+      "name": "ERROR_NETWORK_ERROR"
+    },
+    {
+      "no": 57,
+      "name": "ERROR_PROVIDER_ERROR"
+    },
+    {
+      "no": 58,
+      "name": "ERROR_MODEL_BLOCKED"
+    },
+    {
+      "no": 59,
+      "name": "ERROR_INTERNAL"
+    },
+    {
+      "no": 60,
+      "name": "ERROR_MAX_MODE_REQUIRED"
+    },
+    {
+      "no": 61,
+      "name": "ERROR_MODEL_NO_LONGER_SUPPORTED"
+    },
+    {
+      "no": 62,
+      "name": "ERROR_PRICING_WARNING"
+    },
+    {
+      "no": 63,
+      "name": "ERROR_SLOW_POOL"
+    },
+    {
+      "no": 64,
+      "name": "ERROR_UNSUPPORTED_REGION"
+    },
+    {
+      "no": 65,
+      "name": "ERROR_ACCOUNT_CLOSED"
+    }
+  ],
+  "aiserver.v1.FSSyncErrorType": [
+    {
+      "no": 0,
+      "name": "FS_SYNC_ERROR_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FS_SYNC_ERROR_TYPE_NON_EXISTANT"
+    },
+    {
+      "no": 2,
+      "name": "FS_SYNC_ERROR_TYPE_HASH_MISMATCH"
+    }
+  ],
+  "aiserver.v1.FSUploadErrorType": [
+    {
+      "no": 0,
+      "name": "FS_UPLOAD_ERROR_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FS_UPLOAD_ERROR_TYPE_NON_EXISTANT"
+    },
+    {
+      "no": 2,
+      "name": "FS_UPLOAD_ERROR_TYPE_HASH_MISMATCH"
+    }
+  ],
+  "aiserver.v1.FastApplySource": [
+    {
+      "no": 0,
+      "name": "FAST_APPLY_SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FAST_APPLY_SOURCE_COMPOSER"
+    },
+    {
+      "no": 2,
+      "name": "FAST_APPLY_SOURCE_CLICKED_APPLY"
+    },
+    {
+      "no": 3,
+      "name": "FAST_APPLY_SOURCE_CACHED_APPLY"
+    },
+    {
+      "no": 4,
+      "name": "FAST_APPLY_SOURCE_COMPOSER_AGENT"
+    }
+  ],
+  "aiserver.v1.FastRepoInitHandshakeResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_UP_TO_DATE"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_OUT_OF_SYNC"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_EMPTY"
+    }
+  ],
+  "aiserver.v1.FastRepoInitHandshakeV2Response.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_SUCCESS"
+    }
+  ],
+  "aiserver.v1.FastUpdateFileRequest.UpdateType": [
+    {
+      "no": 0,
+      "name": "UPDATE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "UPDATE_TYPE_ADD"
+    },
+    {
+      "no": 2,
+      "name": "UPDATE_TYPE_DELETE"
+    },
+    {
+      "no": 3,
+      "name": "UPDATE_TYPE_MODIFY"
+    }
+  ],
+  "aiserver.v1.FastUpdateFileResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_EXPECTED_FAILURE"
+    }
+  ],
+  "aiserver.v1.FastUpdateFileV2Request.UpdateType": [
+    {
+      "no": 0,
+      "name": "UPDATE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "UPDATE_TYPE_ADD"
+    },
+    {
+      "no": 2,
+      "name": "UPDATE_TYPE_DELETE"
+    },
+    {
+      "no": 3,
+      "name": "UPDATE_TYPE_MODIFY"
+    },
+    {
+      "no": 4,
+      "name": "UPDATE_TYPE_BATCH"
+    }
+  ],
+  "aiserver.v1.FastUpdateFileV2Response.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_EXPECTED_FAILURE"
+    }
+  ],
+  "aiserver.v1.FeatureType": [
+    {
+      "no": 0,
+      "name": "FEATURE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FEATURE_TYPE_EDIT"
+    },
+    {
+      "no": 2,
+      "name": "FEATURE_TYPE_GENERATE"
+    },
+    {
+      "no": 3,
+      "name": "FEATURE_TYPE_INLINE_LONG_COMPLETION"
+    }
+  ],
+  "aiserver.v1.FinishUpdateRepoResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.FinishUploadRepoResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.GetCopyStatusResponse.CompletedStatus": [
+    {
+      "no": 0,
+      "name": "COMPLETED_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "COMPLETED_STATUS_UP_TO_DATE"
+    },
+    {
+      "no": 2,
+      "name": "COMPLETED_STATUS_OUT_OF_SYNC"
+    },
+    {
+      "no": 3,
+      "name": "COMPLETED_STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.GetCopyStatusResponse.Phase": [
+    {
+      "no": 0,
+      "name": "PHASE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PHASE_INITIALIZING"
+    },
+    {
+      "no": 2,
+      "name": "PHASE_COPYING"
+    },
+    {
+      "no": 3,
+      "name": "PHASE_COMPLETED"
+    },
+    {
+      "no": 4,
+      "name": "PHASE_CREATING_SEARCH_FILTERS"
+    },
+    {
+      "no": 5,
+      "name": "PHASE_COPYING_SEARCH_STATE"
+    },
+    {
+      "no": 6,
+      "name": "PHASE_COPYING_TREE_STATE"
+    },
+    {
+      "no": 7,
+      "name": "PHASE_SYNCING_COPY"
+    }
+  ],
+  "aiserver.v1.GetDefaultModelNudgeDataRequest.StartupOpportunity": [
+    {
+      "no": 0,
+      "name": "STARTUP_OPPORTUNITY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STARTUP_OPPORTUNITY_FIRST_OPEN"
+    },
+    {
+      "no": 2,
+      "name": "STARTUP_OPPORTUNITY_REOPEN"
+    }
+  ],
+  "aiserver.v1.GetDiffRequest.OutputFormat": [
+    {
+      "no": 0,
+      "name": "OUTPUT_FORMAT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "OUTPUT_FORMAT_NAME_STATUS"
+    },
+    {
+      "no": 2,
+      "name": "OUTPUT_FORMAT_NAME_STATUS_AND_NUMSTAT"
+    },
+    {
+      "no": 3,
+      "name": "OUTPUT_FORMAT_FILE_DIFFS"
+    },
+    {
+      "no": 4,
+      "name": "OUTPUT_FORMAT_DIFFS_WITH_BEFORE_AND_AFTER"
+    }
+  ],
+  "aiserver.v1.GetEvaluationPromptRequest.EvaluationPromptType": [
+    {
+      "no": 0,
+      "name": "EVALUATION_PROMPT_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EVALUATION_PROMPT_TYPE_GENERATE"
+    },
+    {
+      "no": 2,
+      "name": "EVALUATION_PROMPT_TYPE_CHAT"
+    }
+  ],
+  "aiserver.v1.GetEvaluationPromptRequest.RerankingStrategy": [
+    {
+      "no": 0,
+      "name": "RERANKING_STRATEGY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RERANKING_STRATEGY_DISTANCE_ONLY"
+    },
+    {
+      "no": 2,
+      "name": "RERANKING_STRATEGY_GPT4_RELEVANCE"
+    }
+  ],
+  "aiserver.v1.GetPRIndexingStatusResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_EMPTY"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_SYNCING"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_SYNCED"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_PARTIAL"
+    }
+  ],
+  "aiserver.v1.GitDiff.DiffType": [
+    {
+      "no": 0,
+      "name": "DIFF_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "DIFF_TYPE_DIFF_TO_HEAD"
+    },
+    {
+      "no": 2,
+      "name": "DIFF_TYPE_DIFF_FROM_BRANCH_TO_MAIN"
+    }
+  ],
+  "aiserver.v1.GitEvent.OperationType": [
+    {
+      "no": 0,
+      "name": "OPERATION_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "OPERATION_TYPE_COMMIT"
+    },
+    {
+      "no": 2,
+      "name": "OPERATION_TYPE_CHECKOUT"
+    },
+    {
+      "no": 3,
+      "name": "OPERATION_TYPE_PULL"
+    },
+    {
+      "no": 4,
+      "name": "OPERATION_TYPE_FETCH"
+    },
+    {
+      "no": 5,
+      "name": "OPERATION_TYPE_MERGE"
+    },
+    {
+      "no": 6,
+      "name": "OPERATION_TYPE_REBASE"
+    },
+    {
+      "no": 7,
+      "name": "OPERATION_TYPE_STASH"
+    },
+    {
+      "no": 8,
+      "name": "OPERATION_TYPE_BRANCH"
+    },
+    {
+      "no": 9,
+      "name": "OPERATION_TYPE_TAG"
+    }
+  ],
+  "aiserver.v1.HealthCheckResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_HEALTHY"
+    }
+  ],
+  "aiserver.v1.HeuristicsSelection.HeuristicsSelectionType": [
+    {
+      "no": 0,
+      "name": "HEURISTICS_SELECTION_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "HEURISTICS_SELECTION_TYPE_GROUP"
+    },
+    {
+      "no": 2,
+      "name": "HEURISTICS_SELECTION_TYPE_LINE"
+    },
+    {
+      "no": 3,
+      "name": "HEURISTICS_SELECTION_TYPE_FOLDING"
+    }
+  ],
+  "aiserver.v1.InterfaceAgentStatus.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_WAITING"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_RUNNING"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.LintDiscriminator": [
+    {
+      "no": 0,
+      "name": "LINT_DISCRIMINATOR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "LINT_DISCRIMINATOR_SPECIFIC_RULES"
+    },
+    {
+      "no": 2,
+      "name": "LINT_DISCRIMINATOR_COMPILE_ERRORS"
+    },
+    {
+      "no": 3,
+      "name": "LINT_DISCRIMINATOR_CHANGE_BEHAVIOR"
+    },
+    {
+      "no": 5,
+      "name": "LINT_DISCRIMINATOR_RELEVANCE"
+    },
+    {
+      "no": 6,
+      "name": "LINT_DISCRIMINATOR_USER_AWARENESS"
+    },
+    {
+      "no": 7,
+      "name": "LINT_DISCRIMINATOR_CORRECTNESS"
+    },
+    {
+      "no": 8,
+      "name": "LINT_DISCRIMINATOR_CHUNKING"
+    },
+    {
+      "no": 9,
+      "name": "LINT_DISCRIMINATOR_TYPO"
+    },
+    {
+      "no": 10,
+      "name": "LINT_DISCRIMINATOR_CONFIDENCE"
+    },
+    {
+      "no": 11,
+      "name": "LINT_DISCRIMINATOR_DISMISSED_BUGS"
+    }
+  ],
+  "aiserver.v1.LintGenerator": [
+    {
+      "no": 0,
+      "name": "LINT_GENERATOR_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "LINT_GENERATOR_NAIVE"
+    },
+    {
+      "no": 2,
+      "name": "LINT_GENERATOR_COMMENT_PIPELINE"
+    },
+    {
+      "no": 3,
+      "name": "LINT_GENERATOR_SIMPLE_BUG"
+    },
+    {
+      "no": 4,
+      "name": "LINT_GENERATOR_SIMPLE_LINT_RULES"
+    }
+  ],
+  "aiserver.v1.LintSeverity": [
+    {
+      "no": 0,
+      "name": "LINT_SEVERITY_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "LINT_SEVERITY_ERROR"
+    },
+    {
+      "no": 2,
+      "name": "LINT_SEVERITY_WARNING"
+    },
+    {
+      "no": 3,
+      "name": "LINT_SEVERITY_INFO"
+    },
+    {
+      "no": 4,
+      "name": "LINT_SEVERITY_HINT"
+    },
+    {
+      "no": 5,
+      "name": "LINT_SEVERITY_AI"
+    }
+  ],
+  "aiserver.v1.LogLinterExplicitUserFeedbackRequest.LinterUserFeedback": [
+    {
+      "no": 0,
+      "name": "LINTER_USER_FEEDBACK_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "LINTER_USER_FEEDBACK_CORRECT"
+    },
+    {
+      "no": 2,
+      "name": "LINTER_USER_FEEDBACK_INCORRECT"
+    },
+    {
+      "no": 3,
+      "name": "LINTER_USER_FEEDBACK_OTHER"
+    }
+  ],
+  "aiserver.v1.LogoutResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_NOT_LOGGED_IN"
+    }
+  ],
+  "aiserver.v1.MarkCppRequest.CppResponseTypes": [
+    {
+      "no": 0,
+      "name": "CPP_RESPONSE_TYPES_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CPP_RESPONSE_TYPES_GOOD"
+    },
+    {
+      "no": 2,
+      "name": "CPP_RESPONSE_TYPES_BAD"
+    },
+    {
+      "no": 3,
+      "name": "CPP_RESPONSE_TYPES_BAD_CONTEXT"
+    },
+    {
+      "no": 4,
+      "name": "CPP_RESPONSE_TYPES_BAD_REASONING"
+    },
+    {
+      "no": 5,
+      "name": "CPP_RESPONSE_TYPES_BAD_STUPID_MISTAKE"
+    },
+    {
+      "no": 6,
+      "name": "CPP_RESPONSE_TYPES_BAD_FORMATTING"
+    },
+    {
+      "no": 7,
+      "name": "CPP_RESPONSE_TYPES_BAD_RANGE"
+    },
+    {
+      "no": 8,
+      "name": "CPP_RESPONSE_TYPES_GOOD_PREDICTION"
+    },
+    {
+      "no": 9,
+      "name": "CPP_RESPONSE_TYPES_BAD_FALSE_POSITIVE_TRIGGER"
+    },
+    {
+      "no": 10,
+      "name": "CPP_RESPONSE_TYPES_BAD_FALSE_NEGATIVE_TRIGGER"
+    }
+  ],
+  "aiserver.v1.MissingFile.MissingReason": [
+    {
+      "no": 0,
+      "name": "MISSING_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MISSING_REASON_TOO_LARGE"
+    },
+    {
+      "no": 2,
+      "name": "MISSING_REASON_NOT_FOUND"
+    }
+  ],
+  "aiserver.v1.ModelQueryRequest.QueryType": [
+    {
+      "no": 0,
+      "name": "QUERY_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "QUERY_TYPE_KEYWORDS"
+    },
+    {
+      "no": 2,
+      "name": "QUERY_TYPE_EMBEDDINGS"
+    }
+  ],
+  "aiserver.v1.PathKeyHashType": [
+    {
+      "no": 0,
+      "name": "PATH_KEY_HASH_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "PATH_KEY_HASH_TYPE_SHA256"
+    }
+  ],
+  "aiserver.v1.PollLoginResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_LOGGED_IN"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_CHECKING"
+    }
+  ],
+  "aiserver.v1.PureMessage.MessageType": [
+    {
+      "no": 0,
+      "name": "MESSAGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "MESSAGE_TYPE_SYSTEM"
+    },
+    {
+      "no": 2,
+      "name": "MESSAGE_TYPE_USER"
+    },
+    {
+      "no": 3,
+      "name": "MESSAGE_TYPE_ASSISTANT"
+    }
+  ],
+  "aiserver.v1.RechunkerChoice": [
+    {
+      "no": 0,
+      "name": "RECHUNKER_CHOICE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RECHUNKER_CHOICE_IDENTITY"
+    },
+    {
+      "no": 2,
+      "name": "RECHUNKER_CHOICE_600_TOKS"
+    },
+    {
+      "no": 3,
+      "name": "RECHUNKER_CHOICE_2400_TOKS"
+    },
+    {
+      "no": 4,
+      "name": "RECHUNKER_CHOICE_4000_TOKS"
+    }
+  ],
+  "aiserver.v1.RemoveRepoHistoryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_NOT_AUTHORIZED"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_PARTIAL_SUCCESS"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_SUCCESS"
+    }
+  ],
+  "aiserver.v1.RemoveRepositoryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_NOT_AUTHORIZED"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_STARTED"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_SUCCESS"
+    }
+  ],
+  "aiserver.v1.RepoEvent.Type": [
+    {
+      "no": 0,
+      "name": "TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TYPE_SYNCED"
+    },
+    {
+      "no": 2,
+      "name": "TYPE_LOADING"
+    },
+    {
+      "no": 3,
+      "name": "TYPE_INDEXING_SETUP"
+    },
+    {
+      "no": 4,
+      "name": "TYPE_INDEXING_INIT_FROM_SIMILAR_CODEBASE"
+    },
+    {
+      "no": 5,
+      "name": "TYPE_PAUSED"
+    },
+    {
+      "no": 6,
+      "name": "TYPE_INDEXING"
+    },
+    {
+      "no": 7,
+      "name": "TYPE_ERROR"
+    },
+    {
+      "no": 8,
+      "name": "TYPE_NOT_AUTO_INDEXING"
+    },
+    {
+      "no": 9,
+      "name": "TYPE_NOT_INDEXED"
+    }
+  ],
+  "aiserver.v1.RepoHistoryInitHandshakeResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_TEST_CANDIDATES"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_NO_INDEXING"
+    }
+  ],
+  "aiserver.v1.RepoHistorySyncCompleteRequest.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_TOTAL_FAILURE"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_INTERRUPTED"
+    }
+  ],
+  "aiserver.v1.RepoHistorySyncOneResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_PARTIAL_SUCCESS"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_NOT_INDEXING"
+    }
+  ],
+  "aiserver.v1.ReportAgentFeedbackRequest.Sentiment": [
+    {
+      "no": 0,
+      "name": "SENTIMENT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SENTIMENT_UP"
+    },
+    {
+      "no": 2,
+      "name": "SENTIMENT_DOWN"
+    },
+    {
+      "no": 3,
+      "name": "SENTIMENT_RETRACTED"
+    }
+  ],
+  "aiserver.v1.ReportAgentFeedbackRequest.Source": [
+    {
+      "no": 0,
+      "name": "SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SOURCE_IDE"
+    },
+    {
+      "no": 2,
+      "name": "SOURCE_GLASS"
+    },
+    {
+      "no": 3,
+      "name": "SOURCE_SAND"
+    }
+  ],
+  "aiserver.v1.ReportAgentFeedbackRequest.Variant": [
+    {
+      "no": 0,
+      "name": "VARIANT_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "VARIANT_PROMINENT"
+    },
+    {
+      "no": 2,
+      "name": "VARIANT_INLINE"
+    }
+  ],
+  "aiserver.v1.ReportBugRequest.BugType": [
+    {
+      "no": 0,
+      "name": "BUG_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "BUG_TYPE_LOW"
+    },
+    {
+      "no": 2,
+      "name": "BUG_TYPE_MEDIUM"
+    },
+    {
+      "no": 3,
+      "name": "BUG_TYPE_URGENT"
+    },
+    {
+      "no": 4,
+      "name": "BUG_TYPE_CRASH"
+    },
+    {
+      "no": 5,
+      "name": "BUG_TYPE_CONNECTION_ERROR"
+    },
+    {
+      "no": 6,
+      "name": "BUG_TYPE_IDEA"
+    },
+    {
+      "no": 7,
+      "name": "BUG_TYPE_MISC_AUTOMATIC_ERROR"
+    }
+  ],
+  "aiserver.v1.ReportCmdKFateRequest.Fate": [
+    {
+      "no": 0,
+      "name": "FATE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FATE_CANCELLED"
+    },
+    {
+      "no": 2,
+      "name": "FATE_ACCEPTED"
+    },
+    {
+      "no": 3,
+      "name": "FATE_REJECTED"
+    },
+    {
+      "no": 4,
+      "name": "FATE_FOLLOWED_UP"
+    },
+    {
+      "no": 5,
+      "name": "FATE_REPROMPTED"
+    }
+  ],
+  "aiserver.v1.ReportFeedbackRequest.FeedbackType": [
+    {
+      "no": 0,
+      "name": "FEEDBACK_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FEEDBACK_TYPE_LOW_PRIORITY"
+    },
+    {
+      "no": 2,
+      "name": "FEEDBACK_TYPE_HIGH_PRIORITY"
+    }
+  ],
+  "aiserver.v1.ReportGenerationFeedbackRequest.FeedbackType": [
+    {
+      "no": 0,
+      "name": "FEEDBACK_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FEEDBACK_TYPE_THUMBS_UP"
+    },
+    {
+      "no": 2,
+      "name": "FEEDBACK_TYPE_THUMBS_DOWN"
+    },
+    {
+      "no": 3,
+      "name": "FEEDBACK_TYPE_NEUTRAL"
+    },
+    {
+      "no": 4,
+      "name": "FEEDBACK_TYPE_STARS"
+    }
+  ],
+  "aiserver.v1.ReportGenerationFeedbackRequest.Source": [
+    {
+      "no": 0,
+      "name": "SOURCE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SOURCE_INLINE"
+    },
+    {
+      "no": 2,
+      "name": "SOURCE_VIBEOMETER"
+    }
+  ],
+  "aiserver.v1.RepositoryCodebaseInfo.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_UP_TO_DATE"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_OUT_OF_SYNC"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_EMPTY"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_EMPTY_WITH_COPY_AVAILABLE"
+    },
+    {
+      "no": 5,
+      "name": "STATUS_COPY_IN_PROGRESS"
+    }
+  ],
+  "aiserver.v1.RepositoryCodebaseSyncStatus.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.RerankerAlgorithm": [
+    {
+      "no": 0,
+      "name": "RERANKER_ALGORITHM_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RERANKER_ALGORITHM_LULEA"
+    },
+    {
+      "no": 2,
+      "name": "RERANKER_ALGORITHM_UMEA"
+    },
+    {
+      "no": 3,
+      "name": "RERANKER_ALGORITHM_NONE"
+    },
+    {
+      "no": 4,
+      "name": "RERANKER_ALGORITHM_LLAMA"
+    },
+    {
+      "no": 5,
+      "name": "RERANKER_ALGORITHM_STARCODER_V1"
+    },
+    {
+      "no": 6,
+      "name": "RERANKER_ALGORITHM_GPT_3_5_LOGPROBS"
+    },
+    {
+      "no": 7,
+      "name": "RERANKER_ALGORITHM_LULEA_HAIKU"
+    },
+    {
+      "no": 8,
+      "name": "RERANKER_ALGORITHM_COHERE"
+    },
+    {
+      "no": 9,
+      "name": "RERANKER_ALGORITHM_VOYAGE"
+    },
+    {
+      "no": 10,
+      "name": "RERANKER_ALGORITHM_VOYAGE_EMBEDS"
+    },
+    {
+      "no": 11,
+      "name": "RERANKER_ALGORITHM_IDENTITY"
+    },
+    {
+      "no": 12,
+      "name": "RERANKER_ALGORITHM_ADA_EMBEDS"
+    }
+  ],
+  "aiserver.v1.ReviewChatMessage.ReviewChatMessageType": [
+    {
+      "no": 0,
+      "name": "REVIEW_CHAT_MESSAGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "REVIEW_CHAT_MESSAGE_TYPE_HUMAN"
+    },
+    {
+      "no": 2,
+      "name": "REVIEW_CHAT_MESSAGE_TYPE_AI"
+    }
+  ],
+  "aiserver.v1.RipgrepSearchResultInternal.IFileSearchStats.FileSearchProviderType": [
+    {
+      "no": 0,
+      "name": "FILE_SEARCH_PROVIDER_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FILE_SEARCH_PROVIDER_TYPE_FILE_SEARCH_PROVIDER"
+    },
+    {
+      "no": 2,
+      "name": "FILE_SEARCH_PROVIDER_TYPE_SEARCH_PROCESS"
+    }
+  ],
+  "aiserver.v1.RipgrepSearchResultInternal.ITextSearchStats.TextSearchProviderType": [
+    {
+      "no": 0,
+      "name": "TEXT_SEARCH_PROVIDER_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TEXT_SEARCH_PROVIDER_TYPE_TEXT_SEARCH_PROVIDER"
+    },
+    {
+      "no": 2,
+      "name": "TEXT_SEARCH_PROVIDER_TYPE_SEARCH_PROCESS"
+    },
+    {
+      "no": 3,
+      "name": "TEXT_SEARCH_PROVIDER_TYPE_AI_TEXT_SEARCH_PROVIDER"
+    }
+  ],
+  "aiserver.v1.RipgrepSearchResultInternal.SearchCompletionExitCode": [
+    {
+      "no": 0,
+      "name": "SEARCH_COMPLETION_EXIT_CODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SEARCH_COMPLETION_EXIT_CODE_NORMAL"
+    },
+    {
+      "no": 2,
+      "name": "SEARCH_COMPLETION_EXIT_CODE_NEW_SEARCH_STARTED"
+    }
+  ],
+  "aiserver.v1.RipgrepSearchResultInternal.TextSearchCompleteMessageType": [
+    {
+      "no": 0,
+      "name": "TEXT_SEARCH_COMPLETE_MESSAGE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TEXT_SEARCH_COMPLETE_MESSAGE_TYPE_INFORMATION"
+    },
+    {
+      "no": 2,
+      "name": "TEXT_SEARCH_COMPLETE_MESSAGE_TYPE_WARNING"
+    }
+  ],
+  "aiserver.v1.RunTerminalCommandEndedReason": [
+    {
+      "no": 0,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_EXECUTION_COMPLETED"
+    },
+    {
+      "no": 2,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_EXECUTION_ABORTED"
+    },
+    {
+      "no": 3,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_EXECUTION_FAILED"
+    },
+    {
+      "no": 4,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_ERROR_OCCURRED_CHECKING_REASON"
+    },
+    {
+      "no": 5,
+      "name": "RUN_TERMINAL_COMMAND_ENDED_REASON_IDLE_TIMEOUT"
+    }
+  ],
+  "aiserver.v1.ShellType": [
+    {
+      "no": 0,
+      "name": "SHELL_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SHELL_TYPE_BASH"
+    },
+    {
+      "no": 2,
+      "name": "SHELL_TYPE_POWERSHELL"
+    }
+  ],
+  "aiserver.v1.SimilarityMetricType": [
+    {
+      "no": 0,
+      "name": "SIMILARITY_METRIC_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SIMILARITY_METRIC_TYPE_SIMHASH"
+    }
+  ],
+  "aiserver.v1.SlashEditRequest.FastApplyModelType": [
+    {
+      "no": 0,
+      "name": "FAST_APPLY_MODEL_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "FAST_APPLY_MODEL_TYPE_DEFAULT"
+    },
+    {
+      "no": 2,
+      "name": "FAST_APPLY_MODEL_TYPE_DEEPSEEK"
+    },
+    {
+      "no": 3,
+      "name": "FAST_APPLY_MODEL_TYPE_SONNET"
+    },
+    {
+      "no": 4,
+      "name": "FAST_APPLY_MODEL_TYPE_OPUS_DIFF"
+    },
+    {
+      "no": 5,
+      "name": "FAST_APPLY_MODEL_TYPE_SMART_REWRITE"
+    },
+    {
+      "no": 6,
+      "name": "FAST_APPLY_MODEL_TYPE_GPT4"
+    },
+    {
+      "no": 7,
+      "name": "FAST_APPLY_MODEL_TYPE_GPT4_NOSPEC"
+    },
+    {
+      "no": 8,
+      "name": "FAST_APPLY_MODEL_TYPE_SMART_REWRITE_NOSPEC"
+    },
+    {
+      "no": 9,
+      "name": "FAST_APPLY_MODEL_TYPE_OPUS"
+    },
+    {
+      "no": 10,
+      "name": "FAST_APPLY_MODEL_TYPE_HAIKU"
+    },
+    {
+      "no": 11,
+      "name": "FAST_APPLY_MODEL_TYPE_GPT4O_NOSPEC"
+    },
+    {
+      "no": 12,
+      "name": "FAST_APPLY_MODEL_TYPE_GPT4O_DIFF"
+    },
+    {
+      "no": 13,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_REWRITE"
+    },
+    {
+      "no": 14,
+      "name": "FAST_APPLY_MODEL_TYPE_DEEPSEEK_33B"
+    },
+    {
+      "no": 15,
+      "name": "FAST_APPLY_MODEL_TYPE_SONNET_35_DIFF"
+    },
+    {
+      "no": 16,
+      "name": "FAST_APPLY_MODEL_TYPE_SONNET_35_REWRITE"
+    },
+    {
+      "no": 17,
+      "name": "FAST_APPLY_MODEL_TYPE_PROMPTED_DEEPSEEK_V2"
+    },
+    {
+      "no": 18,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_REWRITE_OLD"
+    },
+    {
+      "no": 19,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_REWRITE_FP16"
+    },
+    {
+      "no": 20,
+      "name": "FAST_APPLY_MODEL_TYPE_DEEPSEEK_33B_V2"
+    },
+    {
+      "no": 21,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_V4"
+    },
+    {
+      "no": 22,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_V5"
+    },
+    {
+      "no": 23,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_V6"
+    },
+    {
+      "no": 24,
+      "name": "FAST_APPLY_MODEL_TYPE_CODESTRAL_V7"
+    }
+  ],
+  "aiserver.v1.StartUpdateRepoResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_ALREADY_SYNCING"
+    }
+  ],
+  "aiserver.v1.StartUploadRepoResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_ALREADY_EXISTS"
+    }
+  ],
+  "aiserver.v1.StreamCppRequest.ControlToken": [
+    {
+      "no": 0,
+      "name": "CONTROL_TOKEN_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "CONTROL_TOKEN_QUIET"
+    },
+    {
+      "no": 2,
+      "name": "CONTROL_TOKEN_LOUD"
+    },
+    {
+      "no": 3,
+      "name": "CONTROL_TOKEN_OP"
+    }
+  ],
+  "aiserver.v1.StreamUnifiedChatRequest.ThinkingLevel": [
+    {
+      "no": 0,
+      "name": "THINKING_LEVEL_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "THINKING_LEVEL_MEDIUM"
+    },
+    {
+      "no": 2,
+      "name": "THINKING_LEVEL_HIGH"
+    }
+  ],
+  "aiserver.v1.StreamUnifiedChatRequest.UnifiedMode": [
+    {
+      "no": 0,
+      "name": "UNIFIED_MODE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "UNIFIED_MODE_CHAT"
+    },
+    {
+      "no": 2,
+      "name": "UNIFIED_MODE_AGENT"
+    },
+    {
+      "no": 3,
+      "name": "UNIFIED_MODE_EDIT"
+    },
+    {
+      "no": 4,
+      "name": "UNIFIED_MODE_CUSTOM"
+    },
+    {
+      "no": 5,
+      "name": "UNIFIED_MODE_PLAN"
+    },
+    {
+      "no": 6,
+      "name": "UNIFIED_MODE_DEBUG"
+    }
+  ],
+  "aiserver.v1.SttControl.Type": [
+    {
+      "no": 0,
+      "name": "TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TYPE_STOP"
+    },
+    {
+      "no": 2,
+      "name": "TYPE_CANCEL"
+    }
+  ],
+  "aiserver.v1.SubagentType": [
+    {
+      "no": 0,
+      "name": "SUBAGENT_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "SUBAGENT_TYPE_DEEP_SEARCH"
+    },
+    {
+      "no": 2,
+      "name": "SUBAGENT_TYPE_FIX_LINTS"
+    },
+    {
+      "no": 3,
+      "name": "SUBAGENT_TYPE_TASK"
+    },
+    {
+      "no": 4,
+      "name": "SUBAGENT_TYPE_SPEC"
+    }
+  ],
+  "aiserver.v1.SubscribeRepositoryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_NOT_AUTHORIZED"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_ALREADY_SUBSCRIBED"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_SUCCESS"
+    }
+  ],
+  "aiserver.v1.TaskStatus": [
+    {
+      "no": 0,
+      "name": "TASK_STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TASK_STATUS_RUNNING"
+    },
+    {
+      "no": 2,
+      "name": "TASK_STATUS_PAUSED"
+    },
+    {
+      "no": 3,
+      "name": "TASK_STATUS_DONE"
+    },
+    {
+      "no": 4,
+      "name": "TASK_STATUS_NOT_STARTED"
+    }
+  ],
+  "aiserver.v1.ToolResultAttachments.TodoReminderType": [
+    {
+      "no": 0,
+      "name": "TODO_REMINDER_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "TODO_REMINDER_TYPE_EVERY_10_TURNS"
+    },
+    {
+      "no": 2,
+      "name": "TODO_REMINDER_TYPE_AFTER_EDIT"
+    }
+  ],
+  "aiserver.v1.UnsubscribeRepositoryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_NOT_FOUND"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_NOT_SUBSCRIBED"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_SUCCESS"
+    }
+  ],
+  "aiserver.v1.UpdateFileResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_EXPECTED_FAILURE"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_QUEUE_BACKED_UP"
+    }
+  ],
+  "aiserver.v1.UpgradeScopeResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    }
+  ],
+  "aiserver.v1.UploadFileResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_EXPECTED_FAILURE"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_QUEUE_BACKED_UP"
+    }
+  ],
+  "aiserver.v1.UploadRepositoryResponse.Status": [
+    {
+      "no": 0,
+      "name": "STATUS_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "STATUS_SUCCESS"
+    },
+    {
+      "no": 2,
+      "name": "STATUS_FAILURE"
+    },
+    {
+      "no": 3,
+      "name": "STATUS_AUTH_TOKEN_BAD_PERMISSIONS"
+    },
+    {
+      "no": 4,
+      "name": "STATUS_ALREADY_EXISTS"
+    }
+  ],
+  "aiserver.v1.UsageEventKind": [
+    {
+      "no": 0,
+      "name": "USAGE_EVENT_KIND_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "USAGE_EVENT_KIND_USAGE_BASED"
+    },
+    {
+      "no": 2,
+      "name": "USAGE_EVENT_KIND_USER_API_KEY"
+    },
+    {
+      "no": 3,
+      "name": "USAGE_EVENT_KIND_INCLUDED_IN_PRO"
+    },
+    {
+      "no": 4,
+      "name": "USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS"
+    },
+    {
+      "no": 5,
+      "name": "USAGE_EVENT_KIND_ERRORED_NOT_CHARGED"
+    },
+    {
+      "no": 6,
+      "name": "USAGE_EVENT_KIND_ABORTED_NOT_CHARGED"
+    },
+    {
+      "no": 7,
+      "name": "USAGE_EVENT_KIND_CUSTOM_SUBSCRIPTION"
+    },
+    {
+      "no": 8,
+      "name": "USAGE_EVENT_KIND_INCLUDED_IN_PRO_PLUS"
+    },
+    {
+      "no": 9,
+      "name": "USAGE_EVENT_KIND_INCLUDED_IN_ULTRA"
+    },
+    {
+      "no": 10,
+      "name": "USAGE_EVENT_KIND_FREE_CREDIT"
+    }
+  ],
+  "aiserver.v1.UserResponseToSuggestedCodeBlock.UserResponseType": [
+    {
+      "no": 0,
+      "name": "USER_RESPONSE_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "USER_RESPONSE_TYPE_ACCEPT"
+    },
+    {
+      "no": 2,
+      "name": "USER_RESPONSE_TYPE_REJECT"
+    },
+    {
+      "no": 3,
+      "name": "USER_RESPONSE_TYPE_MODIFY"
+    }
+  ],
+  "aiserver.v1.WorktreeEvent.EventType": [
+    {
+      "no": 0,
+      "name": "EVENT_TYPE_UNSPECIFIED"
+    },
+    {
+      "no": 1,
+      "name": "EVENT_TYPE_APPLY_TO_MAIN"
+    },
+    {
+      "no": 2,
+      "name": "EVENT_TYPE_UNDO_APPLY"
+    },
+    {
+      "no": 3,
+      "name": "EVENT_TYPE_VIEW_SUBCOMPOSER"
+    }
+  ]
+}
