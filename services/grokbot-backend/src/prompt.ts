@@ -27,6 +27,8 @@ export interface PromptContext {
   timeZone?: string;
   /** Injected in tests so the volatile tier is deterministic. */
   now?: Date;
+  /** What this bot has learned about the user, already rendered. */
+  memory?: string;
 }
 
 /** Tier 1 — identity, behaviour and the tool contract. Cacheable. */
@@ -61,6 +63,11 @@ export function contextTier(ctx: PromptContext): string {
       : "Hiện chưa có box: bạn KHÔNG chạy được lệnh shell, không đọc file, không mở trình duyệt. " +
         "Đừng hứa làm những việc đó — nói thẳng là chưa nối box.",
   );
+
+  // Memory belongs in THIS tier. It changes as the agent learns but not per turn, so it sits
+  // behind the cacheable prefix and ahead of the timestamp. Injecting it every turn is the
+  // point: a memory the agent has to remember to go and read is one it usually does not read.
+  if (ctx.memory?.trim()) lines.push("", ctx.memory.trim());
   return lines.join("\n");
 }
 

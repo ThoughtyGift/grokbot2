@@ -13,7 +13,7 @@
  */
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, writeFile, readdir, stat, mkdir, rename } from "node:fs/promises";
 import { resolve, join, relative, isAbsolute } from "node:path";
 
 const PORT = Number(process.argv[2] ?? process.env.GROKBOT2_EXEC_PORT ?? 1337);
@@ -61,7 +61,44 @@ const sh = (command, cwd, timeout) =>
       });
   });
 
+/**
+ * Memory lives OUTSIDE the sandbox root.
+ *
+ * The original describes `/home/box` as holding "your profile, memory, routines" — separate
+ * from the scratch space in `/workspace`. Keeping it out of the tool-visible root means a
+ * stray `rm -rf *` in the workspace cannot wipe what the agent has learned, and the agent
+ * cannot reach another agent's memory by path.
+ */
+const MEMORY_DIR = process.env.GROKBOT2_MEMORY_DIR ?? "/root/grok-memory";
+
+/** Keys become filenames, so anything that is not a plain identifier is rejected. */
+function memoryFile(key) {
+  const k = String(key ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(k)) throw new Error(`invalid memory key: ${key}`);
+  return join(MEMORY_DIR, `${k}.json`);
+}
+
 const handlers = {
+  async memoryLoad({ key }) {
+    try {
+      return { entries: JSON.parse(await readFile(memoryFile(key), "utf8")) };
+    } catch (e) {
+      if (e?.code === "ENOENT") return { entries: [] };   // nothing learned yet is not an error
+      throw e;
+    }
+  },
+
+  async memorySave({ key, entries }) {
+    if (!Array.isArray(entries)) throw new Error("entries must be an array");
+    const file = memoryFile(key);
+    await mkdir(MEMORY_DIR, { recursive: true });
+    // Write then rename: a crash mid-write must not leave truncated memory behind.
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, JSON.stringify(entries, null, 1));
+    await rename(tmp, file);
+    return { saved: entries.length, path: file };
+  },
+
   async health() {
     const { stdout } = await sh("uname -a; echo; df -h / | tail -1", ROOT, 10_000);
     return { ok: true, root: ROOT, display: process.env.DISPLAY ?? null, info: stdout.trim() };

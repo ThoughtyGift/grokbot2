@@ -28,6 +28,7 @@ import { requestBoxHelp, setHandBackSink, restoreHandoff, handoffEntries, type B
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
 import { buildSystemPrompt } from "./prompt.js";
+import { knowledgeBase, loadMemory, renderMemory } from "./memory.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
 /** The FE marks a reaction as the current user's when `by === "me"`. */
@@ -276,6 +277,8 @@ export interface ToolCtx {
   note(text: string): void;
   /** Hand the screen to the user; resolves when they hand the box back. */
   requestBoxHelp(instruction: string): Promise<string>;
+  /** Which agent this tool is running for — memory is per bot. */
+  agentId: string;
 }
 
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
@@ -295,6 +298,24 @@ const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<stri
  * Auto-approved: it has no side effect, and putting an approval card in front of a question
  * would make the user click twice to be asked something.
  */
+/**
+ * Remember something about this user (`knowledge_base` in the original catalog).
+ *
+ * Auto-approved: writing a note has no side effect outside the agent's own memory, and an
+ * approval card in front of it would train the model to stop bothering.
+ */
+TOOLS.knowledge_base = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { knowledge_to_store: arg }; }
+  const r = await knowledgeBase(ctx.agentId, {
+    knowledge_to_store: spec?.knowledge_to_store ?? spec?.content ?? spec?.text,
+    title: spec?.title,
+    existing_knowledge_id: spec?.existing_knowledge_id ?? spec?.id,
+    action: spec?.action,
+  });
+  return r.confirmation_message;
+};
+
 TOOLS.ask_question = (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { return 'ask_question cần JSON, ví dụ {"prompt":"…","options":[{"label":"A"}]}'; }
@@ -390,11 +411,26 @@ const ASK_PROTOCOL =
   "— tối đa 6 lựa chọn, thêm \"allowCustom\":true nếu họ có thể tự gõ câu trả lời. " +
   "Đừng hỏi rồi tự trả lời: dừng lượt sau khi hỏi, câu trả lời sẽ đến ở lượt sau.";
 
+/**
+ * Memory only helps if the agent writes to it, and models do not volunteer that.
+ *
+ * So the rule names the trigger (a durable fact about the person, not the current task) and
+ * the anti-trigger — otherwise it either never remembers anything, or fills memory with
+ * transcript.
+ */
+const MEMORY_PROTOCOL = boxConfigured()
+  ? "\n\nTRÍ NHỚ: khi người dùng nói điều gì đáng nhớ lâu dài — tên, nghề, sở thích, cách họ " +
+    "muốn được trả lời, thông tin dự án của họ — hãy lưu lại bằng " +
+    'TOOL_CALL: knowledge_base({"title":"nhãn ngắn","knowledge_to_store":"nội dung"}). ' +
+    "Chỉ lưu điều còn đúng ở lần trò chuyện sau; KHÔNG lưu chi tiết vụn vặt của cuộc hội thoại " +
+    "hiện tại. Những gì đã nhớ được đưa sẵn vào đầu mỗi lượt nên bạn không cần đọc lại."
+  : "";
+
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
   "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
-  BROWSER_PROTOCOL + ASK_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + ASK_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
@@ -624,6 +660,7 @@ export function postWidget(
 
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
+  agentId,
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   ask: (widget) => postWidget(agentId, widget),
   note: (text) => {
@@ -896,6 +933,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // Tiered so the ~5k-token base prompt stays a stable cacheable prefix; the timestamp and
   // anything else per-turn goes last. See prompt.ts.
   const system = buildSystemPrompt(TOOL_PROTOCOL, {
+    memory: renderMemory(await loadMemory(agentId)),
     agentName: agents.get(agentId)?.name,
     boxOn: boxConfigured(),
     browserOn: isBrowserConfigured(),
