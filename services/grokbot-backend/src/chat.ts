@@ -21,6 +21,7 @@ import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./browser.js";
+import { stageImage } from "./attachments.js";
 import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol } from "./tools.js";
 import { boxConfigured } from "./box-exec.js";
 
@@ -56,9 +57,10 @@ type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending"
  *
  *   kind==="send-message" && message.type==="attachment"  →  <Img alt={message.alt} url={message.url}>
  *
- * `url` is rendered directly when it is a `data:` or `https:` URL; anything else makes the
- * renderer ask the host to resolve it, and with no host resolver the chip shows
- * "Image unavailable". So we always emit data: URLs.
+ * `url` decides *which component renders it*, by file extension alone — a `data:` URL has no
+ * extension and falls through to a plain file chip. So `url` is a virtual path ending in
+ * `.png` and the bytes are served from `attachments.ts` through the gateway. See that file
+ * for the three gates involved.
  *
  * (A previous `images?: string[]` field on TextMsg was invented — nothing assigned it and the
  * renderer has no path for it. It is gone; see docs/parity.md §2.)
@@ -391,11 +393,15 @@ export function interruptAgentRun(a: { agentId?: string; id?: string }) {
  * resolver, so callers pass a data URL (see AttachmentMsg).
  */
 export function postAttachment(agentId: string, dataUrl: string, fileName: string, alt: string): void {
+  // `url` must be a path whose extension the renderer can read, not the data URL itself —
+  // the bytes come back through the gateway's readAttachmentImage. See attachments.ts.
+  const path = stageImage(dataUrl, fileName);
+  if (path == null) return;
   tail(agentId).push({
     id: nextId(),
     kind: "send-message",
     author: authorOf(agentId),
-    message: { type: "attachment", url: dataUrl, file_name: fileName, alt },
+    message: { type: "attachment", url: path, file_name: fileName, alt },
     timestampMs: Date.now(),
   });
   onUpdate(agentId);

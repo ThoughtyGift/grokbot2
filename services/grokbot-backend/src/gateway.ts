@@ -51,6 +51,7 @@ import {
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus } from "./forever-box.js";
+import { readAttachmentImage } from "./attachments.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
@@ -158,6 +159,8 @@ const methods: Record<string, (args: any) => unknown> = {
   getBoxSecretsStatus: () => ({}),
   setBoxSecrets: () => ({}),
   setWindowFocused: () => ({}),
+  // The desktop asks the box for attachment bytes once its own filesystem lookup misses.
+  readAttachmentImage: (a) => readAttachmentImage(a),
   // `rooms` is mapped without a guard on every poll, so a bare {} throws in the store.
   getSharingState: () => ({ rooms: [] }),
   isGlobalSearchEnabled: () => false,
