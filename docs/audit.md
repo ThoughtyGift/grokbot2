@@ -24,15 +24,21 @@ Two numbers matter, and they measure different things:
 ## Stubbed — shape-correct, no feature behind it
 
 These answer their declared shape (array / record / null) so the UI shows an honest empty
-state instead of mis-parsing, but nothing is implemented: workflows, automations, channels &
-listeners, skill publishing, subagents, async tasks, cloud agent, forever-box, teach recording,
-media search, groups, trays, MCP servers, plugins/marketplace.
+state instead of mis-parsing, but nothing is implemented: workflows, channels & listeners,
+skill publishing, subagents, async tasks, cloud agent, teach recording, media search, groups,
+trays, MCP servers, plugins/marketplace.
+
+**Shape-correct is not the same as read-correct.** Two stubs answered a plausible shape and
+still crashed the UI, because the client reads those fields without a guard:
+`getForeverBoxStatus` returning `{status:"disabled"}` (no `state`/`vncUrl`/`agentId`) left the
+computer pane dark, and `getSharingState` returning `{}` threw on `v.rooms.map(…)`. Check what
+the client *reads*, not just what it accepts.
 
 ## Missing — needs real infrastructure
 
 | Gap | Why it can't just be stubbed |
 |-----|------------------------------|
-| **VNC / exec workspace** ("Can't reach … screen") | the pane streams a real Linux desktop (Xvfb + x11vnc + websockify) |
+| **Exec daemon** (running commands in the box) | needs a real daemon on the box; the *screen* does not depend on it |
 | **Shared rooms** (9 methods) | multiplayer needs a relay server; faking it creates rooms nobody can join |
 | **Voice input / transcription** | needs an audio pipeline |
 | **Attachments beyond one image** | upload/stage/download are host-side surfaces |

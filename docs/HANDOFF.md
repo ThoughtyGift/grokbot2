@@ -40,12 +40,11 @@ grokbot2 backend            ← this repo
 | Tool calls | model emits `TOOL_CALL:` → approval card → approve → result → follow-up answer |
 | Transcript | paging (`beforeSeq`), outline, search, interrupt |
 | Persistence | agents, transcripts, settings, acceptance ledger survive restarts |
+| **VNC workspace** | live desktop in the pane and the full-size viewer; keyboard and mouse reach the box (§6) |
 | Coverage | **78 / 87** coordinator methods handled |
 
 **Not working**
 
-- **VNC workspace pane** — the box is built and serving (below), but the app still shows
-  "Can't reach … screen" and never opens the viewer. This is where to resume.
 - **Shared rooms** (9 methods) — needs a real relay; faking it would create rooms nobody can join.
 - Stubs that answer their declared shape but have no feature: workflows, automations, channels,
   skills publishing, subagents, async tasks, cloud agent, forever-box, teach recording,
@@ -103,6 +102,7 @@ All under `services/grokbot-backend/scripts/`, all driving the real app over CDP
 | `box-probe.mjs` | logging pass-through to the real backend; decodes the box descriptor |
 | `label-window.mjs` | distinct window titles when two instances run |
 | `capture-box.mjs` | hooks MessagePort (returned nothing useful — box traffic is host-side) |
+| `e2e-vnc.mjs` | proves the computer pane: status shape, viewer webviews, live RFB, framebuffer dump |
 
 `GROKBOT2_LOG=1` makes the gateway log every method **with its arguments** — that is how the
 argument-shape bugs below were found.
@@ -151,48 +151,71 @@ an **Ultra plan**; a Free account sees "Grok Bot needs an Ultra plan" and gets n
 
 ---
 
-## 6. Where the VNC work stopped
+## 6. The VNC workspace — how it was actually gated
 
 **The box is real and serving.** `infra/vps/grok-box-up.sh` brings up Xvfb + fluxbox + xterm on
 display `:77` and reuses the host's own `/opt/flow-vnc.sh` for x11vnc + websockify + the nginx
 route — nothing already running is touched.
 
-Verified on the host and from the Windows machine:
+**The screen does not come from `EnsureSandBox`.** That was the wrong tree. The descriptor's
+`vnc_url` is never what the viewer opens. The renderer keeps a per-agent box store fed by two
+gateway methods, and *its* status is the only input to the pane:
 
 ```
-X77 socket           present
-x11vnc               RFB 003.008        ← real handshake, not just LISTEN
-noVNC 127.0.0.1:7077 HTTP 200
-https://admin.halcion.vn/flowvnc-grokbox/vnc.html   HTTP 200 (also from Windows)
+getForeverBoxStatus({id})   ─┐
+ensureForeverBox({id})       ├─→ status ─→ state === "running" && vncUrl ?  open <webview>
+resetForeverBox / update…   ─┘                                            :  placeholder
 ```
 
-**The real descriptor** (captured from an entitled account, see `docs/box-architecture.md`):
-one pod, four ports — 6080 noVNC (`vnc.html` + `path=websockify` + token in the query),
-6081 fork VNC, 1337 exec daemon, 1340 gateway. The viewer path is **stock noVNC**, which is why
-the VPS recipe is a valid substitute.
+Both were stubbed as `{status:"disabled"}` — a shape the store accepts and then discards, so
+the pane sat on the placeholder forever. This is the same failure mode as the five argument-name
+bugs in §5: the method was "handled", it just answered something nobody reads.
 
-**What is wired**: `EnsureSandBox` returns the box URLs from
-`GROKBOT2_VNC_URL / _EXEC_URL / _GATEWAY_URL / _FORK_VNC_URL / _POD_ID / _CLUSTER`, with
-`fork_vnc_base_url` defaulted (the viewer config needs primaryUrl + forkBaseUrl + networkToken
-together, or the whole block is rejected).
+The status the client actually reads (`services/grokbot-backend/src/forever-box.ts`):
 
-**What still fails**: the app shows "Can't reach … screen" and **never opens a webview** — no
-VNC target ever appears in CDP. Ruled out already: URL unreachable (it is reachable), missing
-fork URL (added), instant replies on the `/gw/local-exec/requests` and `/gw/webauthn/requests`
-long-poll channels (now parked for 25s).
+```jsonc
+{ "agentId": "<echoes the id you were asked about>",   // the store files status by THIS field
+  "state":   "running",                                // anything else ⇒ no screen
+  "vncUrl":  "https://…/vnc.html?path=…websockify…",   // opened as given
+  "windows": [], "handoff": null }                     // `pull` present ⇒ "Setting up the computer"
+```
 
-**Leads for the next session**
+Placeholder text tells you which branch you are on: *Can't reach X's screen* = the read or
+ensure call **rejected**; *Booting up the computer* = resolved but `state`/`vncUrl` not usable;
+*Setting up the computer* = you sent a `pull`.
 
-1. The gate is in the **main process**, not the gateway — the app never asks the gateway about
-   the screen (confirmed from the argument log). Trace `n9n(gatewayUrl, gatewayToken,
-   networkToken, {primaryUrl, forkBaseUrl})` in `electron-main/main.cjs` and find what must
-   succeed before the viewer is created.
-2. `preload-vnc.cjs` (18 KB, readable) references `noVNC` and `vnc.html` — read it end to end;
-   it is the viewer's own contract.
-3. The exec daemon (port 1337 on a real box) does not exist here yet. The box may be considered
-   unreachable until the exec channel handshakes.
-4. Compare against the original app while it runs: `box-probe.mjs` already decodes the real
-   descriptor, and both instances can run side by side.
+**What the app adds to the URL**: `autoconnect=true&resize=scale&reconnect=true`, plus
+`sandInteractive=1` on the full-size viewer — so there are normally **two** webviews (preview
++ modal), both on partition `persist:sand-forever-box`. `preload-vnc.cjs` only installs the
+clipboard bridge, liveness tripwire, presence reporter and control-bar hider when the path
+ends in `/vnc.html`, which is why the URL must be the whole noVNC page.
+
+**Not needed after all**: the exec daemon (port 1337). The viewer never waits on it.
+
+**Verified end to end**, not by inspection — `node scripts/e2e-vnc.mjs`:
+
+```
+viewer webviews: 2   [preview] + [interactive]
+forever-box: state=running  vncUrl=set
+html class: noVNC_connected   canvas: 1920x1080
+PASS: RFB session is live inside the app.
+```
+
+and by typing through the app's own viewer: `echo GROKBOT2_VNC_INPUT_OK` reached the box's
+shell and the output came back on the framebuffer. Input and display both work.
+
+**Two shape bugs found next door**, both of which crashed the whole right rail (error boundary),
+taking the computer pane down with them — worth knowing because the symptom looks nothing like
+the cause:
+
+| Method | Missing | What throws |
+|--------|---------|-------------|
+| `getAgentAutomations` etc. | `runs: []` | the row icon reads `automation.runs[0]?.status` **unguarded** |
+| `getSharingState` | `rooms: []` | the sharing store does `v.rooms.map(…)` **unguarded** |
+
+**Configure it**: put the URL `infra/vps/grok-box-up.sh` prints into `.env` as
+`GROKBOT2_VNC_URL` (the repo root `.env` is loaded by `config.ts`; real env vars still win).
+Leave it unset and the pane honestly reports the box as off.
 
 ---
 

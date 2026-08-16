@@ -58,6 +58,9 @@ const trays: { id: string; kind: string; title: string; timestampMs: number }[] 
 /** Every gateway method the FE has called this session — powers GET /gw/__coverage. */
 const called = new Set<string>();
 
+/** Last payload seen per method, so wrong-key bugs are visible instead of inferred. */
+const lastArgs = new Map<string, unknown>();
+
 /** Persist host settings by piggybacking on the chat snapshot (same state.json). */
 const saveSettings = () => scheduleSave(() => ({ ...chatSnapshot(), hostSettings }));
 
@@ -245,11 +248,19 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     return true;
   }
   // Coverage report: which gateway methods the FE exercised, and which are still unmapped.
+  //
+  // `lastArgs` is the important half. Coverage alone says a method is handled, never that
+  // the handler reads the right keys — the bug class that has silently killed a feature
+  // six times here. Recording what actually came over the wire makes it checkable.
   if (url.startsWith("/gw/__coverage")) {
     const unmapped = [...called].filter((n) => !(n in methods)).sort();
     const mapped = [...called].filter((n) => n in methods).sort();
+    const filter = new URL(url, "http://x").searchParams.get("method");
+    const args = Object.fromEntries(
+      [...lastArgs].filter(([n]) => !filter || n.toLowerCase().includes(filter.toLowerCase())).sort()
+    );
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ calledTotal: called.size, mapped, unmapped, implemented: Object.keys(methods).sort() }, null, 2));
+    res.end(JSON.stringify({ calledTotal: called.size, mapped, unmapped, lastArgs: args, implemented: Object.keys(methods).sort() }, null, 2));
     return true;
   }
 
@@ -264,6 +275,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
       }
     }
     called.add(m[1]);
+    if (body.length) lastArgs.set(m[1], args);
     if (process.env.GROKBOT2_LOG) console.log(`  gw ${m[1]} ${JSON.stringify(args).slice(0, 220)}`);
     const fn = methods[m[1]];
     if (!fn) console.warn(`[gateway] UNMAPPED ${m[1]} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);

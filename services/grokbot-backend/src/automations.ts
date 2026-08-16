@@ -50,7 +50,29 @@ export interface AutomationRun {
 }
 
 /** spec is what the editor sends; everything else is ours to assign. */
-interface Spec { name?: string; prompt?: string; trigger?: string; isEnabled?: boolean }
+interface Spec { name?: string; prompt?: string; trigger?: unknown; isEnabled?: boolean }
+
+const DEFAULT_TRIGGER = "0 9 * * *";
+
+/**
+ * The editor builds its spec only once a trigger exists, so an unreadable trigger means
+ * we are misreading the shape — not that the user left it blank. Falling back silently is
+ * how a wrong-key bug hides, so anything unrecognised is logged loudly with the raw value.
+ */
+function normaliseTrigger(raw: unknown): string {
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  if (raw && typeof raw === "object") {
+    // Tolerate a wrapper around the cron expression rather than dropping the user's choice.
+    for (const key of ["cron", "expression", "schedule", "value", "trigger"]) {
+      const v = (raw as Record<string, unknown>)[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  if (raw !== undefined) {
+    console.warn(`[grokbot2] routine trigger not understood, defaulting to "${DEFAULT_TRIGGER}": ${JSON.stringify(raw)}`);
+  }
+  return DEFAULT_TRIGGER;
+}
 
 /** Enough history for the UI without letting state.json grow without bound. */
 const MAX_RUNS = 20;
@@ -217,9 +239,9 @@ bindAutomationsSnapshot(all);
 const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;
   if (typeof spec?.prompt === "string") target.prompt = spec.prompt;
-  if (typeof spec?.trigger === "string") {
-    target.trigger = spec.trigger;
-    target.triggerDescription = describe(spec.trigger);
+  if (spec?.trigger !== undefined) {
+    target.trigger = normaliseTrigger(spec.trigger);
+    target.triggerDescription = describe(target.trigger);
   }
   if (typeof spec?.isEnabled === "boolean") target.isEnabled = spec.isEnabled;
   return target;
@@ -237,7 +259,7 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   const agentId = agentIdOf(a);
   if (!agentId) return [];
   const spec = a?.spec ?? {};
-  const trigger = typeof spec.trigger === "string" && spec.trigger.trim() ? spec.trigger : "0 9 * * *";
+  const trigger = normaliseTrigger(spec.trigger);
   const rec: Automation = {
     id: `automation-${seq++}`,
     agentId,

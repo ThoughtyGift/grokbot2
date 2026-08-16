@@ -26,13 +26,20 @@
 - [ ] Settings write-back (`setHostSettings` currently discards).
 - [ ] A real tool-emitting agent loop (so tool-calls fire without the `/tool` trigger).
 
-## Later — the real box (workspace / VNC / exec)
-The workspace pane is a VNC view of a Linux desktop. Reuse the OpenClaw VPS recipe:
+## Done — the workspace pane (VNC)
+The pane shows a real Linux desktop from the VPS box and takes keyboard/mouse input.
+`infra/vps/grok-box-up.sh` brings the box up; `GROKBOT2_VNC_URL` in `.env` points the backend
+at it; `getForeverBoxStatus`/`ensureForeverBox` hand the client the status that opens the
+viewer (see [`box-architecture.md`](./box-architecture.md#what-actually-opens-the-viewer)).
+Verify with `node scripts/e2e-vnc.mjs`.
+
+## Later — the rest of the real box (exec / host)
+Running *commands* in the box still needs the exec daemon; the screen does not.
 
 1. **Package the box host** — run the app's `host-main.cjs` (it *is* the box host) on Linux.
 2. **systemd unit** `grok-box@<id>` mirroring `flow-chrome@`: `Xvfb :<disp>` + `xfwm4` + `host-main`
    + `x11vnc` + `websockify`. See [`infra/systemd/grok-box@.service`](../infra/systemd/grok-box@.service).
-3. **Point `EnsureSandBox`** at the VPS: `gateway_url`/`vnc_url`/`exec_daemon_url` → the box.
+3. **Exec daemon** on the exec port, plus the approval layer in front of it.
 4. **Route inference** (`AiService/StreamChat`) from the box → the Claude/Grok pool.
 
 At that point chat + transcript + tools + VNC all run *for real* (host-main handles them) and

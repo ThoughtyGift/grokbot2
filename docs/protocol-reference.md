@@ -55,6 +55,11 @@ Methods observed at boot: `getHostSettings`, `setHostSettings`, `getHostStatus`,
 `getSharingState`, `isGlobalSearchEnabled`, `isEgressTunnelAvailable`, `isAgentNetworkEnabled`,
 `getTeachRecordingStatus`, `getForeverBoxStatus`, `getBackgroundComposerUserSettings`, `setWindowFocused`.
 
+Two of those are read without a guard and must not be minimised:
+`getSharingState` → `{ rooms: [] }` (the store maps `rooms`), and `getForeverBoxStatus` →
+the box status in [`box-architecture.md`](./box-architecture.md#what-actually-opens-the-viewer)
+(this, not `EnsureSandBox`, is what opens the VNC viewer).
+
 ## Chat / transcript
 
 - `POST /gw/api/sendPrompt` — `{ agentId, content|prompt|richText, clientNonce }` → `{ accepted, entryId }`.
