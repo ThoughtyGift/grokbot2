@@ -4,6 +4,18 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
+const repoRoot = join(svcRoot, "..", "..");
+
+/**
+ * Load the repo-root `.env` (the file `.env.example` tells you to create). Real environment
+ * variables win, so `GROKBOT2_VNC_URL=… pnpm backend` still overrides the file. This is where
+ * the box URL belongs — it carries a password and must not be committed in a launcher script.
+ */
+try {
+  process.loadEnvFile(join(repoRoot, ".env"));
+} catch {
+  /* no .env — env vars and defaults only */
+}
 
 /**
  * Model choice drives how fast a reply feels. Measured through the pool

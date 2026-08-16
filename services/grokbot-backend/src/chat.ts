@@ -78,11 +78,17 @@ const snapshot = (): PersistedState => ({
   transcripts: Object.fromEntries([...transcripts.entries()]),
   seq: { agent: agentSeq, entry: entrySeq },
   acceptance: [...acceptance.values()],
+  automations: automationsRef(),
 });
 export const chatSnapshot = snapshot;
 let hostSettingsRef: () => Record<string, unknown> = () => ({});
 export function bindHostSettings(get: () => Record<string, unknown>): void { hostSettingsRef = get; }
+// Routines live in automations.ts but share this one save path — a second writer to
+// state.json would race the debounced write and silently drop whichever lost.
+let automationsRef: () => unknown[] = () => [];
+export function bindAutomationsSnapshot(get: () => unknown[]): void { automationsRef = get; }
 const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
+export const persistState = persist;
 
 /** Older builds stored user-message/agent-message (a shared-room shape the renderer ignores). */
 function migrate(e: any, agentName: string): Entry | null {
@@ -311,6 +317,9 @@ export const getSubagents = (): unknown[] => [];
 export const getAsyncTasks = (): unknown[] => [];
 
 // ── run control ───────────────────────────────────────────────────────────────
+/** True while a turn is streaming — lets a routine settle its run record. */
+export const isAgentRunning = (agentId: string): boolean => inflight.has(agentId);
+
 export function interruptAgentRun(a: { agentId?: string; id?: string }) {
   const agentId = a.agentId ?? a.id ?? "";
   inflight.get(agentId)?.abort(); inflight.delete(agentId);

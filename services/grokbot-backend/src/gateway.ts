@@ -40,7 +40,17 @@ import {
   chatSnapshot,
   type SendArgs,
 } from "./chat.js";
+import {
+  getAgentAutomations,
+  listAllAutomations,
+  createAgentAutomation,
+  updateAgentAutomation,
+  deleteAgentAutomation,
+  setAgentAutomationEnabled,
+  runAgentAutomationNow,
+} from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
+import { foreverBoxStatus } from "./forever-box.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
@@ -145,11 +155,11 @@ const methods: Record<string, (args: any) => unknown> = {
   getBoxSecretsStatus: () => ({}),
   setBoxSecrets: () => ({}),
   setWindowFocused: () => ({}),
-  getSharingState: () => ({}),
+  // `rooms` is mapped without a guard on every poll, so a bare {} throws in the store.
+  getSharingState: () => ({ rooms: [] }),
   isGlobalSearchEnabled: () => false,
   isEgressTunnelAvailable: () => false,
   isAgentNetworkEnabled: () => false,
-  getForeverBoxStatus: () => ({ status: "disabled" }),
 
   // ── P2: real behavior ──
   searchAgents: (a) => searchAgents(a),
@@ -171,13 +181,16 @@ const methods: Record<string, (args: any) => unknown> = {
   importAgentWorkflowText: () => ({ ok: false, reason: "workflows not supported by this backend" }),
   importAgentWorkflowUrl: () => ({ ok: false, reason: "workflows not supported by this backend" }),
   portAgentLocalSkills: () => ({ ok: false, reason: "skills not supported by this backend" }),
-  getAgentAutomations: () => [],
-  listAllAutomations: () => [],
-  setAgentAutomationEnabled: () => [],
-  createAgentAutomation: () => [],
-  updateAgentAutomation: () => [],
-  deleteAgentAutomation: () => [],
-  runAgentAutomationNow: () => ({}),
+  // Routines: every mutating call answers with the agent's FULL list, because the FE
+  // stores the reply as the new list instead of re-fetching. The old `() => []` stub
+  // therefore looked like "created, then vanished".
+  getAgentAutomations: (a) => getAgentAutomations(a),
+  listAllAutomations: () => listAllAutomations(),
+  setAgentAutomationEnabled: (a) => setAgentAutomationEnabled(a),
+  createAgentAutomation: (a) => createAgentAutomation(a),
+  updateAgentAutomation: (a) => updateAgentAutomation(a),
+  deleteAgentAutomation: (a) => deleteAgentAutomation(a),
+  runAgentAutomationNow: (a) => runAgentAutomationNow(a),
   getAgentChannels: () => ({ channels: [] }),
   connectChannel: () => ({ channels: [] }),
   disconnectChannel: () => ({ channels: [] }),
@@ -191,7 +204,12 @@ const methods: Record<string, (args: any) => unknown> = {
   requestDiskSaverAudit: () => null,
   createGroup: () => null,
   setGroupMembers: () => null,
-  ensureForeverBox: () => ({ status: "disabled" }),
+  // ── The computer pane. All four return the same decorated status the box host returns,
+  // because that status is the only thing the viewer reads (see forever-box.ts). ──
+  getForeverBoxStatus: (a) => foreverBoxStatus(a),
+  ensureForeverBox: (a) => foreverBoxStatus(a),
+  resetForeverBox: (a) => foreverBoxStatus(a),
+  updateForeverBox: (a) => foreverBoxStatus(a),
   handBackForeverBox: () => ({}),
   startTeachRecording: () => ({ isRecording: false, ok: false }),
   stopTeachRecording: () => ({ isRecording: false, ok: false }),

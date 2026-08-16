@@ -12,6 +12,8 @@ import { handleGateway } from "./gateway.js";
 import { bootstrapResponses, connectStreamEnd } from "@grokbot2/proto";
 import { saveNow } from "./store.js";
 import { chatSnapshot } from "./chat.js";
+import { startScheduler } from "./automations.js";
+import { reportBoxConfig } from "./forever-box.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -69,7 +71,9 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 }
 
 server.listen(config.port, "127.0.0.1", () => {
+  startScheduler();
   console.log(`[grokbot2] backend on http://localhost:${config.port}`);
   console.log(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
+  reportBoxConfig((msg) => console.log(`[grokbot2] ${msg}`));
   console.log(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
 });

@@ -18,6 +18,7 @@ export interface PersistedState {
   hostSettings?: Record<string, unknown>;
   seq?: { agent?: number; entry?: number };
   acceptance?: unknown[];
+  automations?: unknown[];
 }
 
 /** Load state.json, falling back to a snapshot.json import on first run. */

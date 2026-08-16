@@ -43,6 +43,11 @@ fi
 # 4. Viewer: x11vnc + websockify + nginx route (proven script, additive and reversible)
 /opt/flow-vnc.sh "$ACC" "$DISP" on
 
+# The viewer password belongs to the host's flow-vnc setup, not in this file — pass it in as
+# VNC_PASSWORD (url-encoded) to get a ready-to-paste URL, otherwise a placeholder is printed.
+PW="${VNC_PASSWORD:-<your-url-encoded-vnc-password>}"
+HOST="${BOX_HOST:-admin.halcion.vn}"
+
 echo ""
-echo "vnc_url for EnsureSandBox:"
-echo "  https://admin.halcion.vn/flowvnc-${ACC}/vnc.html?path=flowvnc-${ACC}/websockify&autoconnect=true&password=FlowVps%232026"
+echo "GROKBOT2_VNC_URL for the backend's .env:"
+echo "  https://${HOST}/flowvnc-${ACC}/vnc.html?path=flowvnc-${ACC}/websockify&autoconnect=true&password=${PW}"

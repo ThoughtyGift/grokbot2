@@ -29,9 +29,21 @@ Write-Host "Starting backend on :$port ..."
 Start-Process powershell -ArgumentList @('-NoExit', '-Command', "Set-Location `"$backend`"; pnpm dev")
 Start-Sleep -Seconds 3
 
+# box check — the computer pane stays empty without a noVNC page URL (see .env / .env.example)
+$envFile = Join-Path $repo '.env'
+if ((Test-Path $envFile) -and ((Get-Content $envFile -Raw) -match '(?m)^\s*GROKBOT2_VNC_URL\s*=\s*\S')) {
+  Write-Host 'Box VNC: configured (.env).' -ForegroundColor Green
+} else {
+  Write-Host 'Box VNC: NOT SET. The computer pane will report the box as off.' -ForegroundColor Yellow
+  Write-Host '  Run infra/vps/grok-box-up.sh on the host and put the printed URL in .env as GROKBOT2_VNC_URL.'
+}
+
 # launch app pointed at backend
 $env:CURSOR_API_BASE_URL = "http://localhost:$port"
 $env:SAND_BACKEND_URL = "http://localhost:$port"
+# Without this the app treats a localhost API base as dev mode and sends login to https://localhost:4443.
+$env:CURSOR_WEBSITE_URL = 'https://cursor.com'
 if (-not (Test-Path $appExe)) { Write-Host "App not found: $appExe" -ForegroundColor Red; exit 1 }
 Write-Host 'Launching Grok Bot. Type in the composer to chat via your Claude pool.' -ForegroundColor Cyan
-& $appExe
+# CDP stays open so scripts/e2e-*.mjs can drive and inspect the real app (incl. the VNC webview).
+& $appExe --remote-debugging-port=9222

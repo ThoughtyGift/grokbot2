@@ -477,18 +477,6 @@
       "kind": "message",
       "type": "agent.v1.ClientLlmGatewayCredential",
       "optional": true
-    },
-    {
-      "no": 31,
-      "name": "client_supports_preview_card",
-      "kind": "scalar",
-      "optional": true
-    },
-    {
-      "no": 32,
-      "name": "started_as_new_project",
-      "kind": "scalar",
-      "optional": true
     }
   ],
   "agent.v1.AgentServerMessage": [
@@ -3338,18 +3326,6 @@
       "name": "completed_ask_question_tool_call_ids",
       "kind": "scalar",
       "repeated": true
-    },
-    {
-      "no": 35,
-      "name": "durable_skill_blocks",
-      "kind": "scalar",
-      "repeated": true
-    },
-    {
-      "no": 36,
-      "name": "durable_custom_mode_id",
-      "kind": "scalar",
-      "optional": true
     }
   ],
   "agent.v1.ConversationStep": [
@@ -11546,18 +11522,6 @@
       "kind": "message",
       "type": "agent.v1.ClientLlmGatewayCredential",
       "optional": true
-    },
-    {
-      "no": 28,
-      "name": "client_supports_preview_card",
-      "kind": "scalar",
-      "optional": true
-    },
-    {
-      "no": 29,
-      "name": "started_as_new_project",
-      "kind": "scalar",
-      "optional": true
     }
   ],
   "agent.v1.ProjectDetails": [
@@ -18571,12 +18535,6 @@
       "name": "machine",
       "kind": "message",
       "type": "agent.v1.TargetMachine",
-      "optional": true
-    },
-    {
-      "no": 13,
-      "name": "interrupt",
-      "kind": "scalar",
       "optional": true
     }
   ],
