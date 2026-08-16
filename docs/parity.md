@@ -136,6 +136,34 @@ Note: chapters 106-115 of the original prompt (*Reaching services that have no c
 describe exactly this flow and were dropped from the port in §2c because they named surfaces we
 lacked. Now that `request_box_help` and subagents exist, they are worth re-adding.
 
+## 2e. Parked turns — one persistence path instead of four
+
+Four separate in-memory maps each orphaned their own card on restart: the approval `pending`
+map, `widgetHistory`, and box `handoffs`/`resumers` (attachments had already been moved to
+disk for the same reason). The symptom was always the same and always looked like a broken
+contract — the card stayed on screen, clicking it did nothing.
+
+They turned out to be one thing in three costumes: **the turn stops, a card sits on screen, and
+when the user acts the model resumes from `history`**. So they are now a single `Parked` record
+persisted in `state.json`:
+
+```ts
+{ kind: "approval" | "widget" | "handoff", key, agentId, history, entryId?, toolCallId?, name?, arg? }
+```
+
+One thing genuinely cannot be persisted: the Promise a waiting tool is awaiting. `requestBoxHelp`
+returns one, and it dies with the process. So hand-back takes two routes — resolve the Promise
+when the turn is still in flight, or re-enter the model loop from the stored history when it is
+not (`setHandBackSink`). The parked copy is dropped on the live path so a later restart cannot
+replay a handoff the user already finished.
+
+Fixed alongside: `reqSeq`/`toolSeq` restarted at 1 every boot while `entrySeq` was derived from
+disk, so successive runs reissued `req-1`. Two live approvals could key the same entry, and
+resolving one could run the other's tool. Both are now derived from what is already persisted.
+
+Verified: an approval card created **before** a restart, approved **after** it — the tool ran,
+the card went `approved`, and the turn continued from the persisted history.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

@@ -298,9 +298,13 @@ const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<stri
 TOOLS.ask_question = (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { return 'ask_question cần JSON, ví dụ {"prompt":"…","options":[{"label":"A"}]}'; }
+  // The client's own zod schema caps options at SIX; a seventh makes the whole card invalid
+  // and it renders as nothing. Models happily produce eight, so cap here rather than let a
+  // question disappear — a silently missing question reads as the agent ignoring the user.
   const options = (Array.isArray(spec?.options) ? spec.options : [])
     .map((o: any) => (typeof o === "string" ? { label: o } : o))
-    .filter((o: any) => typeof o?.label === "string");
+    .filter((o: any) => typeof o?.label === "string")
+    .slice(0, 6);
   const prompt = typeof spec?.prompt === "string" ? spec.prompt : typeof spec?.title === "string" ? spec.title : "";
   const id = ctx.ask({
     prompt,
