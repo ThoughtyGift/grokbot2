@@ -8,6 +8,7 @@
  * that does not run.
  */
 import { boxCall, boxConfigured } from "./box-exec.js";
+import { webSearch, webFetch } from "./web.js";
 
 export interface ToolSpec {
   /** Real tool name from ClientSideToolV2. */
@@ -18,6 +19,8 @@ export interface ToolSpec {
   usage: string;
   /** True when the user must approve before it runs (mirrors require_user_approval). */
   needsApproval: boolean;
+  /** Offered even with no box attached — the tool does not run inside one. */
+  alwaysAvailable?: boolean;
   run(arg: string): Promise<string>;
 }
 
@@ -47,6 +50,43 @@ function parts(arg: string, n: number): string[] {
 }
 
 const trim = (s: string, max = 6000) => (s.length <= max ? s : `${s.slice(0, max)}\n… (cắt bớt, còn ${s.length - max} ký tự)`);
+
+/** Mirrors `ListDirV2Result.DirectoryTreeNode`. */
+export interface TreeNode {
+  abs_path: string;
+  children_dirs: TreeNode[];
+  children_files: { name: string; size?: number }[];
+  children_were_processed: boolean;
+  num_files: number;
+}
+
+const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+
+/**
+ * Render the tree as indented text.
+ *
+ * The model reads this, not JSON: nesting shown by indentation costs a fraction of the
+ * tokens of the equivalent object, and unexplored branches must stay visible or the agent
+ * concludes a directory is empty when it was only truncated.
+ */
+export function renderTree(node: TreeNode | undefined, indent = "", isRoot = true): string {
+  if (!node) return "(không có dữ liệu)";
+  const lines: string[] = [];
+  if (isRoot) lines.push(`${node.abs_path}/`);
+  for (const d of node.children_dirs ?? []) {
+    const explored = d.children_were_processed;
+    lines.push(`${indent}  ${baseName(d.abs_path)}/${explored ? "" : "  …chưa mở"}`);
+    if (explored) {
+      const sub = renderTree(d, `${indent}  `, false);
+      if (sub.trim()) lines.push(sub);
+    }
+  }
+  for (const f of node.children_files ?? []) {
+    lines.push(`${indent}  ${f.name}${typeof f.size === "number" ? `  ${f.size}B` : ""}`);
+  }
+  if (!node.children_were_processed && isRoot) lines.push(`${indent}  (danh sách bị cắt bớt)`);
+  return lines.join("\n");
+}
 
 export const TOOLS: Record<string, ToolSpec> = {
   run_terminal_command_v2: {
@@ -86,15 +126,16 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   list_dir_v2: {
     name: "list_dir_v2",
-    summary: "Liệt kê một thư mục trong box",
-    usage: "list_dir_v2(<thư mục>)",
+    summary: "Liệt kê cây thư mục trong box",
+    usage: "list_dir_v2(<thư mục>[, <độ sâu>])",
     needsApproval: false,
     async run(arg) {
-      const r = await boxCall<{ path: string; entries: { name: string; isDir: boolean; size: number | null }[] }>("list", {
-        target_directory: unquote(arg) || ".",
+      const [dir, depth] = parts(arg, 2);
+      const r = await boxCall<{ directory_tree_root: TreeNode }>("list", {
+        target_directory: dir || ".",
+        depth: depth ? Number(depth) : 2,
       });
-      const rows = r.entries.map((e) => `${e.isDir ? "d" : "-"} ${String(e.size ?? "").padStart(9)}  ${e.name}`);
-      return trim(`${r.path} (${r.entries.length} mục)\n${rows.join("\n")}`);
+      return trim(renderTree(r.directory_tree_root));
     },
   },
 
@@ -109,6 +150,35 @@ export const TOOLS: Record<string, ToolSpec> = {
         glob_pattern: pattern, target_directory: dir || ".",
       });
       return trim(r.matches.length ? `${r.matches.length} kết quả trong ${r.path}:\n${r.matches.join("\n")}` : `Không khớp "${pattern}" trong ${r.path}`);
+    },
+  },
+
+  // The two tools in the original's set that need neither a box nor an API key, so unlike
+  // the box tools they are always offered.
+  web_search: {
+    name: "web_search",
+    summary: "Tìm kiếm trên web",
+    usage: "web_search(<từ khoá>)",
+    needsApproval: false,
+    alwaysAvailable: true,
+    async run(arg) {
+      const r = await webSearch(unquote(arg));
+      if (r.rejected) return "Cần từ khoá tìm kiếm.";
+      if (!r.references.length) return `Không tìm thấy kết quả cho "${unquote(arg)}".`;
+      return trim(r.references.map((x, i) => `${i + 1}. ${x.title}\n   ${x.url}${x.chunk ? `\n   ${x.chunk}` : ""}`).join("\n"));
+    },
+  },
+
+  web_fetch: {
+    name: "web_fetch",
+    summary: "Đọc nội dung một trang web",
+    usage: "web_fetch(<url>)",
+    needsApproval: false,
+    alwaysAvailable: true,
+    async run(arg) {
+      const r = await webFetch(unquote(arg));
+      if (r.error) return `Không đọc được ${r.url}: ${r.error}`;
+      return trim(`${r.url}\n\n${r.markdown}`);
     },
   },
 
@@ -133,14 +203,24 @@ export const isAutoApproved = (name: string): boolean => TOOLS[name]?.needsAppro
  * the model does not promise shell access it cannot deliver.
  */
 export function toolProtocol(): string {
-  const lines = Object.values(TOOLS).map((t) => `- ${t.usage} — ${t.summary}`);
-  const status = boxConfigured()
-    ? "Các công cụ này chạy TRONG box Linux, không phải máy người dùng."
-    : "LƯU Ý: hiện chưa nối box, nên mọi công cụ dưới đây sẽ báo lỗi không dùng được. Đừng hứa sẽ chạy lệnh.";
+  // Only advertise what can actually run. Listing a shell tool that will fail teaches the
+  // model to keep reaching for it — and, worse, to promise the user a command it cannot run.
+  const available = availableTools();
+  const lines = Object.values(available).map((t) => `- ${t.usage} — ${t.summary}`);
+  const note = boxConfigured()
+    ? "Công cụ shell/file/tìm-kiếm-file chạy TRONG box Linux, không phải máy người dùng."
+    : "Hiện chưa nối box, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
+      "không đọc file. Đừng hứa làm những việc đó.";
   return (
     "\n\nCÔNG CỤ: khi cần dùng, trả lời DUY NHẤT một dòng đúng dạng " +
     "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm.\n" +
     lines.join("\n") +
-    `\n${status}\nKhông cần công cụ thì trả lời bình thường. Sau khi nhận kết quả, trả lời dựa trên kết quả đó.`
+    `\n${note}\nKhông cần công cụ thì trả lời bình thường. Sau khi nhận kết quả, trả lời dựa trên kết quả đó.`
   );
+}
+
+/** The tools this install can actually run right now. */
+export function availableTools(): Record<string, ToolSpec> {
+  const on = boxConfigured();
+  return Object.fromEntries(Object.entries(TOOLS).filter(([, t]) => on || t.alwaysAvailable));
 }

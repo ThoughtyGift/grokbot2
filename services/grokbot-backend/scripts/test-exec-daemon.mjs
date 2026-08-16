@@ -67,9 +67,18 @@ check("honours offset/limit", r2.content.includes("line two") && !r2.content.inc
 check("adds line numbers", /^\s*2\t/.test(r2.content), r2.content);
 
 console.log("\nlist / glob / grep");
-const ls = (await call("list", { target_directory: "." })).body;
-check("lists entries", ls.entries.some((e) => e.name === "hello.txt") && ls.entries.some((e) => e.isDir && e.name === "sub"));
-check("ignore_globs filters", !(await call("list", { target_directory: ".", ignore_globs: ["*.txt"] })).body.entries.some((e) => e.name === "hello.txt"));
+// list returns ListDirV2Result.directory_tree_root — a tree, matching the original.
+const treeRoot = (await call("list", { target_directory: "." })).body.directory_tree_root;
+check("returns a tree root", Boolean(treeRoot?.abs_path), true);
+check("root files are listed", treeRoot.children_files.some((f) => f.name === "hello.txt"));
+check("subdirectories are nodes", treeRoot.children_dirs.some((d) => d.abs_path.endsWith("sub")));
+check("descends into children", treeRoot.children_dirs.find((d) => d.abs_path.endsWith("sub"))?.children_files.some((f) => f.name === "needle.ts"));
+check("counts files per node", treeRoot.num_files, 1);
+check("marks explored nodes", treeRoot.children_were_processed, true);
+const filtered = (await call("list", { target_directory: ".", ignore_globs: ["*.txt"] })).body.directory_tree_root;
+check("ignore_globs filters", !filtered.children_files.some((f) => f.name === "hello.txt"));
+const shallow = (await call("list", { target_directory: ".", depth: 0 })).body.directory_tree_root;
+check("depth 0 leaves children unexplored", shallow.children_dirs[0]?.children_were_processed, false);
 const g = (await call("glob", { glob_pattern: "*.ts" })).body;
 check("globs recursively", g.matches.some((m) => m.includes("needle.ts")), JSON.stringify(g));
 const gr = (await call("grep", { pattern: "findme" })).body;

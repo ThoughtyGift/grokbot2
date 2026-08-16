@@ -23,6 +23,18 @@ export interface PersistedState {
   automations?: unknown[];
   /** Per-agent context compaction, so a restart does not resend the whole transcript. */
   compaction?: Record<string, unknown>;
+  /**
+   * Turns parked waiting on the user: an approval card, an unanswered question, a box handoff.
+   *
+   * These lived only in memory, and every restart orphaned them — the card stayed on screen
+   * but answering it did nothing, because the map that knew how to continue the turn was gone.
+   * (It also reissued `req-1`, so two live approvals could collide.) What persists is the
+   * continuation *data*; the pending Promise itself cannot survive a process, so on restore the
+   * resume path re-enters the model loop from the stored history instead of resolving it.
+   */
+  parked?: unknown[];
+  /** Box handoff cards, so a restart does not leave a dead "Needs your attention" on screen. */
+  handoffs?: unknown[];
 }
 
 /** Load state.json, falling back to a snapshot.json import on first run. */

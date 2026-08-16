@@ -50,7 +50,7 @@ import {
   runAgentAutomationNow,
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
-import { foreverBoxStatus } from "./forever-box.js";
+import { foreverBoxStatus, handBackBox } from "./forever-box.js";
 import { readAttachmentImage } from "./attachments.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
@@ -216,7 +216,8 @@ const methods: Record<string, (args: any) => unknown> = {
   ensureForeverBox: (a) => foreverBoxStatus(a),
   resetForeverBox: (a) => foreverBoxStatus(a),
   updateForeverBox: (a) => foreverBoxStatus(a),
-  handBackForeverBox: () => ({}),
+  // Clears the handoff card AND resumes the turn that was waiting on the user.
+  handBackForeverBox: (a) => handBackBox(a),
   startTeachRecording: () => ({ isRecording: false, ok: false }),
   stopTeachRecording: () => ({ isRecording: false, ok: false }),
 };

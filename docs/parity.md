@@ -110,6 +110,32 @@ Observable difference on the same question ("what can you do?"):
 The bullet list is exactly what the original prompt forbids ("Prose, not outlines").
 `GROKBOT2_PROMPT=short` restores the old one when latency matters more than voice.
 
+## 2d. Box handoff — the VNC sign-in flow
+
+**The FE is identical in both apps — it is the same signed binary.** The original shows a
+sign-in handoff card and ours did not, purely because our backend never emitted one. Nothing
+was missing on the client side.
+
+The contract, from the client: `status.handoff = { instruction, requestId, snapshotDataUrl? }`
+on the forever-box status. The renderer turns it into a **"Needs your attention"** card with the
+instruction and two buttons — *Skip this step* and *I'm done, continue* — plus a snapshot frame
+(`aria-label="Take over the computer"`) that only appears when `snapshotDataUrl` is supplied.
+*I'm done, continue* calls `handBackForeverBox({id, trigger})`.
+
+Implemented as `request_box_help` (the original's tool name) in `forever-box.ts`: the tool
+returns a promise that stays pending until hand-back, so the agent's turn genuinely waits.
+
+Why this shape and not "ask the user for the password": the original is explicit —
+*"You never ask for, see, or type their password or 2FA; they authenticate on the box desktop,
+and the session persists there, so it is a one-time step."*
+
+Verified end to end in the app: agent asks → card renders → click *I'm done, continue* →
+handoff clears → the same turn resumes with "Cảm ơn bạn! Mình thấy bạn đã đăng nhập xong…".
+
+Note: chapters 106-115 of the original prompt (*Reaching services that have no connector*)
+describe exactly this flow and were dropped from the port in §2c because they named surfaces we
+lacked. Now that `request_box_help` and subagents exist, they are worth re-adding.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

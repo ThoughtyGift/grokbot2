@@ -136,13 +136,20 @@ async function ask(prompt, { timeoutMs = 90_000 } = {}) {
     }
     const call = [...turn].reverse().find((e) => e.kind === "tool-call");
     if (!call || (call.status !== "done" && call.status !== "failed")) continue;
+    // Wait for the turn to settle. Reading it while a bubble is still streaming catches the
+    // model's pre-tool line ("Cần dùng công cụ …") instead of its answer, and reports it as
+    // if no tool had run.
+    if (turn.some((e) => e.streaming)) continue;
     const after = turn.slice(turn.indexOf(call) + 1);
-    if (after.some((e) => e.kind === "send-message" && e.message?.type === "text" && textOf(e).trim() && !isEchoLine(e) && !e.streaming)) return turn;
+    if (after.some((e) => e.kind === "send-message" && e.message?.type === "text" && textOf(e).trim() && !isEchoLine(e))) return turn;
   }
   return ((await gw("getAgentTranscriptTail", { id: agent.id, limit: 200 })).entries ?? []).slice(before);
 }
 
 const CASES = [
+  // No box needed for these two, so they are the ones that work on a fresh clone.
+  { ask: "Tìm trên web: trang chủ chính thức của Nous Research hermes agent. Dùng công cụ.", tool: "web_search", expect: /http|nous|hermes/i },
+  { ask: "Đọc trang https://example.com và cho biết tiêu đề của nó.", tool: "web_fetch", expect: /example/i },
   { ask: "Thư mục làm việc có những file gì? Dùng công cụ rồi trả lời.", tool: "list_dir_v2", expect: /README|notes|src/i },
   { ask: "File notes.txt có một token đặc biệt. Đọc file đó và cho tôi biết token.", tool: "read_file_v2", expect: /MAGIC_TOKEN_9137/ },
   { ask: "Tìm tất cả file .ts trong dự án.", tool: "glob_file_search", expect: /app\.ts|util\.ts/ },

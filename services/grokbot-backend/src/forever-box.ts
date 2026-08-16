@@ -48,10 +48,30 @@ export type ForeverBoxStatus = {
   vncUrl?: string;
 };
 
-/** Pending handoff per agent, and what to run once the user hands the box back. */
+/**
+ * Pending handoff per agent, and what to run once the user hands the box back.
+ *
+ * The card itself is data and is persisted by chat.ts (`parked`). The resolver is a live
+ * Promise callback and cannot be — so after a restart there is no turn left to resolve, and
+ * hand-back has to re-enter the model loop instead. That is what `handBackSink` is for:
+ * resolver when the turn is still in flight, sink when it is not.
+ */
 const handoffs = new Map<string, BoxHandoff>();
 const resumers = new Map<string, (outcome: string) => void>();
 let handoffSeq = 1;
+
+let handBackSink: (agentId: string, outcome: string) => void = () => {};
+export function setHandBackSink(fn: (agentId: string, outcome: string) => void): void { handBackSink = fn; }
+
+/** Re-arm the card after a restart, from the persisted copy. */
+export function restoreHandoff(agentId: string, handoff: BoxHandoff): void {
+  handoffs.set(agentId, handoff);
+  const n = Number(/^boxhelp-(\d+)$/.exec(handoff.requestId)?.[1] ?? 0);
+  if (n >= handoffSeq) handoffSeq = n + 1;
+}
+
+/** What chat.ts persists so the card survives a restart. */
+export const handoffEntries = (): [string, BoxHandoff][] => [...handoffs.entries()];
 
 /**
  * Ask the user to take the screen (`request_box_help` in the original catalog). Resolves when
@@ -73,10 +93,13 @@ export function handBackBox(args: { id?: unknown; agentId?: unknown; trigger?: u
   const agentId = boxId(args);
   const trigger = typeof args?.trigger === "string" ? args.trigger : "button";
   handoffs.delete(agentId);
+  const outcome = `người dùng đã xong trên màn hình box (${trigger})`;
   const resume = resumers.get(agentId);
   if (resume) {
     resumers.delete(agentId);
-    resume(`người dùng đã xong trên màn hình box (${trigger})`);
+    resume(outcome);          // the turn is still in flight — let the awaiting tool return
+  } else {
+    handBackSink(agentId, outcome);   // restarted since — resume from the persisted history
   }
   return {};
 }

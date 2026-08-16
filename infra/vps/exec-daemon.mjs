@@ -87,20 +87,44 @@ const handlers = {
     return { path: abs, totalLines: lines.length, from, to: Math.min(to, lines.length), content: clip(capped).text };
   },
 
-  // list_dir_v2
-  async list({ target_directory, path, ignore_globs }) {
+  /**
+   * list_dir_v2 — a TREE, matching `ListDirV2Result.directory_tree_root`.
+   *
+   * The original returns nested `DirectoryTreeNode { abs_path, children_dirs,
+   * children_files, children_were_processed, num_files }`, not a flat listing. A flat list
+   * costs an extra round trip per level, which is how an agent burns its turns walking a
+   * project one directory at a time.
+   */
+  async list({ target_directory, path, ignore_globs, depth }) {
     const abs = safePath(target_directory ?? path ?? ".");
-    const names = await readdir(abs);
-    const ignores = (ignore_globs ?? []).map((g) => new RegExp(`^${String(g).replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`));
-    const out = [];
-    for (const name of names) {
-      if (ignores.some((re) => re.test(name))) continue;
-      try {
-        const s = await stat(join(abs, name));
-        out.push({ name, isDir: s.isDirectory(), size: s.size, modifiedMs: s.mtimeMs });
-      } catch { out.push({ name, isDir: false, size: null, modifiedMs: null }); }
-    }
-    return { path: abs, entries: out.sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name)) };
+    const ignores = (ignore_globs ?? []).map(
+      (g) => new RegExp(`^${String(g).replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`),
+    );
+    const skip = (name) => name === ".git" || name === "node_modules" || ignores.some((re) => re.test(name));
+    const maxDepth = Math.min(Number(depth) || 2, 5);
+    let budget = 2000;   // total nodes, so a huge tree cannot wedge the daemon
+
+    const walk = async (dir, level) => {
+      const node = { abs_path: dir, children_dirs: [], children_files: [], children_were_processed: true, num_files: 0 };
+      let names;
+      try { names = await readdir(dir); } catch { node.children_were_processed = false; return node; }
+      for (const name of names.sort()) {
+        if (skip(name) || budget <= 0) { if (budget <= 0) node.children_were_processed = false; continue; }
+        budget -= 1;
+        let s;
+        try { s = await stat(join(dir, name)); } catch { continue; }
+        if (s.isDirectory()) {
+          if (level < maxDepth) node.children_dirs.push(await walk(join(dir, name), level + 1));
+          else node.children_dirs.push({ abs_path: join(dir, name), children_dirs: [], children_files: [], children_were_processed: false, num_files: 0 });
+        } else {
+          node.children_files.push({ name, size: s.size, modifiedMs: s.mtimeMs });
+          node.num_files += 1;
+        }
+      }
+      return node;
+    };
+
+    return { directory_tree_root: await walk(abs, 0) };
   },
 
   // glob_file_search — delegate to the shell so the box's own globbing applies

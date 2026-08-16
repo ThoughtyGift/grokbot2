@@ -22,8 +22,9 @@ import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./browser.js";
 import { stageImage } from "./attachments.js";
-import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
+import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
 import { boxConfigured } from "./box-exec.js";
+import { requestBoxHelp, setHandBackSink, restoreHandoff, handoffEntries, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
 import { buildSystemPrompt } from "./prompt.js";
@@ -47,6 +48,21 @@ function readImageAttachment(atts?: { path?: string; name?: string }[]): string 
   }
   return undefined;
 }
+
+/**
+ * The `🔧 name(arg) → result` bubble is a UI convenience, and it must never reach the model.
+ *
+ * It is an assistant-authored message that looks exactly like a tool result, so once it is in
+ * the history the model copies the format and INVENTS results in it — observed live: asked to
+ * list a directory, it emitted a fabricated "🔧 list_dir_v2(".") → 📁 . ├── package.json …"
+ * for files that do not exist, without calling anything. The real result already reaches the
+ * model through continueAfterTool, so this line is redundant there and actively harmful.
+ * (The original's prompt has a whole `## Never fabricate data` chapter; this was us teaching
+ * the opposite.)
+ */
+const TOOL_ECHO = "🔧 ";
+const isToolEcho = (e: Entry): boolean =>
+  e.kind === "send-message" && e.message.type === "text" && e.message.content.startsWith(TOOL_ECHO);
 
 interface Reaction { emoji: string; by: string }
 interface Base { id: string; timestampMs: number; reactions?: Reaction[] }
@@ -104,7 +120,56 @@ export interface AgentRecord {
 const agents = new Map<string, AgentRecord>();
 const transcripts = new Map<string, Entry[]>();
 const inflight = new Map<string, AbortController>();
-const pending = new Map<string, { agentId: string; entryId: string; toolCallId?: string; name?: string; arg?: string; history?: PoolMessage[] }>();
+/**
+ * A turn parked waiting on the user, and everything needed to continue it.
+ *
+ * Approvals, unanswered question widgets and box handoffs are the same thing wearing three
+ * hats: the turn stops, a card sits on screen, and when the user acts the model has to pick
+ * up from `history`. Keeping one shape means one persistence path instead of three — the
+ * previous three in-memory maps each silently orphaned their card on restart.
+ */
+export interface Parked {
+  kind: "approval" | "widget" | "handoff";
+  /** requestId for an approval, agentId for the other two. */
+  key: string;
+  agentId: string;
+  history?: PoolMessage[];
+  /** Approval only: the permission card and the tool-call entry it drives. */
+  entryId?: string;
+  toolCallId?: string;
+  name?: string;
+  arg?: string;
+}
+
+const parked = new Map<string, Parked>();
+const parkKey = (kind: Parked["kind"], key: string) => `${kind}:${key}`;
+
+/**
+ * Hand-back after a restart: the Promise the tool was awaiting died with the old process, so
+ * continue the turn from the persisted history instead. With the turn still in flight
+ * forever-box resolves the Promise directly and this never fires.
+ */
+setHandBackSink((agentId, outcome) => {
+  const waiting = unpark("handoff", agentId);
+  if (!waiting?.history) return;
+  continueAfterTool(agentId, waiting.history, "request_box_help", waiting.arg ?? "", outcome);
+});
+const park = (p: Parked): void => { parked.set(parkKey(p.kind, p.key), p); persist(); };
+const unpark = (kind: Parked["kind"], key: string): Parked | undefined => {
+  const k = parkKey(kind, key);
+  const hit = parked.get(k);
+  if (hit) { parked.delete(k); persist(); }
+  return hit;
+};
+
+/** Backwards-compatible view for the approval path, which looks up by requestId. */
+const pending = {
+  has: (id: string) => parked.has(parkKey("approval", id)),
+  get: (id: string) => parked.get(parkKey("approval", id)),
+  set: (id: string, v: Omit<Parked, "kind" | "key">) => park({ ...v, kind: "approval", key: id }),
+  delete: (id: string) => { unpark("approval", id); },
+  entries: () => [...parked.values()].filter((p) => p.kind === "approval").map((p) => [p.key, p] as const),
+};
 /** Per-agent compaction checkpoint, so a long conversation is summarised once, not per turn. */
 const compaction = new Map<string, CompactionState>();
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
@@ -125,6 +190,8 @@ const snapshot = (): PersistedState => ({
   acceptance: [...acceptance.values()],
   automations: automationsRef(),
   compaction: Object.fromEntries(compaction),
+  parked: [...parked.values()],
+  handoffs: handoffEntries(),
 });
 export const chatSnapshot = snapshot;
 let hostSettingsRef: () => Record<string, unknown> = () => ({});
@@ -163,6 +230,9 @@ function migrate(e: any, agentName: string): Entry | null {
     transcripts.set(id, (entries as any[]).map((e) => migrate(e, name)).filter((e): e is Entry => e !== null));
   }
   for (const r of (s.acceptance ?? []) as AcceptanceRecord[]) if (r?.clientNonce) acceptance.set(r.clientNonce, r);
+  for (const p of (s.parked ?? []) as Parked[]) if (p?.kind && p.key) parked.set(parkKey(p.kind, p.key), p);
+  for (const [id, h] of (s.handoffs ?? []) as [string, BoxHandoff][]) if (id && h?.requestId) restoreHandoff(id, h);
+  if (parked.size) console.log(`[grokbot2] restored ${parked.size} parked turn(s)`);
   // Without this a restart discards every checkpoint and resends the full transcript —
   // the exact cost the compaction exists to avoid.
   for (const [id, c] of Object.entries((s.compaction ?? {}) as Record<string, CompactionState>)) {
@@ -176,6 +246,16 @@ function migrate(e: any, agentName: string): Entry | null {
   };
   agentSeq = Math.max(s.seq?.agent ?? 0, maxNum(agents.keys(), /^agent-(\d+)$/) + 1, 1);
   entrySeq = Math.max(s.seq?.entry ?? 0, maxNum([...transcripts.values()].flat().map((e) => e.id), /^e(\d+)$/) + 1, 1);
+  // Approval ids must keep climbing across restarts too. They were not derived from anything
+  // persistent, so every restart reissued `req-1`/`tc-1`: the pending map then keyed two live
+  // approvals the same, and resolving one could run the other's tool. Derive them from what
+  // is already on disk, exactly as entrySeq does.
+  const all = [...transcripts.values()].flat();
+  reqSeq = Math.max(
+    maxNum(all.flatMap((e) => (e.kind === "send-message" && e.message.type === "local-tool-permission" ? [e.message.ask.requestId] : [])), /^req-(\d+)$/) + 1,
+    1,
+  );
+  toolSeq = Math.max(maxNum(all.flatMap((e) => (e.kind === "tool-call" ? [e.toolCallId] : [])), /^tc-(\d+)$/) + 1, 1);
   if (agents.size) console.log(`[grokbot2] restored ${agents.size} agent(s), ${[...transcripts.values()].flat().length} transcript entries`);
 }
 
@@ -194,6 +274,8 @@ export interface ToolCtx {
   ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean }): string | null;
   /** Post a short progress line — how a long-running tool keeps the user posted. */
   note(text: string): void;
+  /** Hand the screen to the user; resolves when they hand the box back. */
+  requestBoxHelp(instruction: string): Promise<string>;
 }
 
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
@@ -233,6 +315,23 @@ TOOLS.ask_question = (arg, ctx) => {
 };
 
 /**
+ * Hand the box's screen to the user for a step only they can do — signing in, 2FA, an OAuth
+ * approval (`request_box_help` in the original catalog).
+ *
+ * The turn blocks here until they press hand-back, which is the point: the agent must never
+ * ask for, see, or type a password. They authenticate on the box desktop and the session
+ * persists there, so it is a one-time step.
+ */
+TOOLS.request_box_help = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { instruction: arg }; }
+  const instruction = String(spec?.instruction ?? spec?.prompt ?? arg ?? "").trim();
+  if (!instruction) return 'request_box_help cần {"instruction":"việc cần bạn làm trên màn hình"}';
+  ctx.note(`Mình cần bạn thao tác trên màn hình box: ${instruction}`);
+  return ctx.requestBoxHelp(instruction);
+};
+
+/**
  * Hand a self-contained chunk of work to a subagent (`task_v2` in the original catalog).
  * This is how the original drives the browser: not from the main turn, but through a
  * `browserUse` subagent carrying its own prompt and tool set (see subagents.ts).
@@ -262,11 +361,10 @@ if (isBrowserConfigured()) {
   for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
 }
 
-// Shell and file tools, under their real ClientSideToolV2 names. Same rule as the browser:
-// only offered when a box exists, because they run inside it and nowhere else.
-if (boxConfigured()) {
-  for (const [name, spec] of Object.entries(BOX_TOOLS)) TOOLS[name] = (arg) => spec.run(arg);
-}
+// Tools under their real ClientSideToolV2 names. availableTools() drops the shell/file ones
+// when no box is attached — they run inside it and nowhere else — while web_search and
+// web_fetch need neither a box nor a key, so they are always on.
+for (const [name, spec] of Object.entries(availableTools())) TOOLS[name] = (arg) => spec.run(arg);
 
 /**
  * The names and the "you already get the page back" rule come from the original's own
@@ -521,17 +619,30 @@ export function postWidget(
 }
 
 /** The capability object handed to a tool while it runs for one agent. */
-const ctxFor = (agentId: string): ToolCtx => ({
+const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   ask: (widget) => postWidget(agentId, widget),
   note: (text) => {
     tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
     onUpdate(agentId);
   },
+  requestBoxHelp: (instruction) => {
+    const waited = requestBoxHelp(agentId, instruction);
+    // Park the continuation too: if the backend restarts while the card is up, hand-back
+    // has no Promise left to resolve and resumes from this instead.
+    park({ kind: "handoff", key: agentId, agentId, name: "request_box_help", arg: instruction, history });
+    onUpdate(agentId);   // push the handoff card out without waiting for the next poll
+    // Resolved in-process, so the parked copy is no longer the resume path — drop it, or a
+    // later restart would replay a handoff the user already finished.
+    return waited.finally(() => { unpark("handoff", agentId); });
+  },
 });
 
 /** Tools that never need an approval card, on top of the read-only box tools. */
-const AUTO_APPROVED = new Set(["ask_question", "echo", "time", "reverse", "upper", "count", "calc"]);
+// `request_box_help` belongs here for the same reason as `ask_question`: it asks the user to
+// do something, it does not do anything itself. An approval card in front of it would make
+// them click Allow before being allowed to be asked for help.
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /**
  * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
@@ -550,7 +661,7 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
     return;
   }
   tc.status = "running";
-  void Promise.resolve(fn(arg, ctxFor(agentId)))
+  void Promise.resolve(fn(arg, ctxFor(agentId, history)))
     .catch((e: Error) => `tool error: ${e.message}`)
     .then((result) => {
       tc.result = result;
@@ -560,12 +671,11 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
       // A question is not a result to reason about — the follow-up turn happens when the
       // user answers it, not now, or the model talks over its own question.
       if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
-      if (name === "ask_question" && history) widgetHistory.set(agentId, history);
+      if (name === "ask_question" && history) park({ kind: "widget", key: agentId, agentId, history });
     });
 }
 
-/** The turn that asked a question, kept until the user answers it. */
-const widgetHistory = new Map<string, PoolMessage[]>();
+
 
 // ── approvals ─────────────────────────────────────────────────────────────────
 function findPending(requestId?: string) {
@@ -596,7 +706,7 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
         // Browser actions take seconds, so show "running" and finish out of band rather than
         // blocking the gateway reply the FE is waiting on.
         tc.status = "running";
-        void Promise.resolve(fn(p.arg ?? "", ctxFor(p.agentId)))
+        void Promise.resolve(fn(p.arg ?? "", ctxFor(p.agentId, p.history)))
           .catch((e: Error) => `tool error: ${e.message}`)
           .then((result) => {
             tc.result = result;
@@ -659,10 +769,9 @@ export function respondToWidget(a: any) {
   tail(owner).push({ id: nextId(), kind: "message", role: "user", content: value, timestampMs: Date.now() });
   onUpdate(owner);
 
-  const history = widgetHistory.get(owner);
-  if (history) {
-    widgetHistory.delete(owner);
-    continueAfterTool(owner, history, "ask_question", found.message.widget.prompt, value);
+  const waiting = unpark("widget", owner);
+  if (waiting?.history) {
+    continueAfterTool(owner, waiting.history, "ask_question", found.message.widget.prompt, value);
   }
   return found;
 }
@@ -727,7 +836,7 @@ export function sendPrompt(args: SendArgs) {
     return { accepted: true, entryId: userEntry.id, agentId };
   }
 
-  const history: PoolMessage[] = t.filter((e) => textOf(e))
+  const history: PoolMessage[] = t.filter((e) => textOf(e) && !isToolEcho(e))
     .map((e) => ({ role: e.kind === "message" && e.role === "user" ? "user" : "assistant", content: textOf(e) }));
   const image = readImageAttachment(args.attachments);
   const controller = new AbortController();

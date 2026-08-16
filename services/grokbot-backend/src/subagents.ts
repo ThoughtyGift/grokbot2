@@ -28,11 +28,26 @@ export interface SubagentType {
 }
 
 export const SUBAGENT_TYPES: Record<string, SubagentType> = {
-  // BROWSER_USE_SUBAGENT_CONFIG: AGENT_ONLY, defaultModelIds ["claude-4.5-sonnet"].
+  /**
+   * The original pins `claude-4.5-sonnet` here (BROWSER_USE_SUBAGENT_CONFIG, AGENT_ONLY).
+   * **That choice does not transfer to this pool**, and copying it silently breaks the
+   * subagent. Measured, same prompt and task, counting whether the model ever emits a
+   * TOOL_CALL:
+   *
+   *   gemini-2.5-flash   1 call  → "Tiêu đề trang là Example Domain."   ✅
+   *   grok-4.5           1 call  → correct                              ✅
+   *   gemini-3.7-flash   0       → HTTP 200 with an empty body
+   *   sonnet             0       → "I can't access URLs"
+   *   haiku              0       → same refusal
+   *
+   * The Claude models reach us through the pool's Claude Code CLI, which carries its own
+   * agent identity and tool set, so it overrides a text-convention tool protocol and answers
+   * that it has no browser. Models served as plain completions follow the convention.
+   */
   browserUse: {
     allow: ["browser_"],
     label: "duyệt web",
-    model: process.env.GROKBOT2_SUBAGENT_MODEL,
+    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
     prompt:
       "Enter BROWSER USE mode. Use the provided browser tools to interact with web pages.\n\n" +
       "Important: Every browser tool call automatically returns a screenshot of the current " +
@@ -41,6 +56,7 @@ export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   },
   // EXPLORE_SUBAGENT_PROMPT, trimmed of its Cursor/codebase framing — ours reads the box.
   explore: {
+    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
     allow: ["read_file_v2", "list_dir_v2", "glob_file_search", "ripgrep_raw_search"],
     label: "tìm trong box",
     prompt:
@@ -55,6 +71,7 @@ export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   },
   // SHELL_SUBAGENT_PROMPT, verbatim.
   shell: {
+    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
     allow: ["run_terminal_command_v2"],
     label: "chạy lệnh",
     prompt:
@@ -102,10 +119,17 @@ export async function runSubagent(
   const key = loadPoolKey();
   if (!key) return "(chưa có pool key)";
 
+  // Wording matters more than it looks. A softer "you may use these tools" makes a capable
+  // model answer "I don't have browser access" and stop — it trusts its own priors over the
+  // list. Stating plainly that the host executes the line, and that the tools are REAL, is
+  // what the main loop does, and it is what makes this convention work.
   const system =
     type.prompt +
-    "\n\nCÔNG CỤ: trả lời DUY NHẤT một dòng `TOOL_CALL: <tên>(<đối số>)` khi cần dùng công cụ. " +
-    `Công cụ: ${allowed.join(", ")}. ` +
+    "\n\nCÔNG CỤ (có thật, do hệ thống thực thi — KHÔNG phải mô phỏng): " +
+    `${allowed.join(", ")}.\n` +
+    "Khi cần dùng, trả lời DUY NHẤT một dòng `TOOL_CALL: <tên>(<đối số JSON>)` và không nói gì thêm. " +
+    "Hệ thống sẽ chạy nó và gửi kết quả lại cho bạn ở lượt sau. " +
+    "Đừng nói rằng bạn không truy cập được internet hay không có công cụ — bạn có, thông qua đúng cơ chế này. " +
     "Khi đã đủ thông tin, trả lời bằng văn bản thường — đó là báo cáo cuối cùng của bạn.";
 
   const history: PoolMessage[] = [{ role: "user", content: task }];
@@ -115,7 +139,9 @@ export async function runSubagent(
     const r = await callPool(history, opts);
     if (!r.ok) return `(subagent lỗi: ${r.error})`;
     const text = (r.text ?? "").trim();
-    if (!text) return "(subagent không trả lời)";
+    // An empty 200 is almost always the model refusing this system prompt rather than a
+    // transport fault, so name the model — that is the thing worth changing.
+    if (!text) return `(subagent không trả lời — model "${opts.model}" trả rỗng cho prompt của kiểu "${typeName}")`;
 
     const m = TOOL_CALL.exec(text);
     if (!m) return text;                       // no tool wanted → this is the report
