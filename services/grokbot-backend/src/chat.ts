@@ -22,8 +22,9 @@ import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./browser.js";
 import { stageImage } from "./attachments.js";
-import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol } from "./tools.js";
+import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
 import { boxConfigured } from "./box-exec.js";
+import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
 /** The FE marks a reaction as the current user's when `by === "me"`. */
@@ -66,10 +67,28 @@ type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending"
  * renderer has no path for it. It is gone; see docs/parity.md §2.)
  */
 type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
+/**
+ * The "Your answer" question card. Shape and limits are the client's own zod schema, lifted
+ * verbatim from the widget view chunk — including its wording for what each field is for:
+ *
+ *   value   "Text sent back to you when this option is picked. Defaults to the label.
+ *            Make it read like something the user would naturally say in reply."
+ *   options min 1, MAX 6 — more than six and the card is invalid.
+ *   dismissOnMoveOn  auto-dismiss once the user sends a newer message without answering.
+ *
+ * `prompt` must be a non-empty string or the renderer falls back to a blank card.
+ */
+export type WidgetOption = { label: string; value?: string; description?: string; style?: "default" | "primary" | "danger" };
+type WidgetMsg = {
+  type: "widget";
+  widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean };
+};
 
 export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean })
-  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg; streaming?: boolean })
+  // respondedValue / widgetDismissed live on the ENTRY, not inside message.widget — that is
+  // what flips the card from "question" to "resolved" (client: HWn).
+  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
@@ -84,6 +103,8 @@ const agents = new Map<string, AgentRecord>();
 const transcripts = new Map<string, Entry[]>();
 const inflight = new Map<string, AbortController>();
 const pending = new Map<string, { agentId: string; entryId: string; toolCallId?: string; name?: string; arg?: string; history?: PoolMessage[] }>();
+/** Per-agent compaction checkpoint, so a long conversation is summarised once, not per turn. */
+const compaction = new Map<string, CompactionState>();
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
 
 interface AcceptanceRecord {
@@ -101,6 +122,7 @@ const snapshot = (): PersistedState => ({
   seq: { agent: agentSeq, entry: entrySeq },
   acceptance: [...acceptance.values()],
   automations: automationsRef(),
+  compaction: Object.fromEntries(compaction),
 });
 export const chatSnapshot = snapshot;
 let hostSettingsRef: () => Record<string, unknown> = () => ({});
@@ -139,6 +161,11 @@ function migrate(e: any, agentName: string): Entry | null {
     transcripts.set(id, (entries as any[]).map((e) => migrate(e, name)).filter((e): e is Entry => e !== null));
   }
   for (const r of (s.acceptance ?? []) as AcceptanceRecord[]) if (r?.clientNonce) acceptance.set(r.clientNonce, r);
+  // Without this a restart discards every checkpoint and resends the full transcript —
+  // the exact cost the compaction exists to avoid.
+  for (const [id, c] of Object.entries((s.compaction ?? {}) as Record<string, CompactionState>)) {
+    if (c?.summary && typeof c.coveredCount === "number") compaction.set(id, c);
+  }
   // Derive counters from the highest id present — agents.size would reissue a live id.
   const maxNum = (ids: Iterable<string>, re: RegExp) => {
     let max = 0;
@@ -159,7 +186,11 @@ function migrate(e: any, agentName: string): Entry | null {
  * the original's browser tools return a screenshot after every action, and this is how we
  * match that without threading the agent id through every tool signature.
  */
-export interface ToolCtx { attach(dataUrl: string, fileName: string, alt: string): void }
+export interface ToolCtx {
+  attach(dataUrl: string, fileName: string, alt: string): void;
+  /** Put a question card in the transcript; returns its entry id, or null if malformed. */
+  ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean }): string | null;
+}
 
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
   echo: (a) => a || "(empty)",
@@ -171,6 +202,30 @@ const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<stri
     if (!/^[\d\s+\-*/().]+$/.test(a)) return "chỉ hỗ trợ số và + - * / ( )";
     try { return String(Function(`"use strict";return(${a})`)()); } catch { return "biểu thức không hợp lệ"; }
   },
+};
+
+/**
+ * Ask the user a multiple-choice question (`ask_question` in the original catalog).
+ * Auto-approved: it has no side effect, and putting an approval card in front of a question
+ * would make the user click twice to be asked something.
+ */
+TOOLS.ask_question = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { return 'ask_question cần JSON, ví dụ {"prompt":"…","options":[{"label":"A"}]}'; }
+  const options = (Array.isArray(spec?.options) ? spec.options : [])
+    .map((o: any) => (typeof o === "string" ? { label: o } : o))
+    .filter((o: any) => typeof o?.label === "string");
+  const prompt = typeof spec?.prompt === "string" ? spec.prompt : typeof spec?.title === "string" ? spec.title : "";
+  const id = ctx.ask({
+    prompt,
+    options,
+    ...(typeof spec?.helpText === "string" ? { helpText: spec.helpText } : {}),
+    ...(typeof spec?.allowCustom === "boolean" ? { allowCustom: spec.allowCustom } : {}),
+    ...(typeof spec?.dismissOnMoveOn === "boolean" ? { dismissOnMoveOn: spec.dismissOnMoveOn } : {}),
+  });
+  return id == null
+    ? "ask_question cần prompt không rỗng và ít nhất một option"
+    : `đã hỏi người dùng: ${prompt}`;
 };
 
 // Browser actions are only offered when a box browser is actually configured — advertising
@@ -199,11 +254,17 @@ const BROWSER_PROTOCOL = isBrowserConfigured()
     "hay browser_take_screenshot ngay sau một hành động khác."
   : "";
 
+const ASK_PROTOCOL =
+  "\n\nHỎI NGƯỜI DÙNG: khi cần người dùng chọn giữa nhiều hướng, dùng " +
+  'TOOL_CALL: ask_question({"prompt":"Câu hỏi?","options":[{"label":"Cách A"},{"label":"Cách B"}]}) ' +
+  "— tối đa 6 lựa chọn, thêm \"allowCustom\":true nếu họ có thể tự gõ câu trả lời. " +
+  "Đừng hỏi rồi tự trả lời: dừng lượt sau khi hỏi, câu trả lời sẽ đến ở lượt sau.";
+
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
   "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
-  BROWSER_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + ASK_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
@@ -407,10 +468,72 @@ export function postAttachment(agentId: string, dataUrl: string, fileName: strin
   onUpdate(agentId);
 }
 
+const MAX_WIDGET_OPTIONS = 6;   // the client's own schema caps it here
+
+/**
+ * Ask the user a question with buttons. Returns the entry id so the answer can be routed back
+ * to the turn that asked.
+ */
+export function postWidget(
+  agentId: string,
+  widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean },
+): string | null {
+  const options = widget.options.filter((o) => typeof o?.label === "string" && o.label.trim().length > 0).slice(0, MAX_WIDGET_OPTIONS);
+  if (widget.prompt.trim().length === 0 || options.length === 0) return null;
+  const id = nextId();
+  tail(agentId).push({
+    id,
+    kind: "send-message",
+    author: authorOf(agentId),
+    message: { type: "widget", widget: { ...widget, options } },
+    timestampMs: Date.now(),
+  });
+  onUpdate(agentId);
+  return id;
+}
+
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string): ToolCtx => ({
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
+  ask: (widget) => postWidget(agentId, widget),
 });
+
+/** Tools that never need an approval card, on top of the read-only box tools. */
+const AUTO_APPROVED = new Set(["ask_question", "echo", "time", "reverse", "upper", "count", "calc"]);
+
+/**
+ * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
+ * Async by design: browser actions take seconds, so the tool card goes "running" and the
+ * result lands out of band instead of blocking the gateway reply the FE is waiting on.
+ */
+function runTool(agentId: string, toolCallId: string, name: string, arg: string, history?: PoolMessage[]): void {
+  const t = tail(agentId);
+  const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
+  if (!tc) return;
+  const fn = TOOLS[name];
+  if (!fn) {
+    tc.result = "(unknown tool)";
+    tc.status = "failed";
+    onUpdate(agentId);
+    return;
+  }
+  tc.status = "running";
+  void Promise.resolve(fn(arg, ctxFor(agentId)))
+    .catch((e: Error) => `tool error: ${e.message}`)
+    .then((result) => {
+      tc.result = result;
+      tc.status = "done";
+      t.push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: `🔧 ${name}(${arg}) → ${result}` }, timestampMs: Date.now() });
+      onUpdate(agentId);
+      // A question is not a result to reason about — the follow-up turn happens when the
+      // user answers it, not now, or the model talks over its own question.
+      if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
+      if (name === "ask_question" && history) widgetHistory.set(agentId, history);
+    });
+}
+
+/** The turn that asked a question, kept until the user answers it. */
+const widgetHistory = new Map<string, PoolMessage[]>();
 
 // ── approvals ─────────────────────────────────────────────────────────────────
 function findPending(requestId?: string) {
@@ -462,8 +585,54 @@ export function resolveAutoReviewApproval(a: { requestId?: string; approved?: bo
   if (card && card.kind === "send-message" && card.message.type === "auto-review-approval") card.message.approval.status = a.approved ? "approved" : "denied";
   onUpdate(p.agentId); return {};
 }
-export function respondToWidget(a: { requestId?: string }) {
-  const p = findPending(a.requestId); if (p) { pending.delete(p.requestId); onUpdate(p.agentId); } return {};
+/**
+ * The user picked an option (or typed a custom answer).
+ *
+ * The declared reply is "record-or-null", so the updated entry goes back, not `{}`.
+ * Key names are read broadly on purpose: the call site is built in the renderer and could not
+ * be read statically, and guessing one spelling is exactly how five features died before
+ * (HANDOFF §5). `GROKBOT2_LOG=1` prints the real payload.
+ */
+export function respondToWidget(a: any) {
+  const entryId: string | undefined = a?.entryId ?? a?.id ?? a?.messageId;
+  const agentId: string = a?.agentId ?? a?.id ?? "";
+  const answer: string | undefined =
+    a?.value ?? a?.answer ?? a?.respondedValue ?? a?.text ?? a?.freeformText ?? a?.selectedValue;
+
+  // Find the widget entry: by id when we were given one, else the newest unanswered widget.
+  const isWidget = (e: Entry): e is Extract<Entry, { kind: "send-message" }> =>
+    e.kind === "send-message" && e.message.type === "widget";
+  const search = (list: Entry[]) =>
+    (entryId != null ? list.find((e) => e.id === entryId && isWidget(e)) : undefined) ??
+    [...list].reverse().find((e) => isWidget(e) && e.respondedValue == null && e.widgetDismissed !== true);
+
+  let found: Extract<Entry, { kind: "send-message" }> | undefined;
+  let owner = agentId;
+  const direct = transcripts.get(agentId);
+  if (direct) found = search(direct) as typeof found;
+  if (!found) {
+    for (const [id, list] of transcripts) {
+      const hit = search(list) as typeof found;
+      if (hit) { found = hit; owner = id; break; }
+    }
+  }
+  if (!found || found.message.type !== "widget") return null;
+
+  const chosen = found.message.widget.options.find((o) => (o.value ?? o.label) === answer);
+  const value = answer ?? chosen?.value ?? chosen?.label ?? "";
+  found.respondedValue = value;
+
+  // Echo the answer as a user turn so the transcript reads like a conversation, then let the
+  // model continue from the question it asked.
+  tail(owner).push({ id: nextId(), kind: "message", role: "user", content: value, timestampMs: Date.now() });
+  onUpdate(owner);
+
+  const history = widgetHistory.get(owner);
+  if (history) {
+    widgetHistory.delete(owner);
+    continueAfterTool(owner, history, "ask_question", found.message.widget.prompt, value);
+  }
+  return found;
 }
 export function submitSecret(a: { requestId?: string }) {   // value intentionally not stored
   const p = findPending(a.requestId); if (p) { pending.delete(p.requestId); onUpdate(p.agentId); } return {};
@@ -531,7 +700,7 @@ export function sendPrompt(args: SendArgs) {
   const image = readImageAttachment(args.attachments);
   const controller = new AbortController();
   inflight.set(agentId, controller);
-  void runTurn(agentId, bubble, history.length ? history : [{ role: "user", content: text }], key, controller, image);
+  void startTurn(agentId, bubble, history.length ? history : [{ role: "user", content: text }], key, controller, image);
   return { accepted: true, entryId: userEntry.id, agentId };
 }
 
@@ -542,16 +711,42 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   const t = tail(agentId);
   const toolCallId = `tc-${toolSeq++}`;
   const requestId = `req-${reqSeq++}`;
-  const known = name.toLowerCase() in TOOLS;
+  const lower = name.toLowerCase();
+  const known = lower in TOOLS;
   t.push({ id: nextId(), kind: "tool-call", toolCallId, name, rawArgs: JSON.stringify({ arg }), status: "pending", timestampMs: Date.now() });
+
+  // Read-only tools and questions run straight away. `isAutoApproved` existed but nothing
+  // called it, so every harmless read still made the user click Allow.
+  if (known && (AUTO_APPROVED.has(lower) || isAutoApproved(lower))) {
+    runTool(agentId, toolCallId, lower, arg, history);
+    onUpdate(agentId);
+    return;
+  }
+
   const card: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
     message: { type: "local-tool-permission", ask: { status: known ? "pending" : "denied", target: `${name}(${arg})`, requestId } } };
   t.push(card);
-  if (known) pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: name.toLowerCase(), arg, history });
+  if (known) pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: lower, arg, history });
   onUpdate(agentId);
 }
 
 /** One model turn: stream tokens into `bubble`, then handle a TOOL_CALL if the model asked. */
+/**
+ * Compact if the conversation has outgrown its budget, then run the turn.
+ *
+ * Compaction happens before the request rather than after a failure: once the window is
+ * exceeded the call fails outright, and a retry with the same oversized history fails the
+ * same way.
+ */
+async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
+  const prior = compaction.get(agentId) ?? null;
+  if (needsCompaction(history)) {
+    const next = await compact(history, key, prior, controller.signal);
+    if (next) { compaction.set(agentId, next); persist(); }
+  }
+  return runTurn(agentId, bubble, applyCompaction(history, compaction.get(agentId) ?? null), key, controller, image);
+}
+
 async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
   const opts = { url: config.poolUrl, key, model: config.model, system: config.system + TOOL_PROTOCOL, signal: controller.signal, ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop

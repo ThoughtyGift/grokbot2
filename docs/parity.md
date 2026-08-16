@@ -53,6 +53,32 @@ original's own browser-use reminder says it does.
 Verified in the running app: a staged screenshot renders inline at 1920x953.
 Regression test: `scripts/e2e-attachment.mjs`.
 
+## 2b. `ask_question` — DONE
+
+The client's own zod schema, lifted from the widget view chunk (`view-CG_6Qsxm.js`), including
+its wording:
+
+```
+Option = { label, value?, description?, style?: default|primary|danger }
+          value: "Text sent back to you when this option is picked. Defaults to the label."
+Widget = { prompt, helpText?, options: 1..6, allowCustom?, dismissOnMoveOn? }
+```
+
+Two things the schema does not tell you, and both matter:
+
+- `respondedValue` / `widgetDismissed` live on the **entry**, not inside `message.widget`. That
+  is what flips the card from question to answered (client: `HWn`).
+- `respondToWidget` is declared `reply: "record-or-null"` — returning `{}` is wrong; it returns
+  the updated entry. The real payload is `{entryId, value, agentId}`, read off the wire with
+  `GROKBOT2_LOG=1` because the call site could not be resolved statically.
+
+Also fixed while here: `isAutoApproved` was exported from `tools.ts` and **never called**, so
+every read-only tool still put an approval card in front of the user. `injectTool` now honours
+it, and a question is auto-approved — otherwise you click Allow to be asked something.
+
+Verified in the app: the model called `ask_question`, four options rendered, clicking one
+flipped the card to the answered state with a tick and echoed the answer as a user turn.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,
@@ -103,7 +129,7 @@ change available per unit of effort, and it is now a copy-and-adapt job rather t
 ## 6. Suggested order
 
 1. ~~Attachment contract (§2)~~ — **done**, verified in the app.
-2. **`ask_question`** — the widget already renders; we only have to emit it.
+2. ~~`ask_question`~~ — **done**, verified in the app.
 3. **Adopt the extracted base prompt** — behaviour parity without new plumbing.
 4. **`task_v2` + subagents** — makes the browser tools usable the way the original uses them.
 5. **MCP tools** (`get_mcp_tools` / `call_mcp_tool`).

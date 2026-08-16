@@ -21,6 +21,8 @@ export interface PersistedState {
   seq?: { agent?: number; entry?: number };
   acceptance?: unknown[];
   automations?: unknown[];
+  /** Per-agent context compaction, so a restart does not resend the whole transcript. */
+  compaction?: Record<string, unknown>;
 }
 
 /** Load state.json, falling back to a snapshot.json import on first run. */
