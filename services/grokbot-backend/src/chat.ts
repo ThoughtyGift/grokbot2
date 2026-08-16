@@ -61,11 +61,20 @@ const inflight = new Map<string, AbortController>();
 const pending = new Map<string, { agentId: string; entryId: string; toolCallId?: string; name?: string; arg?: string; history?: PoolMessage[] }>();
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
 
+interface AcceptanceRecord {
+  accountSlot: string; clientNonce: string; status: "pending" | "accepted" | "rejected";
+  acceptedAtMs: number; agentId: string; echoEntryId: string | null; rejectionCode: string | null;
+}
+const acceptance = new Map<string, AcceptanceRecord>();
+// Persisted: after a backend restart the composer re-polls its queued nonces, and a
+// forgotten ledger makes every one of them show "Failed to send".
+
 // ── persistence ───────────────────────────────────────────────────────────────
 const snapshot = (): PersistedState => ({
   agents: [...agents.values()],
   transcripts: Object.fromEntries([...transcripts.entries()]),
   seq: { agent: agentSeq, entry: entrySeq },
+  acceptance: [...acceptance.values()],
 });
 export const chatSnapshot = snapshot;
 let hostSettingsRef: () => Record<string, unknown> = () => ({});
@@ -90,6 +99,7 @@ function migrate(e: any, agentName: string): Entry | null {
     const name = agents.get(id)?.name ?? "Claude";
     transcripts.set(id, (entries as any[]).map((e) => migrate(e, name)).filter((e): e is Entry => e !== null));
   }
+  for (const r of (s.acceptance ?? []) as AcceptanceRecord[]) if (r?.clientNonce) acceptance.set(r.clientNonce, r);
   // Derive counters from the highest id present — agents.size would reissue a live id.
   const maxNum = (ids: Iterable<string>, re: RegExp) => {
     let max = 0;
@@ -127,6 +137,10 @@ function parseToolCall(text: string): { name: string; arg: string } | null {
 
 let sink: (agentId: string) => void = () => {};
 export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; }
+let rosterSink: () => void = () => {};
+/** Push a roster change to the FE so add/delete shows up without waiting for its next poll. */
+export function setRosterSink(fn: () => void): void { rosterSink = fn; }
+const rosterChanged = (): void => rosterSink();
 const onUpdate = (agentId: string): void => { sink(agentId); persist(); };
 const nextId = () => `e${entrySeq++}`;
 const tail = (agentId: string) => transcripts.get(agentId) ?? (transcripts.set(agentId, []), transcripts.get(agentId)!);
@@ -140,7 +154,7 @@ const setText = (e: Entry, v: string): void => { if (e.kind === "send-message" &
 export function createAgent(args: { name?: string } = {}): AgentRecord {
   const id = `agent-${agentSeq++}`;
   const rec: AgentRecord = { id, name: args.name || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false };
-  agents.set(id, rec); transcripts.set(id, []); persist();
+  agents.set(id, rec); transcripts.set(id, []); persist(); rosterChanged();
   return rec;
 }
 export const listAgents = (): AgentRecord[] => [...agents.values()].filter((a) => !a.hidden);
@@ -153,7 +167,7 @@ export function updateAgent(a: { id?: string; agentId?: string; name?: string })
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
   const ids = a.ids ?? a.agentIds ?? (a.id ? [a.id] : []);
   for (const id of ids) { agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id); }
-  persist(); return { deleted: ids };
+  persist(); rosterChanged(); return { deleted: ids };
 }
 export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
   const src = agents.get(a.id ?? a.agentId ?? ""); if (!src) return null;
@@ -187,17 +201,37 @@ export function getAgentAvatar(a: { id?: string; agentId?: string }) {
 
 // ── transcript ────────────────────────────────────────────────────────────────
 const PAGE = 200;
-/** Newest page by default; `before` walks backwards as the FE scrolls up. */
-export function transcriptTail(a?: { agentId?: string; limit?: number; before?: string; cursor?: string } | string) {
+/**
+ * Transcript page in the client's shape: `{reachable, entries, beforeSeq, nextBeforeSeq}`.
+ *
+ * The FE pages with a NUMERIC `beforeSeq` and keys each page by it; `nextBeforeSeq` (or its
+ * absence) tells it whether older entries remain. It also needs `reachable:true` — without it
+ * the transcript is treated as unavailable and nothing renders. Entries carry a numeric `seq`
+ * so ordering and the next anchor are well defined.
+ */
+export function transcriptTail(a?: { agentId?: string; limit?: number; beforeSeq?: number; before?: string; cursor?: string } | string) {
   const args = typeof a === "string" || a === undefined ? { agentId: a as string | undefined } : a;
   const all = (args.agentId && transcripts.get(args.agentId)) || [];
+  const withSeq = all.map((e, i) => ({ ...e, seq: i + 1 }));
   const limit = Math.max(1, Math.min(args.limit ?? PAGE, 1000));
-  const anchor = args.before ?? args.cursor;
-  const at = anchor ? all.findIndex((e) => e.id === anchor) : -1;
-  const end = at >= 0 ? at : all.length;
+
+  let end = withSeq.length;
+  if (typeof args.beforeSeq === "number") end = Math.max(0, withSeq.findIndex((e) => e.seq >= args.beforeSeq!));
+  else if (args.before ?? args.cursor) {
+    const at = withSeq.findIndex((e) => e.id === (args.before ?? args.cursor));
+    if (at >= 0) end = at;
+  }
   const start = Math.max(0, end - limit);
-  const entries = all.slice(start, end);
-  return { entries, hasMore: start > 0, cursor: entries[0]?.id ?? null, total: all.length };
+  const entries = withSeq.slice(start, end);
+  return {
+    reachable: true,
+    entries,
+    beforeSeq: typeof args.beforeSeq === "number" ? args.beforeSeq : null,
+    nextBeforeSeq: start > 0 ? entries[0]?.seq ?? null : null,
+    hasMore: start > 0,
+    cursor: entries[0]?.id ?? null,
+    total: withSeq.length,
+  };
 }
 export function getConversationOutline(a: { agentId?: string }) {
   const t = (a.agentId && transcripts.get(a.agentId)) || [];
@@ -221,11 +255,6 @@ export const voteFeedback = (): Record<string, never> => ({});
  * (the old `{accepted:true}`) left every message stuck at "Failed to send" and the reply
  * never rendered. Statuses mirror the box: pending | accepted | rejected.
  */
-interface AcceptanceRecord {
-  accountSlot: string; clientNonce: string; status: "pending" | "accepted" | "rejected";
-  acceptedAtMs: number; agentId: string; echoEntryId: string | null; rejectionCode: string | null;
-}
-const acceptance = new Map<string, AcceptanceRecord>();
 
 export function promptAcceptanceStatus(a: { clientNonce?: string; accountSlot?: string }) {
   const rec = a?.clientNonce ? acceptance.get(a.clientNonce) : undefined;

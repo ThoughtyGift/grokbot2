@@ -11,6 +11,7 @@ import {
   transcriptTail,
   sendPrompt,
   setUpdateSink,
+  setRosterSink,
   updateAgent,
   deleteAgents,
   duplicateAgent,
@@ -53,16 +54,15 @@ const saveSettings = () => scheduleSave(() => ({ ...chatSnapshot(), hostSettings
 const sseClients = new Set<ServerResponse>();
 
 // Push a nudge so the frontend re-fetches the transcript when chat updates.
-setUpdateSink((agentId) => {
-  const line = `data: ${JSON.stringify({ kind: "transcript-updated", agentId })}\n\n`;
+const broadcast = (payload: unknown): void => {
+  const line = `data: ${JSON.stringify(payload)}\n\n`;
   for (const r of sseClients) {
-    try {
-      r.write(line);
-    } catch {
-      /* client gone */
-    }
+    try { r.write(line); } catch { /* client gone */ }
   }
-});
+};
+setUpdateSink((agentId) => broadcast({ kind: "transcript-updated", agentId }));
+// Roster add/delete: push immediately so the sidebar doesn't wait for its next poll.
+setRosterSink(() => broadcast({ kind: "roster-updated" }));
 setInterval(() => {
   for (const r of sseClients) {
     try {
