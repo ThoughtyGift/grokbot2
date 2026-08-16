@@ -68,7 +68,14 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
     if (json.success && typeof json.result === "string") {
       return { ok: true, text: json.result, account: json.account, status: res.status };
     }
-    return { ok: false, status: res.status, error: json.error ?? `pool HTTP ${res.status}`, account: json.account };
+    // The pool reports errors as a string or a nested object — flatten so callers can show it.
+    const err = json.error?.message ?? json.error?.type ?? json.error ?? json.message;
+    return {
+      ok: false,
+      status: res.status,
+      error: typeof err === "string" ? err : `pool HTTP ${res.status}: ${JSON.stringify(err ?? json).slice(0, 200)}`,
+      account: json.account,
+    };
   } catch (e: any) {
     return { ok: false, error: e?.name === "AbortError" ? "aborted" : String(e) };
   } finally {

@@ -115,7 +115,7 @@ const methods: Record<string, (args: any) => unknown> = {
   setAgentHiddenFromSidebar: (a) => setAgentHiddenFromSidebar(a),
   interruptAgentRun: (a) => interruptAgentRun(a),
   sendPrompt: (a: SendArgs) => sendPrompt(a),
-  promptAcceptanceStatus: () => promptAcceptanceStatus(),
+  promptAcceptanceStatus: (a) => promptAcceptanceStatus(a),
   reactToMessage: (a) => reactToMessage(a),
   voteFeedback: () => voteFeedback(),
   getConversationOutline: (a) => getConversationOutline(a),

@@ -16,16 +16,29 @@ export const config = {
       "Bạn KHÔNG phải trợ lý lập trình mặc định — chỉ bàn về code khi được hỏi.",
 };
 
-/** Load the hal_xxx pool key from env or a gitignored file. Never logged. */
+/**
+ * Load the pool key from env or a gitignored file. Never logged.
+ *
+ * The file is edited by hand, so be forgiving: scan every line for a `hal_…` token and
+ * ignore placeholder/comment lines. (Pasting the key *under* the placeholder instead of
+ * replacing it is the common mistake, and it used to silently disable chat.)
+ */
 export function loadPoolKey(): string | null {
-  if (process.env.CLAUDE_POOL_KEY) return process.env.CLAUDE_POOL_KEY.trim();
+  // Real keys are `hal_` + 48 hex (admin-dashboard: 'hal_' + randomBytes(24).toString('hex')).
+  // Match that shape so a label prefix ("API-key-x= hal_…") or the placeholder's own
+  // "hal_xxx_KEY_HERE" text can't be mistaken for the key.
+  const REAL = /hal_[A-Za-z0-9]{24,}/;
+  const scan = (text: string): string | null => {
+    const usable = text.split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.includes("PASTE_") && !l.startsWith("#") && !l.startsWith("//"));
+    for (const line of usable) { const m = line.match(REAL); if (m) return m[0]; }
+    // No hal_ token at all — fall back to a lone token-looking line (other pool deployments).
+    return usable.find((l) => /^[A-Za-z0-9_\-.]{16,}$/.test(l)) ?? null;
+  };
+  if (process.env.CLAUDE_POOL_KEY) return scan(process.env.CLAUDE_POOL_KEY) ?? process.env.CLAUDE_POOL_KEY.trim();
   for (const f of ["pool-key.txt", "anthropic-key.txt"]) {
-    try {
-      const k = readFileSync(join(svcRoot, f), "utf8").trim();
-      if (k && !k.startsWith("PASTE_")) return k;
-    } catch {
-      /* not present */
-    }
+    try { const k = scan(readFileSync(join(svcRoot, f), "utf8")); if (k) return k; } catch { /* not present */ }
   }
   return null;
 }
