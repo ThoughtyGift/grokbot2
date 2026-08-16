@@ -80,13 +80,18 @@ else
 fi
 
 # Start a unit only if it isn't already active — every step below is re-runnable.
+#
+# Restart=always is not optional here. A desktop app that quits leaves the pane looking fine
+# while the agent's browser tools fail with "no page target", which reads as a broken backend
+# rather than a dead browser — Chrome exited on its own within the hour on first run.
 unit_up() {
   local name="$1"; shift
   if systemctl is-active --quiet "$name" 2>/dev/null; then
     echo "  $name already running"; return 0
   fi
   systemctl reset-failed "$name" 2>/dev/null
-  systemd-run --unit="$name" --collect --setenv=DISPLAY=":$DISP" "$@" >/dev/null 2>&1 \
+  systemd-run --unit="$name" --collect --setenv=DISPLAY=":$DISP" \
+    --property=Restart=always --property=RestartSec=2 "$@" >/dev/null 2>&1 \
     && echo "  $name started" || echo "  $name FAILED"
 }
 

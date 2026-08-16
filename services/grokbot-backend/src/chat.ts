@@ -20,7 +20,7 @@ import { extname } from "node:path";
 import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
-import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./browser.js";
+import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe } from "./browser.js";
 import { stageImage } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
 import { boxConfigured } from "./box-exec.js";
@@ -211,6 +211,17 @@ function migrate(e: any, agentName: string): Entry | null {
   const ts = e.timestampMs ?? Date.now();
   if (e.kind === "user-message") return { id, kind: "message", role: "user", content: e.text ?? "", timestampMs: ts, ...(e.clientNonce ? { clientNonce: e.clientNonce } : {}) };
   if (e.kind === "agent-message") return { id, kind: "send-message", author: { id: e.agentId ?? "agent", name: e.authorName ?? agentName }, message: { type: "text", content: e.text ?? "" }, timestampMs: ts };
+  // Nothing can still be streaming in a process that has only just started. A turn cut off
+  // mid-generation (a backend restart, a crash) is persisted with `streaming: true`, and on
+  // restore the app sees a bubble that never finishes: an empty message that sits there
+  // forever with no text and no typing indicator, because as far as the client is concerned
+  // the answer is still coming.
+  if (e.kind === "send-message" && e.streaming) {
+    e.streaming = false;
+    const empty = e.message?.type === "text" && !String(e.message.content ?? "").trim();
+    if (empty) return null;                       // drop it rather than leave a blank bubble
+    if (e.message?.type === "text") e.message.content += "\n\n⏹ (bị ngắt giữa chừng)";
+  }
   if (e.kind === "message" || e.kind === "send-message" || e.kind === "tool-call") {
     // Reactions used to be plain emoji strings; the FE needs {emoji, by}.
     if (Array.isArray(e.reactions)) {
@@ -382,8 +393,14 @@ TOOLS.task_v2 = async (arg, ctx) => {
 
 // Browser actions are only offered when a box browser is actually configured — advertising
 // tools that cannot run just teaches the model to call them and fail.
+// Registered only once the browser has actually answered. Configured-but-unreachable is
+// the expensive case: the tool is offered, the model calls it, and the user waits out a
+// socket timeout for "fetch failed".
 if (isBrowserConfigured()) {
-  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
+  void browserProbe().then(() => {
+    if (!isBrowserReachable()) return;
+    for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
+  });
 }
 
 // Tools under their real ClientSideToolV2 names. availableTools() drops the shell/file ones

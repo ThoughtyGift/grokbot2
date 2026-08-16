@@ -356,11 +356,25 @@ export function closeBrowser(): void {
 }
 
 /** Reachability check for startup logging — never throws. */
+/**
+ * Whether the browser answered its last probe.
+ *
+ * `GROKBOT2_BROWSER_CDP` being SET is not the same as the browser being reachable, and the
+ * difference is expensive: with the variable set but the tunnel down, the 16 browser tools
+ * are still advertised, so the model picks one, waits out a socket timeout, and the user
+ * sees a long silence ending in "fetch failed" — observed live on "mở shopee". A probe at
+ * startup turns that into the tool simply not being offered.
+ */
+let reachable = false;
+export const isBrowserReachable = (): boolean => reachable;
+
 export async function browserProbe(): Promise<string> {
   try {
     const pages = (await listTargets()).filter((t) => t.type === "page");
+    reachable = true;
     return `reachable, ${pages.length} tab(s)`;
   } catch (e) {
+    reachable = false;
     return `unreachable (${(e as Error).message})`;
   }
 }

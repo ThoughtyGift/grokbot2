@@ -200,6 +200,42 @@ Not done: the subagent list in the UI (`getSubagents` → array, plus a `subagen
 The per-item shape was not pinned down, and guessing it is the mistake this document exists to
 record. Ours also runs synchronously — the original's are stateful, resumable and parallel.
 
+## 2g. The box desktop and its browser — DONE
+
+The box now runs the same stack the original's telemetry names
+(`SAND_PROCESS_CRASH_BINARIES` / `DESKTOP_COMPONENT_NAME_PATTERN`): **xfwm4 + compositor +
+plank + google-chrome + thunar + xfce4-terminal**, replacing fluxbox + xterm.
+
+Host: `103.75.186.63`, **SSH port 24700** (found in `Quản lÝ manager/.deploy.local.json`).
+`admin.halcion.vn` is behind Cloudflare, so the domain never reaches SSH — and the IP was in
+`known_hosts` all along but answered "connection refused" on 22, which reads like the wrong
+machine when it only means the wrong port. Confirmed correct host by its hostname
+`cs-linux-20251216104610892`, which is the name in the noVNC window title.
+
+Two bugs in the provisioning script, both found by running it:
+
+- **`picom` is not packaged before Ubuntu 21.04** (focal has `compton`). Now: picom → compton →
+  else xfwm4's own compositor.
+- **One missing package aborted the whole install.** `apt-get install a b c` fails as a unit, so
+  picom took the entire desktop down with it. Packages are installed one at a time now.
+- Units get `Restart=always`. Chrome exited on its own within the hour on the first run, and a
+  dead browser presents as "no page target" — which reads as a broken backend, not a dead app.
+
+**Browser tools now drive the box's Chrome**, over an SSH tunnel to its DevTools port:
+
+```
+ssh -N -L 9223:127.0.0.1:9223 -p 24700 root@103.75.186.63
+GROKBOT2_BROWSER_CDP=http://127.0.0.1:9223
+```
+
+DevTools stays bound to `127.0.0.1` on the box and is never published through nginx — an open
+CDP port is unauthenticated remote code execution.
+
+Verified: `e2e-browser.mjs` passes against it (`X11; Linux x86_64`, Chrome 149), and a
+framebuffer capture of the box shows Chrome sitting on `iana.org/help/example-domains` — the
+page the agent's own `browser_click` navigated to. The user watches the agent work, which is
+the whole point of the pane.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

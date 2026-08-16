@@ -41,14 +41,37 @@ grokbot2 backend            ← this repo
 | Transcript | paging (`beforeSeq`), outline, search, interrupt |
 | Persistence | agents, transcripts, settings, acceptance ledger survive restarts |
 | **VNC workspace** | live desktop in the pane and the full-size viewer; keyboard and mouse reach the box (§6) |
-| Coverage | **78 / 87** coordinator methods handled |
+| **Routines** | editor, cron scheduler, run history — fires on schedule and the model really answers |
+| **Box tools** | `run_terminal_command_v2` `read_file_v2` `list_dir_v2` `glob_file_search` `ripgrep_raw_search`, running on the deployed box (§3a) |
+| **Web tools** | `web_search` `web_fetch` — need neither a box nor a key, so they work on a fresh clone |
+| **Question card** | `ask_question` — the turn parks, the answer resumes it |
+| **Memory** | `knowledge_base`; a cold session recalls what an earlier one learned |
+| **Context compaction** | long conversations are summarised instead of resent whole |
+| **System prompt** | the original's own 59k-char prompt, ported and tiered (§5) |
+| Coverage | **90** gateway methods handled, 0 unmapped |
 
 **Not working**
 
 - **Shared rooms** (9 methods) — needs a real relay; faking it would create rooms nobody can join.
-- Stubs that answer their declared shape but have no feature: workflows, automations, channels,
-  skills publishing, subagents, async tasks, cloud agent, forever-box, teach recording,
-  media search, groups, trays, MCP/plugins.
+- **Past-conversation search** — the original has a `PAST_CONVERSATION_EXPLORER` subagent;
+  `searchAgents` here searches transcripts but only for the sidebar, the agent cannot call it.
+- **Skills** — `skillsCatalog` still answers `[]`.
+- Stubs that answer their declared shape but have no feature: workflows, channels,
+  skills publishing, async tasks, cloud agent, teach recording, media search, groups,
+  trays, MCP/plugins.
+
+**Tests** — `services/grokbot-backend/scripts/`, all runnable with `npx tsx`:
+
+| Suite | Covers |
+|---|---|
+| `test-cron` (31) | cron grammar, timezones, dom-OR-dow day semantics |
+| `test-exec-daemon` (24) | daemon protocol, the directory tree, sandbox escapes |
+| `test-web` (28) | html→markdown, tree rendering, live search/fetch probes |
+| `test-prompt-tiers` (20) | tier order and, mainly, the shared cache prefix |
+| `test-compaction` (18) | estimate, threshold, slice, malformed checkpoints |
+| `test-box-tools` (11) · `test-tool-args` (11) | tool calls and quoted-argument handling |
+| **`test-real-box` (14)** | the tools against the DEPLOYED box, over TLS and nginx |
+| `e2e-memory` · `e2e-ask-question` · `e2e-box-tools` | model-in-the-loop, real replies |
 
 ---
 
