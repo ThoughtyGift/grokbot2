@@ -1,5 +1,11 @@
 # FE / BE coverage audit
 
+> **Live number:** run `node services/grokbot-backend/scripts/e2e-coverage.mjs` against a running
+> backend — it replays every coordinator method the client bundle declares and prints
+> HANDLED vs NOT MAPPED. Currently **78 / 87 handled**; the 9 remaining are shared-rooms
+> (multiplayer) methods, which need a real relay server and can't be faked.
+
+
 Snapshot of which Grok Bot FE surfaces the backend actually serves. Verdict: a thin but
 genuinely-working chat spine — after the P0 pass, core chat + roster are usable.
 

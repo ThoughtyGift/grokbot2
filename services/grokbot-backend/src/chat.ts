@@ -131,6 +131,37 @@ export function reactToMessage(a: { agentId?: string; entryId?: string; reaction
 export const voteFeedback = (): Record<string, never> => ({});
 export const promptAcceptanceStatus = () => ({ accepted: true, status: "accepted" });
 
+// ── P2: roster search / run helpers ───────────────────────────────────────────
+/** Match agents by name, and (cheaply) by transcript text so search feels real. */
+export function searchAgents(a: { query?: string; q?: string; text?: string }): AgentRecord[] {
+  const q = (a.query ?? a.q ?? a.text ?? "").toLowerCase().trim();
+  if (!q) return listAgents();
+  return listAgents().filter((rec) => {
+    if (rec.name.toLowerCase().includes(q)) return true;
+    return (transcripts.get(rec.id) ?? []).some((e) => "text" in e && e.text.toLowerCase().includes(q));
+  });
+}
+
+/** Wake an agent — marks it read and returns the record the FE opens. */
+export function kickstartAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  rec.unread = false;
+  return rec;
+}
+
+/** Send one prompt to many agents (defaults to all visible). */
+export function broadcastToAgents(a: { ids?: string[]; agentIds?: string[]; prompt?: string; content?: string; text?: string }) {
+  const ids = a.ids ?? a.agentIds ?? listAgents().map((x) => x.id);
+  const text = a.prompt ?? a.content ?? a.text ?? "";
+  const sent: string[] = [];
+  for (const id of ids) if (agents.has(id)) { sendPrompt({ agentId: id, content: text }); sent.push(id); }
+  return { sent, count: sent.length };
+}
+
+/** No subagent/async-task model yet — return the declared empty arrays, not a bare {}. */
+export const getSubagents = (): unknown[] => [];
+export const getAsyncTasks = (): unknown[] => [];
+
 // ── run control ────────────────────────────────────────────────────────────────
 export function interruptAgentRun(a: { agentId?: string; id?: string }) {
   const agentId = a.agentId ?? a.id ?? "";

@@ -30,6 +30,11 @@ import {
   setAgentNotifyOnUpdates,
   setAgentAvatarBytes,
   getAgentAvatar,
+  searchAgents,
+  kickstartAgent,
+  broadcastToAgents,
+  getSubagents,
+  getAsyncTasks,
   type SendArgs,
 } from "./chat.js";
 
@@ -136,6 +141,51 @@ const methods: Record<string, (args: any) => unknown> = {
   isEgressTunnelAvailable: () => false,
   isAgentNetworkEnabled: () => false,
   getForeverBoxStatus: () => ({ status: "disabled" }),
+
+  // ── P2: real behavior ──
+  searchAgents: (a) => searchAgents(a),
+  kickstartAgent: (a) => kickstartAgent(a),
+  broadcastToAgents: (a) => broadcastToAgents(a),
+  getSubagents: () => getSubagents(),
+  getAsyncTasks: () => getAsyncTasks(),
+
+  // ── P2: features we don't model yet — answer the DECLARED shape (array / record /
+  // null / channels-view) instead of falling through to {}, so the FE renders an honest
+  // empty state rather than silently mis-parsing a bare object. ──
+  searchMedia: () => [],
+  getAgentWorkflows: () => [],
+  createAgentWorkflow: () => [],
+  updateAgentWorkflow: () => [],
+  setAgentWorkflowEnabled: () => [],
+  deleteAgentWorkflow: () => [],
+  runAgentWorkflowNow: () => ({}),
+  importAgentWorkflowText: () => ({ ok: false, reason: "workflows not supported by this backend" }),
+  importAgentWorkflowUrl: () => ({ ok: false, reason: "workflows not supported by this backend" }),
+  portAgentLocalSkills: () => ({ ok: false, reason: "skills not supported by this backend" }),
+  getAgentAutomations: () => [],
+  listAllAutomations: () => [],
+  setAgentAutomationEnabled: () => [],
+  createAgentAutomation: () => [],
+  updateAgentAutomation: () => [],
+  deleteAgentAutomation: () => [],
+  runAgentAutomationNow: () => ({}),
+  getAgentChannels: () => ({ channels: [] }),
+  connectChannel: () => ({ channels: [] }),
+  disconnectChannel: () => ({ channels: [] }),
+  refreshChannel: () => ({ channels: [] }),
+  getListenerConnectUrl: () => ({ url: "" }),
+  getSkillPublishTargets: () => ({ targets: [] }),
+  publishSkill: () => ({ ok: false }),
+  resyncPublishedSkill: () => ({ ok: false }),
+  unpublishSkill: () => ({ ok: false }),
+  getCloudAgentInfo: () => null,
+  requestDiskSaverAudit: () => null,
+  createGroup: () => null,
+  setGroupMembers: () => null,
+  ensureForeverBox: () => ({ status: "disabled" }),
+  handBackForeverBox: () => ({}),
+  startTeachRecording: () => ({ isRecording: false, ok: false }),
+  stopTeachRecording: () => ({ isRecording: false, ok: false }),
 };
 
 /** Returns true if it handled the request. */
