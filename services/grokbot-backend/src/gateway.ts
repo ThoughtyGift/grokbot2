@@ -239,6 +239,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
       }
     }
     called.add(m[1]);
+    if (process.env.GROKBOT2_LOG) console.log(`  gw ${m[1]} ${JSON.stringify(args).slice(0, 220)}`);
     const fn = methods[m[1]];
     if (!fn) console.warn(`[gateway] UNMAPPED ${m[1]} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);
     let val: unknown = {};

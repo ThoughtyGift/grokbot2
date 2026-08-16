@@ -22,6 +22,8 @@ import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
+/** The FE marks a reaction as the current user's when `by === "me"`. */
+const ME = "me";
 
 const IMG_MIME: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
@@ -39,7 +41,8 @@ function readImageAttachment(atts?: { path?: string; name?: string }[]): string 
   return undefined;
 }
 
-interface Base { id: string; timestampMs: number; reactions?: string[] }
+interface Reaction { emoji: string; by: string }
+interface Base { id: string; timestampMs: number; reactions?: Reaction[] }
 interface Author { id: string; name: string }
 type TextMsg = { type: "text"; content: string; images?: string[] };
 type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; target: string; requestId: string } };
@@ -88,7 +91,15 @@ function migrate(e: any, agentName: string): Entry | null {
   const ts = e.timestampMs ?? Date.now();
   if (e.kind === "user-message") return { id, kind: "message", role: "user", content: e.text ?? "", timestampMs: ts, ...(e.clientNonce ? { clientNonce: e.clientNonce } : {}) };
   if (e.kind === "agent-message") return { id, kind: "send-message", author: { id: e.agentId ?? "agent", name: e.authorName ?? agentName }, message: { type: "text", content: e.text ?? "" }, timestampMs: ts };
-  if (e.kind === "message" || e.kind === "send-message" || e.kind === "tool-call") return e as Entry;
+  if (e.kind === "message" || e.kind === "send-message" || e.kind === "tool-call") {
+    // Reactions used to be plain emoji strings; the FE needs {emoji, by}.
+    if (Array.isArray(e.reactions)) {
+      e.reactions = e.reactions
+        .map((r: any) => (typeof r === "string" ? { emoji: r, by: ME } : r))
+        .filter((r: any) => r && typeof r.emoji === "string");
+    }
+    return e as Entry;
+  }
   return null;
 }
 
@@ -159,9 +170,11 @@ export function createAgent(args: { name?: string } = {}): AgentRecord {
 }
 export const listAgents = (): AgentRecord[] => [...agents.values()].filter((a) => !a.hidden);
 export const countAgents = (): number => listAgents().length;
-export function updateAgent(a: { id?: string; agentId?: string; name?: string }): AgentRecord | null {
+// The FE sends {id, profile:{name,…}} — a bare `name` never arrives.
+export function updateAgent(a: { id?: string; agentId?: string; name?: string; profile?: { name?: string } }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
-  if (typeof a.name === "string" && a.name.length > 0) rec.name = a.name;
+  const name = a.profile?.name ?? a.name;
+  if (typeof name === "string" && name.length > 0) rec.name = name;
   persist(); return rec;
 }
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
@@ -182,11 +195,11 @@ export function setAgentUnread(a: { id?: string; agentId?: string; unread?: bool
 export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; persist(); return {};
 }
-export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.enabled ?? true; persist(); return {};
+export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.isEnabled ?? a.enabled ?? true; persist(); return {};
 }
-export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.enabled ?? true; persist(); return {};
+export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.isEnabled ?? a.enabled ?? true; persist(); return {};
 }
 export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase64?: string; bytes?: string }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
@@ -241,11 +254,23 @@ export function getConversationOutline(a: { agentId?: string; id?: string }) {
   return t.filter((e) => e.kind === "message" && e.role === "user" && e.content)
     .map((e) => ({ entryId: e.id, text: textOf(e).slice(0, 80), timestampMs: e.timestampMs }));
 }
+/**
+ * Toggle a reaction. The FE calls reactToMessage({entryId, emoji, agentId}) and groups
+ * entry.reactions by `{emoji, by}`, treating `by === "me"` as the current user — a plain
+ * array of emoji strings produced no chips at all.
+ */
 export function reactToMessage(a: { agentId?: string; entryId?: string; id?: string; reaction?: string; emoji?: string }): Record<string, never> {
-  const t = (a.agentId && transcripts.get(a.agentId)) || [];  // entryId/id here identify the entry
-  const e = t.find((x) => x.id === (a.entryId ?? a.id));
-  if (e) (e.reactions ??= []).push(a.reaction ?? a.emoji ?? "👍");
-  persist(); return {};
+  const t = ((a.agentId ?? a.id) && transcripts.get((a.agentId ?? a.id)!)) || [];
+  const e = t.find((x) => x.id === a.entryId);
+  const emoji = a.emoji ?? a.reaction;
+  if (e && emoji) {
+    const list = (e.reactions ??= []);
+    const at = list.findIndex((r) => r.emoji === emoji && r.by === ME);
+    if (at >= 0) list.splice(at, 1);        // clicking the same emoji again removes it
+    else list.push({ emoji, by: ME });
+  }
+  if (a.agentId) onUpdate(a.agentId); else persist();
+  return {};
 }
 export const voteFeedback = (): Record<string, never> => ({});
 
@@ -300,9 +325,13 @@ function findPending(requestId?: string) {
   const first = [...pending.entries()][0];
   return first ? { requestId: first[0], ...first[1] } : null;
 }
-export function resolveLocalToolPermission(a: { requestId?: string; approved?: boolean; decision?: string; allow?: boolean }) {
+// The FE sends {entryId, requestId, resolution, agentId} where resolution is
+// "always" | "allow-once" | "never" | "deny" — reading approved/decision never matched.
+export function resolveLocalToolPermission(a: { requestId?: string; entryId?: string; agentId?: string; resolution?: string; approved?: boolean; decision?: string; allow?: boolean }) {
   const p = findPending(a.requestId); if (!p) return {};
-  const approved = a.approved ?? a.allow ?? (a.decision === "approve" || a.decision === "allow");
+  const approved = a.resolution != null
+    ? a.resolution === "always" || a.resolution === "allow-once" || a.resolution === "allow"
+    : a.approved ?? a.allow ?? (a.decision === "approve" || a.decision === "allow");
   pending.delete(p.requestId);
   const t = transcripts.get(p.agentId) ?? [];
   const card = t.find((e) => e.id === p.entryId);

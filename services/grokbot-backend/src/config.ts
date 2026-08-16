@@ -5,10 +5,16 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
 
+/**
+ * Model choice drives how fast a reply feels. Measured through the pool
+ * (same prompt, non-streaming): gemini-2.5-flash ~0.8s · gemini-3.7-flash ~2s ·
+ * sonnet ~5.7s · haiku ~6s · grok-4.5 ~12s. Flash is the default so chat stays snappy;
+ * set GROKBOT2_MODEL (or CLAUDE_MODEL) to any model the router accepts.
+ */
 export const config = {
   port: Number(process.env.PORT ?? 8788),
   poolUrl: process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude",
-  model: process.env.CLAUDE_MODEL ?? "sonnet",
+  model: process.env.GROKBOT2_MODEL ?? process.env.CLAUDE_MODEL ?? "gemini-3.7-flash",
   system:
     process.env.CLAUDE_SYSTEM ??
     "Bạn là trợ lý trò chuyện thân thiện, hữu ích bên trong ứng dụng Grok Bot. " +
