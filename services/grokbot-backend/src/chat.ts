@@ -88,6 +88,18 @@ type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending"
  */
 type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
 /**
+ * Drafts the agent shows before anything is sent. Field names are the client's
+ * (`draft.to/subject/body`, `draft.workspace/target/thread/body`).
+ *
+ * These are **display cards only**: the renderer has no send/approve/dismiss action for them —
+ * no `sendDraft`, no status field, nothing writes back. Actually delivering one needs the
+ * channel integration, which the original itself still ships as "coming soon"
+ * (`availability:"coming-soon"` for both slack and discord, baked into the client). So the
+ * honest use is "here is what I would send", with the user copying or telling us to proceed.
+ */
+type EmailDraftMsg = { type: "email-draft"; draft: { from?: string; to: string[]; subject: string; body: string } };
+type SlackDraftMsg = { type: "slack-draft"; draft: { workspace?: string; target: string; thread?: string; body: string } };
+/**
  * The "Your answer" question card. Shape and limits are the client's own zod schema, lifted
  * verbatim from the widget view chunk — including its wording for what each field is for:
  *
@@ -108,7 +120,7 @@ export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean })
   // respondedValue / widgetDismissed live on the ENTRY, not inside message.widget — that is
   // what flips the card from "question" to "resolved" (client: HWn).
-  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
+  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
@@ -495,7 +507,7 @@ const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
   "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
-  BROWSER_PROTOCOL + ASK_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);

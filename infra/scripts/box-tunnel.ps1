@@ -79,7 +79,9 @@ $user = $Matches['user']; $boxHost = $Matches['host']
 $sshPort = if ($Matches['port']) { $Matches['port'] } else { '22' }
 $key = Join-Path $env:USERPROFILE ".ssh\$keyName"
 
+$logFile = Join-Path $env:TEMP 'grokbot2-box-tunnel.log'
 Write-Host "Tunnel 127.0.0.1:$LocalPort -> box:$RemotePort  (ssh $user@${boxHost}:$sshPort)"
+Write-Host "ssh output goes to $logFile"
 
 # --- hold it open, and put it back when it drops ------------------------------
 # A dropped tunnel presents to the agent as "no page target", which reads as a broken backend
@@ -89,11 +91,15 @@ while ($true) {
   $busy = Get-NetTCPConnection -LocalPort $LocalPort -State Listen -ErrorAction SilentlyContinue
   if ($busy) { Start-Sleep -Seconds 15; continue }
 
+  # Keep ssh's own words. Piping this to Out-Null hid "connect failed: Connection refused"
+  # for long enough to send a diagnosis down the wrong path once already.
   & ssh -i $key -p $sshPort -N `
     -o ExitOnForwardFailure=yes -o BatchMode=yes `
     -o ServerAliveInterval=30 -o ServerAliveCountMax=3 `
     -o StrictHostKeyChecking=accept-new `
-    -L "${LocalPort}:127.0.0.1:${RemotePort}" "$user@$boxHost" 2>&1 | Out-Null
+    -L "${LocalPort}:127.0.0.1:${RemotePort}" "$user@$boxHost" 2>&1 |
+    ForEach-Object { "$(Get-Date -Format 'HH:mm:ss') $_" } | Add-Content -Path $logFile
 
+  "$(Get-Date -Format 'HH:mm:ss') ssh exited, redialing in 5s" | Add-Content -Path $logFile
   Start-Sleep -Seconds 5   # ssh exited; back off briefly, then redial
 }
