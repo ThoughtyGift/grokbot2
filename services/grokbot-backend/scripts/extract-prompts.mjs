@@ -28,7 +28,7 @@ function readTemplate(text, start) {
   let out = "";
   while (i < text.length) {
     const c = text[i];
-    if (c === "\\") { out += text[i] + text[i + 1]; i += 2; continue; }
+    if (c === "\\") { const e = decodeEscape(text, i); out += e.value; i = e.next; continue; }
     if (c === "$" && text[i + 1] === "{") { depth++; out += "${"; i += 2; continue; }
     if (c === "}" && depth > 0) { depth--; out += "}"; i++; continue; }
     if (c === "`" && depth === 0) return { value: out, end: i };
@@ -38,23 +38,75 @@ function readTemplate(text, start) {
   return null;
 }
 
+/**
+ * Decode one JS escape sequence starting at the backslash.
+ *
+ * The previous reader copied the backslash and the next character through unchanged, so
+ * every `\n` stayed two literal characters and every `—` stayed six. A prompt full of
+ * literal "\n" and "—" is not the prompt the model was given — it is a different
+ * document that merely looks similar, which is exactly how a bad extraction slips through
+ * a character count.
+ */
+function decodeEscape(text, i) {
+  const n = text[i + 1];
+  const simple = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", v: "\v", "0": "\0" };
+  if (n === "u") {
+    if (text[i + 2] === "{") {
+      const close = text.indexOf("}", i + 3);
+      const hex = text.slice(i + 3, close);
+      if (close > 0 && /^[0-9a-fA-F]+$/.test(hex)) {
+        return { value: String.fromCodePoint(parseInt(hex, 16)), next: close + 1 };
+      }
+    }
+    const hex = text.slice(i + 2, i + 6);
+    if (/^[0-9a-fA-F]{4}$/.test(hex)) return { value: String.fromCharCode(parseInt(hex, 16)), next: i + 6 };
+  }
+  if (n === "x") {
+    const hex = text.slice(i + 2, i + 4);
+    if (/^[0-9a-fA-F]{2}$/.test(hex)) return { value: String.fromCharCode(parseInt(hex, 16)), next: i + 4 };
+  }
+  if (n === "\n") return { value: "", next: i + 2 };          // line continuation
+  if (n in simple) return { value: simple[n], next: i + 2 };
+  return { value: n ?? "", next: i + 2 };                      // \` \" \' \\ \$ and friends
+}
+
 /** Read a double-quoted JS string starting at the quote. */
 function readQuoted(text, start) {
+  const quote = text[start];
   let i = start + 1;
   let out = "";
   while (i < text.length) {
     const c = text[i];
-    if (c === "\\") {
-      const n = text[i + 1];
-      out += n === "n" ? "\n" : n === "t" ? "\t" : n === '"' ? '"' : n === "\\" ? "\\" : n;
-      i += 2;
-      continue;
-    }
-    if (c === '"') return { value: out, end: i };
+    if (c === "\\") { const e = decodeEscape(text, i); out += e.value; i = e.next; continue; }
+    if (c === "\n") return null;              // a real string never spans a raw newline
+    if (c === quote) return { value: out, end: i };
     out += c;
     i++;
   }
   return null;
+}
+
+/**
+ * Collect the prose strings of a prompt builder, in source order.
+ *
+ * The prompt is not one template — most of it is an ARRAY of quoted lines
+ * (`"...", "", "## Heading", "..."`) that the builder joins with newlines. Reading only
+ * backtick templates made one reader swallow an entire array as a single "template",
+ * which is where the JS fragments in the first extraction came from.
+ */
+function readPromptStrings(body) {
+  const out = [];
+  for (let i = 0; i < body.length; i += 1) {
+    const c = body[i];
+    if (c !== "`" && c !== '"' && c !== "'") continue;
+    const t = c === "`" ? readTemplate(body, i) : readQuoted(body, i);
+    if (!t) continue;                          // stray quote: skip this char, keep scanning
+    const v = t.value;
+    // Keep prose and blank lines; drop identifiers, keys and flags like "utf8" or "n".
+    if (v === "" || /\s/.test(v.trim()) || /^[#\-*>|]/.test(v.trim())) out.push(v);
+    i = t.end;
+  }
+  return out;
 }
 
 // ── 1. named prompt constants: FOO_PROMPT = `…` ──────────────────────────────
@@ -76,15 +128,13 @@ for (const m of src.matchAll(/function (build[A-Za-z0-9]*Prompt)\s*\(/g)) {
   }
   if (end < 0) continue;
   const body = src.slice(open, end + 1);
-  const parts = [];
-  for (let k = 0; k < body.length; k++) {
-    if (body[k] !== "`") continue;
-    const t = readTemplate(body, k);
-    if (!t) break;
-    if (t.value.trim().length > 40) parts.push(t.value);
-    k = t.end;
+  const parts = readPromptStrings(body);
+  if (parts.length) {
+    // Join with a single newline: that is how the builder's own arrays are assembled.
+    // (An earlier version inserted "---" between parts, producing 41 section breaks that
+    // exist nowhere in the original.)
+    prompts.push({ name: m[1], kind: "builder", segments: parts, text: parts.join("\n") });
   }
-  if (parts.length) prompts.push({ name: m[1], kind: "builder", text: parts.join("\n\n---\n\n") });
 }
 
 // ── 3. subagent configs: type, model, permission, tools, description ─────────

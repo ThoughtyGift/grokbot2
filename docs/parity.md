@@ -27,26 +27,31 @@ extracted tool catalog, and the extracted base system prompt.
 Chat, roster, transcripts, reactions, the approval loop, cron routines and the VNC pane are at
 parity. Everything below is the remainder.
 
-## 2. Fix first — we are emitting a field nobody reads
+## 2. Attachments — DONE, and harder than it looked
 
-`chat.ts` declares `TextMsg.images?: string[]` (and the same on `kind:"message"`). It is never
-assigned anywhere — and even if it were, **the renderer has no such path**. (The one place images
-do flow, `readImageAttachment`, feeds the *model*, not the transcript.) Attachments render
-through exactly one function:
+`chat.ts` used to declare `TextMsg.images?: string[]`. Nothing assigned it and the renderer has
+no such path, so no screenshot could ever reach the transcript. Replaced with the real contract,
+which took six tested variants in the live app to pin down. **Three gates, all undocumented:**
 
-```js
-if (kind === "user-attachment")   → { path: file_path, name: file_name }        // snake_case
-if (kind === "send-message" && message.type === "attachment")
-                                  → { path: message.url, name: message.file_name }
-```
+1. **The media gate is the URL string's file extension — nothing else.** `AZ(url)` splits on
+   `/` and `\`, takes the last segment, reads after the last `.`. A base64 `data:` URL has no
+   dot, so it renders as a *file chip* no matter what `file_name` says. (`data:…#shot.png`
+   passes the gate but then fails to resolve.)
+2. **The desktop rejects Windows drive paths.** `normalizeAttachmentSource` runs
+   `new URL(source)`; `C:…` parses with protocol `c:` and is dropped. A `file://` URL is
+   worse — it throws inside the message renderer and takes the whole section down.
+3. **A non-URL path is passed through**: tried against the desktop's own filesystem first, then
+   handed to the box gateway as `readAttachmentImage({path}) → {dataUrl, width, height}`.
+   Omit `width`/`height` and you get "Image unavailable".
 
-So `images` is dead — the same class of bug as the five in `HANDOFF.md` §5. Until this is
-fixed, **no screenshot can ever appear in the transcript**, which is why `browser_take_screenshot`
-can only report a byte count and why the browser and computer work stays half-blind. A resolved
-attachment can also render as *"Image unavailable"* when its `status` is `missing`, which is the
-placeholder visible in the original's own transcript.
+So: `src/attachments.ts` hands out virtual paths (`/workspace/attachments/N-name.png`) and serves
+the bytes through the new gateway method; images are written to `.data/attachments/` so they
+survive a backend restart (in memory only, every screenshot went "Image unavailable" after a
+tsx reload). Browser tools now attach a screenshot after **every** action, which is what the
+original's own browser-use reminder says it does.
 
-This is the highest value-per-effort item in the list: it unblocks every visual tool at once.
+Verified in the running app: a staged screenshot renders inline at 1920x953.
+Regression test: `scripts/e2e-attachment.mjs`.
 
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
@@ -97,7 +102,7 @@ change available per unit of effort, and it is now a copy-and-adapt job rather t
 
 ## 6. Suggested order
 
-1. **Attachment contract** (§2) — small, unblocks every visual tool.
+1. ~~Attachment contract (§2)~~ — **done**, verified in the app.
 2. **`ask_question`** — the widget already renders; we only have to emit it.
 3. **Adopt the extracted base prompt** — behaviour parity without new plumbing.
 4. **`task_v2` + subagents** — makes the browser tools usable the way the original uses them.
