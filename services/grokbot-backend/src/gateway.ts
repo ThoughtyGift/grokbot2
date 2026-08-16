@@ -52,6 +52,7 @@ import {
 import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus, handBackBox } from "./forever-box.js";
 import { readAttachmentImage } from "./attachments.js";
+import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
@@ -174,6 +175,12 @@ const methods: Record<string, (args: any) => unknown> = {
   getBoxSecretsStatus: () => ({}),
   setBoxSecrets: () => ({}),
   setWindowFocused: () => ({}),
+  // The app's own memory screen. Answering with the real entries beats an empty {} — the
+  // reply shape is unverified (no renderer call site to read it from), so GROKBOT2_LOG will
+  // show what actually comes in the first time the screen is opened.
+  getAgentMemories: (a) => getAgentMemories(a),
+  deleteAgentMemory: (a) => deleteAgentMemory(a),
+  clearAgentMemories: (a) => clearAgentMemories(a),
   // The desktop asks the box for attachment bytes once its own filesystem lookup misses.
   readAttachmentImage: (a) => readAttachmentImage(a),
   // `rooms` is mapped without a guard on every poll, so a bare {} throws in the store.

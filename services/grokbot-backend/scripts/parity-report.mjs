@@ -54,5 +54,5 @@ for (const [label, state] of Object.entries({
   "past-conversation search": "the original runs a PAST_CONVERSATION_EXPLORER subagent",
   "skills": "skillsCatalog answers []",
   "agent memory UI": "memory works via knowledge_base, but the app's own memory screen is unanswered",
-  "live transcript updates": "BROKEN — the window never renders a new entry on its own",
+  "live transcript updates": "late, not lost — the client replicates an ordered log and needs events (docs/transcript-replica.md)",
 })) console.log(`  ${label.padEnd(26)} ${state}`);

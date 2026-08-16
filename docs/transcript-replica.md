@@ -87,8 +87,31 @@ replica cannot accept it.
    `gateway-protocol.ts` reads it, so the consumer has to be found before the events have
    anywhere to go.
 
-Step 3 is the unknown. Steps 1 and 2 are ours and can be done first: an anchored page install
-is a real branch in the client, and it may be enough on its own.
+### Step 2 does not work — verified before building it
+
+The fetch-completion path reads the response for `entries` and `nextBeforeSeq` and nothing
+else; the epoch and sequence come from `se.anchor`, captured from `j.observedAnchor` at
+DISPATCH time:
+
+```js
+const se = { anchor: j.observedAnchor, attemptId: …, windowAtDispatch: Z.value };
+F(j).then(le => { … D(j, le, se) … });
+```
+
+So a page cannot carry an envelope that the client will read. Putting one there would have
+been dead code, and the plan above was wrong. Only an event can set the anchor, which makes
+step 3 not merely the unknown but the only route.
+
+### What the plain path tells us
+
+The no-anchor branch installs when three things hold: no epoch yet, the replica value is
+unchanged since dispatch, and no anchor exists. That branch is live — it is why entries
+arrive at all, late rather than never. Anything that mutates the replica between dispatch and
+completion (an optimistic local send, a resync) makes that poll's result get dropped, and the
+next chance is 7–8s later.
+
+So the realistic options are: find the event channel electron-main consumes (step 3), or
+accept the plain path and reduce what disturbs it. Neither is a change to the page shape.
 
 ## The roster is replicated the same way — and that is the indicator
 

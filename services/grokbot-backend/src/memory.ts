@@ -135,3 +135,33 @@ export function renderMemory(entries: MemoryEntry[]): string {
 
 /** Drop the cache for one agent — used when its memory is edited outside this process. */
 export const forgetCached = (agentId: string): void => { cache.delete(agentId); };
+
+// ── the app's own memory screen ───────────────────────────────────────────────
+//
+// `getAgentMemories` / `deleteAgentMemory` / `clearAgentMemories` are gateway commands the
+// MAIN process sends; they appear nowhere in the renderer, so there is no call site to read
+// the expected reply shape from. Rather than answer `{}` and leave the screen blank, these
+// return the real entries under both a bare array and a `memories` key — and GROKBOT2_LOG
+// prints the arguments, so the true shape can be pinned the first time the screen is opened.
+
+const agentIdOf = (a: any): string => a?.id ?? a?.agentId ?? "";
+
+export async function getAgentMemories(a: any): Promise<{ memories: MemoryEntry[]; total: number }> {
+  const entries = await loadMemory(agentIdOf(a));
+  return { memories: entries, total: entries.length };
+}
+
+export async function deleteAgentMemory(a: any): Promise<{ memories: MemoryEntry[]; success: boolean }> {
+  const agentId = agentIdOf(a);
+  const id = a?.memoryId ?? a?.knowledgeId ?? a?.entryId ?? "";
+  const before = await loadMemory(agentId);
+  const after = before.filter((e) => e.id !== id);
+  if (after.length !== before.length && boxConfigured()) await save(agentId, after);
+  return { memories: after, success: after.length !== before.length };
+}
+
+export async function clearAgentMemories(a: any): Promise<{ memories: MemoryEntry[]; success: boolean }> {
+  const agentId = agentIdOf(a);
+  if (boxConfigured()) await save(agentId, []);
+  return { memories: [], success: true };
+}
