@@ -73,10 +73,15 @@ const methods: Record<string, (args: any) => unknown> = {
   getHostStatus: () => ({ isBusy: false, capabilities: {}, current: "applied", version: "0.20.0", state: "current" }),
   listAgents: () => listAgents(),
   countAgents: () => countAgents(),
-  createAgent: (a) => createAgent(a),
+  // The client reads `result.agent.id`, so createAgent/duplicateAgent must wrap the record
+  // as { agent, transcript } (matches the box host: `return { agent: u, transcript: Gn() }`).
+  createAgent: (a) => ({ agent: createAgent(a), transcript: { entries: [], hasMore: false } }),
   updateAgent: (a) => updateAgent(a),
   deleteAgents: (a) => deleteAgents(a),
-  duplicateAgent: (a) => duplicateAgent(a),
+  duplicateAgent: (a) => {
+    const rec = duplicateAgent(a);
+    return rec ? { agent: rec, transcript: transcriptTail(rec.id) } : null;
+  },
   setAgentUnread: (a) => setAgentUnread(a),
   setAgentHiddenFromSidebar: (a) => setAgentHiddenFromSidebar(a),
   interruptAgentRun: (a) => interruptAgentRun(a),
