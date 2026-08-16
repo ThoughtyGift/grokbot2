@@ -24,7 +24,9 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./brows
 import { stageImage } from "./attachments.js";
 import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
 import { boxConfigured } from "./box-exec.js";
+import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
+import { buildSystemPrompt } from "./prompt.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
 /** The FE marks a reaction as the current user's when `by === "me"`. */
@@ -190,6 +192,8 @@ export interface ToolCtx {
   attach(dataUrl: string, fileName: string, alt: string): void;
   /** Put a question card in the transcript; returns its entry id, or null if malformed. */
   ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean }): string | null;
+  /** Post a short progress line — how a long-running tool keeps the user posted. */
+  note(text: string): void;
 }
 
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
@@ -226,6 +230,30 @@ TOOLS.ask_question = (arg, ctx) => {
   return id == null
     ? "ask_question cần prompt không rỗng và ít nhất một option"
     : `đã hỏi người dùng: ${prompt}`;
+};
+
+/**
+ * Hand a self-contained chunk of work to a subagent (`task_v2` in the original catalog).
+ * This is how the original drives the browser: not from the main turn, but through a
+ * `browserUse` subagent carrying its own prompt and tool set (see subagents.ts).
+ */
+TOOLS.task_v2 = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { subagent_type: "browserUse", prompt: arg }; }
+  const type = String(spec?.subagent_type ?? spec?.type ?? "browserUse");
+  const task = String(spec?.prompt ?? spec?.task ?? spec?.description ?? "").trim();
+  if (!task) return 'task_v2 cần {"subagent_type":"browserUse","prompt":"…"}';
+
+  return runSubagent(type, task, Object.keys(TOOLS), {
+    runTool: async (name, toolArg) => {
+      const fn = TOOLS[name];
+      if (!fn) return `(không có công cụ ${name})`;
+      try { return String(await fn(toolArg, ctx)); } catch (e) { return `lỗi: ${(e as Error).message}`; }
+    },
+    // The original tells the parent to keep the user posted while a subagent works; the
+    // subagent's own steps are the only honest source of that.
+    onStep: (text) => ctx.note(text),
+  });
 };
 
 // Browser actions are only offered when a box browser is actually configured — advertising
@@ -496,6 +524,10 @@ export function postWidget(
 const ctxFor = (agentId: string): ToolCtx => ({
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   ask: (widget) => postWidget(agentId, widget),
+  note: (text) => {
+    tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
+    onUpdate(agentId);
+  },
 });
 
 /** Tools that never need an approval card, on top of the read-only box tools. */
@@ -748,7 +780,15 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
 }
 
 async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
-  const opts = { url: config.poolUrl, key, model: config.model, system: config.system + TOOL_PROTOCOL, signal: controller.signal, ...(image ? { image } : {}) };
+  // Tiered so the ~5k-token base prompt stays a stable cacheable prefix; the timestamp and
+  // anything else per-turn goes last. See prompt.ts.
+  const system = buildSystemPrompt(TOOL_PROTOCOL, {
+    agentName: agents.get(agentId)?.name,
+    boxOn: boxConfigured(),
+    browserOn: isBrowserConfigured(),
+    timeZone: (hostSettingsRef() as { userTimeZone?: string }).userTimeZone,
+  });
+  const opts = { url: config.poolUrl, key, model: config.model, system, signal: controller.signal, ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).
@@ -795,6 +835,12 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     setText(bubble, `[grokbot2] Pool error: ${r.error}`);
     if (bubble.kind === "send-message") bubble.streaming = false;
     onUpdate(agentId); return;
+  }
+  // Both routes can answer HTTP 200 with no content. Leaving the bubble empty looks like the
+  // app silently lost the reply; say so instead, so the failure is visible rather than blank.
+  if (!(r.text ?? "").trim() && !acc.trim()) {
+    console.warn("[grokbot2] pool returned no content on either route");
+    setText(bubble, "[grokbot2] Pool trả về rỗng — thử gửi lại.");
   }
   if (bubble.kind === "send-message") bubble.streaming = false;
 

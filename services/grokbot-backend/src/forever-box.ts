@@ -27,13 +27,62 @@
  */
 const boxVncUrl = (): string | null => process.env.GROKBOT2_VNC_URL ?? null;
 
+/**
+ * A pending "you drive for a moment" request. The renderer turns this into the
+ * `sand-box-handoff-card` — a snapshot with the instruction and a **Take over the computer**
+ * button that opens the viewer; the user finishes the step (typically a sign-in) and hands
+ * back. All three field names are the client's (`handoff.instruction / requestId /
+ * snapshotDataUrl`); `snapshotDataUrl` is optional and only decorates the card.
+ *
+ * The original is explicit about why this exists at all: the agent "never asks for, sees, or
+ * types their password or 2FA; they authenticate on the box desktop, and the session persists
+ * there, so it is a one-time step."
+ */
+export interface BoxHandoff { instruction: string; requestId: string; snapshotDataUrl?: string }
+
 export type ForeverBoxStatus = {
   agentId: string;
   state: "running" | "off";
   windows: never[];
-  handoff: null;
+  handoff: BoxHandoff | null;
   vncUrl?: string;
 };
+
+/** Pending handoff per agent, and what to run once the user hands the box back. */
+const handoffs = new Map<string, BoxHandoff>();
+const resumers = new Map<string, (outcome: string) => void>();
+let handoffSeq = 1;
+
+/**
+ * Ask the user to take the screen (`request_box_help` in the original catalog). Resolves when
+ * they hand back, or immediately if a handoff is already pending for this agent.
+ */
+export function requestBoxHelp(agentId: string, instruction: string, snapshotDataUrl?: string): Promise<string> {
+  if (handoffs.has(agentId)) return Promise.resolve("(đã có một yêu cầu bàn giao đang chờ)");
+  const handoff: BoxHandoff = {
+    instruction,
+    requestId: `boxhelp-${handoffSeq++}`,
+    ...(snapshotDataUrl ? { snapshotDataUrl } : {}),
+  };
+  handoffs.set(agentId, handoff);
+  return new Promise((resolve) => resumers.set(agentId, resolve));
+}
+
+/** The user pressed hand-back. Clears the card and lets the waiting turn continue. */
+export function handBackBox(args: { id?: unknown; agentId?: unknown; trigger?: unknown }): Record<string, never> {
+  const agentId = boxId(args);
+  const trigger = typeof args?.trigger === "string" ? args.trigger : "button";
+  handoffs.delete(agentId);
+  const resume = resumers.get(agentId);
+  if (resume) {
+    resumers.delete(agentId);
+    resume(`người dùng đã xong trên màn hình box (${trigger})`);
+  }
+  return {};
+}
+
+/** True while a handoff card is on screen for this agent. */
+export const hasPendingHandoff = (agentId: string): boolean => handoffs.has(agentId);
 
 /** The renderer sends `{id}`; accept `agentId` too rather than trust one spelling. */
 function boxId(args: { id?: unknown; agentId?: unknown } | null | undefined): string {
@@ -47,9 +96,10 @@ function boxId(args: { id?: unknown; agentId?: unknown } | null | undefined): st
  */
 export function foreverBoxStatus(args: { id?: unknown; agentId?: unknown }): ForeverBoxStatus {
   const agentId = boxId(args);
+  const handoff = handoffs.get(agentId) ?? null;
   const vncUrl = boxVncUrl();
-  if (vncUrl == null) return { agentId, state: "off", windows: [], handoff: null };
-  return { agentId, state: "running", vncUrl, windows: [], handoff: null };
+  if (vncUrl == null) return { agentId, state: "off", windows: [], handoff };
+  return { agentId, state: "running", vncUrl, windows: [], handoff };
 }
 
 /** Warn at boot about a URL the viewer will accept but the preload bridges will skip. */

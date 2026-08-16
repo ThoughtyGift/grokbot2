@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BASE_SYSTEM_PROMPT } from "./prompt-base.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -23,15 +24,38 @@ try {
  * sonnet ~5.7s · haiku ~6s · grok-4.5 ~12s. Flash is the default so chat stays snappy;
  * set GROKBOT2_MODEL (or CLAUDE_MODEL) to any model the router accepts.
  */
+/**
+ * The original is English-only and assumes an English-speaking user; it has a "mirror the
+ * user" rule for tone but none for language. Without this the ported prompt answers Vietnamese
+ * messages in English.
+ */
+const LANGUAGE_RULE = [
+  "",
+  "## Language",
+  "",
+  "Always reply in the language the user wrote in. Match Vietnamese with Vietnamese, English",
+  "with English — the tone rules above apply in whatever language you are speaking.",
+].join("\n");
+
 export const config = {
   port: Number(process.env.PORT ?? 8788),
   poolUrl: process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude",
   model: process.env.GROKBOT2_MODEL ?? process.env.CLAUDE_MODEL ?? "gemini-3.7-flash",
+  /**
+   * The original Grok Bot prompt, ported (src/prompt-base.ts, ~4.9k tokens). It is what makes
+   * the app behave like the original — reply-first, its tone, its rules for asking a decision.
+   *
+   * `GROKBOT2_PROMPT=short` falls back to the small hand-written one, which is worth having:
+   * the ported prompt costs ~4.9k tokens on every turn, which is most of the latency on a fast
+   * model. `CLAUDE_SYSTEM` still overrides both.
+   */
   system:
     process.env.CLAUDE_SYSTEM ??
-    "Bạn là trợ lý trò chuyện thân thiện, hữu ích bên trong ứng dụng Grok Bot. " +
-      "Trả lời tự nhiên, ngắn gọn bằng đúng ngôn ngữ người dùng dùng. " +
-      "Bạn KHÔNG phải trợ lý lập trình mặc định — chỉ bàn về code khi được hỏi.",
+    (process.env.GROKBOT2_PROMPT === "short"
+      ? "Bạn là trợ lý trò chuyện thân thiện, hữu ích bên trong ứng dụng Grok Bot. " +
+        "Trả lời tự nhiên, ngắn gọn bằng đúng ngôn ngữ người dùng dùng. " +
+        "Bạn KHÔNG phải trợ lý lập trình mặc định — chỉ bàn về code khi được hỏi."
+      : BASE_SYSTEM_PROMPT + LANGUAGE_RULE),
 };
 
 /**
