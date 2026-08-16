@@ -35,14 +35,20 @@ import {
   broadcastToAgents,
   getSubagents,
   getAsyncTasks,
+  bindHostSettings,
+  chatSnapshot,
   type SendArgs,
 } from "./chat.js";
+import { loadState, scheduleSave } from "./store.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
 
 /** Every gateway method the FE has called this session — powers GET /gw/__coverage. */
 const called = new Set<string>();
+
+/** Persist host settings by piggybacking on the chat snapshot (same state.json). */
+const saveSettings = () => scheduleSave(() => ({ ...chatSnapshot(), hostSettings }));
 
 const sseClients = new Set<ServerResponse>();
 
@@ -80,7 +86,9 @@ const hostSettings: Record<string, unknown> = {
   userTimeZone: "UTC",
   sidebarSections: [],
   hasSeenOnboarding: true,
+  ...(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults
 };
+bindHostSettings(() => hostSettings);   // so settings save alongside agents/transcripts
 
 /** Gateway JSON method -> response value. Unknown methods return {}. */
 const methods: Record<string, (args: any) => unknown> = {
@@ -88,6 +96,7 @@ const methods: Record<string, (args: any) => unknown> = {
   // FE sends partial patches ({notifications:{…}}, {userTimeZone:…}) — merge, don't discard.
   setHostSettings: (a) => {
     if (a && typeof a === "object") for (const [k, v] of Object.entries(a)) if (v !== undefined) hostSettings[k] = v;
+    saveSettings();
     return hostSettings;
   },
   getHostStatus: () => ({ isBusy: false, capabilities: {}, current: "applied", version: "0.20.0", state: "current" }),

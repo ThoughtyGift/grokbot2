@@ -11,6 +11,7 @@ import { readFileSync, existsSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import { callPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
+import { loadState, scheduleSave, type PersistedState } from "./store.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
 
@@ -57,6 +58,35 @@ const inflight = new Map<string, AbortController>();
 const pending = new Map<string, { agentId: string; entryId: string; kind: string; toolCallId?: string; name?: string; arg?: string }>();
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
 
+// ── persistence: restore on boot, save (debounced) on every mutation ──
+const snapshot = (): PersistedState => ({
+  agents: [...agents.values()],
+  transcripts: Object.fromEntries([...transcripts.entries()]),
+  seq: { agent: agentSeq, entry: entrySeq },
+});
+export const chatSnapshot = snapshot;
+const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
+let hostSettingsRef: () => Record<string, unknown> = () => ({});
+/** The gateway owns host settings; let it contribute them to the same save file. */
+export function bindHostSettings(get: () => Record<string, unknown>): void { hostSettingsRef = get; }
+
+{
+  const s = loadState();
+  for (const a of (s.agents ?? []) as AgentRecord[]) if (a?.id) agents.set(a.id, a);
+  for (const [id, entries] of Object.entries(s.transcripts ?? {})) transcripts.set(id, entries as Entry[]);
+  // Derive the counters from the highest id actually present — using agents.size would
+  // hand out an id that already exists and silently overwrite a restored agent.
+  const maxNum = (ids: Iterable<string>, prefix: RegExp) => {
+    let max = 0;
+    for (const id of ids) { const m = prefix.exec(id); if (m) max = Math.max(max, Number(m[1]) || 0); }
+    return max;
+  };
+  const maxEntry = maxNum([...transcripts.values()].flat().map((e) => e.entryId), /^e(\d+)$/);
+  agentSeq = Math.max(s.seq?.agent ?? 0, maxNum(agents.keys(), /^agent-(\d+)$/) + 1, 1);
+  entrySeq = Math.max(s.seq?.entry ?? 0, maxEntry + 1, 1);
+  if (agents.size) console.log(`[grokbot2] restored ${agents.size} agent(s), ${[...transcripts.values()].flat().length} transcript entries`);
+}
+
 /** SAFE demo tools — pure, no side effects, no system access. */
 const DEMO_TOOLS: Record<string, (arg: string) => string> = {
   echo: (a) => a || "(empty)",
@@ -65,8 +95,10 @@ const DEMO_TOOLS: Record<string, (arg: string) => string> = {
   upper: (a) => a.toUpperCase(),
 };
 
-let onUpdate: (agentId: string) => void = () => {};
-export function setUpdateSink(fn: (agentId: string) => void): void { onUpdate = fn; }
+let sink: (agentId: string) => void = () => {};
+export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; }
+/** Notify the FE and persist — every transcript/roster mutation goes through here. */
+const onUpdate = (agentId: string): void => { sink(agentId); persist(); };
 const nextEntryId = () => `e${entrySeq++}`;
 const tail = (agentId: string) => transcripts.get(agentId) ?? (transcripts.set(agentId, []), transcripts.get(agentId)!);
 
@@ -75,41 +107,45 @@ export function createAgent(args: { name?: string } = {}): AgentRecord {
   const id = `agent-${agentSeq++}`;
   const rec: AgentRecord = { id, name: args.name || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false };
   agents.set(id, rec); transcripts.set(id, []);
+  persist();
   return rec;
 }
 export const listAgents = (): AgentRecord[] => [...agents.values()].filter((a) => !a.hidden);
 export const countAgents = (): number => listAgents().length;
 export function updateAgent(a: { id?: string; agentId?: string; name?: string }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
-  if (typeof a.name === "string" && a.name.length > 0) rec.name = a.name; return rec;
+  if (typeof a.name === "string" && a.name.length > 0) rec.name = a.name;
+  persist(); return rec;
 }
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
   const ids = a.ids ?? a.agentIds ?? (a.id ? [a.id] : []);
   for (const id of ids) { agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id); }
+  persist();
   return { deleted: ids };
 }
 export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
   const src = agents.get(a.id ?? a.agentId ?? ""); if (!src) return null;
   const rec = createAgent({ name: `${src.name} (copy)` });
-  transcripts.set(rec.id, structuredClone(transcripts.get(src.id) ?? [])); return rec;
+  transcripts.set(rec.id, structuredClone(transcripts.get(src.id) ?? []));
+  persist(); return rec;
 }
 // NOTE: the FE sends {id, isUnread} / {id, isHidden} — accept both spellings.
 export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); return {};
 }
 export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; persist(); return {};
 }
 export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.enabled ?? true; return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.enabled ?? true; persist(); return {};
 }
 export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.enabled ?? true; return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.enabled ?? true; persist(); return {};
 }
 export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase64?: string; bytes?: string }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const b64 = a.pngBase64 ?? a.bytes;
-  if (b64) { rec.avatarDataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`; rec.avatarVersion = String((entrySeq++)); }
+  if (b64) { rec.avatarDataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`; rec.avatarVersion = String((entrySeq++)); persist(); }
   return rec;
 }
 export function getAgentAvatar(a: { id?: string; agentId?: string }) {

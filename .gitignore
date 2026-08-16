@@ -21,3 +21,6 @@ spike-log.txt
 Thumbs.db
 .vscode/
 .idea/
+
+# local backend state (bots, transcripts, settings)
+.data/

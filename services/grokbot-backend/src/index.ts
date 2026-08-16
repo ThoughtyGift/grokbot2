@@ -10,6 +10,8 @@ import { config } from "./config.js";
 import { handleAuth } from "./auth.js";
 import { handleGateway } from "./gateway.js";
 import { bootstrapResponses, connectStreamEnd } from "@grokbot2/proto";
+import { saveNow } from "./store.js";
+import { chatSnapshot } from "./chat.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -60,6 +62,11 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   res.writeHead(200, { "content-type": "application/json" });
   res.end("{}");
 });
+
+// Flush state to disk on shutdown so an in-flight debounce isn't lost.
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => { saveNow(chatSnapshot); process.exit(0); });
+}
 
 server.listen(config.port, "127.0.0.1", () => {
   console.log(`[grokbot2] backend on http://localhost:${config.port}`);
