@@ -214,9 +214,16 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     res.on("close", () => sseClients.delete(res));
     return true;
   }
-  if (url.startsWith("/gw/webauthn/requests")) {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ frames: [] }));
+  // Long-poll channels: the box holds these open until it has work. Answering instantly makes
+  // the client reconnect in a tight loop and read the box as flapping, so park them and
+  // return an empty batch on timeout.
+  if (url.startsWith("/gw/webauthn/requests") || url.startsWith("/gw/local-exec/requests")) {
+    const empty = url.includes("webauthn") ? { frames: [] } : { requests: [] };
+    const timer = setTimeout(() => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(empty));
+    }, 25_000);
+    res.on("close", () => clearTimeout(timer));
     return true;
   }
   // Coverage report: which gateway methods the FE exercised, and which are still unmapped.

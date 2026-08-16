@@ -42,18 +42,31 @@ export const bootstrapResponses: Record<string, () => Buffer> = {
   EnsureSandBoxWindow: () => ensureSandBox(),
 };
 
-/** Points gateway/vnc/exec at the backend itself (stub) — replace host/port for a real VPS box. */
+/**
+ * Box descriptor. Field numbers and the URL shapes match a real box (see
+ * docs/box-architecture.md): one pod exposing noVNC, an exec daemon and the gateway.
+ *
+ * `vnc_url` must be a full noVNC URL — `vnc.html` plus a `path` that reaches websockify —
+ * because the app opens it as given. Point GROKBOT2_VNC_URL at a self-hosted box
+ * (infra/vps/grok-box-up.sh brings one up); without it the pane stays unreachable.
+ */
 export function ensureSandBox(base = "http://localhost:8788"): Buffer {
+  const vncUrl = process.env.GROKBOT2_VNC_URL ?? `${base}/vnc`;
+  const execUrl = process.env.GROKBOT2_EXEC_URL ?? `${base}/exec`;
+  const gatewayUrl = process.env.GROKBOT2_GATEWAY_URL ?? `${base}/gw`;
   return message(
-    pbStr(1, "local"), // cluster
+    pbStr(1, process.env.GROKBOT2_CLUSTER ?? "local"), // cluster
     pbStr(2, "grokbot2"), // tenant_id
-    pbStr(3, "local-pod"), // pod_id
+    pbStr(3, process.env.GROKBOT2_POD_ID ?? "local-pod"), // pod_id
     pbStr(4, "net-token"), // network_token
     pbStr(5, "exec-token"), // exec_daemon_auth_token
-    pbStr(6, `${base}/exec`), // exec_daemon_url
-    pbStr(7, `${base}/vnc`), // vnc_url
-    pbStr(8, ""), // terminals_folder
-    pbStr(10, `${base}/gw`), // gateway_url
+    pbStr(6, execUrl), // exec_daemon_url
+    pbStr(7, vncUrl), // vnc_url
+    pbStr(8, process.env.GROKBOT2_TERMINALS_FOLDER ?? "/workspace/terminals"), // terminals_folder
+    pbStr(10, gatewayUrl), // gateway_url
     pbStr(11, "gw-token"), // gateway_token
+    // The viewer config wants primaryUrl + forkBaseUrl + networkToken together; leaving the
+    // fork base empty makes the whole vncProxy block invalid, so default it to the same box.
+    pbStr(12, process.env.GROKBOT2_FORK_VNC_URL ?? new URL(vncUrl).origin), // fork_vnc_base_url
   );
 }
