@@ -209,9 +209,12 @@ const PAGE = 200;
  * the transcript is treated as unavailable and nothing renders. Entries carry a numeric `seq`
  * so ordering and the next anchor are well defined.
  */
-export function transcriptTail(a?: { agentId?: string; limit?: number; beforeSeq?: number; before?: string; cursor?: string } | string) {
+export function transcriptTail(a?: { agentId?: string; id?: string; limit?: number; beforeSeq?: number; before?: string; cursor?: string } | string) {
   const args = typeof a === "string" || a === undefined ? { agentId: a as string | undefined } : a;
-  const all = (args.agentId && transcripts.get(args.agentId)) || [];
+  // The FE asks with {id, limit, beforeSeq} — reading only `agentId` returned an empty
+  // transcript for every request, so nothing ever rendered.
+  const agentId = args.agentId ?? args.id;
+  const all = (agentId && transcripts.get(agentId)) || [];
   const withSeq = all.map((e, i) => ({ ...e, seq: i + 1 }));
   const limit = Math.max(1, Math.min(args.limit ?? PAGE, 1000));
 
@@ -233,13 +236,13 @@ export function transcriptTail(a?: { agentId?: string; limit?: number; beforeSeq
     total: withSeq.length,
   };
 }
-export function getConversationOutline(a: { agentId?: string }) {
-  const t = (a.agentId && transcripts.get(a.agentId)) || [];
+export function getConversationOutline(a: { agentId?: string; id?: string }) {
+  const t = ((a.agentId ?? a.id) && transcripts.get((a.agentId ?? a.id)!)) || [];
   return t.filter((e) => e.kind === "message" && e.role === "user" && e.content)
     .map((e) => ({ entryId: e.id, text: textOf(e).slice(0, 80), timestampMs: e.timestampMs }));
 }
 export function reactToMessage(a: { agentId?: string; entryId?: string; id?: string; reaction?: string; emoji?: string }): Record<string, never> {
-  const t = (a.agentId && transcripts.get(a.agentId)) || [];
+  const t = (a.agentId && transcripts.get(a.agentId)) || [];  // entryId/id here identify the entry
   const e = t.find((x) => x.id === (a.entryId ?? a.id));
   if (e) (e.reactions ??= []).push(a.reaction ?? a.emoji ?? "👍");
   persist(); return {};
