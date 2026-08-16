@@ -36,7 +36,9 @@ await check("the box desktop is attached", "run_terminal_command_v2", "echo $DIS
 console.log("\nfiles");
 await check("writes then reads back", "run_terminal_command_v2", "echo REAL_BOX_9137 > probe.txt && cat probe.txt", (o) => /REAL_BOX_9137/.test(o));
 await check("read_file_v2 sees it", "read_file_v2", "probe.txt", (o) => /REAL_BOX_9137/.test(o));
-await check("list_dir_v2 returns a tree", "list_dir_v2", ".", (o) => /grok-workspace/.test(o) && /probe\.txt/.test(o));
+// Assert the SHAPE, not the deployment path: this hardcoded `/grok-workspace/` and broke the
+// moment the box's workspace moved, reporting a path change as a tool regression.
+await check("list_dir_v2 returns a tree", "list_dir_v2", ".", (o) => /workspace\/?\s/.test(o) && /probe\.txt/.test(o));
 await check("ripgrep finds content", "ripgrep_raw_search", "REAL_BOX_9137", (o) => /probe\.txt/.test(o));
 await check("glob finds by name", "glob_file_search", "*.txt", (o) => /probe\.txt/.test(o));
 

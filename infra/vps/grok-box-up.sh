@@ -22,9 +22,33 @@ DISP="${1:-77}"
 ACC="grokbox"
 GEOM="1920x1080x24"
 CDP_PORT="${CHROME_CDP_PORT:-9223}"
-PROFILE="/var/lib/grok-box/chrome-$DISP"
+
+# The desktop runs as an UNPRIVILEGED user, not root.
+#
+# This matters because the "box" here is a display on a shared host, not a per-tenant pod like
+# the original's. Running the desktop as root meant Thunar opened at `/`, the terminal had the
+# whole filesystem, and Chrome — which the agent's browser tools drive, and which the user is
+# handed by request_box_help — could read and delete anything, including the admin dashboard
+# and nginx config of the 68 other services on the machine. The agent's file/shell tools were
+# already sandboxed; the desktop was the hole.
+#
+# The original names this user `box` (its file manager shows a single "box" place), so do the
+# same: one ordinary user, one home, nothing above it.
+BOX_USER="${BOX_USER:-box}"
+BOX_HOME="/home/$BOX_USER"
+WORKSPACE="$BOX_HOME/workspace"
+PROFILE="$BOX_HOME/.config/grok-chrome-$DISP"
 
 echo "== Grok Bot box on :$DISP =="
+
+# ── 0. the unprivileged desktop user ─────────────────────────────────────────
+if ! id -u "$BOX_USER" >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash "$BOX_USER" && echo "  created user $BOX_USER"
+fi
+install -d -o "$BOX_USER" -g "$BOX_USER" "$WORKSPACE"
+# Chrome and plank write here; without ownership they fail in ways that read as a broken box.
+install -d -o "$BOX_USER" -g "$BOX_USER" "$BOX_HOME/.config" "$BOX_HOME/.cache" "$BOX_HOME/.local"
+echo "  desktop user $BOX_USER · workspace $WORKSPACE"
 
 # ── 0. Packages ───────────────────────────────────────────────────────────────
 # Everything below is a stock Debian/Ubuntu package except Chrome, which needs Google's repo.
@@ -100,7 +124,11 @@ unit_up() {
     echo "  $name already running"; return 0
   fi
   systemctl reset-failed "$name" 2>/dev/null
-  systemd-run --unit="$name" --collect --setenv=DISPLAY=":$DISP" \
+  systemd-run --unit="$name" --collect \
+    --property=User="$BOX_USER" --property=Group="$BOX_USER" \
+    --property=WorkingDirectory="$WORKSPACE" \
+    --setenv=DISPLAY=":$DISP" --setenv=HOME="$BOX_HOME" \
+    --setenv=XDG_CONFIG_HOME="$BOX_HOME/.config" --setenv=XDG_CACHE_HOME="$BOX_HOME/.cache" \
     --property=Restart=always --property=RestartSec=3 "$@" >/dev/null 2>&1 \
     && echo "  $name started" || echo "  $name FAILED"
 }
@@ -125,7 +153,7 @@ unit_up "grok-dock-$DISP" /usr/bin/plank
 
 # ── 4. Apps ──────────────────────────────────────────────────────────────────
 unit_up "grok-term-$DISP" /usr/bin/xfce4-terminal --geometry=100x30+40+40 --title="Grok Bot box"
-unit_up "grok-files-$DISP" /usr/bin/thunar
+unit_up "grok-files-$DISP" /usr/bin/thunar "$WORKSPACE"
 
 # Chrome. --no-sandbox is required running as root on a bare VPS.
 #
@@ -133,14 +161,16 @@ unit_up "grok-files-$DISP" /usr/bin/thunar
 # execution with no authentication — never publish it through nginx. Reach it with an SSH
 # tunnel:  ssh -N -L 9223:127.0.0.1:$CDP_PORT <host>
 if [ -n "$CHROME" ]; then
-  install -d -m 0700 "$PROFILE"
+  install -d -m 0700 -o "$BOX_USER" -g "$BOX_USER" "$PROFILE"
   # No startup URL: the agent decides what to open, and a relaunch that reopens a page would
   # throw away whatever it was working on. `about:blank` keeps a CDP page target available.
   #
   # The update/background flags are here because Chrome's own updater is what makes it exit:
   # it restarts to apply an update, which is how the "browser jumps back to Google" loop began.
+  # `--no-sandbox` is gone with root: Chrome refuses to sandbox as uid 0, which is exactly why
+  # it was there. As `box` it keeps its own sandbox, which is the point of this change.
   unit_up "grok-chrome-$DISP" "$CHROME" \
-    --no-sandbox --no-first-run --no-default-browser-check \
+    --no-first-run --no-default-browser-check \
     --disable-features=Translate \
     --disable-component-update --disable-background-networking --no-service-autorun \
     --user-data-dir="$PROFILE" \

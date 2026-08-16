@@ -67,7 +67,16 @@ const isToolEcho = (e: Entry): boolean =>
   e.kind === "send-message" && e.message.type === "text" && e.message.content.startsWith(TOOL_ECHO);
 
 interface Reaction { emoji: string; by: string }
-interface Base { id: string; timestampMs: number; reactions?: Reaction[] }
+/**
+ * `seq` is assigned once and never recomputed.
+ *
+ * It used to be the array index, handed out fresh on every request — so the same entry
+ * reported a different seq depending on what else was in the transcript at the time. A
+ * client that caches or dedupes by seq then sees one entry claim two positions across two
+ * polls, and the observed symptom matches exactly: a reply that renders ~33s late, or never.
+ * Stable and monotonic is the contract; positional was neither.
+ */
+interface Base { id: string; timestampMs: number; reactions?: Reaction[]; seq?: number }
 interface Author { id: string; name: string }
 type TextMsg = { type: "text"; content: string };
 type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; target: string; requestId: string } };
@@ -714,6 +723,32 @@ export function getAgentAvatar(a: { id?: string; agentId?: string }) {
 
 // ── transcript ────────────────────────────────────────────────────────────────
 const PAGE = 200;
+
+/**
+ * Give every entry a stable sequence number, assigning only the ones that lack it.
+ *
+ * Ordering rules the client relies on: monotonic, and increasing with position. Entry ids
+ * are already minted from a monotonic counter (`e12`), so the number inside the id is the
+ * natural seq — it survives restarts and never shifts when older entries are trimmed. An id
+ * that does not parse (an imported snapshot, a hand-edited state file) falls back to one
+ * past its predecessor, which keeps the sequence monotonic without renumbering anything.
+ */
+function ensureSeq(agentId: string | undefined, all: Entry[]): (Entry & { seq: number })[] {
+  let assigned = false;
+  let prev = 0;
+  for (const e of all) {
+    if (typeof e.seq !== "number" || e.seq <= prev) {
+      const fromId = /^e(\d+)$/.exec(e.id)?.[1];
+      const n = fromId ? Number(fromId) : 0;
+      e.seq = n > prev ? n : prev + 1;
+      assigned = true;
+    }
+    prev = e.seq;
+  }
+  // Persist so the numbers survive a restart; recomputing them later would defeat the point.
+  if (assigned && agentId) persist();
+  return all as (Entry & { seq: number })[];
+}
 /**
  * Transcript page in the client's shape: `{reachable, entries, beforeSeq, nextBeforeSeq}`.
  *
@@ -728,7 +763,7 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
   // transcript for every request, so nothing ever rendered.
   const agentId = args.agentId ?? args.id;
   const all = (agentId && transcripts.get(agentId)) || [];
-  const withSeq = all.map((e, i) => ({ ...e, seq: i + 1 }));
+  const withSeq = ensureSeq(agentId, all);
   const limit = Math.max(1, Math.min(args.limit ?? PAGE, 1000));
 
   let end = withSeq.length;
