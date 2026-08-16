@@ -236,6 +236,55 @@ framebuffer capture of the box shows Chrome sitting on `iana.org/help/example-do
 page the agent's own `browser_click` navigated to. The user watches the agent work, which is
 the whole point of the pane.
 
+## 2h. MCP — DONE
+
+`get_mcp_tools` and `call_mcp_tool` over stdio JSON-RPC, against servers declared in a
+repo-root `.mcp.json` — the same shape Claude Code and Cursor use, so an existing config drops
+straight in. Servers start lazily on first use and are reused (`npx -y <server>` costs seconds).
+Only offered to the model when at least one server is declared.
+
+Verified against `@modelcontextprotocol/server-memory`: handshake, `tools/list` (9 tools), a
+real `create_entities` → `search_nodes` round-trip, plus the failure paths — unknown tool and
+malformed args both answer clearly instead of hanging.
+
+**That config file holds live tokens**, so nothing about a server is ever logged except its
+name: not `env`, not `args`, and its stderr is drained without printing. Learned the hard way —
+dumping one such file into a transcript is how two working credentials got exposed.
+
+## 2i. Prompt chapters 106-115, re-added
+
+Held back in §2c because they named surfaces we lacked. `request_box_help`, subagents and the
+box's own Chrome all exist now, so six of them describe what actually happens and are back in:
+the box is the default rather than a refusal, don't re-ask for something already requested,
+dispatch a subagent then hand off at the login, never see the password. 109/110/115 stay out —
+they are about connectors and SearchPlugins, which we still do not have.
+
+Prompt is now 63/179 chapters, ~5.4k tokens.
+
+## 2j. Keeping the box tunnel up
+
+`infra/scripts/box-tunnel.ps1` holds `127.0.0.1:9223` pointed at the box's Chrome DevTools and
+redials when the link drops. `-Install` puts a shim in the per-user **Startup folder**;
+`-Uninstall` removes it.
+
+Startup folder rather than a scheduled task on purpose: `schtasks /sc onlogon` returns
+"Access is denied" without elevation, and this needs none. Same effect at logon, nothing
+system-wide.
+
+Host and key come from `.env` (`GROKBOT2_BOX_SSH=root@HOST:PORT`, `GROKBOT2_BOX_SSH_KEY`), so
+nothing about the box is committed.
+
+Verified by killing it: ssh pid 31652 -> 17800, and the port answered Chrome/149 again. A
+dropped tunnel otherwise presents to the agent as "no page target", which reads as a broken
+backend rather than a dead link.
+
+Two things this cost, both worth remembering:
+
+- **`.ps1` must be ASCII** unless it has a BOM. Windows PowerShell 5.1 reads it as ANSI, so one
+  em dash in a comment broke the parser at load.
+- The first version **printed "Installed" after `schtasks` had failed**, because the exit code
+  was never checked. It now verifies the port answers and says so either way.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,
@@ -289,6 +338,6 @@ change available per unit of effort, and it is now a copy-and-adapt job rather t
 2. ~~`ask_question`~~ — **done**, verified in the app.
 3. ~~Adopt the extracted base prompt~~ — **done**, 56/179 chapters ported.
 4. ~~`task_v2` + subagents~~ — **done**, verified in the app (UI list still open).
-5. **MCP tools** (`get_mcp_tools` / `call_mcp_tool`).
+5. ~~MCP tools~~ — **done**.
 6. **Channels/listeners** → event-triggered routines.
 7. `web_search`/`web_fetch`, `todo_*`, `create_plan`, box file mutation.

@@ -66,6 +66,13 @@ const lastArgs = new Map<string, unknown>();
 const saveSettings = () => scheduleSave(() => ({ ...chatSnapshot(), hostSettings }));
 
 const sseClients = new Set<ServerResponse>();
+/**
+ * How many times the client has opened the event stream, and when it last did.
+ *
+ * Without this you cannot tell "the push was delivered and ignored" from "the client is not
+ * listening at all", and those need opposite fixes.
+ */
+const sseStats = { opened: 0, closed: 0, lastOpenedMs: 0 };
 
 // Push a nudge so the frontend re-fetches the transcript when chat updates.
 const broadcast = (payload: unknown): void => {
@@ -236,7 +243,8 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     res.write(": connected\n\n");
     res.write('event: ready\ndata: {"kind":"ready"}\n\n');
     sseClients.add(res);
-    res.on("close", () => sseClients.delete(res));
+    sseStats.opened += 1; sseStats.lastOpenedMs = Date.now();
+    res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; });
     return true;
   }
   // Long-poll channels: the box holds these open until it has work. Answering instantly makes
@@ -264,7 +272,11 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
       [...lastArgs].filter(([n]) => !filter || n.toLowerCase().includes(filter.toLowerCase())).sort()
     );
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ calledTotal: called.size, mapped, unmapped, lastArgs: args, implemented: Object.keys(methods).sort() }, null, 2));
+    res.end(JSON.stringify({
+      calledTotal: called.size, mapped, unmapped, lastArgs: args,
+      sse: { ...sseStats, connected: sseClients.size },
+      implemented: Object.keys(methods).sort(),
+    }, null, 2));
     return true;
   }
 
