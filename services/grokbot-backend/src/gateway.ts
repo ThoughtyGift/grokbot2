@@ -36,6 +36,9 @@ import {
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
 
+/** Every gateway method the FE has called this session — powers GET /gw/__coverage. */
+const called = new Set<string>();
+
 const sseClients = new Set<ServerResponse>();
 
 // Push a nudge so the frontend re-fetches the transcript when chat updates.
@@ -157,6 +160,15 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     res.end(JSON.stringify({ frames: [] }));
     return true;
   }
+  // Coverage report: which gateway methods the FE exercised, and which are still unmapped.
+  if (url.startsWith("/gw/__coverage")) {
+    const unmapped = [...called].filter((n) => !(n in methods)).sort();
+    const mapped = [...called].filter((n) => n in methods).sort();
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ calledTotal: called.size, mapped, unmapped, implemented: Object.keys(methods).sort() }, null, 2));
+    return true;
+  }
+
   const m = url.match(/\/gw\/api\/([A-Za-z]+)/);
   if (m) {
     let args: any = {};
@@ -167,7 +179,9 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
         /* keep {} */
       }
     }
+    called.add(m[1]);
     const fn = methods[m[1]];
+    if (!fn) console.warn(`[gateway] UNMAPPED ${m[1]} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);
     let val: unknown = {};
     try {
       val = fn ? fn(args) : {};

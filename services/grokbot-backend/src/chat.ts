@@ -93,11 +93,12 @@ export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecor
   const rec = createAgent({ name: `${src.name} (copy)` });
   transcripts.set(rec.id, structuredClone(transcripts.get(src.id) ?? [])); return rec;
 }
-export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.unread ?? false; return {};
+// NOTE: the FE sends {id, isUnread} / {id, isHidden} — accept both spellings.
+export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; return {};
 }
-export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.hidden ?? true; return {};
+export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; return {};
 }
 export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.enabled ?? true; return {};
