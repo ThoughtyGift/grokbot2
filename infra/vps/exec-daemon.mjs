@@ -13,8 +13,8 @@
  */
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { readFile, writeFile, readdir, stat, mkdir, rename } from "node:fs/promises";
-import { resolve, join, relative, isAbsolute } from "node:path";
+import { readFile, writeFile, readdir, stat, mkdir, rename, unlink } from "node:fs/promises";
+import { resolve, join, relative, isAbsolute, dirname } from "node:path";
 
 const PORT = Number(process.argv[2] ?? process.env.GROKBOT2_EXEC_PORT ?? 1337);
 const ROOT = resolve(process.argv[3] ?? process.env.GROKBOT2_EXEC_ROOT ?? "/root/workspace");
@@ -108,6 +108,51 @@ const handlers = {
   async exec({ command, cwd, timeoutMs }) {
     if (typeof command !== "string" || !command.trim()) throw new Error("command required");
     return sh(command, safePath(cwd ?? "."), Math.min(Number(timeoutMs) || DEFAULT_TIMEOUT, 300_000));
+  },
+
+  /**
+   * edit_file_v2 — write a file whole.
+   *
+   * Same tmp+rename as memorySave: a crash mid-write must not leave a half-written file where
+   * a complete one used to be. `safePath` keeps it inside ROOT, so this cannot touch the rest
+   * of the host even though the daemon runs as root.
+   */
+  async write({ target_file, path, content }) {
+    const abs = safePath(target_file ?? path);
+    if (typeof content !== "string") throw new Error("content required");
+    await mkdir(dirname(abs), { recursive: true });
+    const tmp = `${abs}.tmp`;
+    await writeFile(tmp, content);
+    await rename(tmp, abs);
+    return { path: abs, bytes: Buffer.byteLength(content) };
+  },
+
+  /**
+   * str_replace — targeted edit without resending the whole file.
+   *
+   * Refuses when `find` is absent or ambiguous rather than guessing which occurrence was
+   * meant: a silent wrong-instance edit is far worse than a failed call.
+   */
+  async replace({ target_file, path, find, replace: to, all }) {
+    const abs = safePath(target_file ?? path);
+    if (typeof find !== "string" || find === "") throw new Error("find required");
+    if (typeof to !== "string") throw new Error("replace required");
+    const raw = await readFile(abs, "utf8");
+    const count = raw.split(find).length - 1;
+    if (count === 0) throw new Error(`find not present in ${abs}`);
+    if (count > 1 && all !== true) throw new Error(`find matches ${count} times in ${abs}; pass all:true or use a longer, unique find`);
+    const next = all === true ? raw.split(find).join(to) : raw.replace(find, to);
+    const tmp = `${abs}.tmp`;
+    await writeFile(tmp, next);
+    await rename(tmp, abs);
+    return { path: abs, replaced: all === true ? count : 1, bytes: Buffer.byteLength(next) };
+  },
+
+  // delete_file
+  async remove({ target_file, path }) {
+    const abs = safePath(target_file ?? path);
+    await unlink(abs);
+    return { path: abs, deleted: true };
   },
 
   // read_file_v2 — offset/limit are LINE based, matching the tool's params

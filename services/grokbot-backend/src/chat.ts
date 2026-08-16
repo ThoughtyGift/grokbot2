@@ -210,6 +210,11 @@ const pending = {
 };
 /** Per-agent compaction checkpoint, so a long conversation is summarised once, not per turn. */
 const compaction = new Map<string, CompactionState>();
+/** Per-agent checklist behind todo_write / todo_read / create_plan. Persisted with the rest. */
+interface Todo { text: string; done: boolean }
+const todos = new Map<string, Todo[]>();
+const renderTodos = (list: Todo[]): string =>
+  list.map((t, i) => `${t.done ? "[x]" : "[ ]"} ${i + 1}. ${t.text}`).join("\n");
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
 
 interface AcceptanceRecord {
@@ -229,6 +234,7 @@ const snapshot = (): PersistedState => ({
   automations: automationsRef(),
   compaction: Object.fromEntries(compaction),
   parked: [...parked.values()],
+  todos: Object.fromEntries(todos),
   handoffs: handoffEntries(),
 });
 export const chatSnapshot = snapshot;
@@ -286,6 +292,7 @@ function migrate(e: any, agentName: string): Entry | null {
   }
   for (const r of (s.acceptance ?? []) as AcceptanceRecord[]) if (r?.clientNonce) acceptance.set(r.clientNonce, r);
   for (const p of (s.parked ?? []) as Parked[]) if (p?.kind && p.key) parked.set(parkKey(p.kind, p.key), p);
+  for (const [id, list] of Object.entries((s.todos ?? {}) as Record<string, Todo[]>)) if (Array.isArray(list)) todos.set(id, list);
   for (const [id, h] of (s.handoffs ?? []) as [string, BoxHandoff][]) if (id && h?.requestId) restoreHandoff(id, h);
   if (parked.size) console.log(`[grokbot2] restored ${parked.size} parked turn(s)`);
   // Without this a restart discards every checkpoint and resends the full transcript —
@@ -333,6 +340,8 @@ export interface ToolCtx {
   requestBoxHelp(instruction: string): Promise<string>;
   /** Which agent this tool is running for — memory is per bot. */
   agentId: string;
+  /** Put a draft card in the transcript (display only: the renderer has no send action). */
+  draft(message: EmailDraftMsg | SlackDraftMsg): void;
 }
 
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
@@ -391,6 +400,78 @@ TOOLS.ask_question = (arg, ctx) => {
   return id == null
     ? "ask_question cần prompt không rỗng và ít nhất một option"
     : `đã hỏi người dùng: ${prompt}`;
+};
+
+/**
+ * Show a draft before anything is sent. These render as the client's own draft cards, but the
+ * renderer gives them no send button — see EmailDraftMsg — so the turn should say what it wants
+ * to do with the draft rather than implying it went out.
+ */
+TOOLS.email_draft = (arg, ctx) => {
+  let d: any;
+  try { d = JSON.parse(arg); } catch { return 'email_draft cần {"to":["a@b.c"],"subject":"…","body":"…"}'; }
+  const to = Array.isArray(d?.to) ? d.to.filter((x: unknown) => typeof x === "string") : typeof d?.to === "string" ? [d.to] : [];
+  const subject = typeof d?.subject === "string" ? d.subject : "";
+  const body = typeof d?.body === "string" ? d.body : "";
+  if (to.length === 0 || !body) return 'email_draft cần ít nhất {"to":[…],"body":"…"}';
+  ctx.draft({ type: "email-draft", draft: { ...(typeof d.from === "string" ? { from: d.from } : {}), to, subject, body } });
+  return `đã soạn nháp email tới ${to.join(", ")} (chưa gửi — cần người dùng xác nhận)`;
+};
+
+TOOLS.slack_draft = (arg, ctx) => {
+  let d: any;
+  try { d = JSON.parse(arg); } catch { return 'slack_draft cần {"target":"#kênh","body":"…"}'; }
+  const target = typeof d?.target === "string" ? d.target : "";
+  const body = typeof d?.body === "string" ? d.body : "";
+  if (!target || !body) return 'slack_draft cần {"target":"#kênh hoặc @người","body":"…"}';
+  ctx.draft({
+    type: "slack-draft",
+    draft: {
+      ...(typeof d.workspace === "string" ? { workspace: d.workspace } : {}),
+      target,
+      ...(typeof d.thread === "string" ? { thread: d.thread } : {}),
+      body,
+    },
+  });
+  return `đã soạn nháp Slack cho ${target} (chưa gửi — cần người dùng xác nhận)`;
+};
+
+/**
+ * A visible checklist for multi-step work (`todo_write` / `todo_read` in the original catalog).
+ * Persisted with everything else, so a restart mid-task does not lose the plan.
+ */
+TOOLS.todo_write = (arg, ctx) => {
+  let items: any;
+  try { items = JSON.parse(arg); } catch { return 'todo_write cần một mảng, ví dụ ["việc A","việc B"] hoặc [{"text":"…","done":true}]'; }
+  const list = (Array.isArray(items) ? items : items?.todos ?? [])
+    .map((t: any) => (typeof t === "string" ? { text: t, done: false } : { text: String(t?.text ?? ""), done: t?.done === true }))
+    .filter((t: { text: string }) => t.text.length > 0);
+  if (list.length === 0) return "todo_write cần ít nhất một việc";
+  todos.set(ctx.agentId, list);
+  persist();
+  return renderTodos(list);
+};
+
+TOOLS.todo_read = (_arg, ctx) => {
+  const list = todos.get(ctx.agentId) ?? [];
+  return list.length ? renderTodos(list) : "(chưa có việc nào)";
+};
+
+/**
+ * `create_plan` — the original's plan tool. There is no plan card in the renderer, so the plan
+ * is delivered as an ordinary message and kept as the todo list, which is what makes it visible.
+ */
+TOOLS.create_plan = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { steps: arg.split(/\s*[;\n]\s*/) }; }
+  const title = typeof spec?.title === "string" ? spec.title : "Kế hoạch";
+  const steps = (Array.isArray(spec?.steps) ? spec.steps : Array.isArray(spec?.todos) ? spec.todos : [])
+    .map((x: any) => String(typeof x === "string" ? x : x?.text ?? "")).filter((x: string) => x.trim());
+  if (steps.length === 0) return 'create_plan cần {"title":"…","steps":["…","…"]}';
+  const list = steps.map((text: string) => ({ text, done: false }));
+  todos.set(ctx.agentId, list);
+  persist();
+  return `${title}\n${renderTodos(list)}`;
 };
 
 /**
@@ -502,6 +583,12 @@ const MEMORY_PROTOCOL = boxConfigured()
     "Chỉ lưu điều còn đúng ở lần trò chuyện sau; KHÔNG lưu chi tiết vụn vặt của cuộc hội thoại " +
     "hiện tại. Những gì đã nhớ được đưa sẵn vào đầu mỗi lượt nên bạn không cần đọc lại."
   : "";
+
+const DRAFT_PROTOCOL =
+  "\n\nBẢN NHÁP: khi soạn thư hoặc tin nhắn thay người dùng, dùng " +
+  'TOOL_CALL: email_draft({"to":["a@b.c"],"subject":"...","body":"..."}) hoac ' +
+  'TOOL_CALL: slack_draft({"target":"#kenh","body":"..."}). ' +
+  "Thẻ nháp chỉ để xem — hệ thống CHƯA gửi được, nên đừng nói là đã gửi; hỏi người dùng bước tiếp theo.";
 
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
@@ -776,6 +863,10 @@ export function postWidget(
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   agentId,
+  draft: (message) => {
+    tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message, timestampMs: Date.now() });
+    onUpdate(agentId);
+  },
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   ask: (widget) => postWidget(agentId, widget),
   note: (text) => {
@@ -1143,4 +1234,11 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
     { role: "assistant", content: `TOOL_CALL: ${toolName}(${arg})` },
     { role: "user", content: `Kết quả công cụ ${toolName}: ${result}\nHãy trả lời người dùng dựa trên kết quả này (không gọi công cụ nữa).` },
   ], key, controller);
+}
+
+/** Run one tool with a real ToolCtx. Exported for the e2e scripts only. */
+export function runToolForTest(agentId: string, name: string, arg: string): Promise<string> {
+  const fn = TOOLS[name];
+  if (!fn) return Promise.resolve(`(no tool ${name})`);
+  return Promise.resolve(fn(arg, ctxFor(agentId)));
 }

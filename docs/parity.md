@@ -312,6 +312,25 @@ The general lesson, since this is the second time it bit: a supervisor that rest
 must not re-apply *initial* state on restart. `Restart=always` on something that legitimately
 self-restarts turns one process into two.
 
+## 2l. Drafts, checklist and plan
+
+`email_draft` / `slack_draft` emit the client's own draft cards; `todo_write` / `todo_read` /
+`create_plan` keep a per-agent checklist (persisted, so a restart mid-task keeps the plan).
+Field names are the client's: `draft.to/subject/body` and `draft.workspace/target/thread/body`.
+
+**Correction to an earlier reading.** I first reported drafts as display-only, because grepping
+for `sendDraft` / `draftAction` / `respondToDraft` found nothing. The screenshot says otherwise:
+both cards render with a **"Ready to send"** pill and working **Send / Discard** buttons. The
+component takes `{draft, status, onSend, onDiscard}` and `status` has `sending` and `sent`
+states. Absence of a guessed name is not absence of a feature — the handler simply lives in a
+lazily-loaded chunk under a different one.
+
+**Still open:** which gateway method `onSend` calls. It could not be resolved statically, and
+the click-and-read-the-log approach that pinned `respondToWidget` has not landed on the card yet.
+Until it is known, the tools say plainly that nothing has been sent, and the prompt tells the
+model not to claim otherwise. Do not guess this one: emitting the wrong method name is the exact
+failure this document exists to record.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

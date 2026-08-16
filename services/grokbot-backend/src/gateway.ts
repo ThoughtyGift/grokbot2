@@ -62,6 +62,14 @@ const called = new Set<string>();
 /** Last payload seen per method, so wrong-key bugs are visible instead of inferred. */
 const lastArgs = new Map<string, unknown>();
 
+/**
+ * How many times each method has been called, and when it was last seen.
+ *
+ * Names alone cannot answer "does the client poll?" — that question is about RATE, and it
+ * decides whether a missing update is a broken push or a poll that never runs.
+ */
+const callCounts = new Map<string, { n: number; lastMs: number }>();
+
 /** Persist host settings by piggybacking on the chat snapshot (same state.json). */
 const saveSettings = () => scheduleSave(() => ({ ...chatSnapshot(), hostSettings }));
 
@@ -275,6 +283,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     res.end(JSON.stringify({
       calledTotal: called.size, mapped, unmapped, lastArgs: args,
       sse: { ...sseStats, connected: sseClients.size },
+      calls: Object.fromEntries([...callCounts].sort((a, b) => b[1].n - a[1].n)),
       implemented: Object.keys(methods).sort(),
     }, null, 2));
     return true;
@@ -291,6 +300,8 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
       }
     }
     called.add(m[1]);
+    const prev = callCounts.get(m[1]);
+    callCounts.set(m[1], { n: (prev?.n ?? 0) + 1, lastMs: Date.now() });
     if (body.length) lastArgs.set(m[1], args);
     if (process.env.GROKBOT2_LOG) console.log(`  gw ${m[1]} ${JSON.stringify(args).slice(0, 220)}`);
     const fn = methods[m[1]];

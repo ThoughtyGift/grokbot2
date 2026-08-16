@@ -35,6 +35,8 @@ export interface PersistedState {
   parked?: unknown[];
   /** Box handoff cards, so a restart does not leave a dead "Needs your attention" on screen. */
   handoffs?: unknown[];
+  /** Per-agent checklist (todo_write / create_plan), so a restart mid-task keeps the plan. */
+  todos?: Record<string, unknown[]>;
 }
 
 /** Load state.json, falling back to a snapshot.json import on first run. */
