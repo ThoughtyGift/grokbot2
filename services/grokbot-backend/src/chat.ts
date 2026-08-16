@@ -1,15 +1,17 @@
 /**
  * Chat bridge — turns the stubbed box gateway into an agent host backed by the
- * Claude pool. Supports roster mutations, run interrupt, reactions, outline,
- * progressive reveal, and (P1) a SAFE tool-call + approval demo pipeline.
+ * Claude pool: roster mutations, run interrupt, reactions, outline, paged transcripts,
+ * real token streaming, and a tool-call + approval loop.
  *
- * The pool returns plain text (no native tool-calls), so tool-calls are produced
- * by a local demo trigger (`/tool <name> <arg>`) using an allowlisted, side-effect-free
- * tool registry — NO system commands. This exists to exercise the approval UI.
+ * The pool has no native tool-calling, so the system prompt teaches the model a
+ * `TOOL_CALL: name(arg)` convention. A request becomes a tool-call entry plus a pending
+ * permission card; approving it runs the tool and feeds the result back for a follow-up
+ * turn. Tools come from an allowlisted, side-effect-free registry — NO system commands.
+ * `/tool <name> <arg>` still triggers one manually.
  */
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { extname } from "node:path";
-import { callPool, type PoolMessage } from "@grokbot2/pool-client";
+import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 
@@ -55,7 +57,7 @@ export interface AgentRecord {
 const agents = new Map<string, AgentRecord>();
 const transcripts = new Map<string, Entry[]>();
 const inflight = new Map<string, AbortController>();
-const pending = new Map<string, { agentId: string; entryId: string; kind: string; toolCallId?: string; name?: string; arg?: string }>();
+const pending = new Map<string, { agentId: string; entryId: string; kind: string; toolCallId?: string; name?: string; arg?: string; history?: PoolMessage[] }>();
 let agentSeq = 1, entrySeq = 1, reqSeq = 1, toolSeq = 1;
 
 // ── persistence: restore on boot, save (debounced) on every mutation ──
@@ -87,13 +89,33 @@ export function bindHostSettings(get: () => Record<string, unknown>): void { hos
   if (agents.size) console.log(`[grokbot2] restored ${agents.size} agent(s), ${[...transcripts.values()].flat().length} transcript entries`);
 }
 
-/** SAFE demo tools — pure, no side effects, no system access. */
+/** SAFE tools — pure, no side effects, no system access. The model may request these. */
 const DEMO_TOOLS: Record<string, (arg: string) => string> = {
   echo: (a) => a || "(empty)",
   time: () => new Date().toISOString(),
   reverse: (a) => [...a].reverse().join(""),
   upper: (a) => a.toUpperCase(),
+  count: (a) => `${a.trim().split(/\s+/).filter(Boolean).length} từ, ${a.length} ký tự`,
+  calc: (a) => {
+    if (!/^[\d\s+\-*/().]+$/.test(a)) return "chỉ hỗ trợ số và + - * / ( )";
+    try { return String(Function(`"use strict";return(${a})`)()); } catch { return "biểu thức không hợp lệ"; }
+  },
 };
+
+/** Appended to the system prompt so the model can request a tool in a parseable way. */
+const TOOL_PROTOCOL =
+  "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng theo đúng dạng " +
+  "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ có sẵn: " +
+  Object.keys(DEMO_TOOLS).join(", ") +
+  ". Nếu không cần công cụ, cứ trả lời bình thường. Sau khi nhận kết quả công cụ, hãy trả lời người dùng dựa trên kết quả đó.";
+
+/** Detect a model-emitted tool request. */
+function parseToolCall(text: string): { name: string; arg: string } | null {
+  const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
+  if (!m) return null;
+  const name = m[1].toLowerCase();
+  return name in DEMO_TOOLS ? { name, arg: m[2].trim() } : null;
+}
 
 let sink: (agentId: string) => void = () => {};
 export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; }
@@ -154,7 +176,23 @@ export function getAgentAvatar(a: { id?: string; agentId?: string }) {
 }
 
 // ── transcript ────────────────────────────────────────────────────────────────
-export const transcriptTail = (agentId?: string) => ({ entries: (agentId && transcripts.get(agentId)) || [], hasMore: false });
+const PAGE = 200;
+/**
+ * Windowed transcript read. Defaults to the newest page; `before` walks backwards as the
+ * FE scrolls up, and hasMore/cursor report whether older entries exist — both were
+ * hardcoded before, so long conversations never paged.
+ */
+export function transcriptTail(a?: { agentId?: string; limit?: number; before?: string; cursor?: string } | string) {
+  const args = typeof a === "string" || a === undefined ? { agentId: a as string | undefined } : a;
+  const all = (args.agentId && transcripts.get(args.agentId)) || [];
+  const limit = Math.max(1, Math.min(args.limit ?? PAGE, 1000));
+  const anchor = args.before ?? args.cursor;
+  const at = anchor ? all.findIndex((e) => e.entryId === anchor) : -1;
+  const end = at >= 0 ? at : all.length;
+  const start = Math.max(0, end - limit);
+  const entries = all.slice(start, end);
+  return { entries, hasMore: start > 0, cursor: entries[0]?.entryId ?? null, total: all.length };
+}
 export function getConversationOutline(a: { agentId?: string }) {
   const t = (a.agentId && transcripts.get(a.agentId)) || [];
   return t.filter((e): e is Extract<Entry, { kind: "user-message" }> => e.kind === "user-message" && !!e.text)
@@ -250,6 +288,8 @@ export function resolveLocalToolPermission(a: { requestId?: string; approved?: b
       tc.result = fn ? fn(p.arg ?? "") : "(unknown tool)";
       tc.status = "done";
       t.push({ kind: "agent-message", entryId: nextEntryId(), agentId: p.agentId, agentOwnerAuthId: AUTH_ID, authorName: "Claude", text: `🔧 ${p.name}(${p.arg}) → ${tc.result}`, images: [], timestampMs: Date.now() });
+      // Model-initiated call: hand the result back so it can answer with it.
+      if (p.history) continueAfterTool(p.agentId, p.history, p.name ?? "", p.arg ?? "", tc.result);
     } else {
       tc.status = "error"; tc.result = "denied";
     }
@@ -327,13 +367,82 @@ export function sendPrompt(args: SendArgs) {
   const image = readImageAttachment(args.attachments);
   const controller = new AbortController();
   inflight.set(agentId, controller);
-  void callPool(history.length ? history : [{ role: "user", content: text }], { url: config.poolUrl, key, model: config.model, system: config.system, signal: controller.signal, ...(image ? { image } : {}) })
-    .then((r) => {
-      inflight.delete(agentId);
-      if (controller.signal.aborted) return;
-      if (r.ok) reveal(aEntry, r.text ?? "", agentId);
-      else { aEntry.text = `[grokbot2] Pool error: ${r.error}`; aEntry.streaming = false; onUpdate(agentId); }
-    });
+  void runTurn(agentId, aEntry, history.length ? history : [{ role: "user", content: text }], key, controller, image);
 
   return { accepted: true, entryId: userEntry.entryId, agentId };
+}
+
+/**
+ * One model turn: stream tokens into `target`, then — if the model asked for a tool —
+ * replace the raw TOOL_CALL line with a tool-call entry plus a pending permission card.
+ * Approving it runs the tool and feeds the result back for a follow-up turn.
+ */
+async function runTurn(
+  agentId: string,
+  target: Extract<Entry, { kind: "agent-message" }>,
+  history: PoolMessage[],
+  key: string,
+  controller: AbortController,
+  image?: string,
+): Promise<void> {
+  const opts = { url: config.poolUrl, key, model: config.model, system: config.system + TOOL_PROTOCOL, signal: controller.signal, ...(image ? { image } : {}) };
+
+  // Real token streaming first; fall back to the non-streaming route.
+  let r = await streamPool(history, opts, (chunk) => {
+    if (controller.signal.aborted) return;
+    target.text += chunk;
+    target.timestampMs = Date.now();
+    onUpdate(agentId);
+  });
+  if (!r.ok && r.error !== "aborted") {
+    r = await callPool(history, opts);
+    if (r.ok) reveal(target, r.text ?? "", agentId);
+  }
+  inflight.delete(agentId);
+  if (controller.signal.aborted) return;
+
+  if (!r.ok) {
+    target.text = `[grokbot2] Pool error: ${r.error}`;
+    target.streaming = false;
+    onUpdate(agentId);
+    return;
+  }
+  target.streaming = false;
+
+  const call = parseToolCall(target.text);
+  if (!call) { onUpdate(agentId); return; }
+
+  // The model wants a tool — turn the raw line into a tool-call + approval card.
+  const t = tail(agentId);
+  target.text = `Cần dùng công cụ \`${call.name}\` để trả lời.`;
+  const toolCallId = `tc-${toolSeq++}`;
+  const requestId = `req-${reqSeq++}`;
+  t.push(
+    { kind: "tool-call", entryId: nextEntryId(), agentId, timestampMs: Date.now(), toolCallId, name: call.name, rawArgs: JSON.stringify({ arg: call.arg }), status: "pending" },
+    { kind: "send-message", entryId: nextEntryId(), agentId, timestampMs: Date.now(),
+      message: { type: "local-tool-permission", ask: { status: "pending", target: `${call.name}(${call.arg})`, requestId } } },
+  );
+  pending.set(requestId, { agentId, entryId: t[t.length - 1].entryId, kind: "local-tool-permission", toolCallId, name: call.name, arg: call.arg, history });
+  onUpdate(agentId);
+}
+
+/** After approval, hand the tool result back to the model for a final answer. */
+function continueAfterTool(agentId: string, history: PoolMessage[], toolName: string, arg: string, result: string): void {
+  const key = loadPoolKey();
+  if (!key) return;
+  const t = tail(agentId);
+  const follow: Extract<Entry, { kind: "agent-message" }> = {
+    kind: "agent-message", entryId: nextEntryId(), agentId, agentOwnerAuthId: AUTH_ID,
+    authorName: agents.get(agentId)?.name ?? "Claude", text: "", images: [], timestampMs: Date.now(), streaming: true,
+  };
+  t.push(follow);
+  onUpdate(agentId);
+  const controller = new AbortController();
+  inflight.set(agentId, controller);
+  const next: PoolMessage[] = [
+    ...history,
+    { role: "assistant", content: `TOOL_CALL: ${toolName}(${arg})` },
+    { role: "user", content: `Kết quả công cụ ${toolName}: ${result}\nHãy trả lời người dùng dựa trên kết quả này (không gọi công cụ nữa).` },
+  ];
+  void runTurn(agentId, follow, next, key, controller);
 }

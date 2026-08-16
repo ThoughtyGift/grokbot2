@@ -76,6 +76,67 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
   }
 }
 
+/**
+ * Real token streaming via the pool's OpenAI-compatible route
+ * (`/v1/chat/completions` with `stream:true` → SSE `choices[].delta.content`).
+ * Falls back to the caller's non-streaming path if the route or key is unavailable.
+ */
+export async function streamPool(
+  messages: PoolMessage[],
+  opts: PoolOptions,
+  onDelta: (chunk: string) => void,
+): Promise<PoolResult> {
+  const url = opts.url.replace(/\/v1\/claude$/, "/v1/chat/completions");
+  const body = JSON.stringify({
+    model: opts.model ?? "sonnet",
+    messages: opts.system ? [{ role: "system", content: opts.system }, ...messages] : messages,
+    stream: true,
+    max_tokens: opts.maxTokens ?? 2048,
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${opts.key}` },
+      body,
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) return { ok: false, status: res.status, error: `stream HTTP ${res.status}` };
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    let full = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const piece = JSON.parse(data)?.choices?.[0]?.delta?.content;
+          if (typeof piece === "string" && piece) { full += piece; onDelta(piece); }
+        } catch { /* keep-alive or partial frame */ }
+      }
+    }
+    return { ok: true, text: full, status: res.status };
+  } catch (e: any) {
+    return { ok: false, error: e?.name === "AbortError" ? "aborted" : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** GET /v1/health (no key) — returns the live pool roster. */
 export async function poolHealth(baseUrl: string): Promise<unknown> {
   const healthUrl = baseUrl.replace(/\/v1\/claude$/, "/v1/health");
