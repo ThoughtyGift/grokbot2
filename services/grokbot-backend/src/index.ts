@@ -15,6 +15,7 @@ import { chatSnapshot } from "./chat.js";
 import { startScheduler } from "./automations.js";
 import { reportBoxConfig } from "./forever-box.js";
 import { browserProbe, isBrowserConfigured } from "./browser.js";
+import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -69,7 +70,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
 // Flush state to disk on shutdown so an in-flight debounce isn't lost.
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => { saveNow(chatSnapshot); process.exit(0); });
+  process.on(sig, () => { saveNow(chatSnapshot); closeMcp(); process.exit(0); });
 }
 
 server.listen(config.port, "127.0.0.1", () => {
@@ -77,6 +78,7 @@ server.listen(config.port, "127.0.0.1", () => {
   console.log(`[grokbot2] backend on http://localhost:${config.port}`);
   console.log(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
   reportBoxConfig((msg) => console.log(`[grokbot2] ${msg}`));
+  reportMcpConfig((msg) => console.log(`[grokbot2] ${msg}`));
   if (isBrowserConfigured()) {
     void browserProbe().then((s) => console.log(`[grokbot2] [browser] ${process.env.GROKBOT2_BROWSER_CDP} — ${s}`));
   } else {

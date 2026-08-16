@@ -26,6 +26,7 @@ import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved } from 
 import { boxConfigured } from "./box-exec.js";
 import { requestBoxHelp, setHandBackSink, restoreHandoff, handoffEntries, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
+import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "./mcp.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { knowledgeBase, loadMemory, renderMemory } from "./memory.js";
@@ -113,9 +114,33 @@ export type Entry =
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
   | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; status: "pending" | "running" | "done" | "failed"; result?: string });
 
+/**
+ * `currentActivity` — what the agent is doing, shown next to the typing indicator.
+ *
+ * `{kind:"thinking"}` renders "Thinking"; `{kind:"tool", tool}` is looked up in the client's
+ * own table, so the tool name must be its PascalCase one or it falls back to plain "Working":
+ *   WebSearch → Searching the web · WebFetch → Reading the web · Read/BoxRead → Reading file
+ *   GenerateImage → Generating a photo · Task → Waiting on another agent · ReactToMessage → Messaging
+ */
+export type AgentActivity = { kind: "thinking" } | { kind: "tool"; tool: string; detail?: string };
+
 export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
   avatarDataUrl?: string; avatarVersion?: string; notificationsEnabled?: boolean; notifyOnUpdates?: boolean;
+  /**
+   * Presence — what drives the typing/working indicator and the avatar animation.
+   *
+   * The client computes the indicator as
+   *   isAgentRunning ? (isAgentComposing ? "typing" : "working") : "none"
+   * from `isRunning` and `isComposingMessage` ON THIS RECORD, and it compares presence by
+   * exactly these four fields. We never sent any of them, which is why a turn showed no
+   * indicator at all: as far as the app was concerned the bot was idle the whole time.
+   */
+  isRunning?: boolean;
+  isComposingMessage?: boolean;
+  isRetrying?: boolean;
+  awaitingUserResponse?: unknown;
+  currentActivity?: AgentActivity | null;
 }
 
 const agents = new Map<string, AgentRecord>();
@@ -236,7 +261,13 @@ function migrate(e: any, agentName: string): Entry | null {
 
 {
   const s = loadState();
-  for (const a of (s.agents ?? []) as AgentRecord[]) if (a?.id) agents.set(a.id, a);
+  for (const a of (s.agents ?? []) as AgentRecord[]) {
+    if (!a?.id) continue;
+    // Presence is live state, not saved state: restoring `isRunning: true` leaves a bot
+    // typing forever with nothing generating behind it.
+    a.isRunning = false; a.isComposingMessage = false; a.isRetrying = false; a.currentActivity = null;
+    agents.set(a.id, a);
+  }
   for (const [id, entries] of Object.entries(s.transcripts ?? {})) {
     const name = agents.get(id)?.name ?? "Claude";
     transcripts.set(id, (entries as any[]).map((e) => migrate(e, name)).filter((e): e is Entry => e !== null));
@@ -391,6 +422,23 @@ TOOLS.task_v2 = async (arg, ctx) => {
   });
 };
 
+/**
+ * MCP tools (`get_mcp_tools` / `call_mcp_tool` in the original catalog) — structured access to
+ * connected services. Only offered when `.mcp.json` declares at least one server.
+ */
+if (isMcpConfigured()) {
+  // Listing is read-only; calling one is not, so only the call needs an approval card.
+  TOOLS.get_mcp_tools = (arg) => getMcpTools(arg);
+  TOOLS.call_mcp_tool = (arg) => callMcpTool(arg);
+}
+
+const MCP_PROTOCOL = isMcpConfigured()
+  ? "\n\nMCP: các dịch vụ đã nối sẵn — " + Object.keys(mcpServers()).join(", ") + ". " +
+    'Xem tool của một server bằng TOOL_CALL: get_mcp_tools(<tên server>), rồi gọi bằng ' +
+    'TOOL_CALL: call_mcp_tool({"server":"…","tool_name":"…","tool_args":{…}}). ' +
+    "Ưu tiên MCP hơn là mở trình duyệt khi dịch vụ đã có sẵn ở đây."
+  : "";
+
 // Browser actions are only offered when a box browser is actually configured — advertising
 // tools that cannot run just teaches the model to call them and fail.
 // Registered only once the browser has actually answered. Configured-but-unreachable is
@@ -462,6 +510,37 @@ let rosterSink: () => void = () => {};
 /** Push a roster change to the FE so add/delete shows up without waiting for its next poll. */
 export function setRosterSink(fn: () => void): void { rosterSink = fn; }
 const rosterChanged = (): void => rosterSink();
+
+/** PascalCase names the client's activity table knows; anything else renders plain "Working". */
+const ACTIVITY_TOOL: Record<string, string> = {
+  web_search: "WebSearch",
+  web_fetch: "WebFetch",
+  read_file_v2: "Read",
+  browser_navigate: "WebFetch",
+  browser_take_screenshot: "WebFetch",
+  knowledge_base: "ReactToMessage",
+};
+
+/**
+ * Update presence and tell the roster, so the indicator actually moves.
+ *
+ * Pushed rather than left for the next poll: the whole value of a typing indicator is that
+ * it appears within a beat of the user hitting send.
+ */
+function setPresence(agentId: string, patch: Partial<Pick<AgentRecord, "isRunning" | "isComposingMessage" | "isRetrying" | "currentActivity" | "awaitingUserResponse">>): void {
+  const rec = agents.get(agentId);
+  if (!rec) return;
+  const bag = rec as unknown as Record<string, unknown>;
+  let changed = false;
+  for (const [k, v] of Object.entries(patch)) {
+    if (bag[k] !== v) { bag[k] = v; changed = true; }
+  }
+  if (changed) { rosterChanged(); persist(); }
+}
+
+/** Everything presence-related back to idle. Called on every exit path, including failures. */
+const clearPresence = (agentId: string): void =>
+  setPresence(agentId, { isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null });
 const onUpdate = (agentId: string): void => { sink(agentId); persist(); };
 const nextId = () => `e${entrySeq++}`;
 const tail = (agentId: string) => transcripts.get(agentId) ?? (transcripts.set(agentId, []), transcripts.get(agentId)!);
@@ -474,7 +553,13 @@ const setText = (e: Entry, v: string): void => { if (e.kind === "send-message" &
 // ── roster ────────────────────────────────────────────────────────────────────
 export function createAgent(args: { name?: string } = {}): AgentRecord {
   const id = `agent-${agentSeq++}`;
-  const rec: AgentRecord = { id, name: args.name || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false };
+  // Presence is stated explicitly rather than left undefined. The client tolerates missing
+  // fields (`n?.isRunning ?? false`), but a record that never mentions them is how nobody
+  // noticed the indicator was unimplemented for this long.
+  const rec: AgentRecord = {
+    id, name: args.name || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false,
+    isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null,
+  };
   agents.set(id, rec); transcripts.set(id, []); persist(); rosterChanged();
   return rec;
 }
@@ -629,6 +714,7 @@ export function interruptAgentRun(a: { agentId?: string; id?: string }) {
   inflight.get(agentId)?.abort(); inflight.delete(agentId);
   const last = [...(transcripts.get(agentId) ?? [])].reverse().find((e) => e.kind === "send-message" && e.message.type === "text");
   if (last && !textOf(last)) { setText(last, "⏹ đã dừng"); if (last.kind === "send-message") last.streaming = false; last.timestampMs = Date.now(); onUpdate(agentId); }
+  clearPresence(agentId);
   return { id: agentId, interrupted: true };
 }
 
@@ -700,7 +786,7 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
 // `request_box_help` belongs here for the same reason as `ask_question`: it asks the user to
 // do something, it does not do anything itself. An approval card in front of it would make
 // them click Allow before being allowed to be asked for help.
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "echo", "time", "reverse", "upper", "count", "calc"]);
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /**
  * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
@@ -730,6 +816,9 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
       // user answers it, not now, or the model talks over its own question.
       if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
       if (name === "ask_question" && history) park({ kind: "widget", key: agentId, agentId, history });
+      // A parked turn is waiting on the user, not working: leaving it "running" spins the
+      // indicator forever behind a card that needs a click.
+      if (!history || name === "ask_question") clearPresence(agentId);
     });
 }
 
@@ -938,6 +1027,9 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
  * same way.
  */
 async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
+  // The indicator must appear before the first token, not after it — that gap is exactly
+  // what reads as a frozen app.
+  setPresence(agentId, { isRunning: true, isComposingMessage: false, currentActivity: { kind: "thinking" } });
   const prior = compaction.get(agentId) ?? null;
   if (needsCompaction(history)) {
     const next = await compact(history, key, prior, controller.signal);
@@ -977,6 +1069,9 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   };
   let r = await streamPool(history, opts, (chunk) => {
     if (controller.signal.aborted) return;
+    // First token: the indicator switches from "working" to "typing", which is the whole
+    // difference between "it is doing something" and "it is answering you now".
+    if (!target) setPresence(agentId, { isComposingMessage: true, currentActivity: null });
     target += chunk;
     if (instant) { setText(bubble, target); onUpdate(agentId); return; }
     if (!ticking) pump();
@@ -1013,7 +1108,12 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   if (bubble.kind === "send-message") bubble.streaming = false;
 
   const call = parseToolCall(textOf(bubble));
-  if (!call) { onUpdate(agentId); return; }
+  if (!call) { clearPresence(agentId); onUpdate(agentId); return; }
+  // A tool call is not the end of the turn: stay running, and name what is being done.
+  setPresence(agentId, {
+    isComposingMessage: false,
+    currentActivity: { kind: "tool", tool: ACTIVITY_TOOL[call.name] ?? call.name },
+  });
   setText(bubble, `Cần dùng công cụ \`${call.name}\`.`);
   injectTool(agentId, `${call.name} ${call.arg}`, history);
 }

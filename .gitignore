@@ -27,3 +27,4 @@ Thumbs.db
 
 # Bearer token for the box exec daemon — never commit.
 box-token.txt
+.mcp.json

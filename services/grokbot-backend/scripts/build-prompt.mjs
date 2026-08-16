@@ -39,6 +39,11 @@ const KEEP = [
   52, 53, 57,                         // showing your work (54-56 = host file:// + cloud agents)
   61, 62,                             // never fabricate data
   64, 65, 66, 67, 68, 69, 70,         // asking for decisions — this is our ask_question widget
+  // Reaching services with no connector. Held back on the first pass because it names
+  // surfaces we lacked; `request_box_help`, subagents and the box's own Chrome all exist now,
+  // so it describes what actually happens. 109/110/115 stay out — they are about connectors
+  // and SearchPlugins, which we still do not have.
+  106, 107, 108, 111, 112, 113, 114,
   150, 151, 152, 153,                 // autonomy (154 = subagents)
   156, 157, 158, 159, 160, 161, 162,  // initiative
 ];
@@ -69,6 +74,13 @@ const REPLACEMENTS = [
   [/ The ReactToMessage tapback \(a single emoji reaction on the user's own message\) is separate, and fine on the same rare, mirror-the-user terms\./g, ""],
   [/ The one exception is a bare emoji tapback: when a ReactToMessage reaction is the whole response \(a reply would be overkill\), that reaction is the turn — send it alone, no reply needed\./g, ""],
   [/\bReactToMessage\b/g, "a reaction"],
+
+  // Cross-references to chapters we do not include would point at nothing.
+  [/ \(see "The box desktop" for which type\)/g, ""],
+  [/ See "The box desktop" for how delegation and sign-in handoffs work\./g, ""],
+  // The original's tool names for the box shell and file reads; ours come from the catalog.
+  [/use Shell for commands, and use Read for files/g, "use run_terminal_command_v2 for commands, and read_file_v2 for files"],
+  [/\brun `gh auth login`\)/g, "run `gh auth login` through run_terminal_command_v2)"],
 
   // "box" is internal vocabulary in the original too; keep the user-facing wording.
   [/\bthe box\b/g, "the computer"],
