@@ -85,11 +85,15 @@ fi
 # browser tools fail with "no page target", which reads as a broken backend rather than a dead
 # browser.
 #
-# But `Restart=always` was wrong for Chrome. Chrome relaunches itself (self-update, session
-# restore), which systemd sees as the main process exiting, so it started a SECOND Chrome —
-# 10 processes and 4 restarts in an hour, each one reopening the startup URL and yanking the
-# page out from under whoever was using it. `on-failure` restarts a crash without fighting a
-# deliberate or self-managed exit.
+# `Restart=always`, and the reason the browser used to "jump back to Google" was NOT this
+# setting: it was `always` combined with a **startup URL**. Chrome exits on its own every so
+# often (cleanly, exit 0, no crash in the journal), systemd brought it back, and it reopened
+# that URL over whatever the agent was doing. Dropping the URL fixes it; dropping the restart
+# does not — `on-failure` simply leaves Chrome dead after a clean exit, which is worse.
+#
+# (An intermediate diagnosis blamed duplicate instances after seeing 10 chrome processes. That
+# is just Chrome's multi-process architecture for ONE instance. Count main processes — the ones
+# without `--type=` — before concluding anything from a process count.)
 unit_up() {
   local name="$1"; shift
   if systemctl is-active --quiet "$name" 2>/dev/null; then
@@ -97,7 +101,7 @@ unit_up() {
   fi
   systemctl reset-failed "$name" 2>/dev/null
   systemd-run --unit="$name" --collect --setenv=DISPLAY=":$DISP" \
-    --property=Restart=on-failure --property=RestartSec=3 "$@" >/dev/null 2>&1 \
+    --property=Restart=always --property=RestartSec=3 "$@" >/dev/null 2>&1 \
     && echo "  $name started" || echo "  $name FAILED"
 }
 

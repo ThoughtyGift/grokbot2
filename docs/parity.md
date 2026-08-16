@@ -285,6 +285,33 @@ Two things this cost, both worth remembering:
 - The first version **printed "Installed" after `schtasks` had failed**, because the exit code
   was never checked. It now verifies the port answers and says so either way.
 
+## 2k. Regression I introduced: the box browser kept jumping to Google
+
+Symptom the user hit: the box's Chrome would reload itself and land back on google.com,
+throwing away whatever page was open, with Chrome icons piling up in the dock.
+
+Cause was §2g's own fix. `Restart=always` plus a **startup URL** meant every exit relaunched
+Chrome *at that URL*. And Chrome exits on its own routinely — it relaunches to apply an update
+(the "New Chrome available" prompt was visible in the screenshots the whole time). systemd saw
+the main process exit, started a second Chrome, and the cycle repeated: `NRestarts=4` within
+the hour.
+
+Three changes:
+
+- `Restart=on-failure`, not `always`. Restart a crash; do not fight a deliberate or
+  self-managed exit by racing a duplicate against it.
+- **No startup URL** — `about:blank`. The agent decides what to open, so a relaunch must never
+  reopen a page over its work.
+- `--disable-component-update --disable-background-networking --no-service-autorun`, because
+  Chrome's own updater is what was making it exit.
+
+After: `Restart=on-failure`, `NRestarts=0`, **one** Chrome instance (10 OS processes is just
+Chrome's multi-process architecture), CDP answering, and `e2e-browser.mjs` still passes.
+
+The general lesson, since this is the second time it bit: a supervisor that restarts a process
+must not re-apply *initial* state on restart. `Restart=always` on something that legitimately
+self-restarts turns one process into two.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

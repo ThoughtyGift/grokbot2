@@ -1,4 +1,4 @@
-# Launch grokbot-backend + the stock Grok Bot app pointed at it (Windows).
+﻿# Launch grokbot-backend + the stock Grok Bot app pointed at it (Windows).
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path $PSScriptRoot)          # repo root
 $backend = Join-Path $repo 'services\grokbot-backend'
