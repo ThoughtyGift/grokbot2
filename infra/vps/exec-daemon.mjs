@@ -106,9 +106,14 @@ const handlers = {
   // glob_file_search — delegate to the shell so the box's own globbing applies
   async glob({ target_directory, glob_pattern }) {
     const dir = safePath(target_directory ?? ".");
-    const pattern = String(glob_pattern ?? "*").replace(/'/g, "");
-    const { stdout } = await sh(`find . -path './.git' -prune -o -name '${pattern}' -print | head -500`, dir, 30_000);
-    return { path: dir, matches: stdout.split("\n").filter(Boolean) };
+    // Models write `**/*.ts`. `find -name` matches the basename only and never sees a
+    // slash, so that pattern silently returns nothing; strip the recursive prefix and
+    // switch to -path when a real slash remains.
+    const raw = String(glob_pattern ?? "*").replace(/'/g, "");
+    const stripped = raw.replace(/^(\*\*\/)+/, "");
+    const test = stripped.includes("/") ? `-path '*/${stripped}'` : `-name '${stripped}'`;
+    const { stdout } = await sh(`find . -name .git -prune -o -type f ${test} -print | head -500`, dir, 30_000);
+    return { path: dir, pattern: stripped, matches: stdout.split("\n").filter(Boolean) };
   },
 
   // ripgrep_raw_search — rg when present, grep -r otherwise
@@ -145,9 +150,13 @@ const server = createServer((req, res) => {
   req.on("end", async () => {
     let args = {};
     try { if (chunks.length) args = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { /* keep {} */ }
+    // GROKBOT2_EXEC_LOG shows exactly what arrived. Worth having: an argument mangled
+    // on the way in looks identical to a tool that simply found nothing.
+    if (process.env.GROKBOT2_EXEC_LOG) console.error(`[exec-daemon] ${name} ${JSON.stringify(args).slice(0, 300)}`);
     try {
       send(200, await fn(args));
     } catch (e) {
+      if (process.env.GROKBOT2_EXEC_LOG) console.error(`[exec-daemon] ${name} ERROR ${String(e?.message ?? e).slice(0, 200)}`);
       send(200, { error: String(e?.message ?? e) });
     }
   });

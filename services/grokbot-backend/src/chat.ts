@@ -47,13 +47,27 @@ function readImageAttachment(atts?: { path?: string; name?: string }[]): string 
 interface Reaction { emoji: string; by: string }
 interface Base { id: string; timestampMs: number; reactions?: Reaction[] }
 interface Author { id: string; name: string }
-type TextMsg = { type: "text"; content: string; images?: string[] };
+type TextMsg = { type: "text"; content: string };
 type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; target: string; requestId: string } };
 type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending" | "approved" | "denied"; summary: string; requestId: string } };
+/**
+ * How an agent puts a picture in the transcript. This is the ONLY shape the renderer reads
+ * for an agent-side attachment:
+ *
+ *   kind==="send-message" && message.type==="attachment"  →  <Img alt={message.alt} url={message.url}>
+ *
+ * `url` is rendered directly when it is a `data:` or `https:` URL; anything else makes the
+ * renderer ask the host to resolve it, and with no host resolver the chip shows
+ * "Image unavailable". So we always emit data: URLs.
+ *
+ * (A previous `images?: string[]` field on TextMsg was invented — nothing assigned it and the
+ * renderer has no path for it. It is gone; see docs/parity.md §2.)
+ */
+type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
 
 export type Entry =
-  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; images?: string[]; clientNonce?: string; isStreaming?: boolean })
-  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg; streaming?: boolean })
+  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean })
+  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg; streaming?: boolean })
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
@@ -138,7 +152,14 @@ function migrate(e: any, agentName: string): Entry | null {
  * SAFE tools — pure, no side effects, no system access. The model may request these.
  * Async is allowed: the browser tools below reach the box over CDP and take real time.
  */
-const TOOLS: Record<string, (arg: string) => string | Promise<string>> = {
+/**
+ * What a tool may do besides return text. `attach` drops a picture into the transcript —
+ * the original's browser tools return a screenshot after every action, and this is how we
+ * match that without threading the agent id through every tool signature.
+ */
+export interface ToolCtx { attach(dataUrl: string, fileName: string, alt: string): void }
+
+const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
   echo: (a) => a || "(empty)",
   time: () => new Date().toISOString(),
   reverse: (a) => [...a].reverse().join(""),
@@ -153,7 +174,7 @@ const TOOLS: Record<string, (arg: string) => string | Promise<string>> = {
 // Browser actions are only offered when a box browser is actually configured — advertising
 // tools that cannot run just teaches the model to call them and fail.
 if (isBrowserConfigured()) {
-  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg) => runBrowserTool(name, arg);
+  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
 }
 
 // Shell and file tools, under their real ClientSideToolV2 names. Same rule as the browser:
@@ -365,6 +386,26 @@ export function interruptAgentRun(a: { agentId?: string; id?: string }) {
   return { id: agentId, interrupted: true };
 }
 
+/**
+ * Put a picture in the transcript. Only `data:` and `https:` URLs render without a host-side
+ * resolver, so callers pass a data URL (see AttachmentMsg).
+ */
+export function postAttachment(agentId: string, dataUrl: string, fileName: string, alt: string): void {
+  tail(agentId).push({
+    id: nextId(),
+    kind: "send-message",
+    author: authorOf(agentId),
+    message: { type: "attachment", url: dataUrl, file_name: fileName, alt },
+    timestampMs: Date.now(),
+  });
+  onUpdate(agentId);
+}
+
+/** The capability object handed to a tool while it runs for one agent. */
+const ctxFor = (agentId: string): ToolCtx => ({
+  attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
+});
+
 // ── approvals ─────────────────────────────────────────────────────────────────
 function findPending(requestId?: string) {
   if (requestId && pending.has(requestId)) return { requestId, ...pending.get(requestId)! };
@@ -394,7 +435,7 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
         // Browser actions take seconds, so show "running" and finish out of band rather than
         // blocking the gateway reply the FE is waiting on.
         tc.status = "running";
-        void Promise.resolve(fn(p.arg ?? ""))
+        void Promise.resolve(fn(p.arg ?? "", ctxFor(p.agentId)))
           .catch((e: Error) => `tool error: ${e.message}`)
           .then((result) => {
             tc.result = result;

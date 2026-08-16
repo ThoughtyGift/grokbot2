@@ -172,15 +172,7 @@ const ACTIONS: Record<string, { primary: string; run: Action }> = {
     },
   },
   browser_snapshot: { primary: "", run: () => snapshot() },
-  browser_take_screenshot: {
-    primary: "",
-    run: async () => {
-      const r = await send("Page.captureScreenshot", { format: "png" });
-      const bytes = Buffer.from(r.data, "base64").length;
-      // The transcript has no image channel yet, so report the capture instead of inlining it.
-      return `screenshot captured (${bytes} bytes, png). Inline images are not wired into the transcript yet.`;
-    },
-  },
+  browser_take_screenshot: { primary: "", run: async () => "screenshot attached" },
   browser_click: {
     primary: "selector",
     run: async (a) => {
@@ -315,6 +307,19 @@ const ACTIONS: Record<string, { primary: string; run: Action }> = {
 
 export const BROWSER_TOOL_NAMES = Object.keys(ACTIONS);
 
+/** Anything a tool may do besides return text (mirrors chat.ts ToolCtx, kept local to avoid a cycle). */
+export interface BrowserCtx { attach(dataUrl: string, fileName: string, alt: string): void }
+
+/** Capture the page as a data: URL — the only URL form the transcript renders without a host. */
+async function screenshotDataUrl(): Promise<string | null> {
+  try {
+    const r = await send("Page.captureScreenshot", { format: "png" });
+    return typeof r?.data === "string" ? `data:image/png;base64,${r.data}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /** True when a box browser is configured to drive. */
 export const isBrowserConfigured = (): boolean => process.env.GROKBOT2_BROWSER_CDP != null;
 
@@ -322,14 +327,23 @@ export const isBrowserConfigured = (): boolean => process.env.GROKBOT2_BROWSER_C
  * Run one browser action. Errors are returned as text, not thrown: the tool loop shows the
  * result to the model, and "no element matches #foo" is something it can recover from.
  */
-export async function runBrowserTool(name: string, rawArg: string): Promise<string> {
+export async function runBrowserTool(name: string, rawArg: string, ctx?: BrowserCtx): Promise<string> {
   const action = ACTIONS[name];
   if (action == null) return `(unknown browser tool ${name})`;
+  let text: string;
   try {
-    return await action.run(parseArgs(rawArg, action.primary));
+    text = await action.run(parseArgs(rawArg, action.primary));
   } catch (e) {
-    return `browser error: ${(e as Error).message}`;
+    text = `browser error: ${(e as Error).message}`;
   }
+  // The original's browser subagent reminder says every browser tool call already returns a
+  // screenshot of the page, so the model never has to ask for one. Match that: attach the page
+  // after each action, including failures — seeing the wrong page is how you spot a bad selector.
+  if (ctx != null) {
+    const shot = await screenshotDataUrl();
+    if (shot != null) ctx.attach(shot, `${name}.png`, `${name} — trạng thái trang sau hành động`);
+  }
+  return text;
 }
 
 /**

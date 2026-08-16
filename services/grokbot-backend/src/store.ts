@@ -9,7 +9,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
-const FILE = join(DIR, "state.json");
+// Overridable so a test backend can run against a throwaway state file instead of
+// trampling the state the live instance is using.
+const FILE = process.env.GROKBOT2_STATE_FILE ?? join(DIR, "state.json");
 const SNAPSHOT = join(DIR, "snapshot.json");
 
 export interface PersistedState {
@@ -48,7 +50,7 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
     const take = latest;
     if (!take) return;
     try {
-      mkdirSync(DIR, { recursive: true });
+      mkdirSync(dirname(FILE), { recursive: true });
       const tmp = FILE + ".tmp";
       writeFileSync(tmp, JSON.stringify(take(), null, 1));
       renameSync(tmp, FILE);
@@ -61,7 +63,7 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
 /** Flush immediately (used on shutdown). */
 export function saveNow(snapshot: () => PersistedState): void {
   try {
-    mkdirSync(DIR, { recursive: true });
+    mkdirSync(dirname(FILE), { recursive: true });
     const tmp = FILE + ".tmp";
     writeFileSync(tmp, JSON.stringify(snapshot(), null, 1));
     renameSync(tmp, FILE);

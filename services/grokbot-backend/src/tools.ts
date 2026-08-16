@@ -21,17 +21,28 @@ export interface ToolSpec {
   run(arg: string): Promise<string>;
 }
 
+/**
+ * Models quote their arguments — `list_dir_v2(".")` is at least as common as
+ * `list_dir_v2(.)`. Passing the quotes through turns the path into `"."` and every call
+ * fails with ENOENT, so strip one matching pair.
+ */
+export function unquote(s: string): string {
+  const t = s.trim();
+  const pair = (a: string, b: string) => t.length >= 2 && t.startsWith(a) && t.endsWith(b);
+  return pair('"', '"') || pair("'", "'") || pair("`", "`") ? t.slice(1, -1).trim() : t;
+}
+
 /** Split "a, b, c" into at most `n` parts, leaving the remainder in the last one. */
 function parts(arg: string, n: number): string[] {
   const out: string[] = [];
-  let rest = arg.trim();
+  let rest = unquote(arg);
   while (out.length < n - 1) {
     const i = rest.indexOf(",");
     if (i < 0) break;
-    out.push(rest.slice(0, i).trim());
+    out.push(unquote(rest.slice(0, i)));
     rest = rest.slice(i + 1).trim();
   }
-  out.push(rest);
+  out.push(unquote(rest));
   return out;
 }
 
@@ -45,7 +56,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     needsApproval: true,
     async run(arg) {
       const r = await boxCall<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean; truncated: boolean }>(
-        "exec", { command: arg }
+        "exec", { command: unquote(arg) }
       );
       const bits = [
         `exit=${r.exitCode}${r.timedOut ? " (timeout)" : ""}`,
@@ -80,7 +91,7 @@ export const TOOLS: Record<string, ToolSpec> = {
     needsApproval: false,
     async run(arg) {
       const r = await boxCall<{ path: string; entries: { name: string; isDir: boolean; size: number | null }[] }>("list", {
-        target_directory: arg || ".",
+        target_directory: unquote(arg) || ".",
       });
       const rows = r.entries.map((e) => `${e.isDir ? "d" : "-"} ${String(e.size ?? "").padStart(9)}  ${e.name}`);
       return trim(`${r.path} (${r.entries.length} mục)\n${rows.join("\n")}`);
