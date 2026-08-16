@@ -164,6 +164,42 @@ resolving one could run the other's tool. Both are now derived from what is alre
 Verified: an approval card created **before** a restart, approved **after** it — the tool ran,
 the card went `approved`, and the turn continued from the persisted history.
 
+## 2f. `task_v2` + subagents — DONE (minus the UI list)
+
+A nested agent loop with the original's own reminder and tool allowlist per type
+(`browserUse`, `explore`, `shell`), dispatched by `task_v2`. Verified through the app:
+
+```
+tool-call task_v2                     done
+send-message text    duyệt web: browser_navigate({"url":"https://example.com"})
+send-message attachment               ← the subagent's screenshot, via §2's attachment path
+"Tiêu đề của trang https://example.com là Example Domain."
+```
+
+**The original's pinned model does not transfer.** `BROWSER_USE_SUBAGENT_CONFIG` pins
+`claude-4.5-sonnet`; copying that silently breaks the subagent here. Measured on the same
+prompt and task, counting whether the model ever emits a TOOL_CALL:
+
+| model | tool calls | outcome |
+|---|---|---|
+| `gemini-2.5-flash` | 1 | correct answer |
+| `grok-4.5` | 1 | correct answer |
+| `gemini-3.7-flash` | 0 | HTTP 200, empty body |
+| `sonnet` | 0 | "I can't access URLs" |
+| `haiku` | 0 | same refusal |
+
+The Claude models reach us through the pool's Claude Code CLI, which carries its own agent
+identity and tool set and overrides a text-convention protocol. Default is now
+`gemini-2.5-flash` (`GROKBOT2_SUBAGENT_MODEL` overrides).
+
+Wording mattered too: a soft "you may use these tools" made capable models answer "I have no
+browser" and stop. Stating that the host executes the line and the tools are real is what makes
+the convention hold.
+
+Not done: the subagent list in the UI (`getSubagents` → array, plus a `subagents` SSE channel).
+The per-item shape was not pinned down, and guessing it is the mistake this document exists to
+record. Ours also runs synchronously — the original's are stateful, resumable and parallel.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,
@@ -216,7 +252,7 @@ change available per unit of effort, and it is now a copy-and-adapt job rather t
 1. ~~Attachment contract (§2)~~ — **done**, verified in the app.
 2. ~~`ask_question`~~ — **done**, verified in the app.
 3. ~~Adopt the extracted base prompt~~ — **done**, 56/179 chapters ported.
-4. **`task_v2` + subagents** — makes the browser tools usable the way the original uses them.
+4. ~~`task_v2` + subagents~~ — **done**, verified in the app (UI list still open).
 5. **MCP tools** (`get_mcp_tools` / `call_mcp_tool`).
 6. **Channels/listeners** → event-triggered routines.
 7. `web_search`/`web_fetch`, `todo_*`, `create_plan`, box file mutation.

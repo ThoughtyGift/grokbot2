@@ -34,14 +34,22 @@ if [ "${SKIP_INSTALL:-0}" != "1" ]; then
   NEED=""
   have Xvfb          || NEED="$NEED xvfb"
   have xfwm4         || NEED="$NEED xfwm4"
-  have picom         || NEED="$NEED picom"
   have plank         || NEED="$NEED plank"
   have thunar        || NEED="$NEED thunar"
   have xfce4-terminal|| NEED="$NEED xfce4-terminal"
+  # picom is only packaged from Ubuntu 21.04; focal ships its predecessor as compton, and
+  # neither is required — xfwm4 can composite on its own (see the compositor step below).
+  if ! have picom && ! have compton; then NEED="$NEED picom compton"; fi
+
   if [ -n "$NEED" ]; then
     echo "  installing:$NEED"
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq && apt-get install -y -qq $NEED || { echo "  apt FAILED"; exit 1; }
+    apt-get update -qq || echo "  apt update warned (continuing)"
+    # One package at a time: a name missing on this release must not abort the rest, which is
+    # what a single `apt-get install a b c` does — picom on focal took the whole desktop with it.
+    for p in $NEED; do
+      if apt-get install -y -qq "$p" >/dev/null 2>&1; then echo "    + $p"; else echo "    - $p (not available here)"; fi
+    done
   else
     echo "  desktop packages present"
   fi
@@ -83,10 +91,18 @@ unit_up() {
 }
 
 # ── 2. Window manager + compositor ───────────────────────────────────────────
-# xfwm4 draws the frames; picom is what makes the desktop look composited rather than flat.
-unit_up "grok-wm-$DISP"   /usr/bin/xfwm4 --compositor=off
-sleep 1
-unit_up "grok-picom-$DISP" /usr/bin/picom --backend xrender
+# xfwm4 draws the frames. Compositing makes the desktop look layered rather than flat; use a
+# standalone compositor when the release has one, otherwise let xfwm4 do it itself.
+COMPOSITOR="$(command -v picom || command -v compton || true)"
+if [ -n "$COMPOSITOR" ]; then
+  unit_up "grok-wm-$DISP" /usr/bin/xfwm4 --compositor=off
+  sleep 1
+  unit_up "grok-picom-$DISP" "$COMPOSITOR" --backend xrender
+else
+  echo "  no picom/compton — using xfwm4's own compositor"
+  unit_up "grok-wm-$DISP" /usr/bin/xfwm4 --compositor=on
+  sleep 1
+fi
 
 # ── 3. Dock ──────────────────────────────────────────────────────────────────
 # plank is the dock in the original box (the strip of icons along the bottom).

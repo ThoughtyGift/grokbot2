@@ -24,3 +24,6 @@ Thumbs.db
 
 # local backend state (bots, transcripts, settings)
 .data/
+
+# Bearer token for the box exec daemon — never commit.
+box-token.txt
