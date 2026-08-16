@@ -6,27 +6,56 @@ the original brain?" has a hard answer that changes how the backend must be buil
 Regenerate with:
 
 ```bash
+# descriptors + tool catalog, from the RENDERER bundle
 node services/grokbot-backend/scripts/extract-tools.mjs \
   <path-to>/renderer/assets/index-*.js docs/extracted
+
+# prompts, from the BOX HOST bundle — a different file, and the one that matters
+node services/grokbot-backend/scripts/extract-prompts.mjs \
+  <path-to>/host/host-main.cjs docs/extracted
 ```
 
 ---
 
-## 1. The short answer
+## 1. The short answer — corrected
 
-**No — the brain does not ship in the app, and no amount of extraction will produce it.**
+> **Superseded.** The first version of this document concluded "the brain does not ship, and no
+> amount of extraction will produce it." **That was wrong**, and the error is worth recording
+> because it is a research trap, not a typo: the search was run against
+> `dist/renderer/assets/index-*.js` only. The prompts live in `dist/host/host-main.cjs` — the
+> **box host**, which ships inside the very same `app.asar`. Searching one bundle and concluding
+> something about the app is how you miss 33 KB of prompt sitting in the next file over.
 
-The desktop app is a *renderer and a hand*. The *decision-making* is server-side.
+What actually ships, in `host-main.cjs`:
+
+| | |
+|---|---|
+| `buildSandBaseSystemPrompt` | **32,829 chars** — Grok Bot's own base system prompt |
+| `SAND_AUTO_REVIEW_CLASSIFIER_SYSTEM_PROMPT` | 58,221 chars |
+| 38 more prompts | subagent reminders, compaction, summarisation, wake/revival prompts |
+| 6 subagent configs | permission mode + model + which reminder |
+| 7 tool allowlists | which tools each subagent may use |
+
+Identified by content, not by name: the base prompt contains 14 mentions of `SendMessage`,
+32 of `box`, 12 of `cloud agent`, 11 of `MCP`, and rules about routines and reaction-only
+turns — i.e. it describes Grok Bot's behaviour, not a generic IDE assistant. It is assembled at
+runtime from flags (`${cloudAgentsEnabled ? … : …}`), so it is a *template*, not a fixed string.
+
+Everything is in `docs/extracted/subagent-prompts.{json,md}`.
+
+**What still does not ship**: the agent *loop* — model choice per turn, when to stop, how tool
+results re-enter context. The prompt is the instruction set; the server still runs the machine.
 
 ```
-        ┌── system prompt ──┐
-        │  agent loop       │   Cursor's servers (aiserver.v1)   ← NEVER shipped
-        │  model choice     │
+        ┌── agent loop ─────┐
+        │  turn control     │   Cursor's servers (aiserver.v1)   ← still NEVER shipped
+        │  model routing    │
         └───────────────────┘
                  │  emits ClientSideToolV2Call
                  ▼
         ┌───────────────────┐
-        │  the box          │   Linux pod: runs bash, files, the desktop
+        │  the box          │   Linux pod: bash, files, desktop
+        │  host-main.cjs    │   ← the prompts ARE here
         └───────────────────┘
                  │  local-exec channel (box asks the desktop)
                  ▼
@@ -35,22 +64,38 @@ The desktop app is a *renderer and a hand*. The *decision-making* is server-side
         └───────────────────┘
 ```
 
-**Proof that the prompt is absent**: the whole bundle contains exactly three matches for a
-system prompt, and all three are protobuf *field names* — `system_prompt_override`,
-`custom_system_prompt`, `system_prompt_spec`. There is no prompt text, no tool-choice logic,
-and no loop. Searches for the usual openings (`You are a…`) return zero.
-
-So the brain in `services/grokbot-backend/src/chat.ts` is, and must be, **ours**.
+So the loop in `services/grokbot-backend/src/chat.ts` must still be ours — but its **system
+prompt no longer has to be guessed**.
 
 ## 2. What *is* extractable — and it is a lot
 
-The renderer carries the full descriptor set, so every name survives minification.
+Two bundles, two different harvests. Search **both**.
 
-| Extracted | Count | File |
-|---|---|---|
-| Tools in `ClientSideToolV2` | **54** (48 with param schemas) | `docs/extracted/tool-catalog.json` |
-| `aiserver.v1` + `agent.v1` messages | **2496** + **928** | `docs/extracted/proto-messages.json` |
-| Enums | **182** | `docs/extracted/proto-enums.json` |
+| Extracted | Count | Bundle | File |
+|---|---|---|---|
+| Tools in `ClientSideToolV2` | **54** (48 with param schemas) | renderer | `docs/extracted/tool-catalog.json` |
+| `aiserver.v1` + `agent.v1` messages | **2496** + **928** | renderer | `docs/extracted/proto-messages.json` |
+| Enums | **182** | renderer | `docs/extracted/proto-enums.json` |
+| Prompts (incl. the base system prompt) | **40** | **host** | `docs/extracted/subagent-prompts.json` |
+| Subagent configs / tool allowlists | **6** / **7** | **host** | same |
+| Browser MCP actions (`cursor-ide-browser`) | **16** | **host** | same |
+
+### The browser surface
+
+The browser is **not** bespoke code — it is an MCP provider, `cursor-ide-browser`, wrapped in a
+`browserUse` subagent (`AGENT_ONLY`, model `claude-4.5-sonnet`, stateful/resumable, with
+`READ/GLOB/GREP/TODO_WRITE/SEMANTIC_SEARCH` for local context). Its 16 actions:
+
+```
+browser_navigate · browser_snapshot · browser_take_screenshot · browser_click
+browser_mouse_click_xy · browser_type · browser_fill · browser_select_option
+browser_press_key · browser_scroll · browser_drag · browser_get_bounding_box
+browser_highlight · browser_evaluate · browser_tabs · browser_cdp
+```
+
+That is near 1:1 with Playwright MCP, so "porting the browser" means pointing the loop at a
+browser MCP — not writing an automation layer. The box-side browser it drives is plain
+`google-chrome` on the desktop (see `box-architecture.md`).
 
 ### The 54 tools
 

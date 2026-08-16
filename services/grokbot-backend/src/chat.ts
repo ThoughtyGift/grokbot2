@@ -20,6 +20,9 @@ import { extname } from "node:path";
 import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
+import { BROWSER_TOOL_NAMES, isBrowserConfigured, runBrowserTool } from "./browser.js";
+import { TOOLS as BOX_TOOLS, toolProtocol as boxToolProtocol } from "./tools.js";
+import { boxConfigured } from "./box-exec.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
 /** The FE marks a reaction as the current user's when `by === "me"`. */
@@ -51,7 +54,10 @@ type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending"
 export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; images?: string[]; clientNonce?: string; isStreaming?: boolean })
   | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg; streaming?: boolean })
-  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; status: "pending" | "running" | "done" | "error"; result?: string });
+  // status "failed", not "error": the FE picks the tool card's icon with
+  // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
+  // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
+  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; status: "pending" | "running" | "done" | "failed"; result?: string });
 
 export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
@@ -128,8 +134,11 @@ function migrate(e: any, agentName: string): Entry | null {
   if (agents.size) console.log(`[grokbot2] restored ${agents.size} agent(s), ${[...transcripts.values()].flat().length} transcript entries`);
 }
 
-/** SAFE tools — pure, no side effects, no system access. The model may request these. */
-const TOOLS: Record<string, (arg: string) => string> = {
+/**
+ * SAFE tools — pure, no side effects, no system access. The model may request these.
+ * Async is allowed: the browser tools below reach the box over CDP and take real time.
+ */
+const TOOLS: Record<string, (arg: string) => string | Promise<string>> = {
   echo: (a) => a || "(empty)",
   time: () => new Date().toISOString(),
   reverse: (a) => [...a].reverse().join(""),
@@ -140,10 +149,38 @@ const TOOLS: Record<string, (arg: string) => string> = {
     try { return String(Function(`"use strict";return(${a})`)()); } catch { return "biểu thức không hợp lệ"; }
   },
 };
+
+// Browser actions are only offered when a box browser is actually configured — advertising
+// tools that cannot run just teaches the model to call them and fail.
+if (isBrowserConfigured()) {
+  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg) => runBrowserTool(name, arg);
+}
+
+// Shell and file tools, under their real ClientSideToolV2 names. Same rule as the browser:
+// only offered when a box exists, because they run inside it and nowhere else.
+if (boxConfigured()) {
+  for (const [name, spec] of Object.entries(BOX_TOOLS)) TOOLS[name] = (arg) => spec.run(arg);
+}
+
+/**
+ * The names and the "you already get the page back" rule come from the original's own
+ * browser-use subagent reminder (docs/extracted/subagent-prompts.md); reusing its vocabulary
+ * means a model that knows the original behaves correctly here.
+ */
+const BROWSER_PROTOCOL = isBrowserConfigured()
+  ? "\n\nTRÌNH DUYỆT: các công cụ browser_* điều khiển Chrome trong box và người dùng nhìn thấy " +
+    "trực tiếp trên màn hình. Đối số dạng JSON, ví dụ " +
+    'TOOL_CALL: browser_navigate({"url":"https://example.com"}) hoặc ' +
+    'TOOL_CALL: browser_fill({"selector":"#q","value":"xin chào"}). ' +
+    "Mỗi hành động đã tự trả về trạng thái trang sau đó, nên KHÔNG cần gọi browser_snapshot " +
+    "hay browser_take_screenshot ngay sau một hành động khác."
+  : "";
+
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
   "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
-  ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó.";
+  ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
+  BROWSER_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
@@ -349,11 +386,25 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
   if (tc) {
     if (approved) {
       const fn = TOOLS[p.name ?? ""];
-      tc.result = fn ? fn(p.arg ?? "") : "(unknown tool)";
-      tc.status = "done";
-      t.push({ id: nextId(), kind: "send-message", author: authorOf(p.agentId), message: { type: "text", content: `🔧 ${p.name}(${p.arg}) → ${tc.result}` }, timestampMs: Date.now() });
-      if (p.history) continueAfterTool(p.agentId, p.history, p.name ?? "", p.arg ?? "", tc.result);
-    } else { tc.status = "error"; tc.result = "denied"; }
+      if (!fn) {
+        tc.result = "(unknown tool)";
+        tc.status = "done";
+        t.push({ id: nextId(), kind: "send-message", author: authorOf(p.agentId), message: { type: "text", content: `🔧 ${p.name}(${p.arg}) → ${tc.result}` }, timestampMs: Date.now() });
+      } else {
+        // Browser actions take seconds, so show "running" and finish out of band rather than
+        // blocking the gateway reply the FE is waiting on.
+        tc.status = "running";
+        void Promise.resolve(fn(p.arg ?? ""))
+          .catch((e: Error) => `tool error: ${e.message}`)
+          .then((result) => {
+            tc.result = result;
+            tc.status = "done";
+            t.push({ id: nextId(), kind: "send-message", author: authorOf(p.agentId), message: { type: "text", content: `🔧 ${p.name}(${p.arg}) → ${result}` }, timestampMs: Date.now() });
+            onUpdate(p.agentId);
+            if (p.history) continueAfterTool(p.agentId, p.history, p.name ?? "", p.arg ?? "", result);
+          });
+      }
+    } else { tc.status = "failed"; tc.result = "denied"; }
   }
   onUpdate(p.agentId); return {};
 }

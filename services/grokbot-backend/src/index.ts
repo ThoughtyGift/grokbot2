@@ -14,6 +14,8 @@ import { saveNow } from "./store.js";
 import { chatSnapshot } from "./chat.js";
 import { startScheduler } from "./automations.js";
 import { reportBoxConfig } from "./forever-box.js";
+import { browserProbe, isBrowserConfigured } from "./browser.js";
+import { boxHealth } from "./box-exec.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -75,5 +77,13 @@ server.listen(config.port, "127.0.0.1", () => {
   console.log(`[grokbot2] backend on http://localhost:${config.port}`);
   console.log(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
   reportBoxConfig((msg) => console.log(`[grokbot2] ${msg}`));
+  if (isBrowserConfigured()) {
+    void browserProbe().then((s) => console.log(`[grokbot2] [browser] ${process.env.GROKBOT2_BROWSER_CDP} — ${s}`));
+  } else {
+    console.log("[grokbot2] [browser] GROKBOT2_BROWSER_CDP not set — browser_* tools are off.");
+  }
+  // State the truth about the box at startup: a shell tool that is quietly absent is
+  // indistinguishable from one that is broken.
+  void boxHealth().then((s) => console.log(`[grokbot2] [${s}`.replace("[box:", "[box]")));
   console.log(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
 });
