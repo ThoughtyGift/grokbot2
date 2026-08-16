@@ -42,7 +42,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return res.end(JSON.stringify({ token: "exec", authToken: "exec", url: `http://localhost:${config.port}/exec` }));
   }
   // ── box gateway (JSON + SSE + chat) ──
-  if (handleGateway(url, body, res)) return;
+  if (handleGateway(url, body, res, req.headers as Record<string, unknown>)) return;
 
   // ── ConnectRPC bootstrap (protobuf) ──
   const rpc = url.match(/\/([a-z0-9_.]+\.v\d+\.[A-Za-z]+)\/([A-Za-z]+)/i);

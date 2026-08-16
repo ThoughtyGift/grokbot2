@@ -422,6 +422,22 @@ TOOLS.ask_question = (arg, ctx) => {
  * renderer gives them no send button — see EmailDraftMsg — so the turn should say what it wants
  * to do with the draft rather than implying it went out.
  */
+/**
+ * Message another bot (`send_message` in the original's tool identifiers). This is what makes
+ * a roster act like a team: one bot briefs another and the reply comes back as its own turn.
+ */
+TOOLS.message_agent = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch {
+    const m = arg.match(/^\s*([^:,]+)\s*[:,]\s*([\s\S]+)$/);   // "Sales: nội dung"
+    spec = m ? { to: m[1], content: m[2] } : null;
+  }
+  const to = String(spec?.to ?? spec?.agent ?? spec?.name ?? "").trim();
+  const content = String(spec?.content ?? spec?.message ?? spec?.text ?? "").trim();
+  if (!to || !content) return 'message_agent cần {"to":"tên bot","content":"nội dung"}';
+  return messageAgent(ctx.agentId, to, content);
+};
+
 TOOLS.email_draft = (arg, ctx) => {
   let d: any;
   try { d = JSON.parse(arg); } catch { return 'email_draft cần {"to":["a@b.c"],"subject":"…","body":"…"}'; }
@@ -610,11 +626,17 @@ const DRAFT_PROTOCOL =
   'TOOL_CALL: slack_draft({"target":"#kenh","body":"..."}). ' +
   "Thẻ nháp chỉ để xem — hệ thống CHƯA gửi được, nên đừng nói là đã gửi; hỏi người dùng bước tiếp theo.";
 
+const PEER_PROTOCOL =
+  "\n\nNHẮN BOT KHÁC: các bot trong sidebar nhắn được cho nhau bằng " +
+  'TOOL_CALL: message_agent({"to":"tên bot","content":"..."}). ' +
+  "Dùng khi việc thuộc chuyên môn của bot khác; nói cho người dùng biết bạn đã nhắn ai. " +
+  "Trả lời của họ sẽ tới ở lượt sau, đừng chờ trong cùng một lượt.";
+
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
   "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
-  BROWSER_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
@@ -625,6 +647,30 @@ function parseToolCall(text: string): { name: string; arg: string } | null {
 
 let sink: (agentId: string) => void = () => {};
 export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; }
+
+/**
+ * Epoch for the ordered-replica protocol the client uses.
+ *
+ * The client keeps a replica of the transcript and only accepts events whose epoch matches
+ * the one it joined on; a mismatch parks them as "foreign" and drops them. So the epoch must
+ * be stable for as long as the history is append-only, and change only when history is
+ * rewritten — which for us means process start, since a restart reloads from disk.
+ */
+const EPOCH = Date.now();
+export const transcriptEpoch = (_agentId: string): number => EPOCH;
+
+/** The envelope the client's replica requires. `transcript:<id>` is its own key format. */
+export function orderedFor(agentId: string, sequence: number) {
+  return { replicaKey: `transcript:${agentId}`, epoch: EPOCH, sequence };
+}
+
+/** Newest entry of an agent, with its stable seq — what an event announces. */
+export function latestEntry(agentId: string): (Entry & { seq: number }) | null {
+  const all = transcripts.get(agentId) ?? [];
+  if (!all.length) return null;
+  const withSeq = ensureSeq(agentId, all);
+  return withSeq[withSeq.length - 1] ?? null;
+}
 let rosterSink: () => void = () => {};
 /** Push a roster change to the FE so add/delete shows up without waiting for its next poll. */
 export function setRosterSink(fn: () => void): void { rosterSink = fn; }
@@ -670,13 +716,19 @@ const textOf = (e: Entry): string =>
 const setText = (e: Entry, v: string): void => { if (e.kind === "send-message" && e.message.type === "text") e.message.content = v; };
 
 // ── roster ────────────────────────────────────────────────────────────────────
-export function createAgent(args: { name?: string } = {}): AgentRecord {
+/**
+ * The name arrives under several spellings depending on the caller: `updateAgent` takes
+ * `{id, profile:{name}}` (that nesting is why rename silently did nothing once — HANDOFF §5),
+ * so accept the same shape here rather than assuming create is the one that uses a flat key.
+ */
+export function createAgent(args: { name?: string; profile?: { name?: string }; displayName?: string } = {}): AgentRecord {
+  const wanted = args.name ?? args.profile?.name ?? args.displayName;
   const id = `agent-${agentSeq++}`;
   // Presence is stated explicitly rather than left undefined. The client tolerates missing
   // fields (`n?.isRunning ?? false`), but a record that never mentions them is how nobody
   // noticed the indicator was unimplemented for this long.
   const rec: AgentRecord = {
-    id, name: args.name || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false,
+    id, name: wanted?.trim() || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false,
     isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null,
   };
   agents.set(id, rec); transcripts.set(id, []); persist(); rosterChanged();
@@ -935,7 +987,7 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
 // `request_box_help` belongs here for the same reason as `ask_question`: it asks the user to
 // do something, it does not do anything itself. An approval card in front of it would make
 // them click Allow before being allowed to be asked for help.
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "echo", "time", "reverse", "upper", "count", "calc"]);
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /**
  * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
@@ -1097,6 +1149,52 @@ function reveal(target: Entry, full: string, agentId: string): void {
 export interface SendArgs {
   agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string };
   clientNonce?: string; attachments?: { path?: string; name?: string }[];
+}
+
+/**
+ * Bot-to-bot messaging.
+ *
+ * The original's transcript shows this as "Messaged Thư ký" / "Message from Sales" /
+ * "2 messages with 2 Bots". The renderer decides that purely from a `kind:"message"` entry
+ * carrying `toAgent` (outbound) or `fromAgent` (inbound) — client: `fm`. Both sides get an
+ * entry, so each bot's own transcript reads as a conversation.
+ *
+ * A hop budget is not optional. Two bots that answer each other will do so forever, burning
+ * pool quota with nobody watching; the original has orchestration to stop that and we do not.
+ */
+const MAX_HOPS = 3;
+const hops = new Map<string, number>();
+
+export function messageAgent(fromId: string, target: string, content: string): string {
+  const from = agents.get(fromId);
+  const wanted = target.trim().toLowerCase().replace(/^@/, "");
+  const to = agents.get(target) ??
+    [...agents.values()].find((a) => a.name.toLowerCase() === wanted) ??
+    [...agents.values()].find((a) => a.name.toLowerCase().includes(wanted));
+  if (!from || !to) {
+    const names = [...agents.values()].map((a) => a.name).slice(0, 12).join(", ");
+    return `(không tìm thấy bot "${target}"; có: ${names})`;
+  }
+  if (to.id === fromId) return "(không thể tự nhắn cho chính mình)";
+
+  const hop = (hops.get(fromId) ?? 0) + 1;
+  if (hop > MAX_HOPS) return `(đã đạt trần ${MAX_HOPS} lượt chuyển tiếp giữa các bot — dừng để tránh vòng lặp)`;
+
+  const now = Date.now();
+  // Outbound on the sender's side: the renderer labels this "Messaged <name>".
+  tail(fromId).push({ id: nextId(), kind: "message", role: "assistant", content, timestampMs: now,
+    toAgent: { id: to.id, name: to.name, kind: "agent" } });
+  onUpdate(fromId);
+
+  // Inbound on the recipient's side, then let it answer as if a person had written.
+  tail(to.id).push({ id: nextId(), kind: "message", role: "user", content, timestampMs: now + 1,
+    fromAgent: { id: from.id, name: from.name } });
+  to.unread = true;
+  hops.set(to.id, hop);
+  onUpdate(to.id);
+  sendPrompt({ agentId: to.id, content: `[từ bot ${from.name}] ${content}` });
+
+  return `đã nhắn cho ${to.name}`;
 }
 
 export function sendPrompt(args: SendArgs) {

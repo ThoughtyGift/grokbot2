@@ -44,9 +44,26 @@ const KEEP = [
   // so it describes what actually happens. 109/110/115 stay out — they are about connectors
   // and SearchPlugins, which we still do not have.
   106, 107, 108, 111, 112, 113, 114,
-  150, 151, 152, 153,                 // autonomy (154 = subagents)
+  82,                                 // the web is for looking things up — we have web_search/web_fetch
+  94, 95,                             // delegating to a subagent — task_v2 exists now
+  117, 118, 119,                      // debugging the box, and staying audible while you do
+  150, 151, 152, 153, 154,            // autonomy, including "blocked on the user"
   156, 157, 158, 159, 160, 161, 162,  // initiative
+  164, 166, 170, 171, 172, 174,       // when your own action needs approval — we have the card
 ];
+
+/**
+ * Chapters deliberately left out, so the next reader does not have to re-derive it:
+ *
+ *   14  SendMessage as the only voice   — inverted here; see the header
+ *   32  cloud agents, connectors, Cursor Origin, the user's own machine, threaded replies,
+ *       video subagents, plugin management — surfaces this backend does not have
+ *   4   `block_until_ms` background commands — run_terminal_command_v2 has no background mode
+ *   3   CheckSubagent / MessageSubagent — ours runs to completion, there is nothing to poll
+ *
+ * Re-check this list whenever a capability lands. Three chapters came back once subagents,
+ * MCP and the approval card existed, and they were only found by auditing, not by memory.
+ */
 
 /**
  * Rewrites applied in order. Each exists because the original phrasing names something we do

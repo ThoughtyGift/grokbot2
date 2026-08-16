@@ -39,6 +39,8 @@ import {
   bindHostSettings,
   chatSnapshot,
   type SendArgs,
+  orderedFor,
+  latestEntry,
 } from "./chat.js";
 import {
   getAgentAutomations,
@@ -81,7 +83,7 @@ const sseClients = new Set<ServerResponse>();
  * Without this you cannot tell "the push was delivered and ignored" from "the client is not
  * listening at all", and those need opposite fixes.
  */
-const sseStats = { opened: 0, closed: 0, lastOpenedMs: 0 };
+const sseStats: { opened: number; closed: number; lastOpenedMs: number; lastOpen?: unknown } = { opened: 0, closed: 0, lastOpenedMs: 0 };
 
 // Push a nudge so the frontend re-fetches the transcript when chat updates.
 const broadcast = (payload: unknown): void => {
@@ -90,7 +92,27 @@ const broadcast = (payload: unknown): void => {
     try { r.write(line); } catch { /* client gone */ }
   }
 };
-setUpdateSink((agentId) => broadcast({ kind: "transcript-updated", agentId }));
+// The client replicates an ordered log: an event without `ordered` is discarded, and until
+// one arrives it has no anchor, so every polled page after the first is thrown away too.
+// See docs/transcript-replica.md — the envelope is the whole point, the nudge was never enough.
+const announced = new Map<string, number>();
+setUpdateSink((agentId) => {
+  const last = latestEntry(agentId);
+  if (!last) { broadcast({ kind: "transcript-updated", agentId }); return; }
+  // onUpdate fires on every streamed token, so the same entry would be announced over and
+  // over at the same sequence. A replica accepts a sequence once; repeats read as already
+  // seen and are dropped, taking the real update with them. So "added" is sent once per
+  // sequence, and later touches of that entry are "updated".
+  const seen = announced.get(agentId);
+  const type = seen === last.seq ? "updated" : "added";
+  announced.set(agentId, last.seq);
+  broadcast({
+    kind: "transcript-updated",
+    agentId,
+    ordered: orderedFor(agentId, last.seq),
+    event: { type, entry: last },
+  });
+});
 // Roster add/delete: push immediately so the sidebar doesn't wait for its next poll.
 setRosterSink(() => broadcast({ kind: "roster-updated" }));
 setInterval(() => {
@@ -245,7 +267,7 @@ const methods: Record<string, (args: any) => unknown> = {
 };
 
 /** Returns true if it handled the request. */
-export function handleGateway(url: string, body: Buffer, res: ServerResponse): boolean {
+export function handleGateway(url: string, body: Buffer, res: ServerResponse, headers: Record<string, unknown> = {}): boolean {
   if (!url.startsWith("/gw/")) return false;
 
   if (url.startsWith("/gw/health")) {
@@ -254,6 +276,15 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse): b
     return true;
   }
   if (url.startsWith("/gw/events")) {
+    // Record who opens the stream and what they ask for. Something connects here, but no
+    // command table references it, so identifying the caller is the open question — the
+    // headers say whether this is the app's main process or one of our own probes.
+    sseStats.lastOpen = {
+      url,
+      accept: String(headers["accept"] ?? ""),
+      userAgent: String(headers["user-agent"] ?? ""),
+      lastEventId: String(headers["last-event-id"] ?? ""),
+    };
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
     res.write(": connected\n\n");
     res.write('event: ready\ndata: {"kind":"ready"}\n\n');
