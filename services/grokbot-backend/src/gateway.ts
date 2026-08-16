@@ -26,8 +26,15 @@ import {
   respondToWidget,
   submitSecret,
   dismissWidget,
+  setAgentNotificationsEnabled,
+  setAgentNotifyOnUpdates,
+  setAgentAvatarBytes,
+  getAgentAvatar,
   type SendArgs,
 } from "./chat.js";
+
+/** In-memory notification trays (the FE lists/dismisses these). */
+const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
 
 const sseClients = new Set<ServerResponse>();
 
@@ -52,7 +59,8 @@ setInterval(() => {
   }
 }, 5000);
 
-const HOST_SETTINGS = {
+/** Host settings are persisted in-memory and merged on write (the FE sends partial patches). */
+const hostSettings: Record<string, unknown> = {
   notifications: { isEnabled: false },
   mcpCustomInstructions: "",
   mcpCustomInstructionsByServerId: {},
@@ -68,8 +76,12 @@ const HOST_SETTINGS = {
 
 /** Gateway JSON method -> response value. Unknown methods return {}. */
 const methods: Record<string, (args: any) => unknown> = {
-  getHostSettings: () => HOST_SETTINGS,
-  setHostSettings: () => ({}),
+  getHostSettings: () => hostSettings,
+  // FE sends partial patches ({notifications:{…}}, {userTimeZone:…}) — merge, don't discard.
+  setHostSettings: (a) => {
+    if (a && typeof a === "object") for (const [k, v] of Object.entries(a)) if (v !== undefined) hostSettings[k] = v;
+    return hostSettings;
+  },
   getHostStatus: () => ({ isBusy: false, capabilities: {}, current: "applied", version: "0.20.0", state: "current" }),
   listAgents: () => listAgents(),
   countAgents: () => countAgents(),
@@ -100,8 +112,13 @@ const methods: Record<string, (args: any) => unknown> = {
   getAgentTranscript: (a) => transcriptTail(a?.agentId),
   getAgentTranscriptPage: (a) => transcriptTail(a?.agentId),
   getAgentThread: (a) => transcriptTail(a?.agentId),
-  getTrays: () => [],
-  clearTrays: () => ({}),
+  getTrays: () => trays,
+  dismissTray: (a) => { const i = trays.findIndex((t) => t.id === (a?.id ?? a?.trayId)); if (i >= 0) trays.splice(i, 1); return {}; },
+  clearTrays: () => { trays.length = 0; return {}; },
+  setAgentNotificationsEnabled: (a) => setAgentNotificationsEnabled(a),
+  setAgentNotifyOnUpdates: (a) => setAgentNotifyOnUpdates(a),
+  setAgentAvatarBytes: (a) => setAgentAvatarBytes(a),
+  getAgentAvatar: (a) => getAgentAvatar(a),
   skillsCatalog: () => [],
   syncPluginSkills: () => [],
   getPluginSyncStatus: () => ({}),

@@ -48,6 +48,7 @@ interface SecretMessage { type: "secret-request"; secret: { status: "pending" | 
 
 export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
+  avatarDataUrl?: string; avatarVersion?: string; notificationsEnabled?: boolean; notifyOnUpdates?: boolean;
 }
 
 const agents = new Map<string, AgentRecord>();
@@ -97,6 +98,22 @@ export function setAgentUnread(a: { id?: string; agentId?: string; unread?: bool
 }
 export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean }): Record<string, never> {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.hidden ?? true; return {};
+}
+export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.enabled ?? true; return {};
+}
+export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean }): Record<string, never> {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.enabled ?? true; return {};
+}
+export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase64?: string; bytes?: string }): AgentRecord | null {
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  const b64 = a.pngBase64 ?? a.bytes;
+  if (b64) { rec.avatarDataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`; rec.avatarVersion = String((entrySeq++)); }
+  return rec;
+}
+export function getAgentAvatar(a: { id?: string; agentId?: string }) {
+  const rec = agents.get(a.id ?? a.agentId ?? "");
+  return { avatarDataUrl: rec?.avatarDataUrl ?? "", avatarVersion: rec?.avatarVersion ?? "" };
 }
 
 // ── transcript ────────────────────────────────────────────────────────────────
