@@ -447,11 +447,37 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
 /** One model turn: stream tokens into `bubble`, then handle a TOOL_CALL if the model asked. */
 async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
   const opts = { url: config.poolUrl, key, model: config.model, system: config.system + TOOL_PROTOCOL, signal: controller.signal, ...(image ? { image } : {}) };
-  let acc = "";
+  // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
+  // in with no motion. Feed chunks into a target and let the displayed text catch up on a
+  // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).
+  let target = "";
+  let shown = 0;
+  let ticking = false;
+  const instant = process.env.GROKBOT2_PROGRESSIVE === "0";
+  const pump = (): void => {
+    if (controller.signal.aborted) { ticking = false; return; }
+    if (shown >= target.length) { ticking = false; return; }
+    ticking = true;
+    const step = Math.max(2, Math.ceil((target.length - shown) / 12));
+    shown = Math.min(target.length, shown + step);
+    setText(bubble, target.slice(0, shown));
+    bubble.timestampMs = Date.now();
+    onUpdate(agentId);
+    setTimeout(pump, 40);
+  };
   let r = await streamPool(history, opts, (chunk) => {
     if (controller.signal.aborted) return;
-    acc += chunk; setText(bubble, acc); bubble.timestampMs = Date.now(); onUpdate(agentId);
+    target += chunk;
+    if (instant) { setText(bubble, target); onUpdate(agentId); return; }
+    if (!ticking) pump();
   });
+  // Let the buffer drain before finishing the turn.
+  if (!instant && r.ok) {
+    for (let i = 0; i < 80 && shown < target.length && !controller.signal.aborted; i++) {
+      await new Promise((res) => setTimeout(res, 40));
+    }
+  }
+  const acc = target;
   // The pool's streaming route intermittently completes with no deltas (HTTP 200,
   // finish_reason "stop", empty content) while the non-streaming route answers fine —
   // so treat an empty stream as a failure and retry without streaming.

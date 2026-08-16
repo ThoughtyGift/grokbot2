@@ -1,36 +1,46 @@
 # FE / BE coverage audit
 
-> **Live number:** run `node services/grokbot-backend/scripts/e2e-coverage.mjs` against a running
-> backend — it replays every coordinator method the client bundle declares and prints
-> HANDLED vs NOT MAPPED. Currently **78 / 87 handled**; the 9 remaining are shared-rooms
-> (multiplayer) methods, which need a real relay server and can't be faked.
+Two numbers matter, and they measure different things:
 
+- **Method coverage** — `node services/grokbot-backend/scripts/e2e-coverage.mjs` replays every
+  coordinator method the client bundle declares. Currently **78 / 87 handled**.
+- **Argument shapes** — a method can be "handled" and still be dead if the handler reads the
+  wrong key. Five such bugs were found and fixed by extracting the FE's literal call sites
+  (`{id}` vs `{agentId}`, `profile.name`, `isEnabled`, `resolution`, the reaction shape).
+  Run the backend with `GROKBOT2_LOG=1` to log each method's args as they arrive.
 
-Snapshot of which Grok Bot FE surfaces the backend actually serves. Verdict: a thin but
-genuinely-working chat spine — after the P0 pass, core chat + roster are usable.
+## Works (verified in the running app)
 
-## Works
-- **Boot + identity** — auth JWT + bootstrap gates (`GetMe`, `GetSandAccessStatus=GRANTED`,
-  `EnsureSandBox`…) → renders past the paywall.
-- **Roster** — list / count / create / **rename / delete / duplicate / hide / unread** (P0 ✅).
-- **Chat** — multi-turn text via the Claude pool, agent naming, **progressive (typing) reveal**,
-  **interrupt** a running turn, **reactions**, **conversation outline**, prompt-acceptance (P0 ✅).
-- **Shell** — SSE refresh, settings render + onboarding bypass, `/gw/health` green.
+| Surface | Notes |
+|---------|-------|
+| Boot, auth, render | self-minted JWT, bootstrap gates, main window |
+| Roster | list · create · rename · delete · duplicate · hide · unread · avatar · notification flags |
+| Chat | send, real replies from the Claude pool, streaming, markdown, message-enter animation |
+| Reactions | chips render; clicking the same emoji toggles it off |
+| Tool calls | model emits `TOOL_CALL:` → approval card → approve → result → follow-up answer |
+| Transcript | paging (`beforeSeq`), outline, search, interrupt |
+| Persistence | agents, transcripts, settings and the acceptance ledger survive restarts |
 
-## Surface matrix
+## Stubbed — shape-correct, no feature behind it
 
-| Priority | Surface | Status |
-|----------|---------|--------|
-| P0 | Bot roster / sidebar | **WORKS** (list/create/rename/delete/duplicate/hide/unread) |
-| P0 | Chat transcript | **WORKS (text)** — streaming reveal + interrupt + reactions + outline; no tool-call/widget entries yet |
-| P0 | Composer | **WORKS (text)** — attachments/images/voice/@mentions pending |
-| P0 | Run controls | **interrupt WORKS**; kickstart/broadcast pending |
-| P1 | Approval flows (auto-review, tool-permission) | MISSING |
-| P1 | Agent edit / notifications / avatars | PARTIAL (rename done; avatars/notifications pending) |
-| P1 | Trays, Settings write | STUB |
-| P2 | workflows, automations, channels, subagents, MCP/plugins mgmt, skills publish, teach, sharing/rooms, forever-box, updates, egress, **VNC**, feedback | mostly MISSING |
+These answer their declared shape (array / record / null) so the UI shows an honest empty
+state instead of mis-parsing, but nothing is implemented: workflows, automations, channels &
+listeners, skill publishing, subagents, async tasks, cloud agent, forever-box, teach recording,
+media search, groups, trays, MCP servers, plugins/marketplace.
 
-## Next (P1 / P2)
-See [roadmap.md](roadmap.md). Biggest remaining chat gaps: tool-call/widget entry kinds +
-approval pipeline (needed the moment the agent uses a tool), attachments/images, real token
-streaming (needs a streaming pool endpoint — current reveal is client-side progressive).
+## Missing — needs real infrastructure
+
+| Gap | Why it can't just be stubbed |
+|-----|------------------------------|
+| **VNC / exec workspace** ("Can't reach … screen") | the pane streams a real Linux desktop (Xvfb + x11vnc + websockify) |
+| **Shared rooms** (9 methods) | multiplayer needs a relay server; faking it creates rooms nobody can join |
+| **Voice input / transcription** | needs an audio pipeline |
+| **Attachments beyond one image** | upload/stage/download are host-side surfaces |
+| **Updates, real usage/billing** | server-authoritative on Cursor's side |
+
+## Notes
+
+- Model latency through the pool: gemini-2.5-flash ~0.8s · gemini-3.7-flash ~2s (default) ·
+  sonnet ~5.7s · haiku ~6s · grok-4.5 ~12s. Override with `GROKBOT2_MODEL`.
+- The pool's streaming route intermittently returns no deltas; the backend falls back to the
+  non-streaming route so a reply is never lost.
