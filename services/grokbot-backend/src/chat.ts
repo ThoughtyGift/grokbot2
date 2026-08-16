@@ -7,10 +7,28 @@
  * by a local demo trigger (`/tool <name> <arg>`) using an allowlisted, side-effect-free
  * tool registry — NO system commands. This exists to exercise the approval UI.
  */
+import { readFileSync, existsSync, statSync } from "node:fs";
+import { extname } from "node:path";
 import { callPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 
 export const AUTH_ID = "auth0|grokbot2-user";
+
+const IMG_MIME: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+};
+/** Read the first image attachment (a local file path the FE staged) as a data: URL for the pool. */
+function readImageAttachment(atts?: { path?: string; name?: string }[]): string | undefined {
+  for (const a of atts ?? []) {
+    const mime = IMG_MIME[extname(a.path || a.name || "").toLowerCase()];
+    if (!mime || !a.path) continue;
+    try {
+      if (!existsSync(a.path) || statSync(a.path).size > 6_000_000) continue;
+      return `data:${mime};base64,${readFileSync(a.path).toString("base64")}`;
+    } catch { /* skip unreadable */ }
+  }
+  return undefined;
+}
 
 interface BaseEntry {
   entryId: string;
@@ -188,7 +206,7 @@ function reveal(entry: Extract<Entry, { kind: "agent-message" }>, full: string, 
   tick();
 }
 
-export interface SendArgs { agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string }; clientNonce?: string }
+export interface SendArgs { agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string }; clientNonce?: string; attachments?: { path?: string; name?: string }[] }
 
 export function sendPrompt(args: SendArgs) {
   let agentId = args.agentId || [...agents.keys()][0];
@@ -221,9 +239,10 @@ export function sendPrompt(args: SendArgs) {
     .filter((e): e is Extract<Entry, { kind: "user-message" | "agent-message" }> => e.kind === "user-message" || (e.kind === "agent-message" && !!e.text))
     .map((e) => ({ role: e.kind === "user-message" ? "user" : "assistant", content: e.text }));
 
+  const image = readImageAttachment(args.attachments);
   const controller = new AbortController();
   inflight.set(agentId, controller);
-  void callPool(history.length ? history : [{ role: "user", content: text }], { url: config.poolUrl, key, model: config.model, system: config.system, signal: controller.signal })
+  void callPool(history.length ? history : [{ role: "user", content: text }], { url: config.poolUrl, key, model: config.model, system: config.system, signal: controller.signal, ...(image ? { image } : {}) })
     .then((r) => {
       inflight.delete(agentId);
       if (controller.signal.aborted) return;

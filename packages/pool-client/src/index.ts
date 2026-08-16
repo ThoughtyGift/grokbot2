@@ -23,6 +23,8 @@ export interface PoolOptions {
   timeoutMs?: number;
   /** external abort signal (e.g. from interruptAgentRun) */
   signal?: AbortSignal;
+  /** optional image — base64 (data: URL or raw) or a URL; the pool supports vision */
+  image?: string;
 }
 
 export interface PoolResult {
@@ -40,6 +42,7 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
     system: opts.system,
     model: opts.model ?? "sonnet",
     maxTokens: opts.maxTokens ?? 2048,
+    ...(opts.image ? { image: opts.image } : {}),
   });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
