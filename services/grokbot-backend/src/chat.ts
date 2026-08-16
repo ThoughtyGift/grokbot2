@@ -117,7 +117,13 @@ type WidgetMsg = {
 };
 
 export type Entry =
-  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean })
+  /**
+   * A message between two bots. The renderer treats `kind:"message"` with either peer field
+   * set as inter-agent traffic (client: `fm`), and labels the group from direction and peer
+   * count: "Message from X" / "Messaged X" / "Messaged N agents" / "N messages with N agents".
+   * `toAgent.kind` is "agent" for a bot; other values mean a non-agent target.
+   */
+  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" } })
   // respondedValue / widgetDismissed live on the ENTRY, not inside message.widget — that is
   // what flips the card from "question" to "resolved" (client: HWn).
   | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
