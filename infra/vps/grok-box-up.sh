@@ -81,9 +81,15 @@ fi
 
 # Start a unit only if it isn't already active — every step below is re-runnable.
 #
-# Restart=always is not optional here. A desktop app that quits leaves the pane looking fine
-# while the agent's browser tools fail with "no page target", which reads as a broken backend
-# rather than a dead browser — Chrome exited on its own within the hour on first run.
+# Restarting matters: a desktop app that quits leaves the pane looking fine while the agent's
+# browser tools fail with "no page target", which reads as a broken backend rather than a dead
+# browser.
+#
+# But `Restart=always` was wrong for Chrome. Chrome relaunches itself (self-update, session
+# restore), which systemd sees as the main process exiting, so it started a SECOND Chrome —
+# 10 processes and 4 restarts in an hour, each one reopening the startup URL and yanking the
+# page out from under whoever was using it. `on-failure` restarts a crash without fighting a
+# deliberate or self-managed exit.
 unit_up() {
   local name="$1"; shift
   if systemctl is-active --quiet "$name" 2>/dev/null; then
@@ -91,7 +97,7 @@ unit_up() {
   fi
   systemctl reset-failed "$name" 2>/dev/null
   systemd-run --unit="$name" --collect --setenv=DISPLAY=":$DISP" \
-    --property=Restart=always --property=RestartSec=2 "$@" >/dev/null 2>&1 \
+    --property=Restart=on-failure --property=RestartSec=3 "$@" >/dev/null 2>&1 \
     && echo "  $name started" || echo "  $name FAILED"
 }
 
@@ -124,13 +130,19 @@ unit_up "grok-files-$DISP" /usr/bin/thunar
 # tunnel:  ssh -N -L 9223:127.0.0.1:$CDP_PORT <host>
 if [ -n "$CHROME" ]; then
   install -d -m 0700 "$PROFILE"
+  # No startup URL: the agent decides what to open, and a relaunch that reopens a page would
+  # throw away whatever it was working on. `about:blank` keeps a CDP page target available.
+  #
+  # The update/background flags are here because Chrome's own updater is what makes it exit:
+  # it restarts to apply an update, which is how the "browser jumps back to Google" loop began.
   unit_up "grok-chrome-$DISP" "$CHROME" \
     --no-sandbox --no-first-run --no-default-browser-check \
     --disable-features=Translate \
+    --disable-component-update --disable-background-networking --no-service-autorun \
     --user-data-dir="$PROFILE" \
     --remote-debugging-address=127.0.0.1 --remote-debugging-port="$CDP_PORT" \
     --window-position=120,60 --window-size=1400,900 \
-    "https://www.google.com"
+    "about:blank"
 else
   echo "  chrome not installed — skipping"
 fi
