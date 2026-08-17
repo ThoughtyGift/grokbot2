@@ -9,6 +9,7 @@
  */
 import { boxCall, boxConfigured } from "./box-exec.js";
 import { webSearch, webFetch } from "./web.js";
+import { isMcpConfigured, listMcpResources, readMcpResource } from "./mcp.js";
 
 export interface ToolSpec {
   /** Real tool name from ClientSideToolV2. */
@@ -368,6 +369,36 @@ export const TOOLS: Record<string, ToolSpec> = {
     },
   },
 };
+
+/**
+ * MCP resources — registered here rather than in chat.ts, and that is deliberate.
+ *
+ * chat.ts already folds this registry in (`for (const [name, spec] of Object.entries(availableTools()))`),
+ * so a tool added here needs no edit to a 2,000-line file that is currently mid-change. Same reach,
+ * far less risk.
+ *
+ * Only offered when `.mcp.json` declares a server. Advertising a tool that cannot run teaches the
+ * model to keep reaching for it — the argument the browser tools already make in chat.ts.
+ * `alwaysAvailable` because these need no box: MCP servers are local child processes.
+ */
+if (isMcpConfigured()) {
+  TOOLS.list_mcp_resources = {
+    name: "list_mcp_resources",
+    summary: "Liệt kê resource (tài liệu, file, bản ghi) của các server MCP đã nối",
+    usage: 'list_mcp_resources(<tên server>)  ·  bỏ trống để xem tất cả',
+    needsApproval: false,
+    alwaysAvailable: true,
+    run: (arg) => listMcpResources(arg),
+  };
+  TOOLS.read_mcp_resource = {
+    name: "read_mcp_resource",
+    summary: "Đọc nội dung một resource MCP theo URI",
+    usage: 'read_mcp_resource({"server":"<tên>","uri":"<uri>"})',
+    needsApproval: false,
+    alwaysAvailable: true,
+    run: (arg) => readMcpResource(arg),
+  };
+}
 
 /** Tools the model may request without an approval card. */
 export const isAutoApproved = (name: string): boolean => TOOLS[name]?.needsApproval === false;

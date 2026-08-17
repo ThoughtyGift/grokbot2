@@ -40,10 +40,23 @@ const CALL_TIMEOUT_MS = 60_000;
 interface ServerSpec { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
 interface McpTool { name: string; description?: string; inputSchema?: unknown }
 
+/** One resource a server exposes. Field names are the MCP spec's. */
+interface McpResource { uri: string; name?: string; description?: string; mimeType?: string }
+
 interface Live {
   proc: ChildProcessWithoutNullStreams;
   pending: Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>;
   buf: string;
+  /**
+   * What the server said it can do, from its `initialize` reply.
+   *
+   * Kept because `resources/list` is not universal: a server without the capability answers with an
+   * error, and asking anyway would surface a protocol failure as if the resource were missing. The
+   * reply was previously discarded — this is the first thing that needs it.
+   */
+  capabilities: Record<string, unknown>;
+  /** Cached `resources/list`, filled on first read. */
+  resources?: McpResource[];
   nextId: number;
   tools: McpTool[];
 }
@@ -114,7 +127,7 @@ async function start(name: string): Promise<Live> {
     shell: process.platform === "win32" && !isDirectExecutable(spec.command),
   }) as ChildProcessWithoutNullStreams;
 
-  const s: Live = { proc, pending: new Map(), buf: "", nextId: 0, tools: [] };
+  const s: Live = { proc, pending: new Map(), buf: "", nextId: 0, tools: [], capabilities: {} };
 
   // JSON-RPC frames are newline-delimited; a chunk can split or join them.
   proc.stdout.setEncoding("utf8");
@@ -145,11 +158,14 @@ async function start(name: string): Promise<Live> {
   live.set(name, s);
 
   const handshake = (async () => {
-    await rpc(s, "initialize", {
+    const hello = await rpc(s, "initialize", {
       protocolVersion: "2024-11-05",
-      capabilities: {},
+      // We now consume resources as well as tools. Declaring nothing was fine while only tools were
+      // used; a server may gate features on what the client claims, so say what we actually read.
+      capabilities: { tools: {}, resources: {} },
       clientInfo: { name: "grokbot2", version: "0.1.0" },
     });
+    s.capabilities = (hello?.capabilities ?? {}) as Record<string, unknown>;
     s.proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
     const listed = await rpc(s, "tools/list");
     s.tools = Array.isArray(listed?.tools) ? listed.tools : [];
@@ -181,6 +197,101 @@ export async function getMcpTools(arg: string): Promise<string> {
     }
   }
   return out.join("\n");
+}
+
+// ── resources ─────────────────────────────────────────────────────────────────
+//
+// The other half of MCP, and two of the six tools docs/execution-roadmap.md counts as genuinely
+// missing: `list_mcp_resources` and `read_mcp_resource`. Tools are things a server DOES; resources
+// are things it HAS — a file, a document, a record — addressed by URI. Same transport, same
+// handshake, two more methods.
+
+/** True when the server said it serves resources. Asking one that did not is a protocol error. */
+const servesResources = (s: Live): boolean =>
+  s.capabilities.resources != null && typeof s.capabilities.resources === "object";
+
+/**
+ * `list_mcp_resources` — what each server has, addressable by URI.
+ *
+ * Servers that do not declare the capability are named as such rather than skipped: "this server
+ * has no resources" and "this server does not do resources" are different facts, and the model
+ * needs the second one to stop asking.
+ */
+export async function listMcpResources(arg: string): Promise<string> {
+  const names = Object.keys(mcpServers());
+  if (names.length === 0) return `(chưa cấu hình MCP — tạo ${CONFIG} với {"mcpServers":{…}})`;
+
+  const wanted = arg.trim().replace(/^["']|["']$/g, "");
+  const targets = wanted ? names.filter((n) => n === wanted) : names;
+  if (targets.length === 0) return `(không có server "${wanted}"; có: ${names.join(", ")})`;
+
+  const out: string[] = [];
+  for (const name of targets) {
+    try {
+      const s = await start(name);
+      if (!servesResources(s)) { out.push(`${name}: (server này không hỗ trợ resources)`); continue; }
+      const listed = await rpc(s, "resources/list");
+      const items: McpResource[] = Array.isArray(listed?.resources) ? listed.resources : [];
+      s.resources = items;
+      if (items.length === 0) { out.push(`${name}: (không có resource nào)`); continue; }
+      // The URI is the only part the model must reproduce exactly, so it comes first.
+      out.push(
+        `${name}:\n` +
+          items.slice(0, 40).map((r) => {
+            const label = [r.name, r.mimeType].filter(Boolean).join(" · ");
+            return `  ${r.uri}${label ? `  (${label})` : ""}`;
+          }).join("\n") +
+          (items.length > 40 ? `\n  … còn ${items.length - 40} resource nữa` : ""),
+      );
+    } catch (e) {
+      out.push(`${name}: lỗi — ${(e as Error).message}`);
+    }
+  }
+  return out.join("\n");
+}
+
+/**
+ * `read_mcp_resource({server, uri})` — fetch one resource's contents.
+ *
+ * A reply carries `contents[]`, each entry either `text` or a base64 `blob`. Binary is reported by
+ * size and type rather than dumped: a base64 image in the transcript costs thousands of tokens and
+ * the model cannot see it anyway. Attaching it properly is `attach_file`'s job.
+ */
+export async function readMcpResource(arg: string): Promise<string> {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch {
+    // A bare URI is the obvious thing to type, so accept it when only one server serves resources.
+    spec = { uri: arg.trim().replace(/^["']|["']$/g, "") };
+  }
+  const uri = String(spec?.uri ?? spec?.resource ?? spec?.url ?? "").trim();
+  if (!uri) return 'read_mcp_resource cần {"server":"…","uri":"…"}';
+
+  const names = Object.keys(mcpServers());
+  let server = String(spec?.server ?? spec?.server_name ?? "").trim();
+  if (!server) {
+    if (names.length === 1) server = names[0];
+    else return `read_mcp_resource cần "server" khi có nhiều server (${names.join(", ")})`;
+  }
+  if (!names.includes(server)) return `(không có server "${server}"; có: ${names.join(", ")})`;
+
+  try {
+    const s = await start(server);
+    if (!servesResources(s)) return `(server "${server}" không hỗ trợ resources)`;
+    const res = await rpc(s, "resources/read", { uri });
+    const contents: any[] = Array.isArray(res?.contents) ? res.contents : [];
+    if (contents.length === 0) return `(${uri}: không có nội dung)`;
+    return contents.map((c) => {
+      if (typeof c?.text === "string") return c.text;
+      if (typeof c?.blob === "string") {
+        // Report, do not inline: base64 in the transcript is pure token cost.
+        const bytes = Math.floor((c.blob.length * 3) / 4);
+        return `(${c.mimeType ?? "nhị phân"}, ${bytes} byte — dữ liệu nhị phân, không hiển thị được ở đây)`;
+      }
+      return JSON.stringify(c);
+    }).join("\n\n");
+  } catch (e) {
+    return `Không đọc được ${uri}: ${(e as Error).message}`;
+  }
 }
 
 /** `call_mcp_tool({server, tool_name, tool_args})`. */

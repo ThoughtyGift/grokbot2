@@ -2,7 +2,7 @@
   "plan": "P2",
   "run": 7,
   "gate": "C",
-  "backendCommit": "93f00bf",
+  "backendCommit": "bcb6cb3",
   "local": {
     "cdp": "http://127.0.0.1:9222",
     "rowsVisited": 0,
@@ -11,7 +11,9 @@
   "goc": {
     "cdp": "http://127.0.0.1:9333",
     "rowsVisited": 0,
-    "blockers": []
+    "blockers": [
+      "needs-ultra"
+    ]
   },
   "surfaces": [
     {
@@ -45,7 +47,7 @@
     {
       "surface": "toolCards",
       "rule": "informational",
-      "local": 2,
+      "local": 4,
       "goc": 2,
       "verdict": "info"
     },
@@ -59,8 +61,8 @@
     {
       "surface": "screenPane",
       "rule": "informational",
-      "local": 0,
-      "goc": 2,
+      "local": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
@@ -73,21 +75,21 @@
     {
       "surface": "routines",
       "rule": "informational",
-      "local": 0,
-      "goc": 2,
+      "local": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
       "surface": "routineEventTriggers",
       "rule": "informational",
       "local": 0,
-      "goc": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
       "surface": "controls",
       "rule": "informational",
-      "local": 23,
+      "local": 72,
       "goc": 63,
       "verdict": "info"
     }
