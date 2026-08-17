@@ -27,7 +27,17 @@ const CONFIG = process.env.GROKBOT2_MCP_CONFIG ?? join(repoRoot, ".mcp.json");
 const START_TIMEOUT_MS = 60_000;
 const CALL_TIMEOUT_MS = 60_000;
 
-interface ServerSpec { command: string; args?: string[]; env?: Record<string, string> }
+/**
+ * `cwd` matters more than it looks.
+ *
+ * The spawn inherits this backend's working directory (`services/grokbot-backend`), so a server
+ * that resolves anything relative — a Python module beside itself, a config next to its entry
+ * point — cannot be launched without it. The hermes bridge is the case that forced it: its
+ * `mcp_serve` module is importable only from the hermes root, and `python -c` puts the working
+ * directory on `sys.path`. Claude Code and Cursor both accept `cwd` in the same config shape, so
+ * this is matching the format rather than extending it.
+ */
+interface ServerSpec { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
 interface McpTool { name: string; description?: string; inputSchema?: unknown }
 
 interface Live {
@@ -70,6 +80,14 @@ function rpc(s: Live, method: string, params?: unknown): Promise<any> {
   });
 }
 
+/**
+ * True when `command` names a real binary Windows can launch directly.
+ *
+ * Anything else — a bare `npx`, `npm`, a `.cmd` or `.bat` shim — needs a shell to resolve, and
+ * pays the argument-reparsing cost that comes with one.
+ */
+const isDirectExecutable = (command: string): boolean => /\.(exe|com)$/i.test(command.trim());
+
 /** Start a server and complete the MCP handshake, or throw with a usable reason. */
 async function start(name: string): Promise<Live> {
   const existing = live.get(name);
@@ -81,7 +99,19 @@ async function start(name: string): Promise<Live> {
   const proc = spawn(spec.command, spec.args ?? [], {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, ...(spec.env ?? {}) },
-    shell: process.platform === "win32",   // npx/npm are .cmd shims on Windows
+    ...(spec.cwd ? { cwd: spec.cwd } : {}),
+    // `shell` ONLY for shims, never for a real executable — it re-parses the arguments.
+    //
+    // `npx`/`npm` are `.cmd` files on Windows and cannot be spawned without a shell, which is why
+    // this was unconditional. But routing a direct `.exe` through `cmd.exe` hands the argument
+    // list back to cmd's parser, and cmd treats `;` and `&` as separators. The hermes bridge is
+    // launched as `python.exe -c "import mcp_serve; mcp_serve.run_mcp_server()"`, so the semicolon
+    // split the command and the server died at startup — reported only as `MCP server "hermes"
+    // exited`, which reads like the server's fault.
+    //
+    // Measured: with `shell` off, the same spawn completes the handshake on protocolVersion
+    // 2024-11-05, 2025-06-18 AND 2026-07-28. The version negotiation was never the problem.
+    shell: process.platform === "win32" && !isDirectExecutable(spec.command),
   }) as ChildProcessWithoutNullStreams;
 
   const s: Live = { proc, pending: new Map(), buf: "", nextId: 0, tools: [] };

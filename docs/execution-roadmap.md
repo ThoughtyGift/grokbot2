@@ -23,7 +23,15 @@
 | **Chìa khoá** | `app.asar` **chứa sẵn bản cài đặt của chính cái server ta đang giả lập** (hàm router `x3s`). Trích nó ra thành hợp đồng → "so với bản gốc" thành một bài test có đúng/sai. |
 | **Kết quả mong đợi** | 9/9 route · 111/120 lệnh · ảnh đại diện bot hiện · nhiều công cụ trong một lượt · kênh Slack/Discord chạy thật. (Avatar nhấp nháy: **đã xong**, xem §8.) |
 | **Tổng công** | ≈ 4–5 tuần cho P0–P7, trong đó P0+P1 (2,5 ngày) là điều kiện cần của tất cả. |
-| **Đã xong** | **P0 Đợt 1** (`41c3239`) · **P0 Đợt 2** (`d567153`) · **P4 presence** (`549b4db`) |
+| **Đã xong** | **P0** Đợt 1–3 · **P1** (gồm P1-3) · **P2** · **P3** · **P4** — Cửa A xanh cả 4 nhóm, `parity-report` = **111/120** |
+| **Còn chặn** | **P0-5 enforce** — app không gọi lại `EnsureSandBox` sau restart · **P6-2** — cần token nền tảng của người dùng · **đổi khoá pool** |
+
+### Chạy toàn bộ bằng một lệnh
+
+```
+node scripts/e2e-run.mjs --regression
+→ PASS  P0 A · P1 A · P2 A/B/C · P3 A/C      all gates green
+```
 
 ### ⚠️ Thứ tự đã sửa sau khi đo: Đợt 3 phải đi SAU P2
 
@@ -718,11 +726,31 @@ plugins/platforms/discord/adapter.py    9.463 dòng
 plugins/platforms/telegram/adapter.py   9.974 dòng
 ```
 
+### 9.2b ⚠️ Hai điều đo được khi bắt tay vào P6
+
+**1. Cần `mcp==2.0.0`, và nó xung đột với gói đã cài.** `mcp_serve.py` import
+`mcp.server.MCPServer` — API đó **không có** trong bản `mcp` đang cài trên máy (bản đó có
+`Server`). hermes khai báo nó trong extra riêng: `mcp = ["mcp==2.0.0", "httpx2==2.7.0",
+"starlette==1.3.1"]`. Cài đè toàn cục sẽ **thay gói `mcp` mà công cụ khác đang dùng**.
+
+→ **Phải cài vào venv riêng** (`hermes-agent-main/.venv`), và `.mcp.json` trỏ vào python của venv
+đó. Không đụng gì global; muốn bỏ thì xoá thư mục venv.
+
+Tin tốt: hermes chỉ có **5 dependency core** (`openai`, `certifi`, `python-dotenv`, `fire`,
+`httpx[socks]`), và Python 3.12.10 trên máy nằm trong khoảng `>=3.11,<3.14` nó yêu cầu.
+
+**2. P6-2 chặn bởi token của người dùng, không phải bởi code.** Cầu kênh chỉ có giá trị khi có
+Slack/Discord/Telegram thật để nối. Không token thì `channels_list` trả rỗng và `events_poll`
+không có gì để poll — **cài xong chỉ mua được phần đấu dây, chưa mua được tính năng.**
+
+→ Thứ tự thực tế: P6-1 và P6-3 làm được ngay và kiểm được (đếm đúng 10 tool). P6-2, P6-4, P6-5
+chờ token.
+
 ### 9.3 Task
 
 | Task | Việc |
 |---|---|
-| **P6-1** | Cài hermes: `pip install -e hermes-agent-main` (hoặc `uv sync`). Xác nhận `hermes --version`. |
+| **P6-1** | Cài hermes **vào venv riêng**: `python -m venv hermes-agent-main/.venv` rồi cài 5 dep core + extra `mcp`. Xác nhận `create_mcp_server()` dựng được. |
 | **P6-2** | Cấu hình ít nhất một nền tảng (Slack hoặc Discord hoặc Telegram) theo `hermes-agent-main/.env.example`. **Token đi qua env/tệp gitignored, không vào repo.** |
 | **P6-3** | Thêm `hermes` vào `.mcp.json`. Xác nhận `get_mcp_tools("hermes")` liệt kê đủ 10 tool. |
 | **P6-4** | Nối `events_poll`/`events_wait` vào `src/automations.ts`: thêm loại trigger `event` cạnh cron. Khi có sự kiện khớp → `sendPrompt` cho bot chủ. |
@@ -997,3 +1025,7 @@ completeMcpOAuth              requestWebAuthnCeremony       refreshMcp
 | 2026-08-17 | `hermes-agent-main/` gitignore, không vendor | 144 MB / 9.521 file / MIT third-party — commit vào đây sẽ lấn cả repo và trộn history của người khác |
 | 2026-08-17 | **Đợt 3 chuyển xuống sau P2** | Pha quan sát tìm ra 3 endpoint app đang gọi thật (`/gw/webauthn/responses`, `/gw/local-exec/responses`, `/health` gốc). Bật 404 lúc này sẽ 404 cả ba → hỏng app. Hai pha vừa chặn được một lần làm hỏng. |
 | 2026-08-17 | Hợp đồng asar **đúng 2/3, thiếu 1** | Hai endpoint dự đoán từ `x3s` đã được xác nhận bằng phép đo, kèm payload thật (`{"frames":[{"kind":"ping"}]}`). Nhưng `GET /health` ở gốc thì hợp đồng không có — bảng route là tương đối theo `baseUrl`. Xác nhận §13: tin phép đo hơn hợp đồng. |
+| 2026-08-17 | **Cửa C thu hẹp về build-level** | Bản đầu assert trên bề mặt đã render → đỏ 6 chỗ, cả 6 là **dữ liệu** (app gốc chạy workspace thật, app local gần rỗng). Thu về nhãn control cũng đỏ oan (`Bot settings` chỉ có khi mở panel). Phạm vi đúng: dấu hiệu render lỗi + trạng thái chặn + tập chrome cố định. Mọi thứ phụ thuộc dữ liệu → Cửa B. |
+| 2026-08-17 | **Vé gateway không xoay được** | Sau restart app, `stale-literal: 34` — app vẫn gửi `"gw-token"` cũ. Nó **cache box descriptor và không gọi lại `EnsureSandBox`**. Cố ý **không** ghim vé về literal cũ để "làm cho xanh": đèn xanh cho lớp bảo vệ hình thức tệ hơn đèn đỏ cho lỗ thật. P0-5 chặn bởi câu hỏi cụ thể: cái gì làm app bỏ descriptor. |
+| 2026-08-17 | **P3 xong — 111/120** | 18 lệnh cài xong, 9 shared-room ghi là quyết định. Đọc hợp đồng trước đã cứu `getTranscript` (không nhận body, một mình trong nhóm) và `deleteAgent` số ít. 10 lệnh vòng đời box trả `{ok:false, reason}` thay vì `{}` — `{}` không phân biệt được với "chạy rồi, không có gì báo". |
+| 2026-08-17 | **P6 cần venv riêng** | hermes cần `mcp==2.0.0`; bản `mcp` đang cài không có `MCPServer`. Cài đè global sẽ thay gói công cụ khác đang dùng → venv riêng trong `hermes-agent-main/.venv`. Và P6-2 chặn bởi **token nền tảng của người dùng**, không phải code. |

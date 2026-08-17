@@ -1,0 +1,60 @@
+{
+  "plan": "P3",
+  "run": 4,
+  "backendCommit": "7429862",
+  "regression": true,
+  "gocAvailable": true,
+  "gates": [
+    {
+      "plan": "P0",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P1",
+      "gate": "A",
+      "script": "extract-contract.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "B",
+      "script": "e2e-avatar.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "C",
+      "script": "parity-gate.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P3",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P3",
+      "gate": "C",
+      "script": "parity-gate.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "stoppedAt": null,
+  "pass": true
+}

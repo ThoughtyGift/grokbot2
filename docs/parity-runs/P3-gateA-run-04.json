@@ -1,0 +1,16 @@
+{
+  "plan": "P3",
+  "run": 4,
+  "gate": "A",
+  "backendCommit": "7429862",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "commands": {
+      "checks": 10,
+      "failed": 0
+    }
+  },
+  "pass": true,
+  "mismatches": []
+}

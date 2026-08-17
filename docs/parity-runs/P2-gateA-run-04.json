@@ -2,7 +2,7 @@
   "plan": "P2",
   "run": 4,
   "gate": "A",
-  "backendCommit": "93f00bf",
+  "backendCommit": "7429862",
   "appVersion": "0.20.0",
   "base": "http://localhost:8788",
   "summary": {
@@ -14,43 +14,11 @@
       "checks": 6,
       "failed": 0
     },
-    "commands": {
-      "checks": 10,
-      "failed": 1
-    },
     "channels": {
       "checks": 7,
       "failed": 0
     }
   },
-  "pass": false,
-  "mismatches": [
-    {
-      "gate": "A",
-      "check": "every command is implemented or deliberately skipped",
-      "expected": [],
-      "actual": [
-        "appendConnectorCard",
-        "autoUpdateBoxNow",
-        "clearBoxStoreNow",
-        "completeMcpOAuth",
-        "deleteAgent",
-        "getAgentTranscriptWindow",
-        "getBoxStoreStatus",
-        "getTranscript",
-        "openAgent",
-        "openAgentWindowed",
-        "prepareBoxForRecreate",
-        "refreshMcp",
-        "requestWebAuthnCeremony",
-        "resumeBoxAfterRecreate",
-        "setBoxMigrating",
-        "snapshotBoxStoreNow",
-        "updateHostNow",
-        "uploadAttachment"
-      ],
-      "loai": 1,
-      "note": "18 command(s) the client can send and we do not handle"
-    }
-  ]
+  "pass": true,
+  "mismatches": []
 }
