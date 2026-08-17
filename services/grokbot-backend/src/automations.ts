@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -241,6 +241,8 @@ bindAutomationCreate((agentId, spec) => {
   const list = createAgentAutomation({ id: agentId, spec });
   return list[list.length - 1]?.triggerDescription ?? null;
 });
+// And drop an agent's routines when the agent is deleted, so the scheduler stops trying to fire them.
+bindAutomationCleanup((agentId) => { if (byAgent.delete(agentId)) persistState(); });
 
 const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;

@@ -349,6 +349,9 @@ let automationCreateRef: ((agentId: string, spec: { name: string; prompt: string
 export function bindAutomationCreate(fn: (agentId: string, spec: { name: string; prompt: string; trigger: string }) => string | null): void {
   automationCreateRef = fn;
 }
+/** Same injection, for tearing an agent's routines down when the agent is deleted. */
+let automationCleanupRef: ((agentId: string) => void) | null = null;
+export function bindAutomationCleanup(fn: (agentId: string) => void): void { automationCleanupRef = fn; }
 const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
 export const persistState = persist;
 
@@ -1559,6 +1562,10 @@ export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: stri
     // A deleted bot cannot own a browser tab. Without this the box kept one open per bot that
     // ever browsed, long after the bot was gone.
     void closeAgentTab(id);
+    // Nor its routines. Deleting a bot left its automations in the scheduler — measured via
+    // listAllAutomations, which still listed agent-256/258/275 long after those bots were gone. An
+    // orphaned routine has an agentId nothing resolves, and the scheduler would still try to fire it.
+    automationCleanupRef?.(id);
   }
   persist(); rosterChanged(); return { deleted: ids };
 }
