@@ -69,29 +69,72 @@ function unescapeText(s: string): string {
 }
 
 /**
- * File tools accept either `{"path":…,"content":…}` or positional `path, content`. Models
- * reach for both, and the JSON form is the only one that survives content with commas.
+ * One argument, named — for EVERY tool, not just the file ones (P5-3).
+ *
+ * The `TOOL_CALL: name(arg)` convention carries a single string, so each tool used to chop that
+ * string up itself: `parts(arg, 3)`, `unquote(arg)`, `unescapeText(...)`. Three workarounds, each
+ * for a real observed failure — a quoted path becoming ENOENT, `"a.md", "text"` splitting wrongly
+ * once the content contains a comma, `\n` arriving as two visible characters. Positional parsing
+ * cannot be made correct; it can only be made less wrong.
+ *
+ * So JSON is the primary form now, everywhere, and positional stays as the fallback. Not deleted:
+ * models still write the positional form, and removing it would break calls that work today.
+ *
+ * ── The names are the ORIGINAL's ─────────────────────────────────────────────
+ *
+ * Taken from docs/extracted/tool-catalog.json rather than invented, because a model that knows the
+ * original writes ITS names — and three of ours did not match:
+ *
+ *   edit_file_v2   relative_workspace_path / contents_after_edit   (we used path / content)
+ *   delete_file    relative_workspace_path                          (positional only)
+ *   web_search     search_term                                      (positional only)
+ *
+ * `fileArgs` mapped `o[k] ?? o[k.replace(/_/g,"")]`, so a model sending
+ * `{"relative_workspace_path":"n.md","contents_after_edit":"x"}` — exactly what the original
+ * accepts — got two empty strings and the reply "Thiếu đường dẫn." Silent, and blamed on the model.
+ *
+ * Aliases keep our shorter names working, so nothing that worked before stops.
  */
-function fileArgs(arg: string, keys: string[]): Record<string, string> {
-  const t = arg.trim();
+export interface ArgSpec {
+  /** Canonical name: the original's, where the catalog has one. */
+  name: string;
+  /** Other spellings a model may reach for, ours included. */
+  aliases?: string[];
+}
+
+/**
+ * Read `raw` as JSON when it looks like an object, else positionally in `spec` order.
+ *
+ * Values are stringified: every consumer here passes them to the box as strings, and a number that
+ * silently becomes `"[object Object]"` is worse than one converted honestly.
+ */
+export function toolArgs(raw: string, spec: ArgSpec[]): Record<string, string> {
+  const t = raw.trim();
+  const out: Record<string, string> = {};
   if (t.startsWith("{")) {
     try {
       const o = JSON.parse(t);
-      if (o && typeof o === "object") {
-        const out: Record<string, string> = {};
-        for (const k of keys) {
-          const v = o[k] ?? o[k.replace(/_/g, "")] ?? "";
-          out[k] = typeof v === "string" ? v : v == null ? "" : String(v);
+      if (o && typeof o === "object" && !Array.isArray(o)) {
+        for (const { name, aliases } of spec) {
+          // Canonical first, then aliases, then the underscore-free spelling — the order matters
+          // only when a model sends two of them, and preferring the catalog name is the right bias.
+          const candidates = [name, ...(aliases ?? []), name.replace(/_/g, "")];
+          const hit = candidates.find((k) => o[k] !== undefined && o[k] !== null);
+          const v = hit === undefined ? "" : o[hit];
+          out[name] = typeof v === "string" ? v : String(v);
         }
         return out;                       // JSON already carries real newlines
       }
-    } catch { /* fall through to positional */ }
+    } catch { /* not JSON after all — fall through */ }
   }
-  const p = parts(t, keys.length);
-  const out: Record<string, string> = {};
-  keys.forEach((k, i) => { out[k] = unescapeText(p[i] ?? ""); });
+  const p = parts(t, spec.length);
+  spec.forEach(({ name }, i) => { out[name] = unescapeText(p[i] ?? ""); });
   return out;
 }
+
+/** Kept as a thin shim so existing call sites read unchanged. */
+const fileArgs = (arg: string, keys: string[]): Record<string, string> =>
+  toolArgs(arg, keys.map((name) => ({ name })));
 
 /** Mirrors `ListDirV2Result.DirectoryTreeNode`. */
 export interface TreeNode {
@@ -134,11 +177,12 @@ export const TOOLS: Record<string, ToolSpec> = {
   run_terminal_command_v2: {
     name: "run_terminal_command_v2",
     summary: "Chạy một lệnh shell trên máy tính của bạn",
-    usage: "run_terminal_command_v2(<lệnh>)",
+    usage: 'run_terminal_command_v2({"command":"<lệnh>"})  ·  hoặc run_terminal_command_v2(<lệnh>)',
     needsApproval: true,
     async run(arg) {
+      const { command } = toolArgs(arg, [{ name: "command", aliases: ["cmd", "shell"] }]);
       const r = await boxCall<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean; truncated: boolean }>(
-        "exec", { command: unquote(arg) }
+        "exec", { command }
       );
       const bits = [
         `exit=${r.exitCode}${r.timedOut ? " (timeout)" : ""}`,
@@ -152,10 +196,14 @@ export const TOOLS: Record<string, ToolSpec> = {
   read_file_v2: {
     name: "read_file_v2",
     summary: "Đọc nội dung một file trên máy tính của bạn",
-    usage: "read_file_v2(<đường dẫn>[, <dòng bắt đầu>, <số dòng>])",
+    usage: 'read_file_v2({"target_file":"<đường dẫn>","offset":<dòng bắt đầu>,"limit":<số dòng>})  ·  hoặc read_file_v2(<đường dẫn>[, <dòng>, <số dòng>])',
     needsApproval: false,
     async run(arg) {
-      const [path, offset, limit] = parts(arg, 3);
+      const { target_file: path, offset, limit } = toolArgs(arg, [
+        { name: "target_file", aliases: ["path", "file", "relative_workspace_path"] },
+        { name: "offset", aliases: ["from", "start", "line"] },
+        { name: "limit", aliases: ["count", "lines"] },
+      ]);
       const r = await boxCall<{ path: string; totalLines: number; from: number; to: number; content: string }>("read", {
         target_file: path,
         offset: offset ? Number(offset) - 1 : 0,   // the model counts from 1
@@ -178,10 +226,14 @@ export const TOOLS: Record<string, ToolSpec> = {
   edit_file_v2: {
     name: "edit_file_v2",
     summary: "Ghi (tạo hoặc thay toàn bộ) một file trên máy tính của bạn",
-    usage: 'edit_file_v2({"path":"<đường dẫn>","content":"<toàn bộ nội dung mới>"})',
+    usage: 'edit_file_v2({"relative_workspace_path":"<đường dẫn>","contents_after_edit":"<toàn bộ nội dung mới>"})',
     needsApproval: true,
     async run(arg) {
-      const { path, content } = fileArgs(arg, ["path", "content"]);
+      // The original's names are canonical; ours stay as aliases so calls that worked still do.
+      const { relative_workspace_path: path, contents_after_edit: content } = toolArgs(arg, [
+        { name: "relative_workspace_path", aliases: ["path", "target_file", "file"] },
+        { name: "contents_after_edit", aliases: ["content", "contents", "text"] },
+      ]);
       if (!path) return "Thiếu đường dẫn.";
       const r = await boxCall<{ path: string; bytes: number }>("write", { target_file: path, content });
       return `Đã ghi ${r.path} (${r.bytes} byte).`;
@@ -191,10 +243,14 @@ export const TOOLS: Record<string, ToolSpec> = {
   edit_file: {
     name: "edit_file",
     summary: "Sửa một đoạn trong file có sẵn, không cần gửi lại cả file",
-    usage: 'edit_file({"path":"<đường dẫn>","old_string":"<đoạn cũ>","new_string":"<đoạn mới>"})',
+    usage: 'edit_file({"relative_workspace_path":"<đường dẫn>","old_string":"<đoạn cũ>","new_string":"<đoạn mới>"})',
     needsApproval: true,
     async run(arg) {
-      const { path, old_string: oldString, new_string: newString } = fileArgs(arg, ["path", "old_string", "new_string"]);
+      const { relative_workspace_path: path, old_string: oldString, new_string: newString } = toolArgs(arg, [
+        { name: "relative_workspace_path", aliases: ["path", "target_file", "file"] },
+        { name: "old_string", aliases: ["old", "find"] },
+        { name: "new_string", aliases: ["new", "replace"] },
+      ]);
       if (!path || !oldString) return 'Cần: edit_file({"path":…,"old_string":…,"new_string":…}).';
       const r = await boxCall<{ path: string; replaced: number; bytes: number }>("replace", {
         target_file: path, find: oldString, replace: newString ?? "",
@@ -206,10 +262,13 @@ export const TOOLS: Record<string, ToolSpec> = {
   delete_file: {
     name: "delete_file",
     summary: "Xoá một file trên máy tính của bạn",
-    usage: "delete_file(<đường dẫn>)",
+    usage: 'delete_file({"relative_workspace_path":"<đường dẫn>"})  ·  hoặc delete_file(<đường dẫn>)',
     needsApproval: true,
     async run(arg) {
-      const r = await boxCall<{ path: string }>("remove", { target_file: unquote(arg) });
+      const { relative_workspace_path: target } = toolArgs(arg, [
+        { name: "relative_workspace_path", aliases: ["path", "target_file", "file"] },
+      ]);
+      const r = await boxCall<{ path: string }>("remove", { target_file: target });
       return `Đã xoá ${r.path}.`;
     },
   },
@@ -217,10 +276,16 @@ export const TOOLS: Record<string, ToolSpec> = {
   list_dir_v2: {
     name: "list_dir_v2",
     summary: "Liệt kê cây thư mục trên máy tính của bạn",
-    usage: "list_dir_v2(<thư mục>[, <độ sâu>])",
+    usage: 'list_dir_v2({"target_directory":"<thư mục>","depth":<độ sâu>})  ·  hoặc list_dir_v2(<thư mục>[, <độ sâu>])',
     needsApproval: false,
     async run(arg) {
-      const [dir, depth] = parts(arg, 2);
+      // `depth` is ours: the original's list_dir_v2 has target_directory + ignore_globs and no
+      // depth at all. Kept because the tree renderer needs a bound, and named plainly rather than
+      // dressed up as a catalog parameter.
+      const { target_directory: dir, depth } = toolArgs(arg, [
+        { name: "target_directory", aliases: ["dir", "path", "directory"] },
+        { name: "depth", aliases: ["levels", "maxDepth"] },
+      ]);
       const r = await boxCall<{ directory_tree_root: TreeNode }>("list", {
         target_directory: dir || ".",
         depth: depth ? Number(depth) : 2,
@@ -232,10 +297,18 @@ export const TOOLS: Record<string, ToolSpec> = {
   glob_file_search: {
     name: "glob_file_search",
     summary: "Tìm file theo mẫu tên trên máy tính của bạn",
-    usage: "glob_file_search(<mẫu>[, <thư mục>])",
+    usage: 'glob_file_search({"glob_pattern":"<mẫu>","target_directory":"<thư mục>"})  ·  hoặc glob_file_search(<mẫu>[, <thư mục>])',
     needsApproval: false,
     async run(arg) {
-      const [pattern, dir] = parts(arg, 2);
+      // ⚠ Positional order here is OURS, and it is the reverse of the catalog's field order:
+      // the original declares target_directory as field 1 and glob_pattern as field 2. Our `usage`
+      // has always said pattern-first, so the positional form stays pattern-first — changing it now
+      // would break every call a model makes from reading that line. The JSON form removes the
+      // ambiguity entirely, which is the strongest argument for P5-3 in this file.
+      const { glob_pattern: pattern, target_directory: dir } = toolArgs(arg, [
+        { name: "glob_pattern", aliases: ["pattern", "glob"] },
+        { name: "target_directory", aliases: ["dir", "path", "directory"] },
+      ]);
       const r = await boxCall<{ path: string; matches: string[] }>("glob", {
         glob_pattern: pattern, target_directory: dir || ".",
       });
@@ -248,13 +321,16 @@ export const TOOLS: Record<string, ToolSpec> = {
   web_search: {
     name: "web_search",
     summary: "Tìm kiếm trên web",
-    usage: "web_search(<từ khoá>)",
+    usage: 'web_search({"search_term":"<từ khoá>"})  ·  hoặc web_search(<từ khoá>)',
     needsApproval: false,
     alwaysAvailable: true,
     async run(arg) {
-      const r = await webSearch(unquote(arg));
+      const { search_term: term } = toolArgs(arg, [
+        { name: "search_term", aliases: ["query", "q", "term", "text"] },
+      ]);
+      const r = await webSearch(term);
       if (r.rejected) return "Cần từ khoá tìm kiếm.";
-      if (!r.references.length) return `Không tìm thấy kết quả cho "${unquote(arg)}".`;
+      if (!r.references.length) return `Không tìm thấy kết quả cho "${term}".`;
       return trim(r.references.map((x, i) => `${i + 1}. ${x.title}\n   ${x.url}${x.chunk ? `\n   ${x.chunk}` : ""}`).join("\n"));
     },
   },
@@ -262,11 +338,12 @@ export const TOOLS: Record<string, ToolSpec> = {
   web_fetch: {
     name: "web_fetch",
     summary: "Đọc nội dung một trang web",
-    usage: "web_fetch(<url>)",
+    usage: 'web_fetch({"url":"<url>"})  ·  hoặc web_fetch(<url>)',
     needsApproval: false,
     alwaysAvailable: true,
     async run(arg) {
-      const r = await webFetch(unquote(arg));
+      const { url } = toolArgs(arg, [{ name: "url", aliases: ["link", "href", "target"] }]);
+      const r = await webFetch(url);
       // A thin page sets `error` AND keeps what little it got: hiding the fragment would make
       // the model refetch to see it, and showing it without the warning is what let it treat a
       // bare page title as "I have read this site".
@@ -278,10 +355,14 @@ export const TOOLS: Record<string, ToolSpec> = {
   ripgrep_raw_search: {
     name: "ripgrep_raw_search",
     summary: "Tìm nội dung trong file trên máy tính của bạn",
-    usage: "ripgrep_raw_search(<mẫu>[, <thư mục>])",
+    usage: 'ripgrep_raw_search({"pattern":"<mẫu>","path":"<thư mục>"})  ·  hoặc ripgrep_raw_search(<mẫu>[, <thư mục>])',
     needsApproval: false,
     async run(arg) {
-      const [pattern, dir] = parts(arg, 2);
+      // These two ARE the catalog's names and its field order, so JSON and positional agree.
+      const { pattern, path: dir } = toolArgs(arg, [
+        { name: "pattern", aliases: ["query", "regex", "text"] },
+        { name: "path", aliases: ["dir", "directory", "target_directory"] },
+      ]);
       const r = await boxCall<{ path: string; matches: string[] }>("grep", { pattern, path: dir || "." });
       return trim(r.matches.length ? `${r.matches.length} dòng khớp trong ${r.path}:\n${r.matches.join("\n")}` : `Không tìm thấy "${pattern}" trong ${r.path}`);
     },
