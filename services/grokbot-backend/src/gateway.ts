@@ -39,7 +39,6 @@ import {
   bindHostSettings,
   chatSnapshot,
   type SendArgs,
-  nextTranscriptOrdered,
   latestEntry,
   nextRosterOrdered,
   agentById,
@@ -175,9 +174,11 @@ const broadcast = (channel: string, payload: unknown): void => {
     try { r.write(line); } catch { /* client gone */ }
   }
 };
-// The client replicates an ordered log: an event without `ordered` is discarded, and until
-// one arrives it has no anchor, so every polled page after the first is thrown away too.
-// See docs/transcript-replica.md — the envelope is the whole point, the nudge was never enough.
+// That claim was TRUE OF THE ROSTER AND WRONG OF THE TRANSCRIPT, and the difference cost a night:
+// "the client replicates an ordered log, an event without `ordered` is discarded, so the envelope is
+// the whole point". It is the point for the roster, whose rows carry snapshotEpoch/snapshotSeq in the
+// original too. Applying it to transcripts froze the pane instead — see the block below for what each
+// client wrote to disk. Generalising a measured fix to a neighbouring surface is the trap here.
 const announced = new Map<string, number>();
 setUpdateSink((agentId) => {
   const last = latestEntry(agentId);
@@ -204,11 +205,24 @@ setUpdateSink((agentId) => {
   const seen = announced.get(agentId);
   const type = seen === last.seq ? "updated" : "appended";
   announced.set(agentId, last.seq);
-  broadcast("transcript", {
-    agentId,
-    ordered: nextTranscriptOrdered(agentId),
-    event: { type, entry: last },
-  });
+  // ── NO `ordered` on transcript events. The original does not send one either. ──────────────
+  //
+  // Sending it is what froze the conversation pane. An `ordered` envelope opts the client into its
+  // strict replica mode, where every event must arrive with the next sequence for the epoch it
+  // joined on and anything else is parked as foreign and dropped. Proof is in what each client
+  // WROTE TO DISK — same binary, two servers:
+  //
+  //   original  6 of 6 transcripts   epochHint absent   acceptedSequenceHint absent
+  //   ours      agent-162            epochHint 1786987101659   acceptedSequenceHint 1
+  //
+  // The original never anchors a transcript at all; ours accepted exactly ONE event and then stood
+  // still, which is precisely the symptom — pane frozen or spinning while the sidebar, a different
+  // replica, stayed correct. It survived an app restart, which is what ruled out a stale epoch held
+  // by a long-lived client and pointed here instead.
+  //
+  // The envelope IS required for the roster — that was measured, and its rows carry snapshotEpoch and
+  // snapshotSeq in the original too. The mistake was generalising a roster fix to transcripts.
+  broadcast("transcript", { agentId, event: { type, entry: last } });
 });
 // Computer status: push it, rather than making the client wait for its own poll.
 //
