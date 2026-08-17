@@ -477,6 +477,69 @@ returning `{channels: []}`, an invented key, so our panel rendered empty where t
 lists both platforms as coming soon. Now we return the real manifests and an empty
 `connections`, which is byte-for-byte what the original produces with nothing connected.
 
+## 2r. Side-by-side E2E, and the two gaps it found
+
+Both instances open at once (local on CDP 9222, the original on 9333 with its own
+`--user-data-dir`), then compare the rendered DOM rather than the method table. Two things that
+every API-level test had passed turned out to be visibly wrong.
+
+### The sidebar had no second line
+
+The original's rows read `name / time / last message`; ours read only the name. The row
+component takes both from the **agent summary**, not from the transcript:
+
+```js
+m = put(t.lastEntry)     // preview text
+h = l5e(t.updatedAt)     // "9:03 AM" | "Yesterday" | weekday | date
+```
+
+so a record without them renders a name and two blanks — which is what we shipped.
+
+```
+updatedAt : ms. `l5e` returns "" for 0 or missing, hence no timestamp at all.
+lastEntry : {kind:"text", text}
+          | {kind:"attachment", count, kinds:[{kind, count}]}
+          | {kind:"link", url}
+```
+
+The attachment branch is where **"Sent 1 Markdown file"** comes from: the client pluralises
+`kinds` itself against a fixed table — image · video · audio · pdf · markdown · table · json ·
+text · document · archive · file — and anything outside it degrades to "file". A MIME type or a
+bare extension there reads "1 file" with no error. Tool echoes are skipped when picking the
+preview, or the sidebar shows raw JSON arguments where the reply belongs.
+
+Verified in the running app: `ChipTest2 · 9:11 AM · Sent 1 Markdown file`, and the file chip
+renders `ghi-chu.md / 31 B` with the same icon and download button as the original's
+`cinai-14day-calendar.md / 6.9 KB`.
+
+### The transcript showed its own plumbing
+
+Ours put two things in the bubble column that the original never shows:
+
+* `🔧 name({"json":"args"}) → result` after every tool, and
+* `Cần dùng công cụ \`x\`.` in place of the model's raw `TOOL_CALL:` text.
+
+The client's transcript builder explains why the original is clean:
+
+```js
+if (f.kind === "tool-call") { u && (c = f); continue; }
+```
+
+**tool-call entries are skipped when the visible list is assembled.** The original narrates
+what it is doing in prose and lets the working indicator carry the rest; the mechanics never
+reach the chat. Both of ours are removed — the tool-call entry is still emitted (it drives the
+indicator and the outline panel, and now carries the `summary` field the outline reads), it is
+simply not echoed as text, and the bubble holding the raw `TOOL_CALL:` is dropped rather than
+rewritten.
+
+The `isToolEcho` predicate stays: transcripts written before this still contain those bubbles,
+and they must keep out of both the model's history and the new sidebar previews.
+
+Confirmed at parity in the same pass, needing no change: `Messaged <bot>` and
+`Message from <bot>`, the file chip, screenshot attachments, the ask_question widget, the VNC
+pane and the Routines rail. Still only in the original: the collapsed **"N messages with
+<bot>"** grouping, which appears once several agent-to-agent entries sit together.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

@@ -209,14 +209,35 @@ times changed nothing: none of it ever got past the first check to be looked at.
 Channel names come from the client's own method-to-domain map: `transcript`, `roster`,
 `send`, `widgets`, `approvals`, `capabilities`, `sharing`, `automations`, plus `forever-box`.
 
-## Result
+## Result — the first numbers were a false positive
 
-Measured against the running app after wrapping events as `{channel, payload}`:
+The "0.4s" and "3.1s" reported after the `channel` fix were **not real**. The marker was
+embedded in the PROMPT, so the moment the user's own message rendered, the check matched. It
+was measuring the echo of the send, never the reply. Retracted.
 
-| | before | after |
-|---|---|---|
-| reply appears in the window | 33s, or never | **0.4s** |
-| typing indicator | never | **"Thinking" shows** |
+`scripts/e2e-debug.mjs` measures each stage separately and uses a marker only a reply can
+contain. Against the running app:
+
+```
+ok   1. backend answers
+ok   2. app is on the event stream          connected=1
+ok   3. app window reachable
+ok   4. a bot is open                       header says "Marketing"
+ok   5. backend produced the reply          5.0s
+ok   6. presence moved on the wire          working -> typing -> working -> none
+FAIL 7. app drew the indicator              not seen
+FAIL 8. app rendered the reply              not within 40s
+        transcript grew 10 -> 13
+```
+
+So the backend is right, presence is right, the stream is connected — and the app applies
+none of it. The `channel` wrapper was necessary (without it the decoder drops every event on
+its first line) but it is not sufficient. What remains unknown is the PAYLOAD shape each
+channel expects, which the coordinator forwards untouched: `onEvent({channel, payload})`.
+
+Two harness lessons, both of which had produced wrong conclusions earlier: identify the open
+bot from the CHAT HEADER rather than by matching transcript text against the screen, and
+never put the marker in the prompt.
 
 The lesson worth keeping: three correct payloads failed because of a wrapper, and nothing
 reported an error at any point. When repeated correct-looking fixes change nothing at all,

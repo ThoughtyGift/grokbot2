@@ -17,7 +17,10 @@ if (!p) { console.log("no renderer page"); process.exit(1); }
 if (BOT) {
   // Click the SIDEBAR row, not the first text match: a bot's name also appears inside other
   // conversations, and `text=Marketing` happily opened the chat that merely mentioned it.
-  const clicked = await p.evaluate((name) => {
+  // Locate the row, then click it with a real mouse event at its coordinates. Calling
+  // `.click()` on the container div returned true and changed nothing: the handler is bound
+  // to an inner element, so the synthetic click landed on a wrapper and was swallowed.
+  const box = await p.evaluate((name) => {
     const rows = [...document.querySelectorAll("div,li,a")].filter((e) => {
       if (e.offsetParent === null) return false;
       const r = e.getBoundingClientRect();
@@ -25,11 +28,14 @@ if (BOT) {
     });
     const hit = rows.find((e) => (e.innerText || "").split("\n")[0].trim() === name)
       ?? rows.find((e) => (e.innerText || "").split("\n")[0].trim().startsWith(name));
-    if (!hit) return false;
-    hit.click();
-    return true;
+    if (!hit) return null;
+    // A long roster scrolls: a row below the fold is in the DOM but not where it appears.
+    hit.scrollIntoView({ block: "center" });
+    const r = hit.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, BOT);
-  if (!clicked) console.log("could not find sidebar row:", BOT);
+  if (!box) console.log("could not find sidebar row:", BOT);
+  else { await p.mouse.click(box.x, box.y); }
   await p.waitForTimeout(2500);
 }
 
