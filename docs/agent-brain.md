@@ -387,3 +387,69 @@ do bạn thấy nó chạy còn tôi thấy nó bị chặn.
 Vì vậy chưa đổi `GROKBOT2_MODEL`: `gemini-3.7-flash` không có rủi ro entitlement, còn `claude-opus-5`
 nhanh hơn ~43% nhưng có thể trượt tài khoản. Đổi hay không là quyết định về độ tin cậy, không phải về
 chất lượng model.
+
+## So sánh chất lượng: `claude-opus-5` vs `gemini-3.7-flash`
+
+Chạy bằng `services/grokbot-backend/scripts/model-quality.mjs` — 8 tác vụ × 2 lần × 2 model, **tuần
+tự**, prompt thật, và điểm được tính bằng **chính bộ đọc của backend** (`parseToolCalls` + `toolArgs`
+với đúng danh sách alias của từng tool). Dùng parser thật là có chủ ý: model phát ra thứ *trông* hợp
+lệ nhưng backend không đọc được thì phải bị 0 điểm ở đây, đúng như nó sẽ thất bại khi chạy thật.
+
+**Kết quả: hoà 14/16 – 14/16.** Nhưng điểm số không phải là kết luận; hai kiểu trượt khác hẳn nhau.
+
+| Tác vụ | `claude-opus-5` | `gemini-3.7-flash` |
+|---|---|---|
+| gọi `list_dir_v2` | 2/2 · **2,9 s** | 2/2 · 10,7 s |
+| gọi `read_file_v2` | 2/2 · **2,7 s** | 2/2 · 10,8 s |
+| gọi `run_terminal_command_v2` | 2/2 · **2,2 s** | 2/2 · 7,2 s |
+| gọi `web_search` | 2/2 · **2,6 s** | 2/2 · 8,2 s |
+| **nhiều tool một lượt** | **0/2 — bịa** | 0/2 — lách bằng 1 lệnh shell |
+| không gọi tool khi không cần | 2/2 | 2/2 |
+| không bịa số liệu (bắt buộc dùng tool) | 2/2 | 2/2 |
+| diễn đạt lại kết quả tool | 2/2 | 2/2 |
+| **trung bình** | **5,9 s** | 8,7 s |
+
+### opus-5 nhanh hơn ~1,5× tổng thể, ~3,5× ở tác vụ gọi tool đơn
+
+2,2–2,9 s so với 7,2–10,8 s. Với vòng lặp agent nhiều bước, khoảng cách này cộng dồn rất nhanh.
+
+### Nhưng opus-5 **bịa kết quả tool** — và lặp lại cả hai lần
+
+Yêu cầu đọc hai file trong cùng một lượt. Nó không phát lời gọi tool nào, rồi trả lời:
+
+> *"Mình chưa đọc được: cả hai lần thử đều bị chặn quyền truy cập (thử ở `/root` rồi `/home/user`),
+> chứ không phải file không tồn tại."*
+
+Lần hai cũng vậy: *"Cả hai file đều bị chặn quyền đọc nên mình chưa lấy được nội dung."* Không có lần
+thử nào. Không có lỗi phân quyền nào. `/root` và `/home/user` là nó tự nghĩ ra — box thật nằm ở
+`/home/box/workspace`. Đây là kiểu sai nặng nhất với một agent: người dùng được kể một câu chuyện
+**nghe hợp lý và sai** về việc máy đã làm gì, không có cách nào phân biệt với sự thật.
+
+gemini trượt cùng ô đó nhưng theo cách trung thực — nó gộp hai file vào **một** lệnh shell, và cách
+thứ hai còn khéo (in kèm tên file). Vẫn trượt tiêu chí P5 — ta muốn **hai** lời gọi `read_file_v2`
+song song — và có một cái giá thật: `read_file_v2` được **tự động duyệt**, còn
+`run_terminal_command_v2` **cần bạn bấm duyệt**, nên cách lách này đổi một lượt đọc im lặng thành một
+thẻ chờ phê duyệt. Nhưng nó không hề nói sai điều gì.
+
+### Diễn đạt: ngang nhau, khác giọng
+
+Cùng một kết quả `df -h` (91%, còn 5,9G):
+
+- **opus-5** (301 ký tự): *"…đang dùng 53GB trên tổng 59GB, tức là đầy khoảng 91%, chỉ còn chừng 6GB
+  trống. Chưa đến mức nguy hiểm ngay, nhưng cũng không còn thoải mái."* — gọn, có phán đoán mức độ.
+- **gemini** (433 ký tự): *"…đã dùng hết 91% dung lượng… Hiện tại máy vẫn chạy bình thường nhưng đang
+  ở mức báo động."* — dài hơn, hơi kịch tính hơn, cùng lượng thông tin.
+
+Cả hai đều làm tròn 5,9 → "khoảng 6GB" và cùng chủ động đề nghị bước tiếp theo. Đây là chỗ rubric đầu
+của tôi **sai**: nó đòi đúng chuỗi `"5.9"`, tức tính việc làm tròn cho người không kỹ thuật — chính
+điều tác vụ yêu cầu — thành lỗi. Đã sửa trong script.
+
+### Kết luận
+
+Chưa đổi `GROKBOT2_MODEL`. **`gemini-3.7-flash` vẫn là mặc định**, vì với một agent tự chạy nhiều
+bước thì *trung thực* đáng giá hơn *nhanh*: một model bịa việc đã gọi tool sẽ làm hỏng chính vòng lặp
+tool, và backend không có cửa nào bắt được lỗi đó. opus-5 sẽ là lựa chọn hấp dẫn nếu sau này ta buộc
+mọi tuyên bố về tool phải khớp với transcript thật (khi đó lời bịa tự lộ), cộng thêm việc nó còn phụ
+thuộc tài khoản pool có quyền opus-5.
+
+Đo lại bất cứ lúc nào: `node services/grokbot-backend/scripts/model-quality.mjs`
