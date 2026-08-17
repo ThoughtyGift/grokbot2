@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { sendPrompt, persistState, bindAutomationsSnapshot, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -235,6 +235,12 @@ const agentIdOf = (a: any): string => a?.id ?? a?.agentId ?? "";
   if (restored.length) console.log(`[grokbot2] restored ${restored.length} routine(s)`);
 }
 bindAutomationsSnapshot(all);
+// Hand chat.ts a creator so `create_routine` can reach this module without importing it — the import
+// only ever goes one way, automations -> chat, and closing the loop would be a cycle.
+bindAutomationCreate((agentId, spec) => {
+  const list = createAgentAutomation({ id: agentId, spec });
+  return list[list.length - 1]?.triggerDescription ?? null;
+});
 
 const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;

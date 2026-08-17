@@ -340,6 +340,15 @@ export function bindHostSettings(get: () => Record<string, unknown>): void { hos
 // state.json would race the debounced write and silently drop whichever lost.
 let automationsRef: () => unknown[] = () => [];
 export function bindAutomationsSnapshot(get: () => unknown[]): void { automationsRef = get; }
+/**
+ * Injected the same way, and for the same reason: automations.ts imports THIS module, so reaching
+ * back the other way with a plain import would close the cycle. `create_routine` needs a creator, and
+ * this is the seam that already exists for exactly that.
+ */
+let automationCreateRef: ((agentId: string, spec: { name: string; prompt: string; trigger: string }) => string | null) | null = null;
+export function bindAutomationCreate(fn: (agentId: string, spec: { name: string; prompt: string; trigger: string }) => string | null): void {
+  automationCreateRef = fn;
+}
 const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
 export const persistState = persist;
 
@@ -583,6 +592,33 @@ TOOLS.create_agent = (arg, ctx) => {
   const brief = String(spec?.brief ?? spec?.role ?? spec?.instructions ?? "").trim();
   if (brief) for (const m of made) sendPrompt({ agentId: m.id, content: brief, fromAgent: { id: ctx.agentId, name: agents.get(ctx.agentId)?.name ?? "bot" } });
   return `đã tạo ${made.map((m) => m.name).join(", ")}`;
+};
+
+/**
+ * Let a bot schedule ITSELF — the piece the original has and we did not.
+ *
+ * Traced in the original's own history: nobody asked for a routine. The user said "mở đúng chat Thư ký
+ * trên Grok Bot. Muốn thử Slack thì bảo mình install", and the bot installed the Slack connector,
+ * connected it, then created a routine called "Slack lệnh Thư ký" and told the user to `/invite
+ * @Cursor`. The instruction it wrote is in ENGLISH inside an otherwise Vietnamese conversation and
+ * names the exact ids and roles of five sibling bots — which is the tell that the agent wrote it, not
+ * the person. The later `updated` event has no bot message before it: that one WAS the routine editor.
+ *
+ * The backend side already existed (`createAgentAutomation`, the scheduler, the panel); only the tool
+ * was missing, so the model had no way to reach any of it.
+ */
+TOOLS.create_routine = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { prompt: unquote(arg) }; }
+  const prompt = String(spec?.prompt ?? spec?.instruction ?? spec?.task ?? "").trim();
+  if (!prompt) return 'create_routine cần {"name":"tên","prompt":"việc cần làm","trigger":"0 9 * * *"}';
+  const name = String(spec?.name ?? spec?.title ?? "").trim() || "Routine";
+  // The trigger is a cron string, or a platform word for an event-driven routine. Passing the word
+  // through unchanged is what lets `listenerPlatform` recognise it and warn that nothing can fire it.
+  const trigger = String(spec?.trigger ?? spec?.schedule ?? spec?.when ?? "0 9 * * *").trim();
+  if (!automationCreateRef) return "(routine chưa sẵn sàng)";
+  const made = automationCreateRef(ctx.agentId, { name, prompt, trigger });
+  return made ? `đã tạo routine "${name}" — ${made}` : "(không tạo được routine)";
 };
 
 TOOLS.rename_agent = (arg, ctx) => {
