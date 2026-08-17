@@ -96,6 +96,16 @@ type TextMsg = { type: "text"; content: string };
 type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; target: string; requestId: string } };
 type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending" | "approved" | "denied"; summary: string; requestId: string } };
 /**
+ * "This routine cannot fire until you connect the platform it listens on."
+ *
+ * The original emits one 10ms after creating a routine whose trigger is a Slack mention, verbatim:
+ *   {"type":"listener-connect","platform":"slack","reason":"so this routine can fire"}
+ */
+type ListenerConnectMsg = { type: "listener-connect"; platform: string; reason: string };
+export type TranscriptEvent =
+  | { type: "name-changed"; from: string; to: string }
+  | { type: "automation-changed"; action: "created" | "updated" | "deleted"; automationId: string; automationName: string };
+/**
  * How an agent puts a picture in the transcript. This is the ONLY shape the renderer reads
  * for an agent-side attachment:
  *
@@ -149,11 +159,25 @@ export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" } })
   // respondedValue / widgetDismissed live on the ENTRY, not inside message.widget — that is
   // what flips the card from "question" to "resolved" (client: HWn).
-  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
+  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
-  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string });
+  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string })
+  /**
+   * Something that HAPPENED to the bot, recorded inline in its own transcript.
+   *
+   * Shapes copied from the original's stored replica rather than invented — its "Thư ký" carries
+   * five of these, three renames and two routine changes:
+   *
+   *   {"kind":"event","id":"event-<uuid>","event":{"type":"name-changed","from":"Inbox Triage","to":"Điều phối"},"timestampMs":…}
+   *   {"kind":"event","id":"event-<uuid>","event":{"type":"automation-changed","action":"created",
+   *     "automationId":"slack-l-nh-th-k","automationName":"Slack lệnh Thư ký"},"timestampMs":…}
+   *
+   * We already rename bots and create routines; we simply never wrote the fact down, so the history
+   * read as if the bot had always been called what it is called now.
+   */
+  | (Base & { kind: "event"; event: TranscriptEvent });
 
 /**
  * `currentActivity` — what the agent is doing, shown next to the typing indicator.
@@ -1456,10 +1480,41 @@ export const listAgents = (): RosterRow[] =>
   [...agents.values()].filter((a) => !a.hidden).map(summarise);
 export const countAgents = (): number => listAgents().length;
 // The FE sends {id, profile:{name,…}} — a bare `name` never arrives.
+/**
+ * Write an event into a bot's own transcript, the way the original records what happened to it.
+ *
+ * `id` carries the `event-` prefix the original uses; the client keys entries by id and the prefix is
+ * what distinguishes these from ordinary bubbles at a glance in a stored replica.
+ */
+export function pushTranscriptEvent(agentId: string, event: TranscriptEvent): void {
+  const t = transcripts.get(agentId);
+  if (!t) return;
+  t.push({ id: `event-${nextId()}`, kind: "event", event, timestampMs: Date.now() });
+  persist();
+  onUpdate(agentId);
+}
+
+/** Tell the user a routine cannot fire until its platform is connected. */
+export function pushListenerConnect(agentId: string, platform: string, reason = "so this routine can fire"): void {
+  const t = transcripts.get(agentId);
+  if (!t) return;
+  t.push({
+    id: nextId(), kind: "send-message", author: authorOf(agentId),
+    message: { type: "listener-connect", platform, reason }, timestampMs: Date.now(),
+  });
+  persist();
+  onUpdate(agentId);
+}
+
 export function updateAgent(a: { id?: string; agentId?: string; name?: string; profile?: { name?: string } }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const name = a.profile?.name ?? a.name;
-  if (typeof name === "string" && name.length > 0) rec.name = name;
+  if (typeof name === "string" && name.length > 0 && name !== rec.name) {
+    // Record the rename before applying it — the original keeps `from` and `to`, which is only
+    // possible while the old name is still here.
+    pushTranscriptEvent(rec.id, { type: "name-changed", from: rec.name, to: name });
+    rec.name = name;
+  }
   persist(); return rec;
 }
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {

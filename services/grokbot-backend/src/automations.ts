@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { sendPrompt, persistState, bindAutomationsSnapshot, isAgentRunning } from "./chat.js";
+import { sendPrompt, persistState, bindAutomationsSnapshot, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -275,13 +275,41 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   listFor(agentId).push(rec);
   persistState();
   console.log(`[grokbot2] routine created "${rec.name}" (${rec.triggerDescription})`);
+  // The original writes the change into the bot's own transcript, and then — 10ms later, measured —
+  // a card saying the routine cannot fire until its platform is connected. Both are copied from its
+  // stored replica; without them a routine appears in the side panel with no trace in the history,
+  // and one that can never fire looks identical to one that will.
+  pushTranscriptEvent(agentId, {
+    type: "automation-changed", action: "created", automationId: rec.id, automationName: rec.name,
+  });
+  const platform = listenerPlatform(trigger);
+  if (platform) pushListenerConnect(agentId, platform);
   return listFor(agentId);
+}
+
+/**
+ * Which platform a trigger listens on, when it is not something we can fire ourselves.
+ *
+ * A cron routine needs nothing — the scheduler in this process runs it. A routine woken by a Slack
+ * mention or a Discord message needs a listener on that platform, which this install does not have,
+ * so the honest thing is to say so at the moment the routine is created.
+ */
+function listenerPlatform(trigger: string): string | null {
+  const t = trigger.toLowerCase();
+  for (const p of ["slack", "discord", "telegram", "linear", "github"]) if (t.includes(p)) return p;
+  return null;
 }
 
 export function updateAgentAutomation(a: { id?: string; agentId?: string; automationId?: string; spec?: Spec }): Automation[] {
   const agentId = agentIdOf(a);
   const rec = listFor(agentId).find((x) => x.id === a?.automationId);
-  if (rec) { applySpec(rec, a?.spec ?? {}); persistState(); }
+  if (rec) {
+    applySpec(rec, a?.spec ?? {});
+    persistState();
+    pushTranscriptEvent(agentId, {
+      type: "automation-changed", action: "updated", automationId: rec.id, automationName: rec.name,
+    });
+  }
   return listFor(agentId);
 }
 
