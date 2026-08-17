@@ -33,6 +33,8 @@ export interface PoolResult {
   account?: string;
   error?: string;
   status?: number;
+  /** Set when the SSE route returned nothing and the non-streaming route answered instead. */
+  streamFellBack?: boolean;
 }
 
 /** Call the pool once and return the full assistant text (non-streaming). */
@@ -135,6 +137,33 @@ export async function streamPool(
           if (typeof piece === "string" && piece) { full += piece; onDelta(piece); }
         } catch { /* keep-alive or partial frame */ }
       }
+    }
+    // ── the empty-stream fallback ────────────────────────────────────────────
+    //
+    // The pool's SSE route regularly completes with NO content: HTTP 200, one chunk carrying
+    // `delta:{}` and `finish_reason:"stop"`, then `[DONE]`. Measured 17/08 with three attempts per
+    // model, same key, same prompt:
+    //
+    //   gemini-3.7-flash 0/3   gemini-3.6-flash 0/3   gemini-3.5-flash 0/3
+    //   gemini-2.5-pro   1/3   gemini-2.5-flash 1/3
+    //
+    // while the non-streaming route answered every single time. So this is not one bad model to be
+    // avoided by picking another — it is the streaming route, and switching models only changes how
+    // often you lose. (That mistake was made: the brain was moved to gemini-2.5-flash on the
+    // strength of ONE passing sample, which at 1/3 was luck rather than a fix.)
+    //
+    // Retrying here rather than in the caller is deliberate. `chat.ts` has a fallback of its own for
+    // this exact case and it was measured never firing, so a second one bolted on there would be a
+    // guess about why. At this layer the contract is simple and testable: streamPool RESOLVES WITH
+    // TEXT or it fails. Every caller — the turn loop, subagents, compaction — is fixed at once.
+    if (!full.trim()) {
+      const plain = await callPool(messages, opts);
+      if (plain.ok && (plain.text ?? "").trim()) {
+        // Hand the whole answer over as one delta so a caller doing typewriter output still animates.
+        onDelta(plain.text ?? "");
+        return { ...plain, streamFellBack: true };
+      }
+      return plain.ok ? { ok: false, status: plain.status, error: "pool returned no content on either route" } : plain;
     }
     return { ok: true, text: full, status: res.status };
   } catch (e: any) {

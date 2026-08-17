@@ -185,8 +185,9 @@ copied, because none is present. See `docs/legal.md`.
 
 | Model | streaming | latency | TOOL_CALL |
 |---|---|---|---|
-| **`gemini-2.5-flash`** ← đang dùng | **OK** | **1,8 s** | **CÓ** |
-| `gemini-3.7-flash` (mặc định cũ) | **RỖNG** | 6–18 s | có |
+| **`gemini-3.7-flash`** ← đang dùng | rỗng → **fallback** | 4,8 s | **CÓ** (kèm JSON tên thật) |
+| `gemini-3.6-flash` · `gemini-3.5-flash` | rỗng → fallback | 3,1 s | có |
+| `gemini-2.5-flash` | rỗng → fallback | 2,7 s | có |
 | `grok-4.5` | OK | **14 s** | **KHÔNG** |
 | `claude-opus-5` | **RỖNG** | 0,9 s | **KHÔNG** |
 
@@ -199,8 +200,10 @@ Danh sách model có thật lấy từ `GET /v1/models` (18 model) — trang `do
 `runViaCliProxy` → Claude Code CLI (:18803), xác thực bằng **subscription**, không phải API key.
 `MODEL_MAP` có `'claude-opus-5': 'claude-opus-5'` nên tên được truyền thẳng xuống CLI.
 
-Tổ chức của các tài khoản đó đã **tắt Claude Code subscription access**, nên stdout của CLI *chính là*
-câu lỗi, và bridge trả nó về như một kết quả thành công:
+**Đính chính (đo lại):** không phải "tắt Claude" nói chung — `claude-sonnet-5`, `claude-opus-4-5` và
+`claude-haiku-4-5` đều trả `"OK"` bình thường. Chỉ **riêng `claude-opus-5`** bị chặn, nên đây là
+vấn đề **entitlement theo từng model** (subscription không bao gồm opus-5), không phải cả kênh Claude.
+Stdout của CLI *chính là* câu lỗi, và bridge trả nó về như một kết quả thành công:
 
 ```
 success: true, result: "Your organization has disabled Claude subscription access for
@@ -244,3 +247,43 @@ Vì `grok-cli-proxy` có `buildToolSystemBlock(tools, toolChoice)`, tôi đã k�
 - với `grok-4.5` → bị bỏ qua, nó vẫn dùng tool riêng
 
 Nên P5 vẫn là loại 3: giao ước bằng chữ vẫn là lựa chọn bắt buộc trên route này.
+
+
+### Đo lại 17/08 (muộn hơn): streaming hỏng với MỌI model Gemini
+
+Ba lần mỗi model, cùng key, cùng prompt — trước khi có fallback:
+
+| Model | stream có nội dung | non-stream |
+|---|---|---|
+| `gemini-3.7-flash` | **0/3** | OK |
+| `gemini-3.6-flash` | **0/3** | OK |
+| `gemini-3.5-flash` | **0/3** | OK |
+| `gemini-2.5-pro` | 1/3 | OK |
+| `gemini-2.5-flash` | 1/3 | OK |
+
+Nên **đổi model chưa bao giờ là cách sửa** — nó chỉ đổi tần suất thua. Lần chuyển sang
+`gemini-2.5-flash` trước đó dựa trên **một mẫu may mắn**; ở mức 1/3 đó là may, không phải fix.
+
+Sửa đúng tầng: `streamPool` trong `packages/pool-client` tự gọi lại route non-stream khi stream
+rỗng. Sau đó **3/3 cho cả ba model**, và bộ não trở về `gemini-3.7-flash` — model mới nhất, và là
+model **duy nhất** phát TOOL_CALL đúng dạng JSON tên thật:
+
+```
+TOOL_CALL: list_dir_v2({"target_directory":".","depth":1})
+```
+
+### Vì sao model Claude không gọi được tool của ta (kể cả khi chạy được)
+
+Đo với prompt thật 8.943 token, trên các model Claude **chạy bình thường**:
+
+| Model | TOOL_CALL của ta | `<<TOOL_CALL>>` của proxy | Nó tự nói gì |
+|---|---|---|---|
+| `claude-sonnet-5` | KHÔNG | không | "tôi chỉ có công cụ để **đọc nội dung một file**" |
+| `claude-opus-4-5` | KHÔNG | không | "Công cụ **Read** của tôi…" |
+| `claude-haiku-4-5` | KHÔNG | không | hỏi lại cho rõ |
+
+`claude-opus-4-5` **tự gọi tên tool của nó: `Read`** — đó là toolset của Claude Code CLI. Và
+`openclaw-cli-proxy/proxy.mjs` có đúng cùng shim `TOOL_OPEN = '<<TOOL_CALL>>'` như grok. Nên model
+Claude đến với **danh tính agent và bộ tool riêng**, còn `TOOL_CALL: <tên>(<đối số>)` của ta là một
+giao ước cạnh tranh mà nó bỏ qua. Với `claude-opus-5` thì câu hỏi tool là **vô nghĩa** — nó bị chặn
+trước khi model kịp chạy.
