@@ -41,6 +41,8 @@ import {
   type SendArgs,
   orderedFor,
   latestEntry,
+  nextRosterOrdered,
+  agentById,
 } from "./chat.js";
 import {
   getAgentAutomations,
@@ -53,7 +55,7 @@ import {
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus, handBackBox } from "./forever-box.js";
-import { readAttachmentImage } from "./attachments.js";
+import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 
 /** In-memory notification trays (the FE lists/dismisses these). */
@@ -114,7 +116,14 @@ setUpdateSink((agentId) => {
   });
 });
 // Roster add/delete: push immediately so the sidebar doesn't wait for its next poll.
-setRosterSink(() => broadcast({ kind: "roster-updated" }));
+setRosterSink((agentId) => {
+  // A single-agent update needs the envelope or the client discards it outright; presence
+  // (isRunning / isComposingMessage) rides here, so without it the indicator never mounts.
+  const agent = agentId ? agentById(agentId) : undefined;
+  broadcast(agent
+    ? { kind: "roster-updated", ordered: nextRosterOrdered(), agent, activeAgentId: agent.id }
+    : { kind: "roster-updated" });
+});
 setInterval(() => {
   for (const r of sseClients) {
     try {
@@ -205,6 +214,10 @@ const methods: Record<string, (args: any) => unknown> = {
   clearAgentMemories: (a) => clearAgentMemories(a),
   // The desktop asks the box for attachment bytes once its own filesystem lookup misses.
   readAttachmentImage: (a) => readAttachmentImage(a),
+  // Non-image attachments (a .md the agent wrote, say). The file chip's preview asks for
+  // text; the markdown/pdf/table previews ask for raw bytes through chunked reads.
+  readAttachmentText: (a) => readAttachmentText(a),
+  readAttachmentChunk: (a) => readAttachmentChunk(a),
   // `rooms` is mapped without a guard on every poll, so a bare {} throws in the store.
   getSharingState: () => ({ rooms: [] }),
   isGlobalSearchEnabled: () => false,
@@ -215,7 +228,9 @@ const methods: Record<string, (args: any) => unknown> = {
   searchAgents: (a) => searchAgents(a),
   kickstartAgent: (a) => kickstartAgent(a),
   broadcastToAgents: (a) => broadcastToAgents(a),
-  getSubagents: () => getSubagents(),
+  // `{id: <parent agent id>}` — the client asks per parent, so dropping the argument here
+  // would return one agent's subagents under every agent.
+  getSubagents: (a) => getSubagents(a),
   getAsyncTasks: () => getAsyncTasks(),
 
   // ── P2: features we don't model yet — answer the DECLARED shape (array / record /
@@ -290,6 +305,22 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     res.write('event: ready\ndata: {"kind":"ready"}\n\n');
     sseClients.add(res);
     sseStats.opened += 1; sseStats.lastOpenedMs = Date.now();
+    // Establish the replica epoch immediately with a FULL roster snapshot.
+    //
+    // Until the client has an epoch it treats every event as foreign — it buffers them and
+    // returns — so per-agent presence updates were being discarded no matter how correct
+    // their envelope was. `coverage: complete-roster` is the client's own expected kind
+    // (K0t is constructed with expectedCoverageKind: "complete-roster").
+    const snap = listAgents();
+    res.write(`data: ${JSON.stringify({
+      kind: "roster-snapshot",
+      ordered: nextRosterOrdered(),
+      coverage: { kind: "complete-roster" },
+      agents: snap,
+      activeAgentId: snap[0]?.id ?? null,
+    })}
+
+`);
     res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; });
     return true;
   }
@@ -350,8 +381,20 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     } catch (e) {
       console.error(`[gateway] ${m[1]} threw:`, e);
     }
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(val));
+    const finish = (v: unknown) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(v ?? null));
+    };
+    // Handlers may be async. Every one used to be synchronous, so the result was stringified
+    // directly — which turns a Promise into `{}`: a 200 with an empty body, indistinguishable
+    // from a method that legitimately returns nothing. Awaiting is what makes the attachment
+    // readers (which have to reach the box) return anything at all.
+    if (val != null && typeof (val as { then?: unknown }).then === "function") {
+      void (val as Promise<unknown>).then(finish, (e) => {
+        console.error(`[gateway] ${m[1]} rejected:`, e);
+        finish(null);
+      });
+    } else finish(val);
     return true;
   }
   res.writeHead(200, { "content-type": "application/json" });

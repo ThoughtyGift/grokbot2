@@ -22,8 +22,8 @@ import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe } from "./browser.js";
 import { stageImage } from "./attachments.js";
-import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved } from "./tools.js";
-import { boxConfigured } from "./box-exec.js";
+import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
+import { boxConfigured, boxCall } from "./box-exec.js";
 import { requestBoxHelp, setHandBackSink, restoreHandoff, handoffEntries, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "./mcp.js";
@@ -438,6 +438,33 @@ TOOLS.message_agent = (arg, ctx) => {
   return messageAgent(ctx.agentId, to, content);
 };
 
+/**
+ * Attach a file the agent already wrote (with edit_file_v2) to the conversation.
+ *
+ * Kept separate from writing on purpose: the original writes and attaches as two visible
+ * steps, and folding them together would attach every scratch file the agent touches.
+ */
+TOOLS.attach_file = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
+  const path = String(spec?.path ?? spec?.file ?? spec?.target_file ?? "").trim();
+  if (!path) return 'attach_file cần {"path":"tên file trong box"}';
+
+  // Resolve to the absolute box path: the renderer keys the preview off exactly the string
+  // in `url`, so a relative path here and an absolute one at read time never meet.
+  let abs = path, size = 0;
+  try {
+    const r = await boxCall<{ path: string; totalSize: number }>("readBytes", { target_file: path, offset: 0, length: 0 });
+    abs = r.path; size = r.totalSize;
+  } catch (e) {
+    return `Không đọc được ${path}: ${(e as Error).message}`;
+  }
+  const fileName = abs.split("/").pop() || path;
+  const alt = String(spec?.alt ?? spec?.caption ?? fileName);
+  postFileAttachment(ctx.agentId, abs, fileName, alt);
+  return `Đã đính kèm ${fileName} (${size} byte).`;
+};
+
 TOOLS.email_draft = (arg, ctx) => {
   let d: any;
   try { d = JSON.parse(arg); } catch { return 'email_draft cần {"to":["a@b.c"],"subject":"…","body":"…"}'; }
@@ -534,16 +561,30 @@ TOOLS.task_v2 = async (arg, ctx) => {
   const task = String(spec?.prompt ?? spec?.task ?? spec?.description ?? "").trim();
   if (!task) return 'task_v2 cần {"subagent_type":"browserUse","prompt":"…"}';
 
-  return runSubagent(type, task, Object.keys(TOOLS), {
-    runTool: async (name, toolArg) => {
-      const fn = TOOLS[name];
-      if (!fn) return `(không có công cụ ${name})`;
-      try { return String(await fn(toolArg, ctx)); } catch (e) { return `lỗi: ${(e as Error).message}`; }
-    },
-    // The original tells the parent to keep the user posted while a subagent works; the
-    // subagent's own steps are the only honest source of that.
-    onStep: (text) => ctx.note(text),
-  });
+  // The title is the first line of the task, which is what the original's registry stores and
+  // what the subagent list shows. Registering before the run is the point: a list that only
+  // gains a row once the work finishes never shows anything as "running".
+  const title = task.split("\n")[0].slice(0, 80);
+  const subagentId = startSubagentRun(ctx.agentId, type, title);
+  try {
+    const out = await runSubagent(type, task, Object.keys(TOOLS), {
+      runTool: async (name, toolArg) => {
+        const fn = TOOLS[name];
+        if (!fn) return `(không có công cụ ${name})`;
+        try { return String(await fn(toolArg, ctx)); } catch (e) { return `lỗi: ${(e as Error).message}`; }
+      },
+      // The original tells the parent to keep the user posted while a subagent works; the
+      // subagent's own steps are the only honest source of that.
+      onStep: (text) => ctx.note(text),
+    });
+    // runSubagent reports its own refusals as text rather than throwing, so a leading "(" is
+    // the difference between "ran and answered" and "never started".
+    finishSubagentRun(ctx.agentId, subagentId, out.startsWith("(") ? "error" : "done");
+    return out;
+  } catch (e) {
+    finishSubagentRun(ctx.agentId, subagentId, "error");
+    throw e;
+  }
 };
 
 /**
@@ -671,10 +712,21 @@ export function latestEntry(agentId: string): (Entry & { seq: number }) | null {
   const withSeq = ensureSeq(agentId, all);
   return withSeq[withSeq.length - 1] ?? null;
 }
-let rosterSink: () => void = () => {};
+let rosterSink: (agentId?: string) => void = () => {};
 /** Push a roster change to the FE so add/delete shows up without waiting for its next poll. */
-export function setRosterSink(fn: () => void): void { rosterSink = fn; }
-const rosterChanged = (): void => rosterSink();
+export function setRosterSink(fn: (agentId?: string) => void): void { rosterSink = fn; }
+
+/**
+ * Roster ordering, separate from the transcript's.
+ *
+ * The client replicates the roster under its own key ("roster", coverage "complete-roster")
+ * and drops a single-agent update that has no envelope — which is exactly how presence, and
+ * therefore the typing indicator, never arrived.
+ */
+let rosterSeq = 0;
+export const nextRosterOrdered = () => ({ replicaKey: "roster", epoch: EPOCH, sequence: ++rosterSeq });
+export const agentById = (id: string): AgentRecord | undefined => agents.get(id);
+const rosterChanged = (agentId?: string): void => rosterSink(agentId);
 
 /** PascalCase names the client's activity table knows; anything else renders plain "Working". */
 const ACTIVITY_TOOL: Record<string, string> = {
@@ -700,7 +752,7 @@ function setPresence(agentId: string, patch: Partial<Pick<AgentRecord, "isRunnin
   for (const [k, v] of Object.entries(patch)) {
     if (bag[k] !== v) { bag[k] = v; changed = true; }
   }
-  if (changed) { rosterChanged(); persist(); }
+  if (changed) { rosterChanged(agentId); persist(); }
 }
 
 /** Everything presence-related back to idle. Called on every exit path, including failures. */
@@ -899,7 +951,57 @@ export function broadcastToAgents(a: { ids?: string[]; agentIds?: string[]; prom
   for (const id of ids) if (agents.has(id)) { sendPrompt({ agentId: id, content: text }); sent.push(id); }
   return { sent, count: sent.length };
 }
-export const getSubagents = (): unknown[] => [];
+/**
+ * The subagent list behind `getSubagents({id}) → array`.
+ *
+ * Shape is the host's `listSubagents()` verbatim — it maps its registry to
+ * `{subagentId, subagentType, title, status, startedAtMs}` and sorts by `startedAtMs`
+ * ascending. Two details are worth stating because guessing either one produces a list that
+ * renders but is wrong:
+ *
+ *  - `status` is `running | done | aborted | error`. **Not** "completed": that string is the
+ *    *outcome*'s value, which the host maps to `"done"` on the way into the registry
+ *    (`outcome.status === "completed" ? "done" : "error"`).
+ *  - `subagentType` is a free string taken straight from the task's `subagent_type`, not an
+ *    enum, so our own type names (browserUse / explore / shell) belong here as they are.
+ *
+ * The client also accepts a push: `ingestSubagentsEvent({parentAgentId, subagents})`.
+ */
+export interface SubagentRow {
+  subagentId: string;
+  subagentType: string;
+  title: string;
+  status: "running" | "done" | "aborted" | "error";
+  startedAtMs: number;
+}
+
+const subagentRuns = new Map<string, Map<string, SubagentRow>>();
+let subagentSeq = 1;
+
+/** Register a starting subagent and return its id, so the caller can settle it later. */
+export function startSubagentRun(parentAgentId: string, subagentType: string, title: string): string {
+  const subagentId = `sub-${subagentSeq++}`;
+  let rows = subagentRuns.get(parentAgentId);
+  if (!rows) { rows = new Map(); subagentRuns.set(parentAgentId, rows); }
+  rows.set(subagentId, { subagentId, subagentType, title, status: "running", startedAtMs: Date.now() });
+  onUpdate(parentAgentId);
+  return subagentId;
+}
+
+export function finishSubagentRun(parentAgentId: string, subagentId: string, status: SubagentRow["status"]): void {
+  const row = subagentRuns.get(parentAgentId)?.get(subagentId);
+  if (!row) return;
+  // Immutable update: the row is handed straight to the client, and mutating one it already
+  // holds is how a list stops re-rendering on a status change.
+  subagentRuns.get(parentAgentId)!.set(subagentId, { ...row, status });
+  onUpdate(parentAgentId);
+}
+
+export const getSubagents = (a: { id?: string; agentId?: string } = {}): SubagentRow[] => {
+  const rows = subagentRuns.get(a.id ?? a.agentId ?? "");
+  return rows ? [...rows.values()].sort((x, y) => x.startedAtMs - y.startedAtMs) : [];
+};
+
 export const getAsyncTasks = (): unknown[] => [];
 
 // ── run control ───────────────────────────────────────────────────────────────
@@ -924,6 +1026,25 @@ export function postAttachment(agentId: string, dataUrl: string, fileName: strin
   // the bytes come back through the gateway's readAttachmentImage. See attachments.ts.
   const path = stageImage(dataUrl, fileName);
   if (path == null) return;
+  tail(agentId).push({
+    id: nextId(),
+    kind: "send-message",
+    author: authorOf(agentId),
+    message: { type: "attachment", url: path, file_name: fileName, alt },
+    timestampMs: Date.now(),
+  });
+  onUpdate(agentId);
+}
+
+/**
+ * Put a file the agent wrote into the transcript as a chip.
+ *
+ * The same `type:"attachment"` message as a screenshot, but the url is the box path. The
+ * renderer picks the chip over the image component purely from the extension, and asks for
+ * the content through readAttachmentText / readAttachmentChunk when the chip is opened —
+ * so nothing is copied here, only referenced. See attachments.ts for both contracts.
+ */
+export function postFileAttachment(agentId: string, path: string, fileName: string, alt: string): void {
   tail(agentId).push({
     id: nextId(),
     kind: "send-message",
@@ -1149,6 +1270,8 @@ function reveal(target: Entry, full: string, agentId: string): void {
 export interface SendArgs {
   agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string };
   clientNonce?: string; attachments?: { path?: string; name?: string }[];
+  /** Set when the prompt came from another bot rather than the user — see messageAgent. */
+  fromAgent?: { id: string; name: string };
 }
 
 /**
@@ -1186,13 +1309,12 @@ export function messageAgent(fromId: string, target: string, content: string): s
     toAgent: { id: to.id, name: to.name, kind: "agent" } });
   onUpdate(fromId);
 
-  // Inbound on the recipient's side, then let it answer as if a person had written.
-  tail(to.id).push({ id: nextId(), kind: "message", role: "user", content, timestampMs: now + 1,
-    fromAgent: { id: from.id, name: from.name } });
+  // Inbound on the recipient's side. sendPrompt writes that entry itself, so pass `fromAgent`
+  // through rather than pushing one here too — doing both showed the message twice in the
+  // recipient's transcript, once labelled and once as a plain "[từ bot X] …" prompt.
   to.unread = true;
   hops.set(to.id, hop);
-  onUpdate(to.id);
-  sendPrompt({ agentId: to.id, content: `[từ bot ${from.name}] ${content}` });
+  sendPrompt({ agentId: to.id, content, fromAgent: { id: from.id, name: from.name } });
 
   return `đã nhắn cho ${to.name}`;
 }
@@ -1203,7 +1325,7 @@ export function sendPrompt(args: SendArgs) {
   const text = args.content ?? args.prompt ?? args.text ?? args.richText?.text ?? "";
   const t = tail(agentId);
 
-  const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}) };
+  const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}) };
   t.push(userEntry);
 
   // Record acceptance so the composer's poll confirms the bubble and refreshes the transcript.
@@ -1230,8 +1352,17 @@ export function sendPrompt(args: SendArgs) {
     return { accepted: true, entryId: userEntry.id, agentId };
   }
 
+  // A message from another bot is attributed in the model's history, not in the entry text —
+  // the entry carries `fromAgent` so the renderer can label it, and prefixing the stored text
+  // instead would put "[từ bot X]" inside the visible bubble as well.
   const history: PoolMessage[] = t.filter((e) => textOf(e) && !isToolEcho(e))
-    .map((e) => ({ role: e.kind === "message" && e.role === "user" ? "user" : "assistant", content: textOf(e) }));
+    .map((e) => {
+      const from = e.kind === "message" ? e.fromAgent : undefined;
+      return {
+        role: e.kind === "message" && e.role === "user" ? "user" : "assistant",
+        content: from ? `[tin nhắn từ bot ${from.name}] ${textOf(e)}` : textOf(e),
+      } as PoolMessage;
+    });
   const image = readImageAttachment(args.attachments);
   const controller = new AbortController();
   inflight.set(agentId, controller);

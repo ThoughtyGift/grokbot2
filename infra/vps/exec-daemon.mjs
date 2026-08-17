@@ -148,6 +148,26 @@ const handlers = {
     return { path: abs, replaced: all === true ? count : 1, bytes: Buffer.byteLength(next) };
   },
 
+  /**
+   * Raw bytes, for the desktop's attachment preview.
+   *
+   * Mirrors the original's `readAttachmentChunk({path, offset, length}) → {totalSize,
+   * bytesBase64}`: the client probes with `length: 0` to learn the size before deciding
+   * whether to fetch at all, so a zero length must return the size and no bytes rather
+   * than an error.
+   */
+  async readBytes({ target_file, path, offset, length }) {
+    const abs = safePath(target_file ?? path);
+    const info = await stat(abs);
+    if (!info.isFile()) throw new Error(`not a file: ${abs}`);
+    const totalSize = info.size;
+    const from = Math.max(0, Number(offset) || 0);
+    const want = Number(length) || 0;
+    if (want <= 0 || from >= totalSize) return { path: abs, totalSize, bytesBase64: "" };
+    const buf = await readFile(abs);
+    return { path: abs, totalSize, bytesBase64: buf.subarray(from, from + want).toString("base64") };
+  },
+
   // delete_file
   async remove({ target_file, path }) {
     const abs = safePath(target_file ?? path);

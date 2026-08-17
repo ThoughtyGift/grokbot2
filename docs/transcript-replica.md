@@ -151,3 +151,34 @@ The client component is complete (`EJn`): it returns
 `{isMounted, isExiting, mode, activity, activityElapsedMs}` with `typing` / `working` modes,
 a 140 ms exit transition, the activity label and an elapsed timer. Nothing needs building on
 that side. It has simply never been given a reason to mount.
+
+## Three guesses at the SSE payload, none of which worked
+
+The channel is confirmed: the app's main process opens `/gw/events` with
+`accept: text/event-stream`, user-agent `node` (undici inside Electron main). Presence is
+also confirmed correct on the wire — captured from our own stream:
+
+```
+roster seq=1  running=true  composing=false  activity={"kind":"thinking"}   -> "working"
+roster seq=2  running=true  composing=true   activity=null                  -> "typing"
+roster seq=3  running=false composing=false  activity=null                  -> "none"
+```
+
+Three payload shapes were tried against the real app. None changed anything:
+
+1. transcript events with `{ordered:{replicaKey:`transcript:${id}`,epoch,sequence}, event:{type,entry}}`
+2. roster events with `{ordered:{replicaKey:"roster",…}, agent, activeAgentId}`
+3. a full roster snapshot on connect, with `coverage:{kind:"complete-roster"}`, to establish
+   the epoch — since the client buffers every event as foreign until it has one
+
+All three were derived from RENDERER function signatures (`ingestEvent`, `ingestAgentsEvent`,
+`ingestAgentUpserted`). That is the flaw in the reasoning: those describe what the renderer
+receives over the coordinator port, not what electron-main parses off the SSE stream. The
+inference that main forwards the envelope as-is rests on `replicaKey` appearing zero times in
+`main.cjs` — which equally supports main not participating in this at all, with the renderer
+fed from somewhere else entirely.
+
+**Stop guessing here.** Three shapes tried blind is the signal. What settles it is seeing
+what a real box sends on that stream, which needs an entitled account, or finding the SSE
+parser in `main.cjs` by structure rather than by string search — every `text/event-stream`
+and `EventSource` hit so far has been undici's bundled library, not the app's own use of it.

@@ -331,6 +331,77 @@ Until it is known, the tools say plainly that nothing has been sent, and the pro
 model not to claim otherwise. Do not guess this one: emitting the wrong method name is the exact
 failure this document exists to record.
 
+## 2m. Bot-to-bot messaging — DONE
+
+`message_agent({"to":…,"content":…})`. The renderer needs nothing new: a `kind:"message"`
+entry carrying `toAgent` renders as "Messaged <name>" on the sender's side, and one carrying
+`fromAgent` renders as "Message from <name>" on the recipient's. Both come from the client's
+own `ide` switch, which treats `role:"user" && fromAgent != null` as an assistant-side entry
+rather than a user bubble.
+
+Two things worth keeping:
+
+* **One entry, not two.** The first version pushed the inbound entry itself *and* called
+  `sendPrompt` with a `[từ bot X] …` prefix, so the recipient saw the message twice. The
+  attribution now travels as a `fromAgent` field on `SendArgs`; the "[tin nhắn từ bot X]"
+  prefix is added only when building the model's history, never to the stored text.
+* **A hop counter** (`MAX_HOPS = 3`) stops two bots answering each other forever. It is keyed
+  on the receiving agent, so a chain A→B→C→… is what runs out, not one bot's own budget.
+
+## 2n. Writing files, and attaching one — DONE
+
+Names are the catalog's, not invented: `edit_file_v2` (whole-file write, from
+`EditFileV2Params.contents_after_edit`), `edit_file` (targeted, from `old_string`/`new_string`)
+and `delete_file`. All three require approval; the read-only tools do not. They are backed by
+the daemon's `write` / `replace` / `remove` ops, which were written earlier but had never been
+deployed — the box was still running a build whose op list ended at `grep`.
+
+**A latent bug this surfaced.** `parts()` called `unquote()` on the whole argument before
+splitting it. For one argument that is harmless; for two it is not, because `"a.md", "text"`
+begins and ends with a quote, so the outer pair came off and the path became `a.md"`. The box
+really did end up with a file named `bao-cao.md"`, trailing quote included. Each part is now
+unquoted individually. `glob_file_search(<pattern>, <dir>)` had the same defect and nobody had
+noticed.
+
+Contents also arrive through a `name(arg)` call rather than JSON, so a model writing markdown
+types `\n` and means a newline. The file tools accept a JSON object (preferred — it survives
+content containing commas) and unescape `\n`/`\t`/`\"` in the positional form.
+
+**Attaching a non-image.** The renderer's `qvn` routes a `type:"attachment"` message by
+extension alone: an http(s) url with no `file_name` is a link, a known image extension is an
+image, everything else is a **file chip**. So `attach_file` posts the same message shape as a
+screenshot with the box path as `url`. Opening the chip calls two gateway methods, and main.cjs
+forwards both to the box rather than answering them locally:
+
+```
+readAttachmentText({path})                   -> null | {kind:"binary", bytes}
+                                                    | {kind:"text", text, truncated, bytes}
+readAttachmentChunk({path, offset, length})  -> {totalSize, bytesBase64}    length:0 = probe
+```
+
+`bytes` is the file **size**, not its content — that is where the chip's "6.9 KB" comes from
+(client `Eft`: one decimal under 10 KB). Returning the text there would render a nonsense size
+and no error at all.
+
+**The bug that hid all of it.** The gateway dispatcher did `val = fn(args)` with no `await`.
+Every handler had been synchronous, so nobody had needed it; the two attachment readers are the
+first async ones, and `JSON.stringify(Promise)` is `{}`. A 200 with an empty body is
+indistinguishable from a method that legitimately returns nothing — the same "handled ≠ read
+correctly" class as every other entry in this document. The dispatcher now resolves promises.
+
+## 2o. The tunnel loop that never dialed
+
+`box-tunnel.ps1` skipped a cycle whenever *anything* held the local port ("do not fight a manual
+tunnel") and wrote nothing to its log until ssh exited. With a manual `ssh -L` already running,
+that meant an empty log file and a loop that neither dialed nor explained itself — it read as
+hung. The evidence that settled it was the absence of the log, not a guess about ssh.
+
+It now decides on a CDP probe instead of on whether the port is bound, because a half-dead ssh
+keeps a socket bound while forwarding nothing, and reports which of three states it is in
+whenever that changes: `up` (answers, whoever owns it), `blocked` (bound, no answer — needs a
+human), `dialing`. `-Status` prints the same in one line. Verified by killing the manual tunnel:
+detected and redialed in 19s.
+
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,

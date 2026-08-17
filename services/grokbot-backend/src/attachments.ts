@@ -115,3 +115,93 @@ export function readAttachmentImage(args: { path?: unknown }): { dataUrl: string
 
 /** For logging: how many images are held. */
 export const stagedCount = (): number => store.size;
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Files that are not images.
+ *
+ * The renderer routes a `type:"attachment"` message by extension (`qvn` in the client):
+ * an http(s) url with no file_name is a link, a known image extension is an image, and
+ * everything else — `.md` included — is a **file chip**. The chip opens a preview, and the
+ * preview is what asks for content, through two gateway methods the desktop calls straight
+ * through (they are NOT desktop-local, main.cjs forwards both to the box):
+ *
+ *   readAttachmentText({path})                    → null
+ *                                                 | {kind:"binary", bytes}
+ *                                                 | {kind:"text", text, truncated, bytes}
+ *   readAttachmentChunk({path, offset, length})   → {totalSize, bytesBase64}
+ *
+ * `bytes` is the file SIZE, not its content — that is where the chip's "6.9 KB" comes from
+ * (client `Eft`: <1 KB shows B, under 10 KB one decimal). Returning the text there instead
+ * would render a nonsense size and no error, so it is worth stating.
+ *
+ * A probe call arrives as `length: 0`, asking only for `totalSize`.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Matches the client's own text-preview extension list closely enough to agree with it. */
+const TEXT_EXTENSIONS = new Set([
+  "txt", "text", "log", "md", "markdown", "mdx", "rst", "adoc", "tex", "json", "jsonc",
+  "json5", "ndjson", "csv", "tsv", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf",
+  "env", "properties", "sh", "bash", "zsh", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx",
+  "css", "html", "sql", "go", "rs", "rb", "java", "c", "h", "cpp", "hpp",
+]);
+
+/** The head the original previews before declaring the rest truncated. */
+const TEXT_PREVIEW_CAP = 128 * 1024;
+
+const extensionOf = (path: string): string => {
+  const last = path.split(/[/\\]/).pop() ?? "";
+  const dot = last.lastIndexOf(".");
+  return dot <= 0 ? "" : last.slice(dot + 1).toLowerCase();
+};
+
+/**
+ * Where a non-image attachment's bytes come from.
+ *
+ * Staged bytes first (anything this backend produced itself), then the box, because the
+ * interesting case is a file the agent WROTE — `edit_file_v2("plan.md", …)` then attaching
+ * it. Those bytes only exist in the box, and reading them from disk here would find
+ * nothing.
+ */
+async function loadBytes(path: string): Promise<Buffer | null> {
+  const staged = store.get(path);
+  if (staged != null) return staged.bytes;
+  try {
+    const { boxCall, boxConfigured } = await import("./box-exec.js");
+    if (!boxConfigured()) return null;
+    const r = await boxCall<{ totalSize: number; bytesBase64: string }>("readBytes", {
+      target_file: path, offset: 0, length: TEXT_PREVIEW_CAP,
+    });
+    return Buffer.from(r.bytesBase64 ?? "", "base64");
+  } catch { return null; }
+}
+
+/** Bytes that are almost certainly not text: a NUL in the head is the usual give-away. */
+const looksBinary = (head: Buffer): boolean => head.includes(0);
+
+/** Gateway `readAttachmentText({path})`. */
+export async function readAttachmentText(args: { path?: unknown }): Promise<
+  { kind: "binary"; bytes: number } | { kind: "text"; text: string; truncated: boolean; bytes: number } | null
+> {
+  const path = typeof args?.path === "string" ? args.path : "";
+  if (!path) return null;
+  const buf = await loadBytes(path);
+  if (buf == null) return null;
+  const bytes = buf.length;
+  if (!TEXT_EXTENSIONS.has(extensionOf(path)) || looksBinary(buf.subarray(0, 4096))) return { kind: "binary", bytes };
+  const head = buf.subarray(0, TEXT_PREVIEW_CAP);
+  return { kind: "text", text: head.toString("utf8"), truncated: bytes > TEXT_PREVIEW_CAP, bytes };
+}
+
+/** Gateway `readAttachmentChunk({path, offset, length})`. `length: 0` is a size probe. */
+export async function readAttachmentChunk(args: { path?: unknown; offset?: unknown; length?: unknown }): Promise<
+  { totalSize: number; bytesBase64: string } | null
+> {
+  const path = typeof args?.path === "string" ? args.path : "";
+  if (!path) return null;
+  const buf = await loadBytes(path);
+  if (buf == null) return null;
+  const from = Math.max(0, Number(args?.offset) || 0);
+  const length = Number(args?.length) || 0;
+  if (length <= 0 || from >= buf.length) return { totalSize: buf.length, bytesBase64: "" };
+  return { totalSize: buf.length, bytesBase64: buf.subarray(from, from + length).toString("base64") };
+}

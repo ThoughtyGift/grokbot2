@@ -35,10 +35,17 @@ export function unquote(s: string): string {
   return pair('"', '"') || pair("'", "'") || pair("`", "`") ? t.slice(1, -1).trim() : t;
 }
 
-/** Split "a, b, c" into at most `n` parts, leaving the remainder in the last one. */
+/**
+ * Split "a, b, c" into at most `n` parts, leaving the remainder in the last one.
+ *
+ * Each part is unquoted, the whole argument is NOT. Unquoting up front looked harmless for
+ * one-argument calls but silently mangled every multi-argument one: `"a.md", "text"` starts
+ * and ends with a quote, so the outer pair came off and the first part became `a.md"` — which
+ * is how a file called `bao-cao.md"`, trailing quote included, ended up on the box.
+ */
 function parts(arg: string, n: number): string[] {
   const out: string[] = [];
-  let rest = unquote(arg);
+  let rest = arg.trim();
   while (out.length < n - 1) {
     const i = rest.indexOf(",");
     if (i < 0) break;
@@ -50,6 +57,41 @@ function parts(arg: string, n: number): string[] {
 }
 
 const trim = (s: string, max = 6000) => (s.length <= max ? s : `${s.slice(0, max)}\n… (cắt bớt, còn ${s.length - max} ký tự)`);
+
+/**
+ * File contents arrive through a `name(arg)` call, not JSON, so a model writing markdown
+ * types `\n` and means a newline. Left as-is the whole document lands on one line with
+ * visible backslashes — a file that is technically written and practically useless.
+ */
+function unescapeText(s: string): string {
+  return s.replace(/\\(n|r|t|"|'|\\)/g, (_, c) =>
+    c === "n" ? "\n" : c === "r" ? "\r" : c === "t" ? "\t" : c);
+}
+
+/**
+ * File tools accept either `{"path":…,"content":…}` or positional `path, content`. Models
+ * reach for both, and the JSON form is the only one that survives content with commas.
+ */
+function fileArgs(arg: string, keys: string[]): Record<string, string> {
+  const t = arg.trim();
+  if (t.startsWith("{")) {
+    try {
+      const o = JSON.parse(t);
+      if (o && typeof o === "object") {
+        const out: Record<string, string> = {};
+        for (const k of keys) {
+          const v = o[k] ?? o[k.replace(/_/g, "")] ?? "";
+          out[k] = typeof v === "string" ? v : v == null ? "" : String(v);
+        }
+        return out;                       // JSON already carries real newlines
+      }
+    } catch { /* fall through to positional */ }
+  }
+  const p = parts(t, keys.length);
+  const out: Record<string, string> = {};
+  keys.forEach((k, i) => { out[k] = unescapeText(p[i] ?? ""); });
+  return out;
+}
 
 /** Mirrors `ListDirV2Result.DirectoryTreeNode`. */
 export interface TreeNode {
@@ -121,6 +163,54 @@ export const TOOLS: Record<string, ToolSpec> = {
         enable_line_numbers: true,
       });
       return trim(`${r.path} (dòng ${r.from + 1}-${r.to} / ${r.totalLines})\n${r.content}`);
+    },
+  },
+
+  /**
+   * Writing files. Names come from the catalog rather than being invented: the original's
+   * `edit_file_v2` takes `relative_workspace_path` + `contents_after_edit` (a whole-file
+   * write) and `edit_file` takes `old_string`/`new_string` (a targeted one). Keeping both
+   * matters — resending a large file to change one line is how a careful edit turns into
+   * an accidental truncation.
+   *
+   * Both require approval. The read-only tools above do not; a write does.
+   */
+  edit_file_v2: {
+    name: "edit_file_v2",
+    summary: "Ghi (tạo hoặc thay toàn bộ) một file trong box",
+    usage: 'edit_file_v2({"path":"<đường dẫn>","content":"<toàn bộ nội dung mới>"})',
+    needsApproval: true,
+    async run(arg) {
+      const { path, content } = fileArgs(arg, ["path", "content"]);
+      if (!path) return "Thiếu đường dẫn.";
+      const r = await boxCall<{ path: string; bytes: number }>("write", { target_file: path, content });
+      return `Đã ghi ${r.path} (${r.bytes} byte).`;
+    },
+  },
+
+  edit_file: {
+    name: "edit_file",
+    summary: "Sửa một đoạn trong file có sẵn, không cần gửi lại cả file",
+    usage: 'edit_file({"path":"<đường dẫn>","old_string":"<đoạn cũ>","new_string":"<đoạn mới>"})',
+    needsApproval: true,
+    async run(arg) {
+      const { path, old_string: oldString, new_string: newString } = fileArgs(arg, ["path", "old_string", "new_string"]);
+      if (!path || !oldString) return 'Cần: edit_file({"path":…,"old_string":…,"new_string":…}).';
+      const r = await boxCall<{ path: string; replaced: number; bytes: number }>("replace", {
+        target_file: path, find: oldString, replace: newString ?? "",
+      });
+      return `Đã sửa ${r.path} (${r.replaced} chỗ, còn ${r.bytes} byte).`;
+    },
+  },
+
+  delete_file: {
+    name: "delete_file",
+    summary: "Xoá một file trong box",
+    usage: "delete_file(<đường dẫn>)",
+    needsApproval: true,
+    async run(arg) {
+      const r = await boxCall<{ path: string }>("remove", { target_file: unquote(arg) });
+      return `Đã xoá ${r.path}.`;
     },
   },
 
