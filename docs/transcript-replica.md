@@ -242,3 +242,56 @@ never put the marker in the prompt.
 The lesson worth keeping: three correct payloads failed because of a wrapper, and nothing
 reported an error at any point. When repeated correct-looking fixes change nothing at all,
 the thing to question is whether the message is being *read*, not what is inside it.
+
+---
+
+## Chưa sửa: replica lệch rồi không tự neo lại (18/08, đo trên phiên phát lại 66 lượt)
+
+**Triệu chứng người dùng thấy.** Khung hội thoại đứng yên trong khi bot vẫn chạy: sidebar cập nhật
+đúng (giờ, dòng preview mới), nhưng khung chat chậm ~7 lượt. Mở một bot **mới được agent tạo ra giữa
+chừng** (`Gmail`, `Discord CSKH`, `Quản lý`) thì **quay vòng mãi**, không bao giờ hiện nội dung.
+
+**Những gì đã loại trừ — bằng số đo, không phải suy đoán:**
+
+| Nghi ngờ | Kết quả đo | Kết luận |
+|---|---|---|
+| Backend treo | 83 entry, seq **2415** và tăng đều, `status: healthy` | **không** |
+| Epoch đổi do restart | epochHint client `1786989236125` vs backend `…130` — lệch **5 ms**, cùng tiến trình | **không** |
+| Lỗ hổng số thứ tự | nghe trực tiếp `/gw/events` 45 s, seq 2300→2415 **liên tục, không nhảy** | **không** |
+| Gateway nghẽn | `openAgentTail` **4–12 ms** mọi bot, kể cả tail **107 KB** | **không** |
+| Client không thèm hỏi | `openAgentTail` **1 → 12** sau các cú bấm; phản hồi có dữ liệu (4.243 byte) | **không** |
+
+Giả thuyết đầu tiên của tôi — "backend khởi động lại làm đổi epoch" — **sai**, và phép đo 5 ms là thứ
+bác bỏ nó. Ghi lại vì nó là cái bẫy tự nhiên nhất ở đây: `EPOCH = Date.now()` *thật sự* đổi mỗi lần
+khởi động, nên lời giải thích nghe rất hợp lý mà vẫn không phải nguyên nhân của lần này.
+
+**Phép thử phân định.** Bấm sang bot khác rồi quay lại `Thư ký` → khung **đuổi kịp ngay lập tức**.
+Nghĩa là dữ liệu vẫn tới được khi có một lần đọc lại, còn luồng sự kiện thì không tự đưa replica về
+đúng trạng thái.
+
+**Nguyên nhân.** Client dựng khung chat từ replica cục bộ của nó. Ta có đúng một cơ chế "thay nguyên
+khối" — gói **không kèm `ordered`**, đã ghi rõ trong chú thích ở `gateway.ts`:
+
+> Sent without `ordered` on purpose. The client's own handler reads that as "replace wholesale"
+> (`we.ordered == null ? x = b(Pe) : x.ingestSnapshot(…)`)
+
+nhưng ta **chỉ dùng nó cho roster**, lúc client nối lại luồng. Transcript thì không bao giờ được gửi
+ảnh chụp. Hệ quả gồm hai lớp:
+
+1. Replica của một hội thoại đang mở, một khi lệch, **không có đường về** — mọi sự kiện sau đó là
+   append lên một nền sai.
+2. Bot **sinh ra sau khi client đã nối luồng** thì client **chưa từng có replica**, nên khung chat
+   không có gì để dựng và quay vòng mãi. Sidebar vẫn đúng vì nó đi bằng roster, một replica khác.
+
+**Cách sửa (chưa làm).** Gửi ảnh chụp transcript **không kèm `ordered`** ở hai thời điểm:
+
+- khi client mở một hội thoại mà nó chưa có replica — đường `openAgentTail`;
+- khi luồng sự kiện nối lại, song song với ảnh chụp roster đang có sẵn ở `/gw/events`.
+
+Kèm theo: `nextTranscriptOrdered` và `EPOCH` hiện đều **sinh lại từ đầu mỗi lần tiến trình khởi
+động**, trong khi lịch sử được nạp lại nguyên vẹn từ đĩa — tức một lần khởi động lại **không phải** là
+"history rewritten" như chú thích ở `chat.ts` giả định. Nên cân nhắc lưu epoch + seq xuống `.data` để
+restart không còn là một lần lệch replica nữa.
+
+**Vì sao chưa sửa ngay:** sửa `src/` sẽ khiến `tsx watch` khởi động lại và giết phiên phát lại đang ở
+54/66 lượt — mất 23 phút dữ liệu đối chiếu với bản gốc. Để làm một thể sau khi phát lại xong.
