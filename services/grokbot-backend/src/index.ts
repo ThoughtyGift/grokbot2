@@ -18,7 +18,7 @@ import { browserProbe, isBrowserConfigured } from "./browser.js";
 import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
-import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
+import { recordUnknown, notFoundBody, saveCoverageNow, recordRpc } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
 import { reportModelToolSupport } from "./model-probe.js";
 
@@ -79,6 +79,13 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   const rpc = url.match(/\/([a-z0-9_.]+\.v\d+\.[A-Za-z]+)\/([A-Za-z]+)/i);
   if (rpc) {
     const method = rpc[2];
+    // The blind spot that has cost two rounds of guessing on P0-5.
+    //
+    // Everything about which GATEWAY methods the app calls is recorded (observe.ts), but the
+    // ConnectRPC bootstrap surface had no instrumentation at all — so "does the app re-fetch
+    // EnsureSandBox?" was unanswerable, and the question was attacked twice by restarting the app
+    // and hoping. It is answerable: count the calls.
+    recordRpc(method);
     const isStream = ct.includes("connect+") || ct.includes("grpc");
     const isJson = ct.includes("json");
     const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;

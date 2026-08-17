@@ -2,7 +2,7 @@
   "plan": "P2",
   "run": 5,
   "gate": "C",
-  "backendCommit": "93f00bf",
+  "backendCommit": "3e2d953",
   "local": {
     "cdp": "http://127.0.0.1:9222",
     "rowsVisited": 0,
@@ -11,7 +11,9 @@
   "goc": {
     "cdp": "http://127.0.0.1:9333",
     "rowsVisited": 0,
-    "blockers": []
+    "blockers": [
+      "needs-ultra"
+    ]
   },
   "surfaces": [
     {
@@ -31,14 +33,14 @@
     {
       "surface": "inlineImages",
       "rule": "informational",
-      "local": 0,
+      "local": 7,
       "goc": 3,
       "verdict": "info"
     },
     {
       "surface": "attachments",
       "rule": "informational",
-      "local": 0,
+      "local": 28,
       "goc": 19,
       "verdict": "info"
     },
@@ -59,8 +61,8 @@
     {
       "surface": "screenPane",
       "rule": "informational",
-      "local": 0,
-      "goc": 2,
+      "local": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
@@ -73,21 +75,21 @@
     {
       "surface": "routines",
       "rule": "informational",
-      "local": 0,
-      "goc": 2,
+      "local": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
       "surface": "routineEventTriggers",
       "rule": "informational",
       "local": 0,
-      "goc": 1,
+      "goc": 0,
       "verdict": "info"
     },
     {
       "surface": "controls",
       "rule": "informational",
-      "local": 23,
+      "local": 67,
       "goc": 63,
       "verdict": "info"
     }

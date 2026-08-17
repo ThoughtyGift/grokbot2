@@ -148,6 +148,21 @@ export function recordUnknown(method: string, url: string, body: Buffer): void {
   save();
 }
 
+/**
+ * ConnectRPC bootstrap calls, counted separately from gateway methods.
+ *
+ * Same recorder, different surface. `EnsureSandBox` is the one that matters: it is where the app
+ * receives the box descriptor and the gateway ticket, so whether it is ever called again after the
+ * first launch decides whether the ticket can be rotated at all — the open question in P0-5.
+ * Prefixed so it cannot collide with a gateway method of the same name.
+ */
+export function recordRpc(method: string): void {
+  const key = `rpc:${method}`;
+  const prev = calls.get(key);
+  calls.set(key, { n: (prev?.n ?? 0) + 1, lastMs: Date.now() });
+  save();
+}
+
 export function recordCall(method: string, args: unknown, hasBody: boolean): void {
   const prev = calls.get(method);
   calls.set(method, { n: (prev?.n ?? 0) + 1, lastMs: Date.now() });
