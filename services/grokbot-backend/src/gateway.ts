@@ -149,9 +149,12 @@ setRosterSink((agentId) => {
   // A single-agent update needs the envelope or the client discards it outright; presence
   // (isRunning / isComposingMessage) rides here, so without it the indicator never mounts.
   const agent = agentId ? agentById(agentId) : undefined;
-  broadcast("roster", agent
-    ? { ordered: nextRosterOrdered(), agent, activeAgentId: agent.id }
-    : { agents: listAgents() });
+  // No envelope on the roster. Adding one was reasoned from the client's replica code and
+  // measurably made things WORSE: with `ordered` present the client takes its snapshot path,
+  // and new bots stopped appearing in the sidebar at all — the plain wholesale replace was
+  // already working. Presence updates ride along in the full roster rather than incrementally.
+  void agent;
+  broadcast("roster", { agents: listAgents() });
 });
 setInterval(() => {
   for (const r of sseClients) {
@@ -344,16 +347,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     // returns — so per-agent presence updates were being discarded no matter how correct
     // their envelope was. `coverage: complete-roster` is the client's own expected kind
     // (K0t is constructed with expectedCoverageKind: "complete-roster").
-    const snap = listAgents();
-    res.write(`data: ${JSON.stringify({
-      channel: "roster",
-      payload: {
-        ordered: nextRosterOrdered(),
-        coverage: { kind: "complete-roster" },
-        agents: snap,
-        activeAgentId: snap[0]?.id ?? null,
-      },
-    })}
+    res.write(`data: ${JSON.stringify({ channel: "roster", payload: { agents: listAgents() } })}
 
 `);
     res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; });

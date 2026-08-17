@@ -52,15 +52,28 @@ function readImageAttachment(atts?: { path?: string; name?: string }[]): string 
 }
 
 /**
- * The `🔧 name(arg) → result` bubble is a UI convenience, and it must never reach the model.
+ * The `🔧 name(arg) → result` bubble — RETIRED, and the reason is worth keeping.
  *
- * It is an assistant-authored message that looks exactly like a tool result, so once it is in
- * the history the model copies the format and INVENTS results in it — observed live: asked to
- * list a directory, it emitted a fabricated "🔧 list_dir_v2(".") → 📁 . ├── package.json …"
- * for files that do not exist, without calling anything. The real result already reaches the
- * model through continueAfterTool, so this line is redundant there and actively harmful.
- * (The original's prompt has a whole `## Never fabricate data` chapter; this was us teaching
+ * It was a UI convenience that had to be hidden from the model: an assistant-authored message
+ * that looks exactly like a tool result, so once it was in the history the model copied the
+ * format and INVENTED results in it — observed live, a fabricated
+ * "🔧 list_dir_v2(".") → 📁 . ├── package.json …" for files that do not exist, with nothing
+ * called. (The original's prompt has a `## Never fabricate data` chapter; this was us teaching
  * the opposite.)
+ *
+ * It is gone now for a second reason: it does not exist in the original. Comparing the two
+ * apps side by side, ours showed raw JSON arguments in the chat where the original showed
+ * clean prose, and the client's own transcript builder says why —
+ *
+ *   if (f.kind === "tool-call") { u && (c = f); continue; }
+ *
+ * tool-call entries are skipped when the visible list is assembled. The original narrates what
+ * it is doing in words and lets the activity indicator carry the rest; the mechanics never
+ * reach the bubble column. The entries are still emitted here — they drive that indicator and
+ * the outline panel — they are simply not echoed as text.
+ *
+ * The predicate stays so old transcripts, which still contain these bubbles, keep them out of
+ * the model's history and out of sidebar previews.
  */
 const TOOL_ECHO = "🔧 ";
 const isToolEcho = (e: Entry): boolean =>
@@ -139,7 +152,7 @@ export type Entry =
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
-  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; status: "pending" | "running" | "done" | "failed"; result?: string });
+  | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string });
 
 /**
  * `currentActivity` — what the agent is doing, shown next to the typing indicator.
@@ -725,7 +738,12 @@ export function setRosterSink(fn: (agentId?: string) => void): void { rosterSink
  */
 let rosterSeq = 0;
 export const nextRosterOrdered = () => ({ replicaKey: "roster", epoch: EPOCH, sequence: ++rosterSeq });
-export const agentById = (id: string): AgentRecord | undefined => agents.get(id);
+// Summarised, not raw: this feeds the roster SSE push as well as lookups, and a pushed row
+// without `updatedAt`/`lastEntry` blanks the preview the polled list had just filled in.
+export const agentById = (id: string): AgentRecord | undefined => {
+  const a = agents.get(id);
+  return a ? summarise(a) : undefined;
+};
 const rosterChanged = (agentId?: string): void => rosterSink(agentId);
 
 /** PascalCase names the client's activity table knows; anything else renders plain "Working". */
@@ -786,7 +804,76 @@ export function createAgent(args: { name?: string; profile?: { name?: string }; 
   agents.set(id, rec); transcripts.set(id, []); persist(); rosterChanged();
   return rec;
 }
-export const listAgents = (): AgentRecord[] => [...agents.values()].filter((a) => !a.hidden);
+/**
+ * The second line of a sidebar row, and its timestamp.
+ *
+ * Found by comparing the two apps side by side: the original's rows read
+ * `name / <time> / <last message>`, ours read only the name. The row component takes both
+ * from the agent summary — `put(t.lastEntry)` for the preview and `l5e(t.updatedAt)` for the
+ * time — so an agent record without them renders a name and two blanks, which is exactly
+ * what we shipped.
+ *
+ *   updatedAt : ms. `l5e` returns "" for 0 or missing, hence no timestamp at all.
+ *   lastEntry : {kind:"text", text}
+ *             | {kind:"attachment", count, kinds:[{kind, count}]}
+ *             | {kind:"link", url}
+ *
+ * The attachment branch is where "Sent 1 Markdown file" comes from: the client pluralises
+ * `kinds` itself from a fixed table (image · video · audio · pdf · markdown · table · json ·
+ * text · document · archive · file), and anything outside it degrades to "file". So the kind
+ * has to be one of those words — a MIME type or an extension would silently read "1 file".
+ */
+type LastEntry =
+  | { kind: "text"; text: string }
+  | { kind: "attachment"; count: number; kinds: { kind: string; count: number }[] }
+  | { kind: "link"; url: string };
+
+/** Maps a file name onto the client's attachment-kind vocabulary. */
+function attachmentKind(name: string): string {
+  const ext = (name.split(/[/\\]/).pop() ?? "").split(".").pop()?.toLowerCase() ?? "";
+  if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(ext)) return "image";
+  if (["mp4", "mov", "webm", "mkv"].includes(ext)) return "video";
+  if (["mp3", "wav", "ogg", "m4a", "flac"].includes(ext)) return "audio";
+  if (ext === "pdf") return "pdf";
+  if (["md", "markdown", "mdx"].includes(ext)) return "markdown";
+  if (["csv", "tsv", "xlsx", "xls"].includes(ext)) return "table";
+  if (["json", "jsonc", "ndjson"].includes(ext)) return "json";
+  if (["txt", "text", "log", "yaml", "yml", "toml", "ini", "conf"].includes(ext)) return "text";
+  if (["doc", "docx", "odt", "rtf"].includes(ext)) return "document";
+  if (["zip", "tar", "gz", "7z", "rar"].includes(ext)) return "archive";
+  return "file";
+}
+
+function lastEntryOf(agentId: string): LastEntry | undefined {
+  const t = transcripts.get(agentId);
+  if (!t?.length) return undefined;
+  // Walk backwards to the last entry a human would call "the last message": tool cards,
+  // notices and approval prompts are not what the original previews.
+  for (let i = t.length - 1; i >= 0; i--) {
+    const e = t[i];
+    if (e.kind === "send-message" && e.message.type === "attachment") {
+      const name = e.message.file_name || e.message.url;
+      return { kind: "attachment", count: 1, kinds: [{ kind: attachmentKind(name), count: 1 }] };
+    }
+    // Skip the "🔧 tool(args) → result" echo: it is a transcript affordance, not a message,
+    // and previewing it puts raw JSON arguments in the sidebar where the reply belongs.
+    if (isToolEcho(e)) continue;
+    const text = textOf(e).trim();
+    if (text) return { kind: "text", text };
+  }
+  return undefined;
+}
+
+/** The summary the sidebar renders, built fresh so `updatedAt`/`lastEntry` are never stale. */
+function summarise(a: AgentRecord): AgentRecord & { updatedAt: number; lastEntry?: LastEntry } {
+  const t = transcripts.get(a.id);
+  const updatedAt = t?.length ? t[t.length - 1].timestampMs : a.createdAtMs;
+  const lastEntry = lastEntryOf(a.id);
+  return { ...a, updatedAt, ...(lastEntry ? { lastEntry } : {}) };
+}
+
+export const listAgents = (): (AgentRecord & { updatedAt: number })[] =>
+  [...agents.values()].filter((a) => !a.hidden).map(summarise);
 export const countAgents = (): number => listAgents().length;
 // The FE sends {id, profile:{name,…}} — a bare `name` never arrives.
 export function updateAgent(a: { id?: string; agentId?: string; name?: string; profile?: { name?: string } }): AgentRecord | null {
@@ -1108,7 +1195,11 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
 // `request_box_help` belongs here for the same reason as `ask_question`: it asks the user to
 // do something, it does not do anything itself. An approval card in front of it would make
 // them click Allow before being allowed to be asked for help.
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
+// `attach_file` is here for consistency with screenshots: browser tools call ctx.attach() and
+// drop an image into the transcript with no prompt, so asking permission to show a file the
+// agent could already read with read_file_v2 buys nothing. The tools that WRITE (edit_file_v2,
+// edit_file, delete_file) still ask.
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /**
  * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
@@ -1132,7 +1223,6 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
     .then((result) => {
       tc.result = result;
       tc.status = "done";
-      t.push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: `🔧 ${name}(${arg}) → ${result}` }, timestampMs: Date.now() });
       onUpdate(agentId);
       // A question is not a result to reason about — the follow-up turn happens when the
       // user answers it, not now, or the model talks over its own question.
@@ -1170,7 +1260,6 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
       if (!fn) {
         tc.result = "(unknown tool)";
         tc.status = "done";
-        t.push({ id: nextId(), kind: "send-message", author: authorOf(p.agentId), message: { type: "text", content: `🔧 ${p.name}(${p.arg}) → ${tc.result}` }, timestampMs: Date.now() });
       } else {
         // Browser actions take seconds, so show "running" and finish out of band rather than
         // blocking the gateway reply the FE is waiting on.
@@ -1180,7 +1269,6 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
           .then((result) => {
             tc.result = result;
             tc.status = "done";
-            t.push({ id: nextId(), kind: "send-message", author: authorOf(p.agentId), message: { type: "text", content: `🔧 ${p.name}(${p.arg}) → ${result}` }, timestampMs: Date.now() });
             onUpdate(p.agentId);
             if (p.history) continueAfterTool(p.agentId, p.history, p.name ?? "", p.arg ?? "", result);
           });
@@ -1379,7 +1467,9 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   const requestId = `req-${reqSeq++}`;
   const lower = name.toLowerCase();
   const known = lower in TOOLS;
-  t.push({ id: nextId(), kind: "tool-call", toolCallId, name, rawArgs: JSON.stringify({ arg }), status: "pending", timestampMs: Date.now() });
+  // `summary` is the client's own one-line description of a tool step — the outline panel
+  // reads it (`n.summary != null ? firstLine(n.summary) : ""`) and shows nothing without it.
+  t.push({ id: nextId(), kind: "tool-call", toolCallId, name, rawArgs: JSON.stringify({ arg }), summary: `${name}(${arg})`.slice(0, 160), status: "pending", timestampMs: Date.now() });
 
   // Read-only tools and questions run straight away. `isAutoApproved` existed but nothing
   // called it, so every harmless read still made the user click Allow.
@@ -1492,7 +1582,14 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     isComposingMessage: false,
     currentActivity: { kind: "tool", tool: ACTIVITY_TOOL[call.name] ?? call.name },
   });
-  setText(bubble, `Cần dùng công cụ \`${call.name}\`.`);
+  // Drop the bubble instead of rewriting it into a status line.
+  //
+  // Its content at this point is the model's raw `TOOL_CALL: name(args)`, which must not stay
+  // on screen; replacing it with "Cần dùng công cụ `x`." only traded raw syntax for narration
+  // the original never shows. There, a turn that calls a tool renders nothing until the answer
+  // arrives — the working indicator (currentActivity, set just above) is the whole feedback.
+  const at = tail(agentId).indexOf(bubble);
+  if (at >= 0) tail(agentId).splice(at, 1);
   injectTool(agentId, `${call.name} ${call.arg}`, history);
 }
 
