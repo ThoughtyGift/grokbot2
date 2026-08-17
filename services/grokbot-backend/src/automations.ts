@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -292,6 +292,7 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   });
   const platform = listenerPlatform(trigger);
   if (platform) pushListenerConnect(agentId, platform);
+  automationsChanged(agentId);
   return listFor(agentId);
 }
 
@@ -317,6 +318,7 @@ export function updateAgentAutomation(a: { id?: string; agentId?: string; automa
     pushTranscriptEvent(agentId, {
       type: "automation-changed", action: "updated", automationId: rec.id, automationName: rec.name,
     });
+    automationsChanged(agentId);
   }
   return listFor(agentId);
 }
@@ -325,14 +327,14 @@ export function deleteAgentAutomation(a: { id?: string; agentId?: string; automa
   const agentId = agentIdOf(a);
   const l = listFor(agentId);
   const i = l.findIndex((x) => x.id === a?.automationId);
-  if (i >= 0) { l.splice(i, 1); persistState(); }
+  if (i >= 0) { l.splice(i, 1); persistState(); automationsChanged(agentId); }
   return l;
 }
 
 export function setAgentAutomationEnabled(a: { id?: string; agentId?: string; automationId?: string; isEnabled?: boolean; enabled?: boolean }): Automation[] {
   const agentId = agentIdOf(a);
   const rec = listFor(agentId).find((x) => x.id === a?.automationId);
-  if (rec) { rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled; persistState(); }
+  if (rec) { rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled; persistState(); automationsChanged(agentId); }
   return listFor(agentId);
 }
 
@@ -350,6 +352,7 @@ function fire(rec: Automation, trigger: AutomationRun["trigger"]): void {
     console.warn(`[grokbot2] routine "${rec.name}" failed:`, (e as Error).message);
   }
   persistState();
+  automationsChanged(rec.agentId);   // Run history is part of the panel; a new run should show live.
 }
 
 /**

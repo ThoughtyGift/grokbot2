@@ -12,6 +12,7 @@ import {
   sendPrompt,
   setUpdateSink,
   setRosterSink,
+  setAutomationsSink,
   updateAgent,
   deleteAgents,
   duplicateAgent,
@@ -268,6 +269,14 @@ setRosterSink((agentId) => {
   // forwarded as `{kind, event: payload}` to the renderer.
   if (agent) broadcast("agent-upserted", { ordered: nextRosterOrdered(), agent, activeAgentId: agent.id });
   broadcast("agents", { agents: listAgents() });
+});
+
+// Routine changes → the Routines panel, on the `agents-automation` channel (NOT "automations", the
+// family name). The client's handler is `"agents-automation": e => ingestAutomationsEvent(e)` and it
+// reads `{agentId, automations}`, so we send the whole list for that agent. Without this the routine
+// was created but the panel only learned about it on reopen, which read as "the bot didn't create it".
+setAutomationsSink((agentId) => {
+  broadcast("agents-automation", { agentId, automations: getAgentAutomations({ id: agentId }) });
 });
 setInterval(() => {
   for (const r of sseClients) {

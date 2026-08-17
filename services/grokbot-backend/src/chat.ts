@@ -1261,6 +1261,24 @@ let rosterSink: (agentId?: string) => void = () => {};
 export function setRosterSink(fn: (agentId?: string) => void): void { rosterSink = fn; }
 
 /**
+ * Push a routine change so the Routines panel refreshes live, instead of only on reopen.
+ *
+ * Measured cause of "the bot didn't create the routine": it DID — the backend stores it and getAgent
+ * Automations returns it — but nothing told the panel, which reads its list from an SSE event and was
+ * never sent one. The client's own handler names the wire channel, and it is NOT "automations":
+ *
+ *   "agents-automation": e => ingestAutomationsEvent(e)
+ *   ingestAutomationsEvent: j => O(j.agentId, j.automations, …)
+ *
+ * So the channel is `agents-automation` and the payload is `{agentId, automations}` — the same
+ * family≠wire-name trap that hid the roster and presence pushes. automations.ts calls
+ * `automationsChanged(agentId)` after every create/update/delete; gateway.ts turns that into the push.
+ */
+let automationsSink: (agentId: string) => void = () => {};
+export function setAutomationsSink(fn: (agentId: string) => void): void { automationsSink = fn; }
+export function automationsChanged(agentId: string): void { automationsSink(agentId); }
+
+/**
  * Roster ordering, separate from the transcript's.
  *
  * The client replicates the roster under its own key ("roster", coverage "complete-roster")
