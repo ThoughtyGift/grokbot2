@@ -57,6 +57,10 @@ import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus, handBackBox, beginComputerUse } from "./forever-box.js";
 import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
+import {
+  recordUnknown, recordCall, recordSseOpen, recordSseClose,
+  coverageSnapshot, calledMethods, lastArgsFor, notFoundBody,
+} from "./observe.js";
 
 /**
  * The connector manifests, copied from the original's `src/shared/channels.ts`.
@@ -356,7 +360,16 @@ const methods: Record<string, (args: any) => unknown> = {
 };
 
 /** Returns true if it handled the request. */
-export function handleGateway(url: string, body: Buffer, res: ServerResponse, headers: Record<string, unknown> = {}): boolean {
+export function handleGateway(
+  url: string,
+  body: Buffer,
+  res: ServerResponse,
+  headers: Record<string, unknown> = {},
+  // Needed to record an unmatched request the way the real host reports it: the host's own
+  // fallback is `404 "not found: <METHOD> <path>"`, and METHOD is half of what identifies it —
+  // `GET /avatars/x` and `POST /avatars/x` are different routes there.
+  method = "?",
+): boolean {
   if (!url.startsWith("/gw/")) return false;
 
   if (url.startsWith("/gw/health")) {
@@ -379,6 +392,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     res.write('event: ready\ndata: {"kind":"ready"}\n\n');
     sseClients.add(res);
     sseStats.opened += 1; sseStats.lastOpenedMs = Date.now();
+    recordSseOpen();   // persisted, so a tsx restart does not erase the reconnect history
     // Establish the replica epoch immediately with a FULL roster snapshot.
     //
     // Until the client has an epoch it treats every event as foreign — it buffers them and
@@ -388,7 +402,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     res.write(`data: ${JSON.stringify({ channel: "roster", payload: { agents: listAgents() } })}
 
 `);
-    res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; });
+    res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; recordSseClose(); });
     return true;
   }
   // Long-poll channels: the box holds these open until it has work. Answering instantly makes
@@ -415,12 +429,25 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     const args = Object.fromEntries(
       [...lastArgs].filter(([n]) => !filter || n.toLowerCase().includes(filter.toLowerCase())).sort()
     );
+    // `persisted` is the half that survives a restart, and it is the half that matters:
+    // `tsx watch` reloads on every save and the in-memory counters above were seen resetting
+    // three times inside an hour. `unknownPaths` is the new column — every request that matched
+    // no route, which is the list P2/P3 are meant to empty.
+    const persisted = coverageSnapshot();
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       calledTotal: called.size, mapped, unmapped, lastArgs: args,
       sse: { ...sseStats, connected: sseClients.size },
       calls: Object.fromEntries([...callCounts].sort((a, b) => b[1].n - a[1].n)),
       implemented: Object.keys(methods).sort(),
+      persisted: {
+        ...persisted,
+        // Same split as `mapped`/`unmapped` above, but computed over everything ever seen
+        // rather than only this process's lifetime.
+        everCalled: calledMethods().length,
+        everUnmapped: calledMethods().filter((n) => !(n in methods)).sort(),
+        lastArgs: lastArgsFor(filter),
+      },
     }, null, 2));
     return true;
   }
@@ -439,6 +466,7 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     const prev = callCounts.get(m[1]);
     callCounts.set(m[1], { n: (prev?.n ?? 0) + 1, lastMs: Date.now() });
     if (body.length) lastArgs.set(m[1], args);
+    recordCall(m[1], args, body.length > 0);   // same numbers, but surviving a restart
     if (process.env.GROKBOT2_LOG) console.log(`  gw ${m[1]} ${JSON.stringify(args).slice(0, 220)}`);
     const fn = methods[m[1]];
     if (!fn) console.warn(`[gateway] UNMAPPED ${m[1]} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);
@@ -462,6 +490,19 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
         finish(null);
       });
     } else finish(val);
+    return true;
+  }
+  // A `/gw/...` request that matched nothing above.
+  //
+  // The real box host ends its router with `404 "not found: <METHOD> <path>"`. We answer that
+  // only once GROKBOT2_STRICT_404=1; until then the path is RECORDED and still answered `200 {}`,
+  // because flipping it blind breaks the app without telling you which path did it. The observe
+  // pass is what turns "what does the app need that we lack?" into a list.
+  recordUnknown(method, url, body);
+  const nf = notFoundBody(method, url);
+  if (nf) {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(nf);
     return true;
   }
   res.writeHead(200, { "content-type": "application/json" });
