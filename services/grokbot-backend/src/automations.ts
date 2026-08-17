@@ -45,7 +45,8 @@ export interface Automation {
 export interface AutomationRun {
   id: string;
   status: "running" | "completed" | "failed";
-  trigger: "manual" | "schedule";
+  /** `event` is a listener firing (a Slack mention, a webhook), alongside manual and scheduled. */
+  trigger: "manual" | "schedule" | "event";
   startedAt: number;
 }
 
@@ -338,21 +339,47 @@ export function setAgentAutomationEnabled(a: { id?: string; agentId?: string; au
   return listFor(agentId);
 }
 
-/** Fire a routine: its prompt goes through the normal chat path, so the model really answers. */
-function fire(rec: Automation, trigger: AutomationRun["trigger"]): void {
+/**
+ * Fire a routine: its prompt goes through the normal chat path, so the model really answers.
+ *
+ * `context` is prepended for a listener firing — the Slack message that woke it, so the routine's
+ * instruction (which the original writes as "A Slack mention just woke you… reply in that thread")
+ * has the text, channel and thread to act on. A scheduled run has no context; the prompt stands alone.
+ */
+function fire(rec: Automation, trigger: AutomationRun["trigger"], context?: string): void {
   rec.lastRunAt = Date.now();
   const run: AutomationRun = { id: `run-${runSeq++}`, status: "running", trigger, startedAt: Date.now() };
   rec.runs.unshift(run);
   rec.runs.length = Math.min(rec.runs.length, MAX_RUNS);
   console.log(`[grokbot2] routine ${trigger}: "${rec.name}" -> ${rec.agentId}`);
   try {
-    sendPrompt({ agentId: rec.agentId, content: rec.prompt });
+    const content = context ? `${context}\n\n---\n\n${rec.prompt}` : rec.prompt;
+    sendPrompt({ agentId: rec.agentId, content });
   } catch (e) {
     run.status = "failed";
     console.warn(`[grokbot2] routine "${rec.name}" failed:`, (e as Error).message);
   }
   persistState();
   automationsChanged(rec.agentId);   // Run history is part of the panel; a new run should show live.
+}
+
+/**
+ * Fire every routine listening on a platform — Tầng 1 of the Slack bridge.
+ *
+ * A routine is a listener for `platform` when its trigger names it (the agent writes triggers like
+ * "slack_mention"; `listenerPlatform` reads the platform out). The original's native listeners are
+ * only Slack and GitHub, so this is the single path that turns an event-triggered routine from
+ * "shown in the panel" into "actually runs". Returns how many fired, so the receiver can report it.
+ */
+export function fireListeners(platform: string, context: string): number {
+  let n = 0;
+  for (const rec of all()) {
+    if (!rec.isEnabled || !rec.prompt.trim()) continue;
+    if (listenerPlatform(rec.trigger) !== platform) continue;
+    fire(rec, "event", context);
+    n += 1;
+  }
+  return n;
 }
 
 /**

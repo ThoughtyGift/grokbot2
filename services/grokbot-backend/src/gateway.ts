@@ -65,6 +65,7 @@ import {
 } from "./observe.js";
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, type ChannelName } from "./channels.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
+import { handleSlackEvent } from "./slack-events.js";
 import { clearUnknown } from "./observe.js";
 
 /**
@@ -690,6 +691,17 @@ export function handleGateway(
     }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(submitResponses(name, body)));
+    return true;
+  }
+  // Slack Events API — Tầng 1 of the Slack bridge. A Slack mention lands here and wakes the matching
+  // routine (see slack-events.ts). Exempt from the gateway ticket in auth-gate.ts because Slack posts
+  // with its own signature, not our bearer.
+  if (url.startsWith("/gw/slack/events")) {
+    let parsed: Record<string, unknown> = {};
+    try { parsed = body.length ? JSON.parse(body.toString("utf8")) : {}; } catch { /* bad JSON → treated as unknown event */ }
+    const out = handleSlackEvent(parsed);
+    res.writeHead(out.status, { "content-type": "application/json" });
+    res.end(JSON.stringify(out.body));
     return true;
   }
   if (url.startsWith("/gw/events")) {
