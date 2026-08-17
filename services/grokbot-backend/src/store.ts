@@ -4,7 +4,7 @@
  * The box host keeps this state on disk; without it every backend restart wiped the
  * user's bots and conversations. Writes are debounced so a chat burst is one save.
  */
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, statSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,6 +54,50 @@ export function loadState(): PersistedState {
   return {};
 }
 
+/**
+ * Rolling backups — the only thing standing between a mistake and permanent loss.
+ *
+ * Every save rewrites `state.json` wholesale, so one bad write or one over-broad delete takes
+ * the lot. That is not hypothetical: a 214 KB state holding 45 bots and 46 transcripts went to
+ * 48 KB when the app sent a single `deleteAgents` carrying 43 ids. The call was legitimate and
+ * the write was correct — and there was no way back.
+ *
+ * Rotation is time-based, not per-save. Saves are debounced to 400 ms and a chat burst produces
+ * many of them; rotating each time would shift ten copies out of the ring inside a minute and
+ * leave nothing but the last few seconds. One recovery point every ROTATE_EVERY_MS gives a
+ * window measured in hours instead.
+ */
+const KEEP_BACKUPS = 10;
+const ROTATE_EVERY_MS = Number(process.env.GROKBOT2_BACKUP_EVERY_MS ?? 10 * 60_000);
+const backupPath = (n: number): string => `${FILE}.${n}.bak`;
+
+/** True when the newest backup is missing or older than the interval. */
+function backupIsStale(): boolean {
+  try {
+    return Date.now() - statSync(backupPath(1)).mtimeMs > ROTATE_EVERY_MS;
+  } catch {
+    return true;                                  // no backup yet — take one
+  }
+}
+
+/**
+ * Shift the ring: .9→.10, .8→.9, … .1→.2, then copy the CURRENT state to .1.
+ *
+ * Copy rather than rename, because `state.json` has to stay in place for the write that follows.
+ * Never throws: a backup that fails must not stop the save it was protecting.
+ */
+function rotateBackups(): void {
+  if (!existsSync(FILE) || !backupIsStale()) return;
+  try {
+    for (let n = KEEP_BACKUPS - 1; n >= 1; n--) {
+      if (existsSync(backupPath(n))) renameSync(backupPath(n), backupPath(n + 1));
+    }
+    copyFileSync(FILE, backupPath(1));
+  } catch (e) {
+    console.warn("[grokbot2] backup rotation failed:", (e as Error).message);
+  }
+}
+
 let pending: NodeJS.Timeout | null = null;
 let latest: (() => PersistedState) | null = null;
 
@@ -67,6 +111,7 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
     if (!take) return;
     try {
       mkdirSync(dirname(FILE), { recursive: true });
+      rotateBackups();
       const tmp = FILE + ".tmp";
       writeFileSync(tmp, JSON.stringify(take(), null, 1));
       renameSync(tmp, FILE);
@@ -80,6 +125,7 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
 export function saveNow(snapshot: () => PersistedState): void {
   try {
     mkdirSync(dirname(FILE), { recursive: true });
+    rotateBackups();
     const tmp = FILE + ".tmp";
     writeFileSync(tmp, JSON.stringify(snapshot(), null, 1));
     renameSync(tmp, FILE);

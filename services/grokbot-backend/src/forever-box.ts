@@ -19,6 +19,7 @@
  *
  * See docs/box-architecture.md for the real descriptor this mirrors.
  */
+import { redact } from "./redact.js";
 
 /**
  * Full noVNC page URL for the box, e.g. `https://host/flowvnc-grokbox/vnc.html?path=…`.
@@ -205,7 +206,10 @@ export function reportBoxConfig(log: (msg: string) => void): void {
     log("[box] GROKBOT2_VNC_URL not set — the computer pane will stay empty.");
     return;
   }
-  log(`[box] VNC ${vncUrl}`);
+  // Redacted, because this URL carries `password=` in its query string and this line is the
+  // reason redact.ts exists: the box's VNC password went into the dev log five times over.
+  // The startup line still has to say WHICH url is configured, so only the value is masked.
+  log(`[box] VNC ${redact(vncUrl)}`);
   try {
     if (!new URL(vncUrl).pathname.endsWith("/vnc.html")) {
       log("[box] warning: GROKBOT2_VNC_URL does not end in /vnc.html — clipboard, liveness and");

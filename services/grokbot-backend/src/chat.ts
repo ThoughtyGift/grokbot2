@@ -1694,6 +1694,16 @@ export function sendPrompt(args: SendArgs) {
   // A new user message gets a fresh tool-step budget; without this the cap is cumulative and
   // the tenth message of a session gets no tools at all.
   resetToolSteps(agentId);
+  // The bot-to-bot hop budget needs the same reset, and never had one.
+  //
+  // `hops` only ever counted up: nothing deleted or cleared it, in any file. So a bot that had
+  // once received a relayed message at depth MAX_HOPS could never call `message_agent` again —
+  // every later attempt answered "đã đạt trần 3 lượt", in a brand new conversation, with no
+  // error anywhere. The team-of-bots feature quietly switched itself off as the roster got used.
+  //
+  // The reset belongs here and only here: a message FROM THE USER is what starts a new chain,
+  // while one carrying `fromAgent` IS the chain and must keep counting or the loop guard is gone.
+  if (!args.fromAgent) hops.delete(agentId);
 
   // Manual trigger: "/tool echo hello"
   const m = text.match(/^\/tool\s+(.+)/i);

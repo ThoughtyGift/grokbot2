@@ -17,6 +17,7 @@ import { reportBoxConfig } from "./forever-box.js";
 import { browserProbe, isBrowserConfigured } from "./browser.js";
 import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
+import { logSafe } from "./redact.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -30,7 +31,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   const url = req.url ?? "";
   const body = await readBody(req);
   const ct = String(req.headers["content-type"] ?? "");
-  if (process.env.GROKBOT2_LOG) console.log(`${req.method} ${url} (${ct.split(";")[0]})`);
+  // Redacted: a request URL can carry `?token=` / `?password=`, and this line is on by default
+  // for anyone debugging with GROKBOT2_LOG — the exact audience most likely to paste a log.
+  if (process.env.GROKBOT2_LOG) logSafe(`${req.method} ${url} (${ct.split(";")[0]})`);
 
   // ── auth ──
   if (url.startsWith("/oauth/token") || url.includes("/auth/") || url.endsWith("/token")) {
@@ -75,17 +78,19 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 server.listen(config.port, "127.0.0.1", () => {
   startScheduler();
-  console.log(`[grokbot2] backend on http://localhost:${config.port}`);
-  console.log(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
-  reportBoxConfig((msg) => console.log(`[grokbot2] ${msg}`));
-  reportMcpConfig((msg) => console.log(`[grokbot2] ${msg}`));
+  // Every startup line goes through logSafe: these carry the pool URL, the box URL, the VNC URL
+  // and the CDP endpoint, and any of them can hold a credential in its query string.
+  logSafe(`[grokbot2] backend on http://localhost:${config.port}`);
+  logSafe(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
+  reportBoxConfig((msg) => logSafe(`[grokbot2] ${msg}`));
+  reportMcpConfig((msg) => logSafe(`[grokbot2] ${msg}`));
   if (isBrowserConfigured()) {
-    void browserProbe().then((s) => console.log(`[grokbot2] [browser] ${process.env.GROKBOT2_BROWSER_CDP} — ${s}`));
+    void browserProbe().then((s) => logSafe(`[grokbot2] [browser] ${process.env.GROKBOT2_BROWSER_CDP} — ${s}`));
   } else {
     console.log("[grokbot2] [browser] GROKBOT2_BROWSER_CDP not set — browser_* tools are off.");
   }
   // State the truth about the box at startup: a shell tool that is quietly absent is
   // indistinguishable from one that is broken.
-  void boxHealth().then((s) => console.log(`[grokbot2] [${s}`.replace("[box:", "[box]")));
-  console.log(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
+  void boxHealth().then((s) => logSafe(`[grokbot2] [${s}`.replace("[box:", "[box]")));
+  logSafe(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
 });

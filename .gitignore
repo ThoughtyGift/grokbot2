@@ -10,6 +10,20 @@ dist/
 *-key.txt
 pool-key.txt
 anthropic-key.txt
+# The patterns above are all `*-key.txt`-shaped, and a real key sat in `poolkey.tmp` for days
+# because that name matches none of them: no hyphen, wrong extension. Ignore by SHAPE OF THE
+# NAME as well as by exact name, and treat every scratch file as a possible key carrier.
+poolkey*
+*key*.tmp
+*.tmp
+*.key
+*.pem
+secrets.json
+
+# Third-party agent framework read/reused by P6-P7 (see docs/execution-roadmap.md §9, §11).
+# 144 MB across 9,521 files, MIT (Nous Research) — obtained separately, not vendored here:
+# committing it would dwarf this repo and mix someone else's history into ours.
+hermes-agent-main/
 
 # logs / scratch
 *.log
