@@ -1,0 +1,327 @@
+﻿{
+  "calledTotal": 27,
+  "mapped": [
+    "createAgent",
+    "deleteAgents",
+    "ensureForeverBox",
+    "getAgentAutomations",
+    "getAgentChannels",
+    "getAgentTranscriptTail",
+    "getAgentWorkflows",
+    "getAsyncTasks",
+    "getForeverBoxStatus",
+    "getHostSettings",
+    "getSharingState",
+    "getSubagents",
+    "getTeachRecordingStatus",
+    "getTrays",
+    "isAgentNetworkEnabled",
+    "isEgressTunnelAvailable",
+    "isGlobalSearchEnabled",
+    "listAgents",
+    "listBoxMcpServers",
+    "openAgentTail",
+    "promptAcceptanceStatus",
+    "readAttachmentImage",
+    "sendPrompt",
+    "setBoxSecrets",
+    "setHostSettings",
+    "setWindowFocused",
+    "skillsCatalog"
+  ],
+  "unmapped": [],
+  "lastArgs": {
+    "createAgent": {
+      "name": "VncIdle"
+    },
+    "deleteAgents": {
+      "ids": [
+        "agent-92",
+        "agent-93"
+      ]
+    },
+    "ensureForeverBox": {
+      "id": "agent-96"
+    },
+    "getAgentAutomations": {
+      "id": "agent-96"
+    },
+    "getAgentChannels": {
+      "id": "agent-96"
+    },
+    "getAgentTranscriptTail": {
+      "id": "agent-91",
+      "limit": 200
+    },
+    "getAgentWorkflows": {
+      "id": "agent-96"
+    },
+    "getAsyncTasks": {
+      "id": "agent-96"
+    },
+    "getForeverBoxStatus": {
+      "id": "agent-96"
+    },
+    "getHostSettings": {},
+    "getSharingState": {},
+    "getSubagents": {
+      "id": "agent-96"
+    },
+    "getTeachRecordingStatus": {},
+    "getTrays": {},
+    "isAgentNetworkEnabled": {},
+    "isEgressTunnelAvailable": {},
+    "isGlobalSearchEnabled": {},
+    "listAgents": {},
+    "listBoxMcpServers": {
+      "serverIdentifiers": []
+    },
+    "openAgentTail": {
+      "id": "agent-96",
+      "limit": 500
+    },
+    "promptAcceptanceStatus": {
+      "accountSlot": "host",
+      "clientNonce": "d8de308b-48b2-486c-9cda-a7e93c6b945a"
+    },
+    "readAttachmentImage": {
+      "path": "/workspace/attachments/29-browser_navigate.png"
+    },
+    "sendPrompt": {
+      "agentId": "agent-106",
+      "content": "/tool browser_navigate {\"url\":\"https://example.com\"}",
+      "clientNonce": "vnc1786960543073"
+    },
+    "setBoxSecrets": {
+      "secrets": {}
+    },
+    "setHostSettings": {
+      "mcpCustomInstructionsAccountScope": "b8228d6eb8fba04408fae33e8cc23aef0a1c1cebb7d6c500c277d76f1c4b51ee",
+      "mcpCustomInstructionsByServerId": {},
+      "mcpDisabledToolsByServerId": {}
+    },
+    "setWindowFocused": {
+      "isFocused": false
+    },
+    "skillsCatalog": {}
+  },
+  "sse": {
+    "opened": 9,
+    "closed": 8,
+    "lastOpenedMs": 1786960544431,
+    "lastOpen": {
+      "url": "/gw/events",
+      "accept": "text/event-stream",
+      "userAgent": "node",
+      "lastEventId": ""
+    },
+    "connected": 1
+  },
+  "calls": {
+    "getAgentChannels": {
+      "n": 375,
+      "lastMs": 1786960725494
+    },
+    "getAgentTranscriptTail": {
+      "n": 77,
+      "lastMs": 1786960589210
+    },
+    "setHostSettings": {
+      "n": 72,
+      "lastMs": 1786960544607
+    },
+    "getForeverBoxStatus": {
+      "n": 67,
+      "lastMs": 1786960589126
+    },
+    "getHostSettings": {
+      "n": 61,
+      "lastMs": 1786960589139
+    },
+    "getSubagents": {
+      "n": 38,
+      "lastMs": 1786960589126
+    },
+    "getAsyncTasks": {
+      "n": 36,
+      "lastMs": 1786960589126
+    },
+    "getAgentWorkflows": {
+      "n": 36,
+      "lastMs": 1786960589125
+    },
+    "getAgentAutomations": {
+      "n": 27,
+      "lastMs": 1786960589126
+    },
+    "openAgentTail": {
+      "n": 26,
+      "lastMs": 1786960553213
+    },
+    "listAgents": {
+      "n": 25,
+      "lastMs": 1786960589129
+    },
+    "setWindowFocused": {
+      "n": 25,
+      "lastMs": 1786960558056
+    },
+    "readAttachmentImage": {
+      "n": 16,
+      "lastMs": 1786960553250
+    },
+    "createAgent": {
+      "n": 14,
+      "lastMs": 1786960560309
+    },
+    "getTrays": {
+      "n": 14,
+      "lastMs": 1786960589125
+    },
+    "getTeachRecordingStatus": {
+      "n": 14,
+      "lastMs": 1786960589126
+    },
+    "isAgentNetworkEnabled": {
+      "n": 14,
+      "lastMs": 1786960589127
+    },
+    "isGlobalSearchEnabled": {
+      "n": 14,
+      "lastMs": 1786960589127
+    },
+    "isEgressTunnelAvailable": {
+      "n": 14,
+      "lastMs": 1786960589127
+    },
+    "getSharingState": {
+      "n": 14,
+      "lastMs": 1786960589127
+    },
+    "listBoxMcpServers": {
+      "n": 14,
+      "lastMs": 1786960589148
+    },
+    "skillsCatalog": {
+      "n": 14,
+      "lastMs": 1786960589126
+    },
+    "promptAcceptanceStatus": {
+      "n": 10,
+      "lastMs": 1786960589137
+    },
+    "setBoxSecrets": {
+      "n": 9,
+      "lastMs": 1786960544622
+    },
+    "ensureForeverBox": {
+      "n": 9,
+      "lastMs": 1786960589126
+    },
+    "sendPrompt": {
+      "n": 7,
+      "lastMs": 1786960543076
+    },
+    "deleteAgents": {
+      "n": 1,
+      "lastMs": 1786959096055
+    }
+  },
+  "implemented": [
+    "broadcastToAgents",
+    "clearAgentMemories",
+    "clearTrays",
+    "connectChannel",
+    "countAgents",
+    "createAgent",
+    "createAgentAutomation",
+    "createAgentWorkflow",
+    "createGroup",
+    "deleteAgentAutomation",
+    "deleteAgentMemory",
+    "deleteAgentWorkflow",
+    "deleteAgents",
+    "disconnectChannel",
+    "dismissTray",
+    "dismissWidget",
+    "duplicateAgent",
+    "ensureForeverBox",
+    "getAgentAutomations",
+    "getAgentAvatar",
+    "getAgentChannels",
+    "getAgentMemories",
+    "getAgentThread",
+    "getAgentTranscript",
+    "getAgentTranscriptPage",
+    "getAgentTranscriptTail",
+    "getAgentWorkflows",
+    "getAsyncTasks",
+    "getBoxSecretsStatus",
+    "getCloudAgentInfo",
+    "getConversationOutline",
+    "getForeverBoxStatus",
+    "getHostSettings",
+    "getHostStatus",
+    "getListenerConnectUrl",
+    "getListenerIntegrations",
+    "getPluginSyncStatus",
+    "getSharingState",
+    "getSkillPublishTargets",
+    "getSubagents",
+    "getTeachRecordingStatus",
+    "getTrays",
+    "handBackForeverBox",
+    "importAgentWorkflowText",
+    "importAgentWorkflowUrl",
+    "interruptAgentRun",
+    "isAgentNetworkEnabled",
+    "isEgressTunnelAvailable",
+    "isGlobalSearchEnabled",
+    "kickstartAgent",
+    "listAgents",
+    "listAllAutomations",
+    "listBoxMcpServers",
+    "openAgentTail",
+    "portAgentLocalSkills",
+    "promptAcceptanceStatus",
+    "publishSkill",
+    "reactToMessage",
+    "readAttachmentChunk",
+    "readAttachmentImage",
+    "readAttachmentText",
+    "refreshChannel",
+    "requestDiskSaverAudit",
+    "resetForeverBox",
+    "resolveAutoReviewApproval",
+    "resolveLocalToolPermission",
+    "respondToWidget",
+    "resyncPublishedSkill",
+    "runAgentAutomationNow",
+    "runAgentWorkflowNow",
+    "searchAgents",
+    "searchMedia",
+    "sendPrompt",
+    "setAgentAutomationEnabled",
+    "setAgentAvatarBytes",
+    "setAgentHiddenFromSidebar",
+    "setAgentNotificationsEnabled",
+    "setAgentNotifyOnUpdates",
+    "setAgentUnread",
+    "setAgentWorkflowEnabled",
+    "setBoxSecrets",
+    "setGroupMembers",
+    "setHostSettings",
+    "setWindowFocused",
+    "skillsCatalog",
+    "startTeachRecording",
+    "stopTeachRecording",
+    "submitSecret",
+    "syncPluginSkills",
+    "unpublishSkill",
+    "updateAgent",
+    "updateAgentAutomation",
+    "updateAgentWorkflow",
+    "updateForeverBox",
+    "voteFeedback"
+  ]
+}
