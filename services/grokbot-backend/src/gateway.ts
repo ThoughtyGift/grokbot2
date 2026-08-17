@@ -57,6 +57,8 @@ import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus, handBackBox, beginComputerUse } from "./forever-box.js";
 import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
+import { closeMcp, mcpServers } from "./mcp.js";
+import { stageImage, stagedCount } from "./attachments.js";
 import {
   recordUnknown, recordCall, recordSseOpen, recordSseClose,
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody,
@@ -296,6 +298,84 @@ const methods: Record<string, (args: any) => unknown> = {
   getAgentTranscript: (a) => transcriptTail(a),
   getAgentTranscriptPage: (a) => transcriptTail(a),
   getAgentThread: (a) => transcriptTail(a),
+  // ── P3-1 · transcript readers the client can send and we were not answering ──
+  //
+  // `getTranscript` takes NO body (contract: `takesBody: false`), unlike every sibling above.
+  // It is the whole-transcript read for whichever agent is current, so with no argument the only
+  // honest answer is the first agent's tail — and saying that out loud beats returning `{}`, which
+  // the renderer maps over without a guard.
+  getTranscript: () => transcriptTail(listAgents()[0]?.id ?? ""),
+  getAgentTranscriptWindow: (a) => transcriptTail(a),
+
+  // ── P3-1 · `deleteAgent`, singular ──────────────────────────────────────────
+  //
+  // We only had `deleteAgents`. The client can send either, and the singular one is precisely the
+  // wrong-name class of bug that parity.md records six times: a method that looks handled because
+  // something similarly spelled is, then silently does nothing. Reuses the plural path so the two
+  // can never drift.
+  deleteAgent: (a) => deleteAgents({ ids: [a?.id ?? a?.agentId].filter(Boolean) }),
+
+  // ── P3-1 · opening a bot ────────────────────────────────────────────────────
+  //
+  // Same reply shape as `createAgent`/`duplicateAgent` — `{agent, transcript}` — because the
+  // client reads `result.agent.id` off all three. `openAgentWindowed` is the detached-window
+  // variant; the payload it needs is identical, only the frame differs, and the frame is the
+  // app's business.
+  openAgent: (a) => {
+    const rec = agentById(a?.id ?? a?.agentId ?? "");
+    if (!rec) return null;
+    // Opening a conversation is what marks it read. Doing it here rather than making the client
+    // send a second call matches what the sidebar already assumes.
+    setAgentUnread({ id: rec.id, isUnread: false });
+    return { agent: rec, transcript: transcriptTail(rec.id) };
+  },
+  openAgentWindowed: (a) => {
+    const rec = agentById(a?.id ?? a?.agentId ?? "");
+    return rec ? { agent: rec, transcript: transcriptTail(rec.id) } : null;
+  },
+
+  // ── P3-1 · MCP refresh ──────────────────────────────────────────────────────
+  //
+  // `.mcp.json` is read fresh on every call by design (mcp.ts), so a refresh is about dropping
+  // the live child processes and letting the next tool call restart them against the new config.
+  refreshMcp: () => {
+    closeMcp();
+    return { ok: true, servers: Object.keys(mcpServers()) };
+  },
+
+  // ── P3-1 · attachment upload ────────────────────────────────────────────────
+  //
+  // The client pushes bytes in; attachments.ts already owns staging and serving them, so this is
+  // the entry point it never had. Only PNG can be measured (the renderer needs real width/height,
+  // see attachments.ts), so anything else is refused with a reason rather than stored broken.
+  uploadAttachment: (a) => {
+    const b64 = typeof a?.dataUrl === "string" ? a.dataUrl
+      : typeof a?.bytes === "string" ? a.bytes
+      : typeof a?.pngBase64 === "string" ? `data:image/png;base64,${a.pngBase64}`
+      : "";
+    const name = typeof a?.fileName === "string" ? a.fileName : typeof a?.name === "string" ? a.name : "upload.png";
+    if (!b64) return { ok: false, reason: "uploadAttachment needs dataUrl / bytes / pngBase64" };
+    const url = stageImage(b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`, name);
+    return url ? { ok: true, url, fileName: name } : { ok: false, reason: "only measurable PNG bytes can be staged" };
+  },
+
+  // ── P3-1 · connector card ───────────────────────────────────────────────────
+  //
+  // Answered, but answered NO — following the `importAgentWorkflowText` precedent a few lines
+  // below rather than returning `{ok:true}` for work that did not happen. Writing the card needs a
+  // plain-text transcript writer, and chat.ts exports only `postAttachment`, `postFileAttachment`
+  // and `postWidget`; a question widget is the wrong shape for a connector notice, and inventing
+  // an entry kind the renderer has no branch for is exactly what the `images?: string[]` note in
+  // chat.ts records as a mistake.
+  //
+  // It costs nothing to leave: both connectors ship `availability: "coming-soon"` in the original,
+  // so there is no card to append until P6 wires the hermes bridge. The reason travels with the
+  // reply so the gap is legible instead of looking like success.
+  appendConnectorCard: (a) => {
+    const agentId = a?.id ?? a?.agentId ?? "";
+    if (!agentId || !agentById(agentId)) return { ok: false, reason: "unknown agent" };
+    return { ok: false, reason: "connector cards need a transcript writer; connectors are coming-soon in the original too" };
+  },
   getTrays: () => trays,
   dismissTray: (a) => { const i = trays.findIndex((t) => t.id === (a?.id ?? a?.trayId)); if (i >= 0) trays.splice(i, 1); return {}; },
   clearTrays: () => { trays.length = 0; return {}; },
@@ -402,6 +482,44 @@ const methods: Record<string, (args: any) => unknown> = {
   handBackForeverBox: (a) => handBackBox(a),
   startTeachRecording: () => ({ isRecording: false, ok: false }),
   stopTeachRecording: () => ({ isRecording: false, ok: false }),
+
+  // ── P3-2 · box lifecycle ────────────────────────────────────────────────────
+  //
+  // Ten commands the app can send about updating, snapshotting and recreating the box. This
+  // backend does not own the box's lifecycle — `infra/vps/grok-box-up.sh` brings it up and the
+  // exec daemon is reached over HTTP (box-exec.ts) — so none of these can honestly *do* the thing.
+  //
+  // They are answered anyway, and with a REASON rather than a bare `{}`, for the same argument the
+  // rest of this table already makes: a method that falls through to `{}` is indistinguishable
+  // from one that legitimately returns nothing, so the app cannot tell "not supported here" from
+  // "worked, nothing to report" and neither can whoever debugs it next. `getBoxStoreStatus` is the
+  // one that reports something real, because it can.
+  autoUpdateBoxNow: () => ({ ok: false, reason: "the box is provisioned outside this backend (infra/vps/grok-box-up.sh)" }),
+  updateHostNow: () => ({ ok: false, reason: "this backend IS the host; update it by restarting it" }),
+  snapshotBoxStoreNow: () => ({ ok: false, reason: "no box store to snapshot — state lives in .data/state.json, backed up on write" }),
+  clearBoxStoreNow: () => ({ ok: false, reason: "refusing to clear: state.json holds the user's bots and transcripts" }),
+  // Real numbers: what this backend actually holds on the user's behalf.
+  getBoxStoreStatus: () => ({
+    ok: true,
+    // Reported from where the data really is, so the panel is not lying by omission.
+    agents: countAgents(),
+    attachments: stagedCount(),
+    isMigrating: false,
+    note: "state is local to this backend, not in a box store",
+  }),
+  setBoxMigrating: () => ({ ok: false, reason: "no box migration in this backend" }),
+  prepareBoxForRecreate: () => ({ ok: false, reason: "the box is not recreated from here" }),
+  resumeBoxAfterRecreate: () => ({ ok: false, reason: "the box is not recreated from here" }),
+
+  // ── P3-2 · MCP OAuth and WebAuthn ceremonies ────────────────────────────────
+  //
+  // Both are multi-step flows with a browser leg. `completeMcpOAuth` would finish a flow this
+  // backend never starts (mcp.ts speaks stdio to local servers, which need no OAuth), and
+  // `requestWebAuthnCeremony` would have to push a request into the webauthn channel — the channel
+  // exists and accepts responses now (channels.ts), but nothing here has a reason to ask for a
+  // signature, and issuing one to see what happens would be a prompt on the user's real security key.
+  completeMcpOAuth: () => ({ ok: false, reason: "stdio MCP servers need no OAuth; no flow to complete" }),
+  requestWebAuthnCeremony: () => ({ ok: false, reason: "nothing here initiates a WebAuthn ceremony" }),
 };
 
 /** Returns true if it handled the request. */
@@ -536,6 +654,20 @@ export function handleGateway(
 
 `);
     res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; recordSseClose(); });
+    return true;
+  }
+  // Drop every live event stream on purpose, with the server still answering.
+  //
+  // This exists to tell two failures apart, because they look identical from the app and want
+  // opposite fixes: a client that never retries needs the connection never to break, while a
+  // client that retries only needs the restart to be quick. Killing the backend cannot answer
+  // that — it takes the retry target away at the same moment — so the drop has to come from a
+  // server that stays up. Diagnostic only; nothing in the product calls it.
+  if (url.startsWith("/gw/__dropsse")) {
+    const n = sseClients.size;
+    for (const r of [...sseClients]) { try { r.end(); } catch { /* already gone */ } }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ dropped: n }));
     return true;
   }
   // Long-poll channels: the box holds these open until it has work. Answering instantly makes

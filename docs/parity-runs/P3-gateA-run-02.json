@@ -1,0 +1,28 @@
+{
+  "plan": "P3",
+  "run": 2,
+  "gate": "A",
+  "backendCommit": "d213abd",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 16,
+      "failed": 0
+    },
+    "auth": {
+      "checks": 6,
+      "failed": 0
+    },
+    "commands": {
+      "checks": 10,
+      "failed": 0
+    },
+    "channels": {
+      "checks": 7,
+      "failed": 0
+    }
+  },
+  "pass": true,
+  "mismatches": []
+}

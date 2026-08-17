@@ -70,7 +70,7 @@ const PLANS = {
 };
 
 /** Plans already closed, replayed by --regression in the order they were closed. */
-const CLOSED = ["P0", "P1", "P2"];
+const CLOSED = ["P0", "P1", "P2", "P3"];
 
 const isUp = async (url) => {
   try {
