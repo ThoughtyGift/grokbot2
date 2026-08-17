@@ -168,7 +168,14 @@ if (want("routes") && probed.length) {
     // between this process and the backend's debounced write.
     const hit = unknown[key];
     const wasUnknown = hit != null && hit.lastMs >= probeStartMs - 1000;
-    const implemented = strict ? r.status !== 404 : !wasUnknown;
+    // In strict mode a 404 is ambiguous, and reading only the status gets it wrong: `/avatars/<id>`
+    // answers 404 "agent has no avatar" for an id that does not exist, which is the route WORKING.
+    // The fallback is the one that says "not found: <METHOD> <path>", so the body is what separates
+    // "no such route" from "no such thing behind the route".
+    const fellThrough = r.status === 404
+      && typeof r.json?.error === "string"
+      && r.json.error.startsWith(contract.fallback.bodyContains);
+    const implemented = strict ? !fellThrough : !wasUnknown;
     record("routes", `${key} implemented`, true, implemented,
       implemented ? undefined
         : `in the contract, not handled here — recorded as an unknown path${strict ? "" : " (observe mode: status was 200 from the fallback)"}`);

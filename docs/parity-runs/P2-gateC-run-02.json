@@ -1,0 +1,121 @@
+{
+  "plan": "P2",
+  "run": 2,
+  "gate": "C",
+  "backendCommit": "93f00bf",
+  "local": {
+    "cdp": "http://127.0.0.1:9222",
+    "rowsVisited": 0,
+    "blockers": []
+  },
+  "goc": {
+    "cdp": "http://127.0.0.1:9333",
+    "rowsVisited": 0,
+    "blockers": []
+  },
+  "surfaces": [
+    {
+      "surface": "imageUnavailable",
+      "rule": "mustBeZero",
+      "local": 0,
+      "goc": 1,
+      "verdict": "ok"
+    },
+    {
+      "surface": "sidebarAvatarImages",
+      "rule": "informational",
+      "local": 0,
+      "goc": 1,
+      "verdict": "info"
+    },
+    {
+      "surface": "inlineImages",
+      "rule": "informational",
+      "local": 0,
+      "goc": 4,
+      "verdict": "info"
+    },
+    {
+      "surface": "attachments",
+      "rule": "informational",
+      "local": 0,
+      "goc": 24,
+      "verdict": "info"
+    },
+    {
+      "surface": "toolCards",
+      "rule": "informational",
+      "local": 2,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "openComputer",
+      "rule": "informational",
+      "local": 0,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "screenPane",
+      "rule": "informational",
+      "local": 0,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "questionWidgets",
+      "rule": "informational",
+      "local": 0,
+      "goc": 0,
+      "verdict": "info"
+    },
+    {
+      "surface": "routines",
+      "rule": "informational",
+      "local": 0,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "routineEventTriggers",
+      "rule": "informational",
+      "local": 0,
+      "goc": 1,
+      "verdict": "info"
+    },
+    {
+      "surface": "controls",
+      "rule": "informational",
+      "local": 33,
+      "goc": 74,
+      "verdict": "info"
+    }
+  ],
+  "controls": [
+    {
+      "control": "new bot",
+      "present": true
+    },
+    {
+      "control": "composer",
+      "present": true
+    },
+    {
+      "control": "settings",
+      "present": false
+    }
+  ],
+  "scope": "build-level only: broken-render markers, blocking states, control labels. Data-dependent surfaces are Gate B's job (see e2e-avatar.mjs).",
+  "pass": false,
+  "mismatches": [
+    {
+      "gate": "C",
+      "check": "local offers a \"settings\" control",
+      "expected": true,
+      "actual": false,
+      "loai": 2,
+      "note": "controls are build-level: present because the feature is compiled in, not because data exists"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "plan": "P2",
+  "run": 4,
+  "backendCommit": "93f00bf",
+  "regression": false,
+  "gocAvailable": true,
+  "gates": [
+    {
+      "plan": "P2",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "fail",
+      "exitCode": 1
+    }
+  ],
+  "stoppedAt": "P2 Gate A",
+  "pass": false
+}
