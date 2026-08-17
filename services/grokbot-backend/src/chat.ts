@@ -23,6 +23,7 @@ import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, closeAgentTab } from "./browser.js";
 import { stageImage, imageSize } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
+import { parseToolCalls, planBatches, planShape } from "./tool-calls.js";
 import { boxConfigured, boxCall } from "./box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, restoreHandoff, handoffEntries, beginComputerUse, endComputerUse, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
@@ -1050,19 +1051,42 @@ const TOOL_PROTOCOL =
   // the bubble mid-turn contained the call itself and nothing else. The parser already accepts
   // prose in front (TOOL_CALL is anchored at the END) and the bubble now keeps whatever was
   // said, so this instruction was the only thing forbidding it.
+  // The one-call-per-reply half of that instruction is also gone, and for the same reason: it was
+  // ours, while the original's own subagent prompts say "Parallel tool calls are critical … call all
+  // tools together in a single response". Now that runTurn reads every call and batches the read-only
+  // ones, saying "exactly one line" would cap the fan-out at one again — from the other end of the
+  // prompt, where it would be easy to miss. Both protocol strings have to agree.
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, hãy nói MỘT câu ngắn về việc sắp làm, " +
-  "rồi KẾT THÚC câu trả lời bằng đúng một dòng dạng " +
-  "TOOL_CALL: <tên>(<đối số>). Sau dòng đó không viết gì thêm. Công cụ: " +
+  "rồi KẾT THÚC câu trả lời bằng các dòng dạng TOOL_CALL: <tên>(<đối số>), mỗi lời gọi một dòng. " +
+  "Nhiều việc độc lập thì gọi song song trong CÙNG một lượt thay vì lần lượt. " +
+  "Sau các dòng đó không viết gì thêm. Công cụ: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
   BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
-function parseToolCall(text: string): { name: string; arg: string } | null {
-  const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
-  if (!m) return null;
-  const name = m[1].toLowerCase();
-  return name in TOOLS ? { name, arg: m[2].trim() } : null;
-}
+/** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
+const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
+
+/**
+ * Which tools may run side by side in one batch.
+ *
+ * Deliberately narrower than "auto-approved". Three kinds of tool are auto-approved yet must NOT
+ * be parallelised:
+ *
+ *   browser_*        — stateful and ordered. navigate then screenshot describes one page; run them
+ *                      together and the screenshot races the navigation.
+ *   ask_question     — parks the turn waiting on a human, so it cannot be one of several results
+ *   request_box_help   arriving together; the turn resumes when the person acts.
+ *
+ * What is left is the read-only box surface — read_file_v2, list_dir_v2, glob_file_search,
+ * ripgrep_raw_search, web_search, web_fetch — which is exactly the set P5 wanted to fan out.
+ */
+const BARRIER_TOOLS = new Set(["ask_question", "request_box_help"]);
+const isParallelSafe = (name: string): boolean => {
+  const l = name.toLowerCase();
+  if (BARRIER_TOOLS.has(l) || l.startsWith("browser_")) return false;
+  return isAutoApproved(l);
+};
 
 let sink: (agentId: string) => void = () => {};
 export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; }
@@ -1749,7 +1773,19 @@ const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tool
  * Async by design: browser actions take seconds, so the tool card goes "running" and the
  * result lands out of band instead of blocking the gateway reply the FE is waiting on.
  */
-function runTool(agentId: string, toolCallId: string, name: string, arg: string, history?: PoolMessage[]): void {
+function runTool(
+  agentId: string,
+  toolCallId: string,
+  name: string,
+  arg: string,
+  history?: PoolMessage[],
+  /**
+   * Set by a batch owner. When present, this call does NOT continue the turn on its own — the owner
+   * waits for every call in the batch and sends one combined follow-up instead. Without this, N
+   * parallel calls would each start their own follow-up turn and the model would answer N times.
+   */
+  onDone?: (result: string) => void,
+): void {
   const t = tail(agentId);
   const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
   if (!tc) return;
@@ -1778,6 +1814,7 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
       tc.result = result;
       tc.status = "done";
       onUpdate(agentId);
+      if (onDone) { onDone(result); return; }
       // A question is not a result to reason about — the follow-up turn happens when the
       // user answers it, not now, or the model talks over its own question.
       if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
@@ -2183,8 +2220,22 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   }
   if (bubble.kind === "send-message") bubble.streaming = false;
 
-  const call = parseToolCall(textOf(bubble));
-  if (!call) { clearPresence(agentId); onUpdate(agentId); return; }
+  // P5-2. `parseToolCalls` reads every call in the reply, not just a trailing one, and `planBatches`
+  // decides what may run together: read-only calls accumulate, anything side-effecting stands alone
+  // as a barrier. Only the FIRST batch runs now — its results go back to the model, which re-issues
+  // whatever is left. That keeps approval and browser ordering exactly as they were while turning a
+  // read-two-files request into one round trip instead of two.
+  const calls = parseToolCalls(textOf(bubble), isKnownTool);
+  if (!calls.length) { clearPresence(agentId); onUpdate(agentId); return; }
+  const batches = planBatches(calls, isParallelSafe);
+  const batch = batches[0];
+  const call = batch[0];
+  if (batches.length > 1) {
+    // Never drop work silently: say what is deferred, or a turn that quietly ran 1 of 4 calls looks
+    // like a turn that ran everything.
+    const shape = planShape(batches);
+    console.log(`[grokbot2] ${shape.calls} tool call(s) in one reply → ${shape.batches} batch(es), widest ${shape.widest}; running batch 1 of ${shape.batches}`);
+  }
   // A tool call is not the end of the turn: stay running, and name what is being done.
   setPresence(agentId, {
     isComposingMessage: false,
@@ -2196,8 +2247,8 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   });
   // Keep whatever the model SAID; drop only the machine-readable line.
   //
-  // `parseToolCall` anchors `TOOL_CALL:` at the END of the text, so prose in front of it matches
-  // too — and this used to delete the whole bubble on the assumption that the content was
+  // The parser accepts prose in front of a call, so a narrating reply matches too — and this used
+  // to delete the whole bubble on the assumption that the content was
   // "the model's raw TOOL_CALL: name(args)" and nothing else. That assumption was never checked.
   // If the model narrated before acting ("Mình mở trang trước đã." then the call), the narration
   // was thrown away, which is exactly the symptom we were blaming on the model: a multi-step
@@ -2205,7 +2256,12 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   //
   // So: strip the call, keep the words. An empty remainder still removes the bubble, which is
   // the common case and the original's behaviour — a turn that only acts renders nothing.
-  const spoken = textOf(bubble).replace(/TOOL_CALL:\s*[A-Za-z_][\w-]*\s*\([\s\S]*?\)\s*$/, "").trim();
+  //
+  // Strip by the EXACT text each call was parsed from (`ToolCall.raw`) rather than by a pattern.
+  // A pattern anchored to the end of the reply removes only the last call, leaving the earlier ones
+  // rendered to the user as raw `TOOL_CALL:` lines; and a global pattern would have to re-solve the
+  // balanced-parenthesis problem the parser already solved.
+  const spoken = calls.reduce((text, c) => text.replace(c.raw, ""), textOf(bubble)).trim();
   if (spoken) {
     setText(bubble, spoken);
     if (bubble.kind === "send-message") bubble.streaming = false;
@@ -2214,7 +2270,8 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     const at = tail(agentId).indexOf(bubble);
     if (at >= 0) tail(agentId).splice(at, 1);
   }
-  injectTool(agentId, `${call.name} ${call.arg}`, history);
+  if (batch.length > 1) runToolBatch(agentId, batch.map((c) => ({ name: c.name, arg: c.arg })), history);
+  else injectTool(agentId, `${call.name} ${call.arg}`, history);
 }
 
 /**
@@ -2234,6 +2291,74 @@ const toolSteps = new Map<string, number>();
 
 /** A fresh user message starts a new budget. */
 export const resetToolSteps = (agentId: string): void => { toolSteps.delete(agentId); };
+
+/**
+ * P5-2 — run one batch of read-only calls at the same time, then continue the turn ONCE.
+ *
+ * The turn loop was built around exactly one call per reply: `runTool` continued the turn itself, and
+ * `continueAfterTool` fed one name/arg/result triple back. Fanning out therefore needs two things
+ * beyond a wider parser — a batch owner that waits for all of them (`onDone` on `runTool`), and a
+ * follow-up that carries every result in one message. Without the second, each finished call starts
+ * its own turn and the model answers the user once per file it read.
+ *
+ * Calls are started together and awaited together, so the batch costs the slowest call rather than
+ * the sum. Entries are pushed for all of them first, so the outline panel shows the whole fan-out
+ * immediately instead of revealing it one row at a time.
+ */
+function runToolBatch(agentId: string, calls: { name: string; arg: string }[], history?: PoolMessage[]): void {
+  const t = tail(agentId);
+  const results: (string | undefined)[] = new Array(calls.length).fill(undefined);
+  let left = calls.length;
+
+  const started = calls.map((c) => {
+    const toolCallId = `tc-${toolSeq++}`;
+    t.push({
+      id: nextId(), kind: "tool-call", toolCallId, name: c.name, rawArgs: JSON.stringify({ arg: c.arg }),
+      summary: `${c.name}(${c.arg})`.slice(0, 160), status: "pending", timestampMs: Date.now(),
+    });
+    return { ...c, toolCallId };
+  });
+  onUpdate(agentId);
+
+  for (const [i, c] of started.entries()) {
+    runTool(agentId, c.toolCallId, c.name, c.arg, history, (result) => {
+      results[i] = result;
+      left -= 1;
+      if (left > 0 || !history) return;
+      continueAfterTools(agentId, history, started.map((s, j) => ({ name: s.name, arg: s.arg, result: results[j] ?? "" })));
+    });
+  }
+}
+
+/** Hand a whole batch of results back in ONE follow-up, in the order the model asked for them. */
+function continueAfterTools(agentId: string, history: PoolMessage[], done: { name: string; arg: string; result: string }[]): void {
+  if (done.length === 1) {
+    continueAfterTool(agentId, history, done[0].name, done[0].arg, done[0].result);
+    return;
+  }
+  const key = loadPoolKey(); if (!key) return;
+  const t = tail(agentId);
+  const step = (toolSteps.get(agentId) ?? 0) + 1;
+  toolSteps.set(agentId, step);
+  const last = step >= MAX_TOOL_STEPS;
+
+  const bubble: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  t.push(bubble); onUpdate(agentId);
+  const controller = new AbortController();
+  inflight.set(agentId, controller);
+  void runTurn(agentId, bubble, [
+    ...history,
+    { role: "assistant", content: done.map((d) => `TOOL_CALL: ${d.name}(${d.arg})`).join("\n") },
+    {
+      role: "user",
+      // Label each result with its own call. A batch of reads comes back as several blocks of text
+      // and, unlabelled, the model has to guess which file it is looking at — it guesses wrong.
+      content: `${done.map((d) => `Kết quả công cụ ${d.name}(${d.arg}):\n${d.result}`).join("\n\n")}\n` + (last
+        ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
+        : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
+    },
+  ], key, controller);
+}
 
 /** Hand the tool result back to the model, which may call another tool or answer. */
 function continueAfterTool(agentId: string, history: PoolMessage[], toolName: string, arg: string, result: string): void {

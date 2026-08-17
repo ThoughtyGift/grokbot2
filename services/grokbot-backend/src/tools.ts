@@ -10,6 +10,9 @@
 import { boxCall, boxConfigured } from "./box-exec.js";
 import { webSearch, webFetch } from "./web.js";
 import { isMcpConfigured, listMcpResources, readMcpResource } from "./mcp.js";
+// Safe direction: tool-calls.ts takes `known`/`isReadOnly` as parameters and imports nothing from
+// here, so the cap the parser enforces and the cap the prompt states cannot drift apart.
+import { MAX_CALLS_PER_REPLY } from "./tool-calls.js";
 
 export interface ToolSpec {
   /** Real tool name from ClientSideToolV2. */
@@ -421,24 +424,28 @@ export function toolProtocol(): string {
     : "Hiện chưa nối máy tính, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
       "không đọc file. Đừng hứa làm những việc đó.";
   return (
-    // KEEP "DUY NHẤT một dòng" until chat.ts runs the multi-call parser.
+    // The parallel-call sentence is the ORIGINAL's, not ours.
     //
-    // This sentence is what caps the agent at one tool per turn, i.e. the exact thing P5 exists to
-    // fix, and lifting it is a two-line change here. It was lifted, measured, and put back, because
-    // the executor is not ready: chat.ts:1061 still matches with
-    // `/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s` — one call, anchored to the END of the
-    // reply. Given two TOOL_CALL lines, the lazy group runs from the FIRST `(` to the LAST `)`, so
-    // the argument becomes the second call's text as well. Measured live against the box: `arg=""`
-    // and `tool error: ENOENT ... open '/home/b`, then the turn looped into five tool-calls and
-    // ended on an approval card. Emitting more calls than the executor can read is worse than
-    // emitting one.
+    // This used to read "trả lời DUY NHẤT một dòng", which capped the agent at one tool per turn —
+    // the exact thing P5 exists to fix — and it was invented here rather than ported. The original
+    // app says the opposite, in `buildBugbotSubagentPrompt`: "Parallel tool calls are critical. For
+    // maximum efficiency, invoke all relevant tools simultaneously rather than sequentially. When you
+    // need to verify multiple things, call all tools together in a single response." Two more of its
+    // subagent prompts repeat it. So the policy below is a translation of that, and only the SYNTAX
+    // is ours — it has to be, because the original invokes tools as native ClientSideToolV2Call
+    // protobufs and the pool has no native tool calling at all.
     //
-    // With the cap lifted, both models produce exactly what P5 wants — 2 calls, 1 batch, width 2,
-    // 6/6 attempts (gemini 7.8-11.4s, opus-5 2.8-4.6s). So P5's model-side blocker is this sentence
-    // and nothing else. Order of work: wire `parseToolCalls` + `planBatches` into chat.ts FIRST,
-    // then delete this comment and lift the cap.
-    "\n\nCÔNG CỤ: khi cần dùng, trả lời DUY NHẤT một dòng đúng dạng " +
-    "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm.\n" +
+    // The cap cost more than one turn per tool. Both models were marked down in the quality benchmark
+    // for obeying it, and opus-5, asked to do two things while allowed one line, invented a story
+    // about having tried and being denied permission. Lifting it, both emit exactly what P5 wants:
+    // 2 calls, 1 batch, width 2, on 6/6 attempts.
+    //
+    // Safe to lift only because chat.ts now runs `parseToolCalls` + `planBatches`. Lifting it while
+    // the executor still matched a single trailing call produced a corrupted argument and a turn that
+    // looped into five tool-calls — see the P5-2 comment in runTurn.
+    `\n\nCÔNG CỤ: khi cần dùng, trả lời bằng dòng dạng TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. ` +
+    `Gọi song song là điều then chốt: cần nhiều việc độc lập thì xuất tất cả trong CÙNG một lượt, ` +
+    `mỗi lời gọi một dòng (tối đa ${MAX_CALLS_PER_REPLY}), thay vì gọi lần lượt từng cái.\n` +
     lines.join("\n") +
     `\n${note}\nKhông cần công cụ thì trả lời bình thường. Sau khi nhận kết quả, trả lời dựa trên kết quả đó.`
   );
