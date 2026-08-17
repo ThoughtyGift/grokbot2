@@ -1236,10 +1236,9 @@ function seqFor(agentId: string): number {
   return seeded;
 }
 
-/** Read-only view of the anchor a tail response must carry. */
-export function transcriptAnchor(agentId: string) {
-  return { epoch: EPOCH, sequence: seqFor(agentId) };
-}
+// `transcriptAnchor` lived here and is gone: nothing should publish a transcript anchor, because
+// doing so sets the client's `observedAnchor` and stops it rendering. `seqFor` stays — it seeds the
+// event sequence from history so a restart does not rewind it, which is right regardless.
 
 export function nextTranscriptOrdered(agentId: string) {
   const next = seqFor(agentId) + 1;
@@ -1654,7 +1653,26 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
     hasMore: start > 0,
     cursor: entries[0]?.id ?? null,
     total: withSeq.length,
-    // ── the anchor, without which the conversation pane spins forever ──────────
+    // ── NO anchor here. Adding one is what kept the pane spinning. ────────────
+    //
+    // This response used to carry `epoch` and `sequence`, on the reasoning below, and it was WRONG —
+    // recorded rather than deleted because the reasoning still looks convincing and someone will be
+    // tempted again. Read the client's guard, not just its snapshot call:
+    //
+    //   B = R => R.observedAnchor != null            // set from {epoch: Z.epoch, sequence: Z.sequence}
+    //   q = (R, Z, X) => {
+    //     if (X.anchor == null) {
+    //       if (oe.epoch != null || oe.value !== X.windowAtDispatch || B(R)) return;   // ← bails
+    //       S(R, Z.entries), D(R, Z.nextBeforeSeq);                                    // ← renders
+    //     }
+    //
+    // Supplying epoch/sequence sets `observedAnchor`, which makes `B(R)` true, which makes the
+    // unanchored path BAIL WITHOUT RENDERING. The fields promise an ordered replica; a client that
+    // then never receives matching ordered events has been promised something we stopped sending.
+    // The original supplies neither — which is exactly why none of its six stored transcripts carries
+    // an epochHint — and its pane renders from the plain path.
+    //
+    // ── the reasoning that was wrong, kept as a warning ────────────────────────
     //
     // The client builds its transcript replica from THIS response plus an anchor, and it takes the
     // anchor from these two fields. Its own reducer, from the shipped bundle:
@@ -1675,7 +1693,6 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
     //
     // Sending the anchor also gives a drifted replica a way back: the client re-anchors on the epoch
     // and sequence here instead of appending forever onto a replica that has silently fallen behind.
-    ...transcriptAnchor(agentId ?? ""),
   };
 }
 export function getConversationOutline(a: { agentId?: string; id?: string }) {
