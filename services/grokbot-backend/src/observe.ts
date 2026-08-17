@@ -33,7 +33,10 @@ const FILE = process.env.GROKBOT2_COVERAGE_FILE ?? join(DIR, "coverage.json");
  * Two phases on purpose, same as the auth switch. The observe pass is what turns
  * "which endpoints does the app need?" from a guess into a list.
  */
-export const STRICT_404 = process.env.GROKBOT2_STRICT_404 === "1";
+// Read per call rather than captured at import, so the phase can be flipped by editing `.env`
+// and letting tsx reload — the whole point of a two-phase rollout is being able to go back
+// quickly, and a value frozen at module load makes that a rebuild instead of a restart.
+export const isStrict404 = (): boolean => process.env.GROKBOT2_STRICT_404 === "1";
 
 export interface UnknownHit {
   /** How many times this exact METHOD + path arrived. */
@@ -137,11 +140,11 @@ export function recordUnknown(method: string, url: string, body: Buffer): void {
     lastMs: now,
     // Redacted: an unknown endpoint is exactly where an unexpected credential shows up.
     sample: prev?.sample ?? redact(body.toString("utf8").slice(0, 300)),
-    answered: STRICT_404 ? 404 : 200,
+    answered: isStrict404() ? 404 : 200,
   });
   // Loud on the first hit only: this is the line that turns an invisible gap into a task, and
   // repeating it on every poll would bury it.
-  if (!prev) console.warn(`[gateway] UNKNOWN PATH ${key} — answering ${STRICT_404 ? 404 : "200 {} (observe mode)"}`);
+  if (!prev) console.warn(`[gateway] UNKNOWN PATH ${key} — answering ${isStrict404() ? 404 : "200 {} (observe mode)"}`);
   save();
 }
 
@@ -157,8 +160,24 @@ export function recordSseClose(): void { sse.closed += 1; save(); }
 
 // ── read ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Forget the recorded unknown paths.
+ *
+ * The record is deliberately historical, which means implementing a route does NOT remove its
+ * row — after P2 the list still showed `/gw/avatars/…` and `/gw/prepare-upgrade` from before they
+ * existed, next to leftovers from this script's own probes. A list that only ever grows stops
+ * being a to-do list. Clearing is explicit and manual: `GET /gw/__coverage?reset=unknown`.
+ */
+export function clearUnknown(): number {
+  const n = unknownPaths.size;
+  unknownPaths.clear();
+  saveCoverageNow();
+  console.log(`[grokbot2] cleared ${n} recorded unknown path(s)`);
+  return n;
+}
+
 export const coverageSnapshot = () => ({
-  strict404: STRICT_404,
+  strict404: isStrict404(),
   unknownPaths: Object.fromEntries([...unknownPaths].sort((a, b) => b[1].n - a[1].n)),
   calls: Object.fromEntries([...calls].sort((a, b) => b[1].n - a[1].n)),
   lastArgs: Object.fromEntries([...lastArgs].sort()),
@@ -178,6 +197,6 @@ export const lastArgsFor = (filter?: string | null): Record<string, unknown> =>
  * `const nf = notFoundBody(...); if (nf) { …404… } else { …200 {}… }`
  */
 export function notFoundBody(method: string, url: string): string | null {
-  if (!STRICT_404) return null;
+  if (!isStrict404()) return null;
   return JSON.stringify({ error: `not found: ${method} ${url.split("?")[0]}` });
 }

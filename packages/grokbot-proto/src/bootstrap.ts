@@ -64,7 +64,10 @@ export function ensureSandBox(base = "http://localhost:8788"): Buffer {
     pbStr(7, vncUrl), // vnc_url
     pbStr(8, process.env.GROKBOT2_TERMINALS_FOLDER ?? "/workspace/terminals"), // terminals_folder
     pbStr(10, gatewayUrl), // gateway_url
-    pbStr(11, "gw-token"), // gateway_token
+    // The ticket the client presents on every /gw/* call. Minted per boot by the backend
+    // (services/grokbot-backend/src/auth-gate.ts) — a literal here would be a credential written
+    // in the source, which is no credential at all against a process that can read the repo.
+    pbStr(11, process.env.GROKBOT2_GATEWAY_TOKEN ?? "gw-token"), // gateway_token
     // The viewer config wants primaryUrl + forkBaseUrl + networkToken together; leaving the
     // fork base empty makes the whole vncProxy block invalid, so default it to the same box.
     pbStr(12, process.env.GROKBOT2_FORK_VNC_URL ?? new URL(vncUrl).origin), // fork_vnc_base_url

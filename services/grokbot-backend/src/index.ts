@@ -18,7 +18,8 @@ import { browserProbe, isBrowserConfigured } from "./browser.js";
 import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
-import { recordUnknown, notFoundBody, saveCoverageNow, STRICT_404 } from "./observe.js";
+import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
+import { ensureGatewayToken, authMode } from "./auth-gate.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -45,6 +46,20 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ token: "exec", authToken: "exec", url: `http://localhost:${config.port}/exec` }));
   }
+  // ── telemetry sink ──
+  //
+  // The observe pass caught `POST /v1/traces` — the app's OpenTelemetry exporter, which is also
+  // what the `traceparent` header in the client's constant table is for. It is fire-and-forget:
+  // a 404 makes the exporter retry and fill the log with failures over something we do not want
+  // anyway. Accept and discard, which is exactly what a sink that stores nothing should do.
+  //
+  // Deliberately BEFORE the strict-404 fallback, so turning strict mode on cannot start breaking
+  // telemetry. Deliberately not forwarded anywhere: traces would leave this machine otherwise.
+  if (url.startsWith("/v1/traces") || url.startsWith("/v1/metrics") || url.startsWith("/v1/logs")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end("{}");
+  }
+
   // ── bare /health ──
   //
   // Not in the extracted contract, which is gateway-relative — but the observe pass caught
@@ -101,6 +116,10 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 server.listen(config.port, "127.0.0.1", () => {
   startScheduler();
+  // Mint the gateway ticket BEFORE anything can serve EnsureSandBox, so the descriptor and the
+  // check are guaranteed to carry the same value.
+  ensureGatewayToken();
+  logSafe(`[grokbot2] [auth] mode=${authMode()} · token minted, harness copy at .data/gateway-token.txt`);
   // Every startup line goes through logSafe: these carry the pool URL, the box URL, the VNC URL
   // and the CDP endpoint, and any of them can hold a credential in its query string.
   logSafe(`[grokbot2] backend on http://localhost:${config.port}`);

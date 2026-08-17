@@ -62,6 +62,8 @@ import {
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody,
 } from "./observe.js";
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, type ChannelName } from "./channels.js";
+import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
+import { clearUnknown } from "./observe.js";
 
 /**
  * When this process started, and when it was last doing work.
@@ -415,6 +417,17 @@ export function handleGateway(
 ): boolean {
   if (!url.startsWith("/gw/")) return false;
 
+  // P0-5. In `warn` this only records the verdict; in `enforce` it answers 401 with the host's own
+  // message. `/gw/health` and `/gw/__coverage` are exempt inside checkAuth — they are how you
+  // diagnose a bad rollout, so they must not be behind the credential that broke it.
+  const verdict = checkAuth(url, headers);
+  noteAuth(url, verdict);
+  if (!verdict.allow) {
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: verdict.message }));
+    return true;
+  }
+
   if (url.startsWith("/gw/health")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(hostHealth()));
@@ -550,6 +563,11 @@ export function handleGateway(
     // `tsx watch` reloads on every save and the in-memory counters above were seen resetting
     // three times inside an hour. `unknownPaths` is the new column — every request that matched
     // no route, which is the list P2/P3 are meant to empty.
+    // `?reset=unknown` forgets the recorded unknown paths. Needed because the record is
+    // historical by design: implementing a route does not remove its row, so after P2 the list
+    // still showed routes that now exist. A to-do list that only grows is not one.
+    const reset = new URL(url, "http://x").searchParams.get("reset");
+    const cleared = reset === "unknown" ? clearUnknown() : undefined;
     const persisted = coverageSnapshot();
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -560,6 +578,8 @@ export function handleGateway(
       // What each request/response channel has actually seen. The app posts frames we do not yet
       // consume, and reading their real shape here beats guessing it.
       channels: channelSnapshot(),
+      auth: authSnapshot(),
+      ...(cleared !== undefined ? { clearedUnknownPaths: cleared } : {}),
       persisted: {
         ...persisted,
         // Same split as `mapped`/`unmapped` above, but computed over everything ever seen

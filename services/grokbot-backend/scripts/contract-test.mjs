@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..", "..");
@@ -74,7 +75,9 @@ const req = async (method, path, { body, headers, stream = false } = {}) => {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method,
-      headers: { "content-type": "application/json", ...(headers ?? {}) },
+      // The ticket, once P0-5 enforces it. Spread first so a check that deliberately sends a
+      // wrong or absent credential can still override it.
+      headers: { "content-type": "application/json", ...gwHeaders(), ...(headers ?? {}) },
       ...(body !== undefined ? { body: typeof body === "string" ? body : JSON.stringify(body) } : {}),
       signal: controller.signal,
     });
