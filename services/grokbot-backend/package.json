@@ -4,7 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "//dev": "Builds the workspace packages FIRST, on purpose. `@grokbot2/proto` and `@grokbot2/pool-client` resolve to their dist/, so editing their src has no effect until they are rebuilt — and `tsx watch` hides that completely: it reloads this backend and keeps serving the stale build. That cost a wrong diagnosis (see the retraction in git log): we minted a random gateway token, checked against it, and handed the app a hardcoded literal from a day-old dist, then blamed the app for not re-fetching.",
+    "dev": "pnpm --filter @grokbot2/proto --filter @grokbot2/pool-client build && tsx watch src/index.ts",
+    "dev:nobuild": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
