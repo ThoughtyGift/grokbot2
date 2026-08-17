@@ -23,7 +23,22 @@
 | **Chìa khoá** | `app.asar` **chứa sẵn bản cài đặt của chính cái server ta đang giả lập** (hàm router `x3s`). Trích nó ra thành hợp đồng → "so với bản gốc" thành một bài test có đúng/sai. |
 | **Kết quả mong đợi** | 9/9 route · 111/120 lệnh · ảnh đại diện bot hiện · nhiều công cụ trong một lượt · kênh Slack/Discord chạy thật. (Avatar nhấp nháy: **đã xong**, xem §8.) |
 | **Tổng công** | ≈ 4–5 tuần cho P0–P7, trong đó P0+P1 (2,5 ngày) là điều kiện cần của tất cả. |
-| **Đã xong** | **P0 Đợt 1** (commit `41c3239`) · **P4 presence** (commit `549b4db`) |
+| **Đã xong** | **P0 Đợt 1** (`41c3239`) · **P0 Đợt 2** (`d567153`) · **P4 presence** (`549b4db`) |
+
+### ⚠️ Thứ tự đã sửa sau khi đo: Đợt 3 phải đi SAU P2
+
+Pha quan sát của Đợt 2 tìm ra **3 endpoint app đang gọi thật** mà backend im lặng trả `200 {}`.
+Nếu bật `GROKBOT2_STRICT_404=1` ngay bây giờ, cả ba sẽ nhận 404 → **app hỏng thật**.
+
+```
+                     ┌── Đợt 1 ✅ vá bảo mật
+   P0 ───────────────┼── Đợt 2 ✅ quan sát (404 cài sẵn, TẮT)
+                     └── Đợt 3 ⛔ CHỜ P2 ──┐
+                                            │
+   P1 ─► P2 (cài 4 endpoint) ───────────────┘  rồi mới bật 404
+```
+
+**Đây chính là giá trị của việc chia hai pha** — nó vừa chặn một lần làm hỏng app.
 
 ### Thứ tự thực thi
 
@@ -466,9 +481,36 @@ Trả `{ "quiescing": false, "runningTurns": <số> }`. Dùng `inflight.size` **
 Nhận mảng phản hồi, ghép theo id với request đang treo ở kênh long-poll, trả `{"ok":true}`.
 Không có kênh → `404 "local-exec channel not enabled"`.
 
+> **✅ Đã xác nhận bằng phép đo** (Đợt 2, 17:17:34): app **thật sự gọi** endpoint này, n=2, và
+> ta đang trả `200 {}` — nên kênh local-exec im lặng không làm gì. Không còn là giả thuyết từ
+> asar nữa.
+
 #### P2-4 · `POST /gw/webauthn/responses`
 
 Cùng dạng, trả `{"ok":true}`, `404 "webauthn channel not enabled"` khi tắt.
+
+> **✅ Đã xác nhận bằng phép đo** (Đợt 2, 17:17:06), **kèm hình dạng payload thật** — thứ đoán
+> không ra từ asar:
+>
+> ```json
+> {"frames":[{"kind":"ping"}]}
+> ```
+>
+> Nghĩa là `frames` là một mảng các frame có `kind`. Cài theo hình dạng này, không theo suy đoán.
+
+#### P2-6 · `GET /health` ở **gốc** — phát hiện mới, không có trong hợp đồng
+
+> **App gọi `GET /health` ở gốc**, không phải `/gw/health` (Đợt 2, 17:16:56). Backend chỉ cài
+> `/gw/health`, nên lời gọi này rơi vào fallback.
+>
+> **Vì sao hợp đồng không bắt được:** bảng route trích từ `x3s` là **tương đối theo `baseUrl`
+> của gateway**. Nếu app dựng URL health từ một base khác (hoặc một caller khác — tiến trình
+> main, hoặc luồng exec-daemon-credential), nó sẽ ra `/health` trần.
+>
+> **Chưa xác định** ai gọi. Việc cần làm: bật `GROKBOT2_LOG=1` một phiên, đọc header
+> `user-agent` của lời gọi đó — đúng cách đã dùng để xác định ai mở `/gw/events`.
+>
+> Đây là ví dụ sống của §13: **hợp đồng là giả thuyết tốt nhất, phép đo mới là trọng tài.**
 
 #### P2-5 · `GET /gw/health` — thêm 6 trường
 
@@ -953,3 +995,5 @@ completeMcpOAuth              requestWebAuthnCeremony       refreshMcp
 | 2026-08-17 | **P4 rút khỏi kế hoạch — đã xong** | Nguyên nhân: phát trên `channel: "roster"`, tên không có trong `SSE_CHANNEL_BY_FAMILY` (16 tên hợp lệ). Đổi sang `agents`/`agent-upserted`: bot hiện sau ~1,5 s, avatar animate. **Không task nào trong P4 dự kiến là nguyên nhân** — bài học nằm ở *chỗ đọc*, không ở độ cẩn thận. |
 | 2026-08-17 | P0 Đợt 1 xong, Đợt 3 vẫn chờ quan sát | 4 task rủi ro 0 đã commit (`41c3239`). Hai task đổi hành vi mạng (404, kiểm token) **phải có pha quan sát trước** — P0-3 nay cũng hai pha như P0-5. |
 | 2026-08-17 | `hermes-agent-main/` gitignore, không vendor | 144 MB / 9.521 file / MIT third-party — commit vào đây sẽ lấn cả repo và trộn history của người khác |
+| 2026-08-17 | **Đợt 3 chuyển xuống sau P2** | Pha quan sát tìm ra 3 endpoint app đang gọi thật (`/gw/webauthn/responses`, `/gw/local-exec/responses`, `/health` gốc). Bật 404 lúc này sẽ 404 cả ba → hỏng app. Hai pha vừa chặn được một lần làm hỏng. |
+| 2026-08-17 | Hợp đồng asar **đúng 2/3, thiếu 1** | Hai endpoint dự đoán từ `x3s` đã được xác nhận bằng phép đo, kèm payload thật (`{"frames":[{"kind":"ping"}]}`). Nhưng `GET /health` ở gốc thì hợp đồng không có — bảng route là tương đối theo `baseUrl`. Xác nhận §13: tin phép đo hơn hợp đồng. |
