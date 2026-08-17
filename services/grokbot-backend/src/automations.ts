@@ -260,6 +260,45 @@ export function getAgentAutomations(a: { id?: string; agentId?: string }): Autom
   return listFor(agentIdOf(a));
 }
 
+/**
+ * The automation shape the CLIENT reads — different from how we store it, and clicking a routine
+ * crashed the editor because of it: "Couldn't render this. This section hit an unexpected error."
+ *
+ * We store `trigger` as a cron STRING ("0 9 * * *"). The client's editor reads `trigger.type` and
+ * `trigger.schedule` — it wants an OBJECT. Its own helper is literally `Bb(t) = {type:"cron",
+ * schedule:t}`, and its trigger-chip renderer switches on `trigger.type` ("cron" | "slack" | …). Given
+ * a bare string, `trigger.type` is undefined, no case matches, and rendering the chip throws — the
+ * section-scoped error boundary is what the user sees. The panel ROW survived because it reads
+ * `triggerDescription`, which we do provide; only the editor's "When to run" section crashed.
+ *
+ * So this maps our internal record to the client's shape: `trigger` as `{type, schedule}` (or the
+ * platform object for a listener), plus the top-level `schedule`/`scheduleDescription` the editor also
+ * reads. Applied at the gateway boundary only; internally the cron string stays, because parseCron and
+ * the scheduler are built on it.
+ */
+export function toClientAutomation(rec: Automation): Record<string, unknown> {
+  const platform = listenerPlatform(rec.trigger);
+  const trigger = platform
+    ? platform === "slack"
+      ? { type: "slack", channel: "", match: "message", keyword: "", emoji: "", bySelf: false }
+      : { type: platform }
+    : { type: "cron", schedule: rec.trigger };
+  return {
+    ...rec,
+    trigger,
+    schedule: rec.trigger,
+    scheduleDescription: rec.triggerDescription,
+    // `body` alongside `prompt`: the editor's Instruction field has read both across builds, and
+    // sending both costs nothing while a wrong single guess leaves the field blank.
+    body: rec.prompt,
+  };
+}
+
+/** Client-facing list — the shape the FE editor and panel expect. */
+export function getAgentAutomationsForClient(a: { id?: string; agentId?: string }): Record<string, unknown>[] {
+  return listFor(agentIdOf(a)).map(toClientAutomation);
+}
+
 export function listAllAutomations(): Automation[] {
   return all();
 }

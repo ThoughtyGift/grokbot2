@@ -46,6 +46,8 @@ import {
 } from "./chat.js";
 import {
   getAgentAutomations,
+  getAgentAutomationsForClient,
+  toClientAutomation,
   listAllAutomations,
   createAgentAutomation,
   updateAgentAutomation,
@@ -277,7 +279,7 @@ setRosterSink((agentId) => {
 // reads `{agentId, automations}`, so we send the whole list for that agent. Without this the routine
 // was created but the panel only learned about it on reopen, which read as "the bot didn't create it".
 setAutomationsSink((agentId) => {
-  broadcast("agents-automation", { agentId, automations: getAgentAutomations({ id: agentId }) });
+  broadcast("agents-automation", { agentId, automations: getAgentAutomationsForClient({ id: agentId }) });
 });
 setInterval(() => {
   for (const r of sseClients) {
@@ -482,12 +484,15 @@ const methods: Record<string, (args: any) => unknown> = {
   // Routines: every mutating call answers with the agent's FULL list, because the FE
   // stores the reply as the new list instead of re-fetching. The old `() => []` stub
   // therefore looked like "created, then vanished".
-  getAgentAutomations: (a) => getAgentAutomations(a),
-  listAllAutomations: () => listAllAutomations(),
-  setAgentAutomationEnabled: (a) => setAgentAutomationEnabled(a),
-  createAgentAutomation: (a) => createAgentAutomation(a),
-  updateAgentAutomation: (a) => updateAgentAutomation(a),
-  deleteAgentAutomation: (a) => deleteAgentAutomation(a),
+  // Every automation reply goes out in the CLIENT'S shape (trigger as an object, not our cron string)
+  // — the mutating calls too, because the FE stores their reply as the new list and the editor then
+  // reads `trigger.type` off it. Sending the raw record is what crashed the editor on click.
+  getAgentAutomations: (a) => getAgentAutomationsForClient(a),
+  listAllAutomations: () => listAllAutomations().map(toClientAutomation),
+  setAgentAutomationEnabled: (a) => setAgentAutomationEnabled(a).map(toClientAutomation),
+  createAgentAutomation: (a) => createAgentAutomation(a).map(toClientAutomation),
+  updateAgentAutomation: (a) => updateAgentAutomation(a).map(toClientAutomation),
+  deleteAgentAutomation: (a) => deleteAgentAutomation(a).map(toClientAutomation),
   runAgentAutomationNow: (a) => runAgentAutomationNow(a),
   // A "channels-view" is `{manifests, connections}` — the host builds it as
   // `{manifests: CONNECTOR_MANIFESTS, connections: <filtered>}`. The previous `{channels: []}`
