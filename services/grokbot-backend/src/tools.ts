@@ -180,8 +180,8 @@ export function renderTree(node: TreeNode | undefined, indent = "", isRoot = tru
 export const TOOLS: Record<string, ToolSpec> = {
   run_terminal_command_v2: {
     name: "run_terminal_command_v2",
-    summary: "Chạy một lệnh shell trên máy tính của bạn",
-    usage: 'run_terminal_command_v2({"command":"<lệnh>"})  ·  hoặc run_terminal_command_v2(<lệnh>)',
+    summary: "Run a shell command on your computer",
+    usage: 'run_terminal_command_v2({"command":"<command>"})  ·  or run_terminal_command_v2(<command>)',
     needsApproval: true,
     async run(arg) {
       const { command } = toolArgs(arg, [{ name: "command", aliases: ["cmd", "shell"] }]);
@@ -199,8 +199,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   read_file_v2: {
     name: "read_file_v2",
-    summary: "Đọc nội dung một file trên máy tính của bạn",
-    usage: 'read_file_v2({"target_file":"<đường dẫn>","offset":<dòng bắt đầu>,"limit":<số dòng>})  ·  hoặc read_file_v2(<đường dẫn>[, <dòng>, <số dòng>])',
+    summary: "Read a file on your computer",
+    usage: 'read_file_v2({"target_file":"<path>","offset":<first line>,"limit":<line count>})  ·  or read_file_v2(<path>[, <line>, <count>])',
     needsApproval: false,
     async run(arg) {
       const { target_file: path, offset, limit } = toolArgs(arg, [
@@ -229,8 +229,8 @@ export const TOOLS: Record<string, ToolSpec> = {
    */
   edit_file_v2: {
     name: "edit_file_v2",
-    summary: "Ghi (tạo hoặc thay toàn bộ) một file trên máy tính của bạn",
-    usage: 'edit_file_v2({"relative_workspace_path":"<đường dẫn>","contents_after_edit":"<toàn bộ nội dung mới>"})',
+    summary: "Write a file on your computer — creates it, or replaces it whole",
+    usage: 'edit_file_v2({"relative_workspace_path":"<path>","contents_after_edit":"<the entire new contents>"})',
     needsApproval: true,
     async run(arg) {
       // The original's names are canonical; ours stay as aliases so calls that worked still do.
@@ -246,8 +246,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   edit_file: {
     name: "edit_file",
-    summary: "Sửa một đoạn trong file có sẵn, không cần gửi lại cả file",
-    usage: 'edit_file({"relative_workspace_path":"<đường dẫn>","old_string":"<đoạn cũ>","new_string":"<đoạn mới>"})',
+    summary: "Change one passage inside an existing file, without resending the whole file",
+    usage: 'edit_file({"relative_workspace_path":"<path>","old_string":"<the old passage>","new_string":"<the new passage>"})',
     needsApproval: true,
     async run(arg) {
       const { relative_workspace_path: path, old_string: oldString, new_string: newString } = toolArgs(arg, [
@@ -265,8 +265,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   delete_file: {
     name: "delete_file",
-    summary: "Xoá một file trên máy tính của bạn",
-    usage: 'delete_file({"relative_workspace_path":"<đường dẫn>"})  ·  hoặc delete_file(<đường dẫn>)',
+    summary: "Delete a file on your computer",
+    usage: 'delete_file({"relative_workspace_path":"<path>"})  ·  or delete_file(<path>)',
     needsApproval: true,
     async run(arg) {
       const { relative_workspace_path: target } = toolArgs(arg, [
@@ -279,8 +279,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   list_dir_v2: {
     name: "list_dir_v2",
-    summary: "Liệt kê cây thư mục trên máy tính của bạn",
-    usage: 'list_dir_v2({"target_directory":"<thư mục>","depth":<độ sâu>})  ·  hoặc list_dir_v2(<thư mục>[, <độ sâu>])',
+    summary: "List the directory tree on your computer",
+    usage: 'list_dir_v2({"target_directory":"<directory>","depth":<depth>})  ·  or list_dir_v2(<directory>[, <depth>])',
     needsApproval: false,
     async run(arg) {
       // `depth` is ours: the original's list_dir_v2 has target_directory + ignore_globs and no
@@ -300,8 +300,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   glob_file_search: {
     name: "glob_file_search",
-    summary: "Tìm file theo mẫu tên trên máy tính của bạn",
-    usage: 'glob_file_search({"glob_pattern":"<mẫu>","target_directory":"<thư mục>"})  ·  hoặc glob_file_search(<mẫu>[, <thư mục>])',
+    summary: "Find files by name pattern on your computer",
+    usage: 'glob_file_search({"glob_pattern":"<pattern>","target_directory":"<directory>"})  ·  or glob_file_search(<pattern>[, <directory>])',
     needsApproval: false,
     async run(arg) {
       // ⚠ Positional order here is OURS, and it is the reverse of the catalog's field order:
@@ -324,8 +324,8 @@ export const TOOLS: Record<string, ToolSpec> = {
   // the box tools they are always offered.
   web_search: {
     name: "web_search",
-    summary: "Tìm kiếm trên web",
-    usage: 'web_search({"search_term":"<từ khoá>"})  ·  hoặc web_search(<từ khoá>)',
+    summary: "Search the web",
+    usage: 'web_search({"search_term":"<terms>"})  ·  or web_search(<terms>)',
     needsApproval: false,
     alwaysAvailable: true,
     async run(arg) {
@@ -341,8 +341,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   web_fetch: {
     name: "web_fetch",
-    summary: "Đọc nội dung một trang web",
-    usage: 'web_fetch({"url":"<url>"})  ·  hoặc web_fetch(<url>)',
+    summary: "Read the contents of a web page",
+    usage: 'web_fetch({"url":"<url>"})  ·  or web_fetch(<url>)',
     needsApproval: false,
     alwaysAvailable: true,
     async run(arg) {
@@ -358,8 +358,8 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   ripgrep_raw_search: {
     name: "ripgrep_raw_search",
-    summary: "Tìm nội dung trong file trên máy tính của bạn",
-    usage: 'ripgrep_raw_search({"pattern":"<mẫu>","path":"<thư mục>"})  ·  hoặc ripgrep_raw_search(<mẫu>[, <thư mục>])',
+    summary: "Search inside files on your computer",
+    usage: 'ripgrep_raw_search({"pattern":"<pattern>","path":"<directory>"})  ·  or ripgrep_raw_search(<pattern>[, <directory>])',
     needsApproval: false,
     async run(arg) {
       // These two ARE the catalog's names and its field order, so JSON and positional agree.
@@ -387,16 +387,16 @@ export const TOOLS: Record<string, ToolSpec> = {
 if (isMcpConfigured()) {
   TOOLS.list_mcp_resources = {
     name: "list_mcp_resources",
-    summary: "Liệt kê resource (tài liệu, file, bản ghi) của các server MCP đã nối",
-    usage: 'list_mcp_resources(<tên server>)  ·  bỏ trống để xem tất cả',
+    summary: "List the resources (documents, files, records) of the connected MCP servers",
+    usage: 'list_mcp_resources(<server name>)  ·  leave empty to see them all',
     needsApproval: false,
     alwaysAvailable: true,
     run: (arg) => listMcpResources(arg),
   };
   TOOLS.read_mcp_resource = {
     name: "read_mcp_resource",
-    summary: "Đọc nội dung một resource MCP theo URI",
-    usage: 'read_mcp_resource({"server":"<tên>","uri":"<uri>"})',
+    summary: "Read one MCP resource by URI",
+    usage: 'read_mcp_resource({"server":"<name>","uri":"<uri>"})',
     needsApproval: false,
     alwaysAvailable: true,
     run: (arg) => readMcpResource(arg),
@@ -419,10 +419,10 @@ export function toolProtocol(): string {
     ? // "box" is internal jargon. The original is explicit: to the user it is always "my computer",
     // never a "box" — and the model repeats whatever word the tool list uses. It called itself
     // a "Linux Box" in a live reply because every summary here said box.
-    "Công cụ shell/file/tìm-kiếm-file chạy trên MÁY TÍNH của bạn (một máy Linux riêng), " +
-      "không phải máy của người dùng. Khi nói với người dùng, gọi nó là \"máy tính của mình\", đừng gọi là \"box\"."
-    : "Hiện chưa nối máy tính, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
-      "không đọc file. Đừng hứa làm những việc đó.";
+    "The shell, file and file-search tools run on YOUR computer (a Linux machine of your own), not on " +
+      "the user's machine. When speaking to the user, call it \"my computer\" — never \"the box\"."
+    : "No computer is attached yet, so you have ONLY the web tools above: you cannot run shell " +
+      "commands or read files. Do not promise to do either.";
   return (
     // The parallel-call sentence is the ORIGINAL's, not ours.
     //
@@ -443,11 +443,13 @@ export function toolProtocol(): string {
     // Safe to lift only because chat.ts now runs `parseToolCalls` + `planBatches`. Lifting it while
     // the executor still matched a single trailing call produced a corrupted argument and a turn that
     // looped into five tool-calls — see the P5-2 comment in runTurn.
-    `\n\nCÔNG CỤ: khi cần dùng, trả lời bằng dòng dạng TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. ` +
-    `Gọi song song là điều then chốt: cần nhiều việc độc lập thì xuất tất cả trong CÙNG một lượt, ` +
-    `mỗi lời gọi một dòng (tối đa ${MAX_CALLS_PER_REPLY}), thay vì gọi lần lượt từng cái.\n` +
+    "\n\nTOOLS: when you need one, reply with lines of the form TOOL_CALL: <name>(<args>) and nothing " +
+    // Verbatim from the original's buildBugbotSubagentPrompt, minus its own count limit.
+    "else. Parallel tool calls are critical. For maximum efficiency, invoke all relevant tools " +
+    "simultaneously rather than sequentially. When you need to verify multiple things, call all tools " +
+    `together in a single response — one call per line, at most ${MAX_CALLS_PER_REPLY}.\n` +
     lines.join("\n") +
-    `\n${note}\nKhông cần công cụ thì trả lời bình thường. Sau khi nhận kết quả, trả lời dựa trên kết quả đó.`
+    `\n${note}\nIf no tool is needed, just answer. Once results come back, answer from them.`
   );
 }
 

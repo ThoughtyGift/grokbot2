@@ -917,11 +917,31 @@ if (isMcpConfigured()) {
   TOOLS.call_mcp_tool = (arg) => callMcpTool(arg);
 }
 
+/**
+ * These protocol strings are ENGLISH on purpose, like the rest of the prompt.
+ *
+ * `BASE_SYSTEM_PROMPT` is generated from the original app (79 of its 179 chapters) and is English
+ * throughout; these seams were written here in Vietnamese, which left the shipped prompt a mix —
+ * measured, 18 of 100 non-empty lines and 8% of its characters. Where the original has a sentence for
+ * something, its wording is quoted below rather than paraphrased, so a model that knows the original
+ * behaves the same way here. Only the mechanics of `TOOL_CALL: name(args)` are ours, because the
+ * original invokes tools as native ClientSideToolV2Call protobufs and the pool has no native tool
+ * calling at all.
+ *
+ * Measured before switching, three sequential attempts per cell with gemini-3.7-flash: tool calling is
+ * IDENTICAL between the two languages (two-file task 6 calls either way, shell 3/3 either way, no
+ * spurious calls either way), and a Vietnamese question still gets a Vietnamese answer 3/3 with an
+ * English seam — the reply language follows the user, not the prompt. So this change buys consistency
+ * with the original, not behaviour, and it is claimed as nothing more.
+ *
+ * What stays Vietnamese: every string the USER reads. `"[grokbot2] Pool trả về rỗng — thử gửi lại."`
+ * and its kind are rendered in the app, not read by the model.
+ */
 const MCP_PROTOCOL = isMcpConfigured()
-  ? "\n\nMCP: các dịch vụ đã nối sẵn — " + Object.keys(mcpServers()).join(", ") + ". " +
-    'Xem tool của một server bằng TOOL_CALL: get_mcp_tools(<tên server>), rồi gọi bằng ' +
+  ? "\n\nMCP: these services are already connected — " + Object.keys(mcpServers()).join(", ") + ". " +
+    "List a server's tools with TOOL_CALL: get_mcp_tools(<server name>), then call one with " +
     'TOOL_CALL: call_mcp_tool({"server":"…","tool_name":"…","tool_args":{…}}). ' +
-    "Ưu tiên MCP hơn là mở trình duyệt khi dịch vụ đã có sẵn ở đây."
+    "Prefer MCP over opening a browser when the service is already here."
   : "";
 
 // Browser actions are only offered when a box browser is actually configured — advertising
@@ -954,28 +974,31 @@ for (const [name, spec] of Object.entries(availableTools())) TOOLS[name] = (arg)
 const BROWSER_PROTOCOL = isBrowserConfigured()
   // "box" is internal jargon; the original forbids saying it to the user, and the model repeats
   // whatever the tool text uses — it introduced itself as running on a "Linux Box" in a live reply.
-  ? "\n\nTRÌNH DUYỆT: các công cụ browser_* điều khiển Chrome trên máy tính của bạn và người dùng nhìn thấy " +
-    "trực tiếp trên màn hình. Đối số dạng JSON, ví dụ " +
-    'TOOL_CALL: browser_navigate({"url":"https://example.com"}) hoặc ' +
-    'TOOL_CALL: browser_fill({"selector":"#q","value":"xin chào"}). ' +
-    "Mỗi hành động đã tự trả về trạng thái trang sau đó, nên KHÔNG cần gọi browser_snapshot " +
-    "hay browser_take_screenshot ngay sau một hành động khác. " +
+  ? "\n\nBROWSER: the browser_* tools drive Chrome on your computer, and the user watches it live on " +
+    "screen. Arguments are JSON, e.g. " +
+    'TOOL_CALL: browser_navigate({"url":"https://example.com"}) or ' +
+    'TOOL_CALL: browser_fill({"selector":"#q","value":"hello"}). ' +
+    "Every action already returns the page state that follows it, so do NOT call browser_snapshot " +
+    "or browser_take_screenshot right after another action. " +
     // Observed: asked to pull the images out of an article it had just opened, the model wrote a
     // python3 + urllib scraper and called run_terminal_command_v2 — which needs approval, refetches
     // the page as a bot, and loses everything JavaScript had rendered. The page was already there.
-    "Khi cần lấy nội dung TỪ trang đang mở (ảnh, link, tiêu đề, bảng...), dùng browser_evaluate " +
-    "trên chính trang đó — đừng tải lại trang bằng shell (curl/python) hay web_fetch: trang đang mở " +
-    "đã qua JavaScript và đã có cookie/đăng nhập, còn tải lại thường bị chặn và mất nội dung động. " +
-    'Ví dụ lấy ảnh: TOOL_CALL: browser_evaluate({"expression":' +
+    "To pull content OUT of the page that is already open (images, links, titles, tables…), use " +
+    "browser_evaluate on that page — do not re-fetch it with a shell command (curl/python) or " +
+    "web_fetch: the open page has run its JavaScript and carries the cookies and sign-in, while a " +
+    "re-fetch is usually blocked and loses everything rendered dynamically. " +
+    'To collect images: TOOL_CALL: browser_evaluate({"expression":' +
     '"[...document.querySelectorAll(\'img\')].map(i=>i.currentSrc||i.src).filter(u=>u.startsWith(\'http\')).slice(0,20)"})' +
     // Having the URLs was only half of it: the model then wrote them out as markdown links,
     // which is the one thing that cannot work — the client refuses to load a third-party image
     // and shows "Couldn't load image" (parity.md §2u). Naming the tool here is what closes the
     // loop between finding an image and the user seeing it.
-    "\nSau khi có URL ảnh, muốn NGƯỜI DÙNG NHÌN THẤY ảnh thì gọi " +
-    'TOOL_CALL: attach_image({"urls":["https://…","https://…"]}) — gửi HẾT các ảnh trong MỘT lần gọi ' +
-    '(tối đa 8); một ảnh thì dùng {"url":"https://…","alt":"mô tả"}. ' +
-    "Viết link markdown ![](…) sẽ KHÔNG hiện được ảnh."
+    // "Show your work. When you've done something visible, attach the screenshot or file that proves
+    // it." — the original's own words; this is the tool that carries them out.
+    "\nShow your work: once you have the image URLs, attach them so the USER actually SEES them, with " +
+    'TOOL_CALL: attach_image({"urls":["https://…","https://…"]}) — send ALL of them in ONE call ' +
+    '(max 8); for a single image use {"url":"https://…","alt":"description"}. ' +
+    "A markdown link ![](…) will NOT display the image."
   : "";
 
 /**
@@ -987,16 +1010,20 @@ const BROWSER_PROTOCOL = isBrowserConfigured()
  * is the only way to produce an image at all.
  */
 const IMAGE_PROTOCOL =
-  "\n\nVẼ ẢNH: khi người dùng muốn một hình ảnh chưa tồn tại (minh hoạ, logo nháp, ảnh bìa...), gọi " +
-  'TOOL_CALL: generate_image({"prompt":"mô tả chi tiết bằng tiếng Anh"}) — ảnh sẽ tự hiện trong khung chat. ' +
-  "Mô tả càng cụ thể (bố cục, màu, phong cách) thì càng sát ý. " +
-  "Đây là vẽ mới; còn ảnh đã có sẵn trên mạng thì dùng attach_image.";
+  "\n\nDRAWING IMAGES: when the user wants a picture that does not exist yet (an illustration, a rough " +
+  "logo, a cover image…), call " +
+  'TOOL_CALL: generate_image({"prompt":"a detailed description in English"}) — the image appears in the ' +
+  "chat by itself. The more specific the description (composition, colour, style), the closer the " +
+  "result. This draws something new; for a picture that already exists on the web, use attach_image.";
 
 const ASK_PROTOCOL =
-  "\n\nHỎI NGƯỜI DÙNG: khi cần người dùng chọn giữa nhiều hướng, dùng " +
-  'TOOL_CALL: ask_question({"prompt":"Câu hỏi?","options":[{"label":"Cách A"},{"label":"Cách B"}]}) ' +
-  "— tối đa 6 lựa chọn, thêm \"allowCustom\":true nếu họ có thể tự gõ câu trả lời. " +
-  "Đừng hỏi rồi tự trả lời: dừng lượt sau khi hỏi, câu trả lời sẽ đến ở lượt sau.";
+  // "…if you need a decision first, ask with a widget rather than stalling." — the original's rule,
+  // and `ask_question` is the widget it means.
+  "\n\nASKING THE USER: when the user has to choose between directions, ask with the widget rather than " +
+  "stalling: " +
+  'TOOL_CALL: ask_question({"prompt":"The question?","options":[{"label":"Option A"},{"label":"Option B"}]}) ' +
+  "— up to 6 options, add \"allowCustom\":true if they may type their own answer. " +
+  "Do not ask and then answer yourself: end the turn after asking, the answer arrives on the next one.";
 
 /**
  * Memory only helps if the agent writes to it, and models do not volunteer that.
@@ -1006,36 +1033,41 @@ const ASK_PROTOCOL =
  * transcript.
  */
 const MEMORY_PROTOCOL = boxConfigured()
-  ? "\n\nTRÍ NHỚ: khi người dùng nói điều gì đáng nhớ lâu dài — tên, nghề, sở thích, cách họ " +
-    "muốn được trả lời, thông tin dự án của họ — hãy lưu lại bằng " +
-    'TOOL_CALL: knowledge_base({"title":"nhãn ngắn","knowledge_to_store":"nội dung"}). ' +
-    "Chỉ lưu điều còn đúng ở lần trò chuyện sau; KHÔNG lưu chi tiết vụn vặt của cuộc hội thoại " +
-    "hiện tại. Những gì đã nhớ được đưa sẵn vào đầu mỗi lượt nên bạn không cần đọc lại."
+  ? "\n\nMEMORY: when the user says something worth keeping for the long term — their name, their job, " +
+    "preferences, how they want to be answered, facts about their projects — store it with " +
+    'TOOL_CALL: knowledge_base({"title":"a short label","knowledge_to_store":"the content"}). ' +
+    "Only store what will still be true in a later conversation; do NOT store passing details of the " +
+    "current one. Whatever is already remembered is placed at the start of every turn, so there is no " +
+    "need to read it back."
   : "";
 
 const DRAFT_PROTOCOL =
-  "\n\nBẢN NHÁP: khi soạn thư hoặc tin nhắn thay người dùng, dùng " +
-  'TOOL_CALL: email_draft({"to":["a@b.c"],"subject":"...","body":"..."}) hoac ' +
-  'TOOL_CALL: slack_draft({"target":"#kenh","body":"..."}). ' +
-  "Thẻ nháp chỉ để xem — hệ thống CHƯA gửi được, nên đừng nói là đã gửi; hỏi người dùng bước tiếp theo.";
+  "\n\nDRAFTS: when composing mail or a message on the user's behalf, use " +
+  'TOOL_CALL: email_draft({"to":["a@b.c"],"subject":"...","body":"..."}) or ' +
+  'TOOL_CALL: slack_draft({"target":"#channel","body":"..."}). ' +
+  "A draft card is for review only — the system CANNOT send yet, so never say it was sent; ask the " +
+  "user what to do next.";
 
 const PEER_PROTOCOL =
-  "\n\nNHẮN BOT KHÁC: các bot trong sidebar nhắn được cho nhau bằng " +
-  'TOOL_CALL: message_agent({"to":"tên bot","content":"..."}). ' +
-  "Dùng khi việc thuộc chuyên môn của bot khác; nói cho người dùng biết bạn đã nhắn ai. " +
-  "Trả lời của họ sẽ tới ở lượt sau, đừng chờ trong cùng một lượt. " +
+  "\n\nMESSAGING OTHER BOTS: the bots in the sidebar can message each other with " +
+  'TOOL_CALL: message_agent({"to":"bot name","content":"..."}). ' +
+  "Use it when the work belongs to another bot's speciality; tell the user who you messaged. " +
+  "Their reply arrives on a later turn — do not wait for it within this one. " +
   // The original narrates step by step because SendMessage is its only voice. Ours streams the
   // final text, so without this a multi-step turn is silent until the end — screenshots pile up
   // with no words. Tell the model it can speak between steps.
-  "\n\nNÓI GIỮA CHỪNG: việc nhiều bước thì đừng im lặng tới cuối. Sau mỗi bước đáng kể, " +
-  'TOOL_CALL: send_to_user("một câu ngắn về việc vừa làm và bước tiếp theo") — mỗi lần là một ' +
-  "tin nhắn riêng hiện ngay cho người dùng. Câu trả lời cuối cùng vẫn viết bình thường. " +
-  "Đừng dùng nó cho việc một bước, và đừng lặp lại nội dung đã nói. " +
-  'Brief nhiều bot cùng lúc bằng danh sách: {"to":["Sales","Marketing"],"content":"..."}. ' +
-  "\n\nTẠO / ĐỔI TÊN BOT: " +
-  'TOOL_CALL: create_agent({"name":"Quản lý","brief":"vai trò và cách phối hợp"}) — thêm "names":[…] để tạo nhiều bot. ' +
-  'TOOL_CALL: rename_agent({"from":"New Bot","to":"Quản lý"}) — bỏ "from" nếu tự đổi tên mình. ' +
-  "Tạo bot xong thì brief vai trò cho nó ngay, đừng để bot rỗng.";
+  // "Work out loud. Do the work while keeping the user posted on meaningful beats; never vanish into a
+  // long run of silent tool calls." — the original's sentence, quoted, and then the tool that does it.
+  "\n\nWORK OUT LOUD: do the work while keeping the user posted on meaningful beats; never vanish into " +
+  "a long run of silent tool calls. After each meaningful beat, " +
+  'TOOL_CALL: send_to_user("one short line about what you just did and what comes next") — each one is ' +
+  "its own message, shown to the user immediately. The final answer is still written normally. Do not " +
+  "use it for single-step work, and do not repeat what you already said. " +
+  'Brief several bots at once with a list: {"to":["Sales","Marketing"],"content":"..."}. ' +
+  "\n\nCREATING / RENAMING BOTS: " +
+  'TOOL_CALL: create_agent({"name":"Manager","brief":"the role and how to work together"}) — add "names":[…] to create several. ' +
+  'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
+  "Brief a bot on its role as soon as you create it; never leave an empty one.";
 
 /**
  * Scaffolding from the first spike — `calc`, `echo` and friends. They stay callable so the
@@ -1056,12 +1088,14 @@ const TOOL_PROTOCOL =
   // tools together in a single response". Now that runTurn reads every call and batches the read-only
   // ones, saying "exactly one line" would cap the fan-out at one again — from the other end of the
   // prompt, where it would be easy to miss. Both protocol strings have to agree.
-  "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, hãy nói MỘT câu ngắn về việc sắp làm, " +
-  "rồi KẾT THÚC câu trả lời bằng các dòng dạng TOOL_CALL: <tên>(<đối số>), mỗi lời gọi một dòng. " +
-  "Nhiều việc độc lập thì gọi song song trong CÙNG một lượt thay vì lần lượt. " +
-  "Sau các dòng đó không viết gì thêm. Công cụ: " +
+  "\n\nTOOLS: when you need one of the tools below, say ONE short line about what you are about to do, " +
+  "then END the reply with lines of the form TOOL_CALL: <name>(<args>), one call per line. " +
+  // Verbatim from the original's buildBugbotSubagentPrompt; two more of its subagent prompts repeat it.
+  "Parallel tool calls are critical. For maximum efficiency, invoke all relevant tools simultaneously " +
+  "rather than sequentially. When you need to verify multiple things, call all tools together in a " +
+  "single response. Write nothing after those lines. Tools: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
-  ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
+  ". If no tool is needed, just answer. Once tool results come back, answer from them." +
   BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
@@ -2088,7 +2122,29 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   // → click → screenshot in one breath, and a card per step would make that impossible. What
   // still asks is anything that writes to disk.
   const isBrowserAction = lower.startsWith("browser_");
-  if (known && (AUTO_APPROVED.has(lower) || isBrowserAction || isAutoApproved(lower))) {
+  /**
+   * The user's standing answer to the permission card, which we were storing and ignoring.
+   *
+   * The client persists it through `setHostSettings` as `localToolPermission` and its own card
+   * says so — "Always allow … It can always be changed in Settings". Read off the live settings
+   * on this machine it was already `"always"`, meaning the button had been pressed at some point
+   * and every later request still put the card up again. From the user's side that is the app
+   * forgetting an answer it explicitly promised to remember.
+   *
+   * `never` is honoured too, and honoured as a refusal rather than a silent drop: a tool that
+   * does nothing and says nothing is indistinguishable from one that is broken.
+   */
+  const standing = String((hostSettingsRef() as { localToolPermission?: unknown }).localToolPermission ?? "ask");
+  if (known && standing === "never") {
+    const denied: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+      message: { type: "local-tool-permission", ask: { status: "denied", target: `${name}(${arg})`, requestId } } };
+    t.push(denied);
+    const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
+    if (tc) { tc.status = "done"; tc.result = "(người dùng đã chặn công cụ chạy lệnh trên máy)"; }
+    onUpdate(agentId);
+    return;
+  }
+  if (known && (standing === "always" || AUTO_APPROVED.has(lower) || isBrowserAction || isAutoApproved(lower))) {
     runTool(agentId, toolCallId, lower, arg, history);
     onUpdate(agentId);
     return;

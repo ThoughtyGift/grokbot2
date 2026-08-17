@@ -158,7 +158,7 @@ test("cache order is stable → context → volatile", () => {
   });
   const stable = p.indexOf("TOOLS");
   const ctx = p.indexOf("Thư ký");
-  const vol = p.indexOf("Bây giờ là");
+  const vol = p.indexOf("The current time is");
   assert.ok(stable < ctx, "the stable tier must come first or caching breaks");
   assert.ok(ctx < vol, "the timestamp must be last for the same reason");
 });
@@ -171,11 +171,37 @@ test("the bot's own name is stated, and model self-naming is closed off", () => 
 
 test("with no box, the prompt says so rather than promising a shell", () => {
   const c = contextTier({ boxOn: false, browserOn: false });
-  assert.match(c, /chưa có box/i);
+  assert.match(c, /no computer is attached/i);
+  assert.match(c, /CANNOT run shell commands/, "it has to say what it cannot do, not just that something is missing");
 });
 
-test("with a box, the tools are described as running INSIDE it", () => {
-  assert.match(contextTier({ boxOn: true }), /TRONG box/);
+test("with a box, the tools are described as running on the agent's OWN computer", () => {
+  const c = contextTier({ boxOn: true });
+  assert.match(c, /YOUR computer/);
+  assert.match(c, /not on the user's machine/, "the whole point is the distinction from the user's machine");
+});
+
+/**
+ * The word "box" is internal jargon, and the model repeats whatever the prompt uses — it introduced
+ * itself as running on a "Linux Box" in a live reply because two tiers of the prompt taught it that
+ * word while a third forbade saying it. Asserting its absence is what stops the drift returning.
+ */
+test("the model-facing prompt never uses the word 'box'", () => {
+  for (const c of [contextTier({ boxOn: true, browserOn: true }), contextTier({ boxOn: false })]) {
+    assert.ok(!/\bbox\b/i.test(c), `"box" leaked into the prompt: ${c}`);
+  }
+});
+
+/**
+ * The prompt is generated from the original app, which is English throughout; the seams written here
+ * were Vietnamese, leaving it a mix. Vietnamese diacritics are the cheap, reliable signal that a new
+ * seam has drifted back — user-facing strings live elsewhere and are untouched by this.
+ */
+test("the model-facing prompt stays in one language", () => {
+  const VIETNAMESE = /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
+  const p = buildSystemPrompt("TOOLS", { now: new Date("2026-08-17T02:00:00Z"), boxOn: true, browserOn: true });
+  const stray = p.split("\n").filter((l) => VIETNAMESE.test(l));
+  assert.deepEqual(stray, [], `Vietnamese left in the model-facing prompt:\n${stray.join("\n")}`);
 });
 
 test("memory lands in the context tier, not the volatile one", () => {

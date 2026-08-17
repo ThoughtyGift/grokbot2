@@ -45,9 +45,9 @@ export function contextTier(ctx: PromptContext): string {
   // answer to give, and the fallback is closed explicitly.
   if (ctx.agentName) {
     lines.push(
-      `Tên của bạn trong cuộc trò chuyện này là "${ctx.agentName}" — khi người dùng hỏi bạn là ai ` +
-      `hoặc tên gì, trả lời đúng tên đó. Bạn KHÔNG BAO GIỜ tự xưng là tên của mô hình nền ` +
-      `(Gemini, Claude, GPT, Grok…) và không nói mình do hãng nào tạo ra.`,
+      `Your name in this conversation is "${ctx.agentName}" — when the user asks who you are or what ` +
+      `you are called, answer with that name. You NEVER introduce yourself by the name of the ` +
+      `underlying model (Gemini, Claude, GPT, Grok…) and never say which company made you.`,
     );
   }
 
@@ -55,13 +55,17 @@ export function contextTier(ctx: PromptContext): string {
   // browser and a desktop; with none of those attached, repeating that text would teach
   // the model to promise capabilities this install does not have.
   const has: string[] = [];
-  if (ctx.boxOn) has.push("shell và file trong box Linux");
-  if (ctx.browserOn) has.push("trình duyệt trong box");
+  // "box" is deliberately absent from the text the model reads. tools.ts already forbids saying it to
+  // the user — the original always calls it "my computer" — and these three lines were teaching the
+  // opposite word twice in the same prompt, which is how "I'm running on a Linux Box" reached a live
+  // reply. Naming it "your computer" here means the vocabulary agrees end to end.
+  if (ctx.boxOn) has.push("a shell and files on your own Linux computer");
+  if (ctx.browserOn) has.push("a browser on that same computer");
   lines.push(
     has.length
-      ? `Bạn có: ${has.join(", ")}. Những công cụ này chạy TRONG box, không phải máy người dùng.`
-      : "Hiện chưa có box: bạn KHÔNG chạy được lệnh shell, không đọc file, không mở trình duyệt. " +
-        "Đừng hứa làm những việc đó — nói thẳng là chưa nối box.",
+      ? `You have: ${has.join(", ")}. These tools run on YOUR computer, not on the user's machine.`
+      : "No computer is attached yet: you CANNOT run shell commands, read files, or open a browser. " +
+        "Do not promise any of that — say plainly that no computer is connected.",
   );
 
   // Memory belongs in THIS tier. It changes as the agent learns but not per turn, so it sits
@@ -79,10 +83,13 @@ export function contextTier(ctx: PromptContext): string {
 export function volatileTier(ctx: PromptContext): string {
   const now = ctx.now ?? new Date();
   const tz = ctx.timeZone && isZone(ctx.timeZone) ? ctx.timeZone : "UTC";
-  const stamp = new Intl.DateTimeFormat("vi-VN", {
+  // Formatted in English like the rest of the prompt. The stamp is read by the model, not shown to
+  // the user, and the reply language follows the user's message rather than the prompt's — measured,
+  // a Vietnamese question gets a Vietnamese answer 3/3 with an English prompt.
+  const stamp = new Intl.DateTimeFormat("en-GB", {
     timeZone: tz, dateStyle: "full", timeStyle: "short", hourCycle: "h23",
   }).format(now);
-  return `Bây giờ là ${stamp} (${tz}).`;
+  return `The current time is ${stamp} (${tz}).`;
 }
 
 const zones = new Map<string, boolean>();
