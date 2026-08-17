@@ -82,10 +82,20 @@ step("P5: two tools run in one turn, answered once", reads.length >= 2 && multi.
   `${reads.length} read, ${multi.texts.length} bubble, ${Math.round(multi.ms / 100) / 10}s`);
 
 // ── approval gate still stands for side-effecting tools ──────────────────────
+// Drive the standing setting, do not assume it. `hostSettings.localToolPermission` is "always" on this
+// install, and with it set every tool runs straight through by design — so the first version of this
+// check reported "no permission card" and I read it as the gate being broken. It was the test that was
+// wrong. Set "ask", prove the card appears, then put the user's setting back.
+const wasPermission = (await gw("getHostSettings", {}))?.localToolPermission ?? "ask";
+await gw("setHostSettings", { localToolPermission: "ask" });
 const shell = await turn(agentId, "Chay lenh `df -h /` trong box.", 90_000);
 const card = shell.fresh.find((e) => e.message?.type === "local-tool-permission");
-step("a side-effecting tool asks for approval", Boolean(card),
-  card ? `card: ${String(card.message.ask.target).slice(0, 46)}` : "no permission card");
+await gw("setHostSettings", { localToolPermission: wasPermission });
+// Name the tools when it fails. "no permission card" is true both when the gate is broken and when
+// the model simply reached for a read-only tool instead, and those want opposite responses.
+step("a side-effecting tool asks for approval (with localToolPermission=ask)", Boolean(card),
+  card ? `card: ${String(card.message.ask.target).slice(0, 46)}`
+       : `no permission card — tools: ${shell.tools.map((t) => `${t.name}/${t.status}`).join(", ") || "none"}`);
 
 // ── web ──────────────────────────────────────────────────────────────────────
 const web = await turn(agentId, "Tim tren web: ty gia USD sang VND hom nay.");
@@ -102,7 +112,10 @@ step("knowledge_base stores a durable fact", mem.tools.some((t) => t.name === "k
   mem.tools.map((t) => t.name).join(", ") || "no tool");
 
 // ── avatar bytes ─────────────────────────────────────────────────────────────
-const av = await fetch(`${BASE}/gw/avatars/${agentId}?v=1`);
+// With the auth header. Both this and the stream below were written as bare fetches and both came
+// back 401 — a red box that said nothing about the backend and everything about the test, since the
+// gateway has been in enforce mode all evening.
+const av = await fetch(`${BASE}/gw/avatars/${agentId}?v=1`, { headers: { authorization: `Bearer ${TOKEN}` } });
 step("avatar bytes are served", av.ok && String(av.headers.get("content-type")).startsWith("image/"),
   `HTTP ${av.status} ${av.headers.get("content-type")}`);
 
@@ -111,7 +124,9 @@ const mcp = await gw("refreshMcp", {});
 step("refreshMcp answers", mcp !== undefined && mcp !== null, JSON.stringify(mcp).slice(0, 60));
 
 // ── event stream ─────────────────────────────────────────────────────────────
-const ev = await fetch(`${BASE}/gw/events`, { signal: AbortSignal.timeout(2500) }).catch((e) => e);
+const ev = await fetch(`${BASE}/gw/events`, {
+  headers: { authorization: `Bearer ${TOKEN}` }, signal: AbortSignal.timeout(2500),
+}).catch((e) => e);
 step("/gw/events holds the connection open (long poll)",
   ev?.name === "TimeoutError" || ev?.ok === true, ev?.name ?? `HTTP ${ev?.status}`);
 

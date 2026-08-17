@@ -2515,6 +2515,18 @@ export const resetToolSteps = (agentId: string): void => { toolSteps.delete(agen
  * immediately instead of revealing it one row at a time.
  */
 function runToolBatch(agentId: string, calls: { name: string; arg: string }[], history?: PoolMessage[]): void {
+  // Defence in depth: this path calls `runTool` directly and therefore skips `injectTool`, where the
+  // approval gate lives. Nothing side-effecting is supposed to reach here — `planBatches` gives such a
+  // call its own batch of one, which routes to `injectTool` instead — but a permission boundary should
+  // not rest on a single upstream assumption staying true. Anything that could ask for approval is
+  // handed back to `injectTool`, which asks.
+  const unsafe = calls.filter((c) => !isParallelSafe(c.name));
+  if (unsafe.length) {
+    console.warn(`[grokbot2] batch contained ${unsafe.map((c) => c.name).join(", ")} — routing through the approval gate instead`);
+    for (const c of unsafe) injectTool(agentId, `${c.name} ${c.arg}`, history);
+    calls = calls.filter((c) => isParallelSafe(c.name));
+    if (!calls.length) return;
+  }
   const t = tail(agentId);
   const results: (string | undefined)[] = new Array(calls.length).fill(undefined);
   let left = calls.length;
