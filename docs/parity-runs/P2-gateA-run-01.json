@@ -1,0 +1,88 @@
+{
+  "plan": "P2",
+  "run": 1,
+  "gate": "A",
+  "backendCommit": "15367a4",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 16,
+      "failed": 4
+    },
+    "auth": {
+      "checks": 5,
+      "failed": 0
+    },
+    "commands": {
+      "checks": 10,
+      "failed": 1
+    },
+    "channels": {
+      "checks": 7,
+      "failed": 0
+    }
+  },
+  "pass": false,
+  "mismatches": [
+    {
+      "gate": "A",
+      "check": "GET /gw/avatars/contract-probe implemented",
+      "expected": true,
+      "actual": false,
+      "loai": 1,
+      "note": "in the contract, not handled here — recorded as an unknown path (observe mode: status was 200 from the fallback)"
+    },
+    {
+      "gate": "A",
+      "check": "POST /gw/local-exec/responses implemented",
+      "expected": true,
+      "actual": false,
+      "loai": 1,
+      "note": "in the contract, not handled here — recorded as an unknown path (observe mode: status was 200 from the fallback)"
+    },
+    {
+      "gate": "A",
+      "check": "POST /gw/prepare-upgrade implemented",
+      "expected": true,
+      "actual": false,
+      "loai": 1,
+      "note": "in the contract, not handled here — recorded as an unknown path (observe mode: status was 200 from the fallback)"
+    },
+    {
+      "gate": "A",
+      "check": "POST /gw/webauthn/responses implemented",
+      "expected": true,
+      "actual": false,
+      "loai": 1,
+      "note": "in the contract, not handled here — recorded as an unknown path (observe mode: status was 200 from the fallback)"
+    },
+    {
+      "gate": "A",
+      "check": "every command is implemented or deliberately skipped",
+      "expected": [],
+      "actual": [
+        "appendConnectorCard",
+        "autoUpdateBoxNow",
+        "clearBoxStoreNow",
+        "completeMcpOAuth",
+        "deleteAgent",
+        "getAgentTranscriptWindow",
+        "getBoxStoreStatus",
+        "getTranscript",
+        "openAgent",
+        "openAgentWindowed",
+        "prepareBoxForRecreate",
+        "refreshMcp",
+        "requestWebAuthnCeremony",
+        "resumeBoxAfterRecreate",
+        "setBoxMigrating",
+        "snapshotBoxStoreNow",
+        "updateHostNow",
+        "uploadAttachment"
+      ],
+      "loai": 1,
+      "note": "18 command(s) the client can send and we do not handle"
+    }
+  ]
+}

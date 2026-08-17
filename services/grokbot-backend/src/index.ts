@@ -8,7 +8,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { handleAuth } from "./auth.js";
-import { handleGateway } from "./gateway.js";
+import { handleGateway, hostHealth } from "./gateway.js";
 import { bootstrapResponses, connectStreamEnd } from "@grokbot2/proto";
 import { saveNow } from "./store.js";
 import { chatSnapshot } from "./chat.js";
@@ -45,6 +45,17 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ token: "exec", authToken: "exec", url: `http://localhost:${config.port}/exec` }));
   }
+  // ── bare /health ──
+  //
+  // Not in the extracted contract, which is gateway-relative — but the observe pass caught
+  // something asking for `/health` at the ROOT, where it fell into the fallback and got `200 {}`.
+  // Answering the same body as `/gw/health` costs one line and is strictly better than an empty
+  // object; who the caller is remains open (see docs/execution-roadmap.md §6 P2-6).
+  if (url === "/health" || url.startsWith("/health?")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(hostHealth()));
+  }
+
   // ── box gateway (JSON + SSE + chat) ──
   if (handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?")) return;
 

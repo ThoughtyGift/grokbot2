@@ -106,6 +106,15 @@ const req = async (method, path, { body, headers, stream = false } = {}) => {
 const isLongPoll = (path) => path.endsWith("/requests");
 
 // ── routes ────────────────────────────────────────────────────────────────────
+/**
+ * When probing started.
+ *
+ * `unknownPaths` is a HISTORICAL record that survives restarts by design, so "is this key
+ * present?" is the wrong question — a path recorded before the route was implemented stays in the
+ * file for ever and the route reads as missing long after it works. The right question is whether
+ * the recorder saw it DURING this probe, which is a timestamp comparison.
+ */
+const probeStartMs = Date.now();
 const probed = [];
 if (want("routes")) {
   for (const route of contract.routes) {
@@ -147,12 +156,15 @@ if (want("routes")) {
  */
 if (want("routes") && probed.length) {
   const cov = await req("GET", `${GW}/__coverage`);
-  const unknown = Object.keys(cov.json?.persisted?.unknownPaths ?? {});
+  const unknown = cov.json?.persisted?.unknownPaths ?? {};
   const strict = cov.json?.persisted?.strict404 === true;
   for (const { route, path, r } of probed) {
     if (isLongPoll(route.path)) continue;
     const key = `${route.method} ${GW}${path}`;
-    const wasUnknown = unknown.includes(key);
+    // Recorded during THIS probe, not merely present in the file. `- 1000` absorbs clock skew
+    // between this process and the backend's debounced write.
+    const hit = unknown[key];
+    const wasUnknown = hit != null && hit.lastMs >= probeStartMs - 1000;
     const implemented = strict ? r.status !== 404 : !wasUnknown;
     record("routes", `${key} implemented`, true, implemented,
       implemented ? undefined

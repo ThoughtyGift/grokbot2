@@ -61,6 +61,49 @@ import {
   recordUnknown, recordCall, recordSseOpen, recordSseClose,
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody,
 } from "./observe.js";
+import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, type ChannelName } from "./channels.js";
+
+/**
+ * When this process started, and when it was last doing work.
+ *
+ * `/health` reports both. `startedAt` cannot be derived after the fact, and `lastBusyAtMs` has to
+ * be observed as it happens — so both are captured here rather than reconstructed.
+ */
+const STARTED_AT = Date.now();
+let lastBusyAtMs = 0;
+
+/** How many bots are mid-turn. Read by `/prepare-upgrade` to decide whether to wait. */
+const runningTurns = (): number => listAgents().filter((a) => a.isRunning === true).length;
+
+/**
+ * The host's `/health` shape, field for field (contract: `health.fields`).
+ *
+ * Built from `listAgents()` rather than by reaching into chat.ts, because the roster row already
+ * carries the presence flags this needs and adding an export there would collide with work in
+ * flight on that file.
+ *
+ * `busyOnlyAwaitingApproval` is deliberately OMITTED. In the host it is a conditional spread —
+ * present only when it can be determined — and we cannot determine it: our roster rows report
+ * `awaitingUserResponse: null` unconditionally, so any value here would be invented. The contract
+ * lists it as optional, so leaving it out is correct; guessing it would not be.
+ */
+function hostHealth() {
+  const rows = listAgents();
+  const running = rows.filter((a) => a.isRunning === true);
+  if (running.length > 0) lastBusyAtMs = Date.now();
+  return {
+    ok: true,
+    pid: process.pid,
+    isBusy: running.length > 0,
+    activeAgentId: running[0]?.id ?? null,
+    startedAt: STARTED_AT,
+    lastBusyAtMs,
+    // Kept from the previous shape: harmless, and something may already read it.
+    status: "healthy",
+  };
+}
+
+export { hostHealth };
 
 /**
  * The connector manifests, copied from the original's `src/shared/channels.ts`.
@@ -374,7 +417,84 @@ export function handleGateway(
 
   if (url.startsWith("/gw/health")) {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ status: "healthy", ok: true }));
+    res.end(JSON.stringify(hostHealth()));
+    return true;
+  }
+  // ── /avatars/<agentId>?v=<version> ──────────────────────────────────────────
+  //
+  // The app fetches bot avatars over HTTP, not through a gateway command, and we never served
+  // this route — which is why the sidebar showed initials where the original shows pictures.
+  // Every branch below is the host's own (`E3s`), including the ones that are easy to skip:
+  // the cross-site refusal, the version check, and the 304.
+  if (url.startsWith("/gw/avatars/")) {
+    const parsed = new URL(url, "http://x");
+    // The host decodes the id, so a bot id with a reserved character still resolves.
+    const agentId = decodeURIComponent(parsed.pathname.slice("/gw/avatars/".length));
+    const send = (status: number, msg: string) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: msg }));
+      return true;
+    };
+    // An avatar is an image the renderer embeds; a cross-site read of it is never legitimate.
+    if (String(headers["sec-fetch-site"] ?? "") === "cross-site") return send(403, "cross-site avatar loads are not allowed");
+    if (!agentId) return send(404, "missing agent id");
+
+    const { avatarDataUrl, avatarVersion } = getAgentAvatar({ id: agentId });
+    const m = /^data:([a-z0-9.+/-]+);base64,(.*)$/i.exec(avatarDataUrl ?? "");
+    if (!avatarVersion || !m) return send(404, "agent has no avatar");
+
+    // `?v=` is a cache-busting pin. A stale pin must 404 rather than silently serve the new
+    // image, or a client caching immutably would keep a picture it asked not to have.
+    const asked = parsed.searchParams.get("v");
+    if (asked != null && asked !== avatarVersion) return send(404, "no such avatar version");
+
+    const etag = `"${avatarVersion}"`;
+    // Pinned requests are immutable for a year; unpinned ones must never be cached, because the
+    // same URL will answer differently the moment the avatar changes.
+    const caching = asked != null
+      ? { "cache-control": "private, max-age=31536000, immutable", etag }
+      : { "cache-control": "no-store", etag };
+
+    if (String(headers["if-none-match"] ?? "") === etag) {
+      res.writeHead(304, caching);
+      res.end();
+      return true;
+    }
+    const bytes = Buffer.from(m[2], "base64");
+    res.writeHead(200, {
+      ...caching,
+      "content-type": m[1],
+      "content-length": bytes.byteLength,
+      // The host's three hardening headers. An avatar is untrusted bytes from the box: never
+      // rendered as a document, never sniffed into one.
+      "content-disposition": "attachment",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+    });
+    res.end(bytes);
+    return true;
+  }
+  // ── /prepare-upgrade ────────────────────────────────────────────────────────
+  //
+  // Asked before the app replaces the host. `runningTurns` is read to decide whether to wait, so
+  // a hardcoded 0 would tell the app it is safe to swap the host out from under a live turn.
+  if (url.startsWith("/gw/prepare-upgrade")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ quiescing: false, runningTurns: runningTurns() }));
+    return true;
+  }
+  // ── the responses half of the two channels ──────────────────────────────────
+  //
+  // Both were missing, and the observe pass caught the app posting to both. See channels.ts.
+  if (url.startsWith("/gw/local-exec/responses") || url.startsWith("/gw/webauthn/responses")) {
+    const name: ChannelName = url.includes("webauthn") ? "webauthn" : "local-exec";
+    if (!isChannelEnabled(name)) {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: `${name} channel not enabled` }));
+      return true;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(submitResponses(name, body)));
     return true;
   }
   if (url.startsWith("/gw/events")) {
@@ -409,12 +529,9 @@ export function handleGateway(
   // the client reconnect in a tight loop and read the box as flapping, so park them and
   // return an empty batch on timeout.
   if (url.startsWith("/gw/webauthn/requests") || url.startsWith("/gw/local-exec/requests")) {
-    const empty = url.includes("webauthn") ? { frames: [] } : { requests: [] };
-    const timer = setTimeout(() => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(empty));
-    }, 25_000);
-    res.on("close", () => clearTimeout(timer));
+    // Moved into channels.ts so the requests half and the responses half live together — they are
+    // one protocol, and having them in two places is how the responses half stayed missing.
+    parkRequests(url.includes("webauthn") ? "webauthn" : "local-exec", res);
     return true;
   }
   // Coverage report: which gateway methods the FE exercised, and which are still unmapped.
@@ -440,6 +557,9 @@ export function handleGateway(
       sse: { ...sseStats, connected: sseClients.size },
       calls: Object.fromEntries([...callCounts].sort((a, b) => b[1].n - a[1].n)),
       implemented: Object.keys(methods).sort(),
+      // What each request/response channel has actually seen. The app posts frames we do not yet
+      // consume, and reading their real shape here beats guessing it.
+      channels: channelSnapshot(),
       persisted: {
         ...persisted,
         // Same split as `mapped`/`unmapped` above, but computed over everything ever seen
