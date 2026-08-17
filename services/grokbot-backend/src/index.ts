@@ -20,6 +20,7 @@ import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
 import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
+import { reportModelToolSupport } from "./model-probe.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -134,5 +135,8 @@ server.listen(config.port, "127.0.0.1", () => {
   // State the truth about the box at startup: a shell tool that is quietly absent is
   // indistinguishable from one that is broken.
   void boxHealth().then((s) => logSafe(`[grokbot2] [${s}`.replace("[box:", "[box]")));
+  // P5-5: a model that will not speak the TOOL_CALL convention removes every tool the bot has, and
+  // says so only by being unhelpful. Cached per model, so `tsx watch` does not re-buy the answer.
+  void reportModelToolSupport((msg) => logSafe(`[grokbot2] ${msg}`));
   logSafe(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
 });
