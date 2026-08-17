@@ -5,9 +5,16 @@
  * the browser tools silently vanished once) and diffs it against the extracted catalog.
  */
 import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { toolNames } from "../src/chat.ts";
 
-const catalog = JSON.parse(readFileSync("../../docs/extracted/tool-catalog.json", "utf8"));
+// Resolved from THIS file, not from the working directory. The path used to be
+// `"../../docs/extracted/tool-catalog.json"`, which only worked when invoked from exactly
+// `services/grokbot-backend` — run it from `scripts/` and it looked for `services/docs/…` and
+// died. A measurement that crashes depending on where you stand is a measurement nobody takes.
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const catalog = JSON.parse(readFileSync(join(REPO, "docs", "extracted", "tool-catalog.json"), "utf8"));
 const arr = Array.isArray(catalog) ? catalog : catalog.tools ?? Object.values(catalog).find(Array.isArray) ?? [];
 const original = arr.map((t) => t.name ?? t).filter(Boolean);
 

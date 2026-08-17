@@ -1,0 +1,647 @@
+{
+  "extractedFrom": "app.asar",
+  "appVersion": "0.20.0",
+  "routerFunction": "x3s",
+  "anchors": {
+    "router": "not found: ",
+    "paths": "\"/local-exec/requests\"",
+    "channels": "transcript:\"transcript\""
+  },
+  "constants": {
+    "AAi": "/health",
+    "APe": "/local-exec/responses",
+    "EAi": "/local-exec/requests",
+    "LAi": "/webauthn/requests",
+    "TAi": "/local-exec/responses",
+    "UAi": "/webauthn/responses",
+    "bPe": "/local-exec/requests",
+    "f5n": "/api",
+    "gAi": "/events",
+    "h5n": "/avatars",
+    "lAi": "/prepare-upgrade",
+    "p5n": "x-sand-mint-dedupe",
+    "wAi": "x-sand-slim-avatars",
+    "xPe": "Bearer",
+    "yAi": "Bearer"
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/<param>",
+      "matchesPrefix": true,
+      "auth": "ifTokenSet",
+      "constant": "f5n"
+    },
+    {
+      "method": "GET",
+      "path": "/avatars/<param>",
+      "matchesPrefix": true,
+      "auth": "ifTokenSet",
+      "constant": "h5n"
+    },
+    {
+      "method": "GET",
+      "path": "/events",
+      "auth": "ifTokenSet",
+      "constant": "gAi"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "auth": "ifTokenSet",
+      "constant": "AAi"
+    },
+    {
+      "method": "GET",
+      "path": "/local-exec/requests",
+      "auth": "required",
+      "constant": "EAi"
+    },
+    {
+      "method": "POST",
+      "path": "/local-exec/responses",
+      "auth": "required",
+      "constant": "TAi"
+    },
+    {
+      "method": "POST",
+      "path": "/prepare-upgrade",
+      "auth": "ifTokenSet",
+      "constant": "lAi"
+    },
+    {
+      "method": "GET",
+      "path": "/webauthn/requests",
+      "auth": "required",
+      "constant": "LAi"
+    },
+    {
+      "method": "POST",
+      "path": "/webauthn/responses",
+      "auth": "required",
+      "constant": "UAi"
+    }
+  ],
+  "health": {
+    "fields": [
+      "activeAgentId",
+      "isBusy",
+      "lastBusyAtMs",
+      "ok",
+      "pid",
+      "startedAt"
+    ],
+    "optional": [
+      "busyOnlyAwaitingApproval"
+    ]
+  },
+  "fallback": {
+    "status": 404,
+    "bodyContains": "not found: "
+  },
+  "auth401": [
+    "local-exec requires gateway authentication",
+    "webauthn requires gateway authentication",
+    "unauthorized"
+  ],
+  "avatarStatuses": {
+    "crossSite": "cross-site avatar loads are not allowed",
+    "missingId": "missing agent id",
+    "noAvatar": "agent has no avatar",
+    "noVersion": "no such avatar version"
+  },
+  "eventChannels": [
+    "agent-upserted",
+    "agents",
+    "async-tasks",
+    "automations",
+    "box-disk-pressure",
+    "computer-action",
+    "forever-box",
+    "host-settings",
+    "mcp-servers",
+    "outline",
+    "sharing",
+    "subagents",
+    "teach-recording",
+    "transcript",
+    "tray",
+    "workflows"
+  ],
+  "channelFamilies": {
+    "agent-upserted": "agent-upserted",
+    "agents": "agents",
+    "agents-automation": "automations",
+    "agents-workflow": "workflows",
+    "async-tasks": "async-tasks",
+    "box-disk-pressure": "box-disk-pressure",
+    "computer-action": "computer-action",
+    "forever-box": "forever-box",
+    "host-settings": "host-settings",
+    "mcp-servers-updated": "mcp-servers",
+    "outline": "outline",
+    "sharing": "sharing",
+    "subagents": "subagents",
+    "teach-recording": "teach-recording",
+    "transcript": "transcript",
+    "tray": "tray"
+  },
+  "channelAliases": {
+    "agents-automation": "automations",
+    "agents-workflow": "workflows",
+    "mcp-servers-updated": "mcp-servers"
+  },
+  "gatewayCommands": [
+    {
+      "name": "addOwnAgentToSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "appendConnectorCard",
+      "takesBody": true
+    },
+    {
+      "name": "autoUpdateBoxNow",
+      "takesBody": false
+    },
+    {
+      "name": "broadcastToAgents",
+      "takesBody": true
+    },
+    {
+      "name": "clearAgentMemories",
+      "takesBody": true
+    },
+    {
+      "name": "clearBoxStoreNow",
+      "takesBody": false
+    },
+    {
+      "name": "clearTrays",
+      "takesBody": false
+    },
+    {
+      "name": "completeMcpOAuth",
+      "takesBody": true
+    },
+    {
+      "name": "connectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "countAgents",
+      "takesBody": false
+    },
+    {
+      "name": "createAgent",
+      "takesBody": true
+    },
+    {
+      "name": "createAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "createAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "createGroup",
+      "takesBody": true
+    },
+    {
+      "name": "createRoomFromAgent",
+      "takesBody": true
+    },
+    {
+      "name": "createRoomInvite",
+      "takesBody": true
+    },
+    {
+      "name": "createSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgent",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentMemory",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgents",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "disconnectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "dismissTray",
+      "takesBody": true
+    },
+    {
+      "name": "dismissWidget",
+      "takesBody": true
+    },
+    {
+      "name": "duplicateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "ensureForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAutomations",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAvatar",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentChannels",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentMemories",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentThread",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscript",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptPage",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptTail",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptWindow",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentWorkflows",
+      "takesBody": true
+    },
+    {
+      "name": "getAsyncTasks",
+      "takesBody": true
+    },
+    {
+      "name": "getBoxSecretsStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getBoxStoreStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getCloudAgentInfo",
+      "takesBody": true
+    },
+    {
+      "name": "getConversationOutline",
+      "takesBody": true
+    },
+    {
+      "name": "getForeverBoxStatus",
+      "takesBody": true
+    },
+    {
+      "name": "getHostSettings",
+      "takesBody": false
+    },
+    {
+      "name": "getHostStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getListenerConnectUrl",
+      "takesBody": true
+    },
+    {
+      "name": "getListenerIntegrations",
+      "takesBody": false
+    },
+    {
+      "name": "getPluginSyncStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getSharingState",
+      "takesBody": false
+    },
+    {
+      "name": "getSkillPublishTargets",
+      "takesBody": false
+    },
+    {
+      "name": "getSubagents",
+      "takesBody": true
+    },
+    {
+      "name": "getTeachRecordingStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getTranscript",
+      "takesBody": false
+    },
+    {
+      "name": "getTrays",
+      "takesBody": false
+    },
+    {
+      "name": "handBackForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "importAgentWorkflowText",
+      "takesBody": true
+    },
+    {
+      "name": "importAgentWorkflowUrl",
+      "takesBody": true
+    },
+    {
+      "name": "isAgentNetworkEnabled",
+      "takesBody": false
+    },
+    {
+      "name": "isEgressTunnelAvailable",
+      "takesBody": false
+    },
+    {
+      "name": "isGlobalSearchEnabled",
+      "takesBody": false
+    },
+    {
+      "name": "joinSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "kickstartAgent",
+      "takesBody": true
+    },
+    {
+      "name": "leaveSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "listAgents",
+      "takesBody": false
+    },
+    {
+      "name": "listAllAutomations",
+      "takesBody": false
+    },
+    {
+      "name": "listBoxMcpServers",
+      "takesBody": true
+    },
+    {
+      "name": "openAgent",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentTail",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentWindowed",
+      "takesBody": true
+    },
+    {
+      "name": "portAgentLocalSkills",
+      "takesBody": true
+    },
+    {
+      "name": "prepareBoxForRecreate",
+      "takesBody": false
+    },
+    {
+      "name": "promptAcceptanceStatus",
+      "takesBody": true
+    },
+    {
+      "name": "publishSkill",
+      "takesBody": true
+    },
+    {
+      "name": "reactToMessage",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentChunk",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentImage",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentText",
+      "takesBody": true
+    },
+    {
+      "name": "refreshChannel",
+      "takesBody": true
+    },
+    {
+      "name": "refreshMcp",
+      "takesBody": true
+    },
+    {
+      "name": "removeOwnAgentFromSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "requestDiskSaverAudit",
+      "takesBody": true
+    },
+    {
+      "name": "requestWebAuthnCeremony",
+      "takesBody": true
+    },
+    {
+      "name": "resetForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "resolveAutoReviewApproval",
+      "takesBody": true
+    },
+    {
+      "name": "resolveLocalToolPermission",
+      "takesBody": true
+    },
+    {
+      "name": "respondToRoomJoinRequest",
+      "takesBody": true
+    },
+    {
+      "name": "respondToWidget",
+      "takesBody": true
+    },
+    {
+      "name": "resumeBoxAfterRecreate",
+      "takesBody": true
+    },
+    {
+      "name": "resyncPublishedSkill",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentAutomationNow",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentWorkflowNow",
+      "takesBody": true
+    },
+    {
+      "name": "searchAgents",
+      "takesBody": true
+    },
+    {
+      "name": "searchMedia",
+      "takesBody": true
+    },
+    {
+      "name": "sendPrompt",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAutomationEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAvatarBytes",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentHiddenFromSidebar",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotificationsEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotifyOnUpdates",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentUnread",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentWorkflowEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setBoxMigrating",
+      "takesBody": true
+    },
+    {
+      "name": "setBoxSecrets",
+      "takesBody": true
+    },
+    {
+      "name": "setGroupMembers",
+      "takesBody": true
+    },
+    {
+      "name": "setHostSettings",
+      "takesBody": true
+    },
+    {
+      "name": "setSharedRoomTyping",
+      "takesBody": true
+    },
+    {
+      "name": "setWindowFocused",
+      "takesBody": true
+    },
+    {
+      "name": "skillsCatalog",
+      "takesBody": false
+    },
+    {
+      "name": "snapshotBoxStoreNow",
+      "takesBody": true
+    },
+    {
+      "name": "startTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "stopTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "submitSecret",
+      "takesBody": true
+    },
+    {
+      "name": "syncPluginSkills",
+      "takesBody": false
+    },
+    {
+      "name": "unpublishSkill",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "updateForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "updateHostNow",
+      "takesBody": true
+    },
+    {
+      "name": "uploadAttachment",
+      "takesBody": true
+    }
+  ],
+  "intentionallySkipped": [
+    "addOwnAgentToSharedRoom",
+    "createRoomFromAgent",
+    "createRoomInvite",
+    "createSharedRoom",
+    "joinSharedRoom",
+    "leaveSharedRoom",
+    "removeOwnAgentFromSharedRoom",
+    "respondToRoomJoinRequest",
+    "setSharedRoomTyping"
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "plan": "P1",
+  "run": 1,
+  "gate": "A",
+  "backendCommit": "c52b478",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 15,
+      "failed": 8
+    },
+    "auth": {
+      "checks": 5,
+      "failed": 0
+    },
+    "commands": {
+      "checks": 10,
+      "failed": 1
+    },
+    "channels": {
+      "checks": 7,
+      "failed": 0
+    }
+  },
+  "pass": false,
+  "mismatches": [
+    {
+      "gate": "A",
+      "check": "GET /gw/events",
+      "expected": "reachable",
+      "actual": "unreachable: The operation was aborted due to timeout",
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/local-exec/requests",
+      "expected": "reachable",
+      "actual": "unreachable: The operation was aborted due to timeout",
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/webauthn/requests",
+      "expected": "reachable",
+      "actual": "unreachable: The operation was aborted due to timeout",
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/health has activeAgentId",
+      "expected": true,
+      "actual": false,
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/health has isBusy",
+      "expected": true,
+      "actual": false,
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/health has lastBusyAtMs",
+      "expected": true,
+      "actual": false,
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/health has pid",
+      "expected": true,
+      "actual": false,
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "GET /gw/health has startedAt",
+      "expected": true,
+      "actual": false,
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "every command is implemented or deliberately skipped",
+      "expected": [],
+      "actual": [
+        "appendConnectorCard",
+        "autoUpdateBoxNow",
+        "clearBoxStoreNow",
+        "completeMcpOAuth",
+        "deleteAgent",
+        "getAgentTranscriptWindow",
+        "getBoxStoreStatus",
+        "getTranscript",
+        "openAgent",
+        "openAgentWindowed",
+        "prepareBoxForRecreate",
+        "refreshMcp",
+        "requestWebAuthnCeremony",
+        "resumeBoxAfterRecreate",
+        "setBoxMigrating",
+        "snapshotBoxStoreNow",
+        "updateHostNow",
+        "uploadAttachment"
+      ],
+      "loai": 1,
+      "note": "18 command(s) the client can send and we do not handle"
+    }
+  ]
+}
