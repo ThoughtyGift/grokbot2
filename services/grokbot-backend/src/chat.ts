@@ -1158,8 +1158,31 @@ export const transcriptEpoch = (_agentId: string): number => EPOCH;
  * one entry, and each of those is an event the replica counts.
  */
 const transcriptSeq = new Map<string, number>();
+
+/**
+ * The current sequence for an agent, started from its history rather than from zero.
+ *
+ * A restart reloads the whole transcript from disk, so beginning the counter at 0 while the agent
+ * already has N entries publishes an anchor covering `1..0` — an empty range for a conversation that
+ * is not empty. The client then has a snapshot that proves nothing and a pane that never fills.
+ * Seeding from the entry count keeps the anchor honest across restarts and keeps the next event one
+ * past what the snapshot already covers.
+ */
+function seqFor(agentId: string): number {
+  const known = transcriptSeq.get(agentId);
+  if (known !== undefined) return known;
+  const seeded = (transcripts.get(agentId) ?? []).length;
+  transcriptSeq.set(agentId, seeded);
+  return seeded;
+}
+
+/** Read-only view of the anchor a tail response must carry. */
+export function transcriptAnchor(agentId: string) {
+  return { epoch: EPOCH, sequence: seqFor(agentId) };
+}
+
 export function nextTranscriptOrdered(agentId: string) {
-  const next = (transcriptSeq.get(agentId) ?? 0) + 1;
+  const next = seqFor(agentId) + 1;
   transcriptSeq.set(agentId, next);
   return { replicaKey: `transcript:${agentId}`, epoch: EPOCH, sequence: next };
 }
@@ -1540,6 +1563,28 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
     hasMore: start > 0,
     cursor: entries[0]?.id ?? null,
     total: withSeq.length,
+    // ── the anchor, without which the conversation pane spins forever ──────────
+    //
+    // The client builds its transcript replica from THIS response plus an anchor, and it takes the
+    // anchor from these two fields. Its own reducer, from the shipped bundle:
+    //
+    //   (R.observedAnchor = {epoch: Z.epoch, sequence: Z.sequence})
+    //   q = (R, Z, X) => {
+    //     if (X.anchor == null) { …; if (oe.epoch != null || oe.value !== X.windowAtDispatch || B(R)) return; … }
+    //     …R.replica.ingestSnapshot({replicaKey: Nde(R.agentId), epoch: X.anchor.epoch,
+    //        throughSequence: X.anchor.sequence, coverage: {kind: "transcript-live-range", …},
+    //        value: {isInstalled: true, liveRange: re, entries: Z.entries}})
+    //
+    // `Z` is this object. With no `epoch`/`sequence` the anchor is null, and the fallback branch
+    // RETURNS WITHOUT DOING ANYTHING once the replica is in any state other than pristine — so the
+    // pane keeps its spinner and never renders. Measured: openAgentTail answered in 4-12ms with a
+    // correct 107KB body while the app span forever, and a bot created mid-run (its replica never
+    // built) span from the moment it appeared in the sidebar. The sidebar stayed correct throughout
+    // because the roster is a different replica, which is what made this look like a stuck backend.
+    //
+    // Sending the anchor also gives a drifted replica a way back: the client re-anchors on the epoch
+    // and sequence here instead of appending forever onto a replica that has silently fallen behind.
+    ...transcriptAnchor(agentId ?? ""),
   };
 }
 export function getConversationOutline(a: { agentId?: string; id?: string }) {
