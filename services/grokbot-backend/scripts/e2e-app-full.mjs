@@ -77,6 +77,37 @@ const isRunning = async (id) => {
   return Array.isArray(rows) && rows.some((r) => r.id === id && r.isRunning === true);
 };
 
+const entryCount = async (id) => ((await gw("getAgentTranscriptTail", { agentId: id }))?.entries ?? []).length;
+
+/**
+ * Type into the composer and confirm the backend actually received the turn.
+ *
+ * The naive version — click, type, press Enter — worked for the first prompt of a session and
+ * silently did nothing for the second, with identical code. Every downstream check then failed
+ * (no tool ran, the answer on screen was the PREVIOUS turn's), so one dropped keystroke read as four
+ * separate system faults. Returning what happened at each stage keeps the blame local: whether the
+ * text landed in the composer at all, and whether the transcript grew.
+ */
+const sendViaUi = async (page, agentId, text) => {
+  const before = await entryCount(agentId);
+  const composer = page.locator('[contenteditable="true"]').last();
+  await composer.click({ timeout: 5000 });
+  await page.keyboard.type(text, { delay: 12 });
+
+  const typed = (await composer.innerText().catch(() => "")).includes(text.slice(0, 24));
+  await page.keyboard.press("Enter");
+
+  let arrived = await until(async () => (await entryCount(agentId)) > before, 20_000);
+  // One retry, and only after re-focusing: the observed failure is a lost focus/keystroke, not a
+  // backend refusal, and a second Enter into an unfocused document would fail the same way.
+  if (!arrived) {
+    await composer.click({ timeout: 5000 }).catch(() => {});
+    await page.keyboard.press("Enter");
+    arrived = await until(async () => (await entryCount(agentId)) > before, 15_000);
+  }
+  return { typed, arrived: Boolean(arrived), before };
+};
+
 /**
  * Wait until the bot is idle before sending the next prompt.
  *
@@ -220,18 +251,11 @@ try {
     // did not submit — a harness fault reported as a system fault. Driving the same prompt straight
     // through `sendPrompt` on the gateway completed `list_dir_v2` against the box in 6.1s, which is
     // how we know the difference matters.
-    const before = ((await gw("getAgentTranscriptTail", { agentId }))?.entries ?? []).length;
-
-    const composer = page.locator('[contenteditable="true"]').last();
-    await composer.click({ timeout: 5000 });
-    await page.keyboard.type("Dung cong cu list_dir_v2 xem thu muc . cua box, roi noi co bao nhieu muc.", { delay: 10 });
-    await page.keyboard.press("Enter");
-
-    const arrived = await until(async () => {
-      const n = ((await gw("getAgentTranscriptTail", { agentId }))?.entries ?? []).length;
-      return n > before ? `${before} → ${n} entries` : null;
-    }, 20_000);
-    step("the typed prompt reaches the backend", Boolean(arrived), arrived ?? `still ${before} entries — Enter did not submit`);
+    const sent = await sendViaUi(page, agentId, "Dung cong cu list_dir_v2 xem thu muc . cua box, roi noi co bao nhieu muc.");
+    step("the typed prompt reaches the backend", sent.arrived,
+      sent.arrived ? `${sent.before} → grew` : sent.typed
+        ? `text is in the composer but Enter never submitted (still ${sent.before} entries)`
+        : `the keystrokes never reached the composer (still ${sent.before} entries)`);
 
     // Assert on the BACKEND transcript for the tool step (tool-call entries are deliberately not
     // rendered as bubbles — the client skips them, see chat.ts), and on the SCREEN for the answer.
