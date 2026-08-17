@@ -23,7 +23,7 @@ import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, closeAgentTab } from "./browser.js";
 import { stageImage, imageSize } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
-import { parseToolCalls, planBatches, planShape } from "./tool-calls.js";
+import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "./tool-calls.js";
 import { boxConfigured, boxCall } from "./box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, restoreHandoff, handoffEntries, beginComputerUse, endComputerUse, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
@@ -2365,7 +2365,11 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     browserOn: isBrowserConfigured(),
     timeZone: (hostSettingsRef() as { userTimeZone?: string }).userTimeZone,
   });
-  const opts = { url: config.poolUrl, key, model: config.model, system, signal: controller.signal, ...(image ? { image } : {}) };
+  // 2048 (the pool default) truncates a big tool call: an `ask_question` with several options runs
+  // past it, and a cut-off `TOOL_CALL: ask_question({…` cannot parse, so it lands on screen as raw
+  // JSON instead of a widget — exactly the reported bug. 4096 clears the realistic cases; tunable.
+  const maxTokens = Number(process.env.GROKBOT2_MAX_TOKENS ?? 4096);
+  const opts = { url: config.poolUrl, key, model: config.model, system, maxTokens, signal: controller.signal, ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).
@@ -2473,7 +2477,35 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // whatever is left. That keeps approval and browser ordering exactly as they were while turning a
   // read-two-files request into one round trip instead of two.
   const calls = parseToolCalls(textOf(bubble), isKnownTool);
-  if (!calls.length) { clearPresence(agentId); onUpdate(agentId); return; }
+  if (!calls.length) {
+    // A `TOOL_CALL:` that did not parse means it was cut off mid-arguments (a big ask_question runs
+    // past the token limit) or malformed. Left alone, the raw `TOOL_CALL: ask_question({…` shows on
+    // screen as JSON — the reported bug. Never show that: strip from the last TOOL_CALL onward so only
+    // the prose remains, and retry the turn ONCE so the model can reissue the call whole. The retry is
+    // budgeted by the same MAX_TOOL_STEPS as any other continuation, so it cannot loop.
+    if (hasIncompleteToolCall(textOf(bubble), isKnownTool) && history) {
+      const spoken = textOf(bubble).replace(/TOOL_CALL:[\s\S]*$/, "").trim();
+      const step = (toolSteps.get(agentId) ?? 0) + 1;
+      if (step < MAX_TOOL_STEPS) {
+        toolSteps.set(agentId, step);
+        if (spoken) { setText(bubble, spoken); if (bubble.kind === "send-message") bubble.streaming = false; }
+        else { const at = tail(agentId).indexOf(bubble); if (at >= 0) tail(agentId).splice(at, 1); }
+        onUpdate(agentId);
+        const key2 = loadPoolKey();
+        if (key2) {
+          const b: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+          tail(agentId).push(b); onUpdate(agentId);
+          const c = new AbortController(); inflight.set(agentId, c);
+          void runTurn(agentId, b, history, key2, c);
+          return;
+        }
+      }
+      // Out of retries: at least never leave raw JSON on screen.
+      if (spoken) setText(bubble, spoken);
+      else { const at = tail(agentId).indexOf(bubble); if (at >= 0) tail(agentId).splice(at, 1); }
+    }
+    clearPresence(agentId); onUpdate(agentId); return;
+  }
   const batches = planBatches(calls, isParallelSafe);
   const batch = batches[0];
   const call = batch[0];

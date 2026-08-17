@@ -11,7 +11,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseToolCalls, planBatches, planShape, wasTruncated, MAX_CALLS_PER_REPLY } from "./tool-calls.js";
+import { parseToolCalls, planBatches, planShape, wasTruncated, hasIncompleteToolCall, MAX_CALLS_PER_REPLY } from "./tool-calls.js";
 
 const KNOWN = new Set([
   "read_file_v2", "list_dir_v2", "web_search", "web_fetch", "browser_evaluate", "browser_navigate",
@@ -102,6 +102,23 @@ test("at or under the cap is not reported as truncated", () => {
 
 test("no calls at all is an empty list, not a null", () => {
   assert.deepEqual(parseToolCalls("Chào bạn, 2+2 bằng 4.", known), []);
+});
+
+/**
+ * The reported bug: a big ask_question runs past the token limit, its `TOOL_CALL: ask_question({…`
+ * never closes, parseToolCalls skips it (zero parsed calls), and without detection the raw JSON shows
+ * on screen instead of a widget. hasIncompleteToolCall is what lets the turn strip it and retry.
+ */
+test("a cut-off tool call parses to nothing but is flagged incomplete", () => {
+  const cut = 'Bạn muốn gì?\nTOOL_CALL: ask_question({"options":[{"label":"A","value":"a"}],"prompt":"gì?"';
+  assert.equal(parseToolCalls(cut, known).length, 0, "an unclosed call must not parse");
+  assert.equal(hasIncompleteToolCall(cut, known), true, "…but it must be detectable so raw JSON never shows");
+});
+
+test("a complete call is not flagged incomplete, and prose is neither", () => {
+  const full = 'TOOL_CALL: ask_question({"prompt":"x","options":[{"label":"A","value":"a"}]})';
+  assert.equal(hasIncompleteToolCall(full, known), false);
+  assert.equal(hasIncompleteToolCall("Chào bạn, không cần công cụ.", known), false);
 });
 
 // ── scheduling ────────────────────────────────────────────────────────────────

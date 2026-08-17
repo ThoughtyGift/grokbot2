@@ -99,6 +99,28 @@ export function parseToolCalls(text: string, known: (name: string) => boolean): 
 }
 
 /** Whether the model asked for more than it is allowed, so the turn can say so out loud. */
+/**
+ * A `TOOL_CALL:` whose argument list never closes — the call was cut off mid-arguments.
+ *
+ * This is a DIFFERENT question from `wasTruncated` below, which is about the count cap ("asked for more
+ * calls than allowed"). This one is about a single call that ran past the token limit: a big
+ * `ask_question` with several options is the common victim, and its unclosed `TOOL_CALL: ask_question({…`
+ * cannot parse, so without detecting it the raw JSON lands on screen. `parseToolCalls` skips it (its
+ * `findArgEnd` returns -1 and it breaks), so a reply can have zero parsed calls yet still contain a
+ * dangling one — which is exactly when this returns true.
+ */
+export function hasIncompleteToolCall(text: string, known: (name: string) => boolean): boolean {
+  NAME.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = NAME.exec(text)) !== null) {
+    const open = m.index + m[0].length - 1;
+    const close = findArgEnd(text, open);
+    if (close < 0) return known(m[1].toLowerCase()); // opened but never closed → truncated
+    NAME.lastIndex = close + 1;
+  }
+  return false;
+}
+
 export function wasTruncated(text: string, known: (name: string) => boolean): boolean {
   // Counting without the cap: cheap, and the only honest way to report "I ran 6 of your 9".
   const all: string[] = [];
