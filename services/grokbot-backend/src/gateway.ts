@@ -54,7 +54,7 @@ import {
   runAgentAutomationNow,
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
-import { foreverBoxStatus, handBackBox } from "./forever-box.js";
+import { foreverBoxStatus, handBackBox, beginComputerUse } from "./forever-box.js";
 import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 
@@ -333,7 +333,20 @@ const methods: Record<string, (args: any) => unknown> = {
   // ── The computer pane. All four return the same decorated status the box host returns,
   // because that status is the only thing the viewer reads (see forever-box.ts). ──
   getForeverBoxStatus: (a) => foreverBoxStatus(a),
-  ensureForeverBox: (a) => foreverBoxStatus(a),
+  /**
+   * `ensure` means the USER asked for the screen — so give it to them.
+   *
+   * Scoping the pane to a running `computerUse` session was right for the passive
+   * `getForeverBoxStatus` poll, and wrong here: opening the computer pane calls this, we
+   * answered "off" because the bot had not browsed yet, and the app sat on "Starting desktop"
+   * with a progress bar that never finished. A person clicking "open the computer" IS the
+   * session starting; only the poll should infer it from the agent's own activity.
+   */
+  ensureForeverBox: (a) => {
+    const id = typeof a?.id === "string" ? a.id : typeof a?.agentId === "string" ? a.agentId : "";
+    if (id) beginComputerUse(id);
+    return foreverBoxStatus(a);
+  },
   resetForeverBox: (a) => foreverBoxStatus(a),
   updateForeverBox: (a) => foreverBoxStatus(a),
   // Clears the handoff card AND resumes the turn that was waiting on the user.
