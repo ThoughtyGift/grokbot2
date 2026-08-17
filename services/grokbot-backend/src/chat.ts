@@ -2373,6 +2373,19 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     for (let i = 0; i < 80 && shown < target.length && !controller.signal.aborted; i++) {
       await new Promise((res) => setTimeout(res, 40));
     }
+    // Then publish the finished text once more, unconditionally.
+    //
+    // The reply arrived on screen two characters short — "bắt tay vào luô" for a stored "bắt tay vào
+    // luôn?" — and two is exactly the typewriter's minimum step, so the last tick was the one that
+    // went missing. Rather than chase which tick got lost, end the animation with a state that does
+    // not depend on any tick having landed: same text the transcript already holds, so it is a no-op
+    // whenever the pump did finish cleanly, and the difference between a correct answer and a
+    // truncated one when it did not.
+    if (!controller.signal.aborted && shown !== target.length) {
+      shown = target.length;
+      setText(bubble, target);
+      onUpdate(agentId);
+    }
   }
   const acc = target;
   // The pool's streaming route intermittently completes with no deltas (HTTP 200,
