@@ -45,7 +45,23 @@ for (const [i, text] of turns.entries()) {
   const sent = await gw("sendPrompt", { agentId, text });
   if (!sent?.accepted) { console.log(`${String(i + 1).padStart(2)}. KHONG GUI DUOC: ${JSON.stringify(sent).slice(0, 80)}`); continue; }
 
-  while (Date.now() - t0 < TURN_TIMEOUT_MS) {
+  // Wait for the turn to START before waiting for it to finish.
+  //
+  // Waiting only for idle looks right and silently measures nothing: `sendPrompt` returns as soon as
+  // it is accepted, `isRunning` has not flipped yet, so the idle check passes immediately and the
+  // transcript is sampled before the turn produces anything. That is how a run came back with 22 of
+  // 66 turns blank and no error anywhere — and the resulting parity table read those blanks as
+  // missing surfaces. Same fault this repo's app harness already had, unfixed here until it bit.
+  const started = await (async () => {
+    while (Date.now() - t0 < 30_000) {
+      const rows = await gw("listAgents", {});
+      if (Array.isArray(rows) && rows.some((r) => r.id === agentId && r.isRunning)) return true;
+      if ((await gw("getAgentTranscriptTail", { agentId }))?.entries?.length > before) return true;
+      await sleep(300);
+    }
+    return false;
+  })();
+  while (started && Date.now() - t0 < TURN_TIMEOUT_MS) {
     const rows = await gw("listAgents", {});
     if (Array.isArray(rows) && !rows.some((r) => r.id === agentId && r.isRunning)) break;
     await sleep(1500);
@@ -63,12 +79,21 @@ for (const [i, text] of turns.entries()) {
     reply: replies.map((e) => String(e.message?.content ?? "")).join("\n---\n"),
     tools: tools.map((e) => `${e.name}/${e.status}`),
     kinds,
+    // A turn that produced nothing is a hole in the comparison, not a data point. Marked here so the
+    // table can exclude it instead of reading it as "the backend emitted no surfaces".
+    blank: fresh.length === 0,
   };
   out.push(record);
-  console.log(`${String(i + 1).padStart(2)}. ${String(Math.round(record.ms / 100) / 10 + "s").padStart(6)}  tool=${record.tools.length}  ${JSON.stringify(text.slice(0, 40))} -> ${JSON.stringify(record.reply.slice(0, 60).replace(/\n/g, " "))}`);
+  const flag = record.blank ? "  ⟵ TRONG, khong ghi duoc gi" : "";
+  console.log(`${String(i + 1).padStart(2)}. ${String(Math.round(record.ms / 100) / 10 + "s").padStart(6)}  tool=${record.tools.length}  ${JSON.stringify(text.slice(0, 40))} -> ${JSON.stringify(record.reply.slice(0, 60).replace(/\n/g, " "))}${flag}`);
   fs.writeFileSync(`${SCRATCH}/replay-local.json`, JSON.stringify(out, null, 2));
 }
 
+const blanks = out.filter((r) => r.blank);
 console.log(`\nxong ${out.length}/${turns.length} luot -> ${SCRATCH}/replay-local.json`);
+if (blanks.length) {
+  console.log(`\nCANH BAO: ${blanks.length} luot khong ghi duoc gi (${blanks.map((r) => r.n).join(", ")}).`);
+  console.log("Bang doi chieu se BO QUA nhung luot nay — dung doc chung nhu be mat thieu.");
+}
 await gw("deleteAgents", { agentIds: [agentId] });
 process.exit(0);

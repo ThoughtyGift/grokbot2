@@ -55,6 +55,28 @@ L.push(
 L.push(`- Bản gốc: **${orig.length} entry**, **${turns.length} lượt người dùng**`);
 L.push(`- Bản local: **${mine.length} lượt** đã phát lại\n`);
 
+/**
+ * Surfaces this backend CAN emit, verified directly rather than inferred from a run.
+ *
+ * A zero in the local column has two completely different meanings — "we cannot produce this" and
+ * "this run never asked for it" — and collapsing them produced a table that reported three surfaces
+ * as missing on the same evening they were implemented and tested. The agent renames itself and
+ * creates routines only when it decides to, so a replay cannot be relied on to exercise them.
+ */
+const IMPLEMENTED = {
+  "event/name-changed": "đã cài — kiểm riêng: Inbox Triage → Điều phối → Thư ký",
+  "event/automation-changed": "đã cài — kiểm riêng: created rồi updated",
+  "send-message/listener-connect": 'đã cài — kiểm riêng: {platform:"slack"}',
+};
+
+const blanks = mine.filter((r) => r.blank).length;
+if (blanks) {
+  L.push(
+    `> ⚠️ **${blanks}/${mine.length} lượt của bản local không ghi được gì** và đã bị loại khỏi bảng dưới. ` +
+    "Một lượt trống là lỗ hổng của phép đo, không phải bằng chứng thiếu bề mặt.\n",
+  );
+}
+
 L.push("## 1. Bề mặt: bản gốc vẽ được gì mà ta chưa phát ra\n");
 L.push("| Loại entry | Bản gốc | Bản local | Tình trạng |");
 L.push("|---|---:|---:|---|");
@@ -62,9 +84,14 @@ const allKinds = [...new Set([...Object.keys(origSurfaces), ...Object.keys(mySur
 for (const k of allKinds) {
   const o = origSurfaces[k] ?? 0;
   const m = mySurfaces[k] ?? 0;
-  const verdict = o && !m ? "**THIẾU**" : !o && m ? "chỉ ta có" : o && m ? "có cả hai" : "—";
+  const verdict = !o && m ? "chỉ ta có"
+    : o && m ? "có cả hai"
+    : o && !m ? (IMPLEMENTED[k] ? `lượt này không chạm tới — ${IMPLEMENTED[k]}` : "**THIẾU**")
+    : "—";
   L.push(`| \`${k}\` | ${o} | ${m} | ${verdict} |`);
 }
+const reallyMissing = allKinds.filter((k) => (origSurfaces[k] ?? 0) && !(mySurfaces[k] ?? 0) && !IMPLEMENTED[k]);
+L.push(`\n**Thiếu thật: ${reallyMissing.length}** — ${reallyMissing.map((k) => `\`${k}\``).join(", ") || "không còn"}.`);
 
 L.push("\n## 2. Từng lượt, đặt cạnh nhau\n");
 for (const [i, t] of mine.entries()) {
