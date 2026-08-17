@@ -421,6 +421,22 @@ export function toolProtocol(): string {
     : "Hiện chưa nối máy tính, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
       "không đọc file. Đừng hứa làm những việc đó.";
   return (
+    // KEEP "DUY NHẤT một dòng" until chat.ts runs the multi-call parser.
+    //
+    // This sentence is what caps the agent at one tool per turn, i.e. the exact thing P5 exists to
+    // fix, and lifting it is a two-line change here. It was lifted, measured, and put back, because
+    // the executor is not ready: chat.ts:1061 still matches with
+    // `/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s` — one call, anchored to the END of the
+    // reply. Given two TOOL_CALL lines, the lazy group runs from the FIRST `(` to the LAST `)`, so
+    // the argument becomes the second call's text as well. Measured live against the box: `arg=""`
+    // and `tool error: ENOENT ... open '/home/b`, then the turn looped into five tool-calls and
+    // ended on an approval card. Emitting more calls than the executor can read is worse than
+    // emitting one.
+    //
+    // With the cap lifted, both models produce exactly what P5 wants — 2 calls, 1 batch, width 2,
+    // 6/6 attempts (gemini 7.8-11.4s, opus-5 2.8-4.6s). So P5's model-side blocker is this sentence
+    // and nothing else. Order of work: wire `parseToolCalls` + `planBatches` into chat.ts FIRST,
+    // then delete this comment and lift the cap.
     "\n\nCÔNG CỤ: khi cần dùng, trả lời DUY NHẤT một dòng đúng dạng " +
     "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm.\n" +
     lines.join("\n") +
