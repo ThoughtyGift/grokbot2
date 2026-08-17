@@ -280,7 +280,28 @@ TOOL_CALL: list_dir_v2({"target_directory":".","depth":1})
 |---|---|---|---|
 | `claude-sonnet-5` | KHÔNG | không | "tôi chỉ có công cụ để **đọc nội dung một file**" |
 | `claude-opus-4-5` | KHÔNG | không | "Công cụ **Read** của tôi…" |
+| `claude-opus-4-8` | KHÔNG | không | "công cụ hiện có của mình chỉ cho phép **đọc file**" |
 | `claude-haiku-4-5` | KHÔNG | không | hỏi lại cho rõ |
+
+### `claude-opus-4-8` — đo riêng, 17/08
+
+Model này **không bị chặn** như `claude-opus-5`, và **stream chạy native** (không cần tới fallback
+vừa thêm ở `streamPool` — khác hẳn mọi model Gemini). Nhưng nó **không dùng được** làm bộ não, vì
+tầng tool. Bốn yêu cầu, mỗi yêu cầu nhắm đúng một tool đang có, so trực tiếp với model đang chạy:
+
+| Yêu cầu | `claude-opus-4-8` | | `gemini-3.7-flash` | |
+|---|---|---|---|---|
+| đọc file | không | 14,2 s | `TOOL_CALL: read_file_v2("ghi-chu.md")` | 6,8 s |
+| chạy lệnh | không | 10,4 s | `TOOL_CALL: run_terminal_command_v2({"command":"ls -la"})` | 6,0 s |
+| tìm web | không | 10,9 s | `TOOL_CALL: web_search({"search_term":"giá vàng hôm nay"})` | 6,4 s |
+| **ép** dùng `list_dir_v2` | không | 8,3 s | `TOOL_CALL: list_dir_v2({"target_directory":"."})` | 3,8 s |
+
+**0/4 so với 4/4, và chậm gấp đôi.** Đáng chú ý là lượt thứ tư: prompt nói thẳng *"BẮT BUỘC dùng
+công cụ `list_dir_v2`"* và nó vẫn trả lời *"Mình không có công cụ `list_dir_v2`"* — nó phủ nhận một
+tool được liệt kê ngay trong system prompt 8.943 token của chính lượt đó. Đây không phải model kém
+hiểu đề; đây là **danh tính agent của Claude Code CLI ghi đè bảng tool ta gửi**. Cùng nguyên nhân
+cấu trúc với `claude-sonnet-5` và `claude-opus-4-5`, nên kết luận suy ra được cho cả họ Claude qua
+pool này: **chạy được ≠ dùng được**. Bộ não vẫn là `gemini-3.7-flash`.
 
 `claude-opus-4-5` **tự gọi tên tool của nó: `Read`** — đó là toolset của Claude Code CLI. Và
 `openclaw-cli-proxy/proxy.mjs` có đúng cùng shim `TOOL_OPEN = '<<TOOL_CALL>>'` như grok. Nên model
