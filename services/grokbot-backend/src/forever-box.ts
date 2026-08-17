@@ -60,6 +60,58 @@ const handoffs = new Map<string, BoxHandoff>();
 const resumers = new Map<string, (outcome: string) => void>();
 let handoffSeq = 1;
 
+/**
+ * Which agents currently have the computer.
+ *
+ * The original does NOT give every bot a screen. It scopes the pane to a running `computerUse`
+ * subagent — client `CTn` keeps only `status === "running" && subagentType === "computerUse"`
+ * and emits one `{subagentId, title, vncUrl}` per session, and the box is retained per
+ * `subagentId`. Its own prompt states the model outright:
+ *
+ *   "the machine is ONE computer shared by all of this user's agents … while the desktop is
+ *    per-agent — each agent gets its own screen and browser window on that shared machine, and
+ *    no agent sees or drives another's. Never claim each agent has its own machine."
+ *
+ * We answered `state: "running"` for every agent, so all of them showed the same desktop and a
+ * bot idle since yesterday looked as busy as the one working. One X display cannot give each a
+ * different picture, but it can tell the truth about WHO is using it: a bot with no session
+ * reports "off", exactly as the original shows an idle bot's screen as off.
+ */
+const computerUsers = new Set<string>();
+
+/**
+ * A grace period after the turn ends.
+ *
+ * Releasing the screen the instant a tool returns measured at ~1.5s of visible pane: the agent
+ * navigated, the turn ended, and the pane went dark while the user was still reading the page
+ * it had just opened. The point of watching is to see the result, so the screen stays up for a
+ * while after the work stops. Any new action cancels the pending release.
+ */
+const RELEASE_AFTER_MS = 120_000;
+const releaseTimers = new Map<string, NodeJS.Timeout>();
+
+/** This agent has started using the computer (a browser action, or a handoff it must watch). */
+export const beginComputerUse = (agentId: string): void => {
+  if (!agentId) return;
+  const t = releaseTimers.get(agentId);
+  if (t) { clearTimeout(t); releaseTimers.delete(agentId); }
+  computerUsers.add(agentId);
+};
+
+/** Released a couple of minutes after the turn ends — never while a handoff is still on screen. */
+export const endComputerUse = (agentId: string): void => {
+  if (!agentId || handoffs.has(agentId) || releaseTimers.has(agentId)) return;
+  const timer = setTimeout(() => {
+    releaseTimers.delete(agentId);
+    if (!handoffs.has(agentId)) computerUsers.delete(agentId);
+  }, RELEASE_AFTER_MS);
+  // Do not hold the process open just to turn a screen off.
+  timer.unref?.();
+  releaseTimers.set(agentId, timer);
+};
+
+export const isUsingComputer = (agentId: string): boolean => computerUsers.has(agentId);
+
 let handBackSink: (agentId: string, outcome: string) => void = () => {};
 export function setHandBackSink(fn: (agentId: string, outcome: string) => void): void { handBackSink = fn; }
 
@@ -77,6 +129,18 @@ export const handoffEntries = (): [string, BoxHandoff][] => [...handoffs.entries
  * Ask the user to take the screen (`request_box_help` in the original catalog). Resolves when
  * they hand back, or immediately if a handoff is already pending for this agent.
  */
+/**
+ * Called with the new request id so the caller can put the matching card in the transcript.
+ * Set before the promise is returned, because the tool that awaits it never gets a chance to
+ * read a return value.
+ */
+let onHandoffStart: ((agentId: string, handoff: BoxHandoff) => void) | null = null;
+export const setHandoffStartSink = (fn: (agentId: string, handoff: BoxHandoff) => void): void => { onHandoffStart = fn; };
+
+/** Fired whenever a handoff stops being live, so the transcript card can settle. */
+let onHandoffEnd: ((agentId: string, resolution: "handed_back" | "replied" | "dismissed") => void) | null = null;
+export const setHandoffEndSink = (fn: (agentId: string, resolution: "handed_back" | "replied" | "dismissed") => void): void => { onHandoffEnd = fn; };
+
 export function requestBoxHelp(agentId: string, instruction: string, snapshotDataUrl?: string): Promise<string> {
   if (handoffs.has(agentId)) return Promise.resolve("(đã có một yêu cầu bàn giao đang chờ)");
   const handoff: BoxHandoff = {
@@ -85,6 +149,7 @@ export function requestBoxHelp(agentId: string, instruction: string, snapshotDat
     ...(snapshotDataUrl ? { snapshotDataUrl } : {}),
   };
   handoffs.set(agentId, handoff);
+  onHandoffStart?.(agentId, handoff);
   return new Promise((resolve) => resumers.set(agentId, resolve));
 }
 
@@ -93,6 +158,10 @@ export function handBackBox(args: { id?: unknown; agentId?: unknown; trigger?: u
   const agentId = boxId(args);
   const trigger = typeof args?.trigger === "string" ? args.trigger : "button";
   handoffs.delete(agentId);
+  // Always, on both paths below. The transcript card has to stop saying "Action needed"
+  // whether the waiting turn is resumed here or restarted from persisted history — hooking it
+  // to `handBackSink` alone left it stuck, because that only fires on the restarted path.
+  onHandoffEnd?.(agentId, "handed_back");
   const outcome = `người dùng đã xong trên màn hình box (${trigger})`;
   const resume = resumers.get(agentId);
   if (resume) {
@@ -122,6 +191,10 @@ export function foreverBoxStatus(args: { id?: unknown; agentId?: unknown }): For
   const handoff = handoffs.get(agentId) ?? null;
   const vncUrl = boxVncUrl();
   if (vncUrl == null) return { agentId, state: "off", windows: [], handoff };
+  // Only the agent actually using the computer gets a screen — see `computerUsers`. A pending
+  // handoff counts as using it: the whole point of that card is "look at my screen and finish
+  // this step", so the pane has to be live even though no tool is mid-flight.
+  if (!computerUsers.has(agentId) && handoff == null) return { agentId, state: "off", windows: [], handoff };
   return { agentId, state: "running", vncUrl, windows: [], handoff };
 }
 

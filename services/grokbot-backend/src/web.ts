@@ -103,7 +103,31 @@ export async function webFetch(rawUrl: string): Promise<{ url: string; markdown:
   const body = await res.text();
   if (!/html/i.test(type)) return { url: res.url || url, markdown: body.slice(0, 40_000), error: "" };
 
-  return { url: res.url || url, markdown: htmlToMarkdown(body).slice(0, 40_000), error: "" };
+  const markdown = htmlToMarkdown(body).slice(0, 40_000);
+
+  /**
+   * A 200 that carries almost no text is a failure wearing a success costume.
+   *
+   * Measured on cinai.tv: HTTP 200, and `markdown` was 65 characters — the page title and
+   * nothing else, because the site renders in JavaScript and turns bots away. The tool
+   * reported `status=done`, the model took that as "I have read the site", and answered a
+   * question about the business from general knowledge instead of opening it. The original
+   * handles the same page by escalating out loud: "Site đang chặn bot, mình mở bằng trình
+   * duyệt luôn."
+   *
+   * So say it. The threshold is deliberately low — a real page that genuinely has under ~200
+   * characters of text is rare, and the worst case is a hint the model can ignore.
+   */
+  const THIN = 200;
+  if (markdown.trim().length < THIN) {
+    return {
+      url: res.url || url,
+      markdown,
+      error: `trang trả về rất ít nội dung (${markdown.trim().length} ký tự) — nhiều khả năng site render bằng JavaScript hoặc chặn bot. ` +
+        `Đừng suy đoán nội dung: mở trang bằng browser_navigate rồi đọc bằng browser_evaluate.`,
+    };
+  }
+  return { url: res.url || url, markdown, error: "" };
 }
 
 export function htmlToMarkdown(html: string): string {

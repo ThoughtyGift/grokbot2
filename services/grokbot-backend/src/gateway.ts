@@ -149,12 +149,37 @@ setRosterSink((agentId) => {
   // A single-agent update needs the envelope or the client discards it outright; presence
   // (isRunning / isComposingMessage) rides here, so without it the indicator never mounts.
   const agent = agentId ? agentById(agentId) : undefined;
-  // No envelope on the roster. Adding one was reasoned from the client's replica code and
-  // measurably made things WORSE: with `ordered` present the client takes its snapshot path,
-  // and new bots stopped appearing in the sidebar at all — the plain wholesale replace was
-  // already working. Presence updates ride along in the full roster rather than incrementally.
-  void agent;
-  broadcast("roster", { agents: listAgents() });
+  // The enveloped form, retried on purpose.
+  //
+  // An earlier note here said the envelope "measurably made things WORSE" and the wholesale
+  // `{agents: […]}` replace "was already working". Re-measured: it is NOT working — a bot
+  // created through the gateway never appears in the sidebar (12s, list scrolled to the bottom,
+  // window focused), and presence never animates. The client has no `applyEvent` branch for
+  // `{agents}` at all; it reads `ev.agent.id` and `ev.activeAgentId`.
+  //
+  // The old measurement is still explainable: it was taken when roster rows carried no
+  // `snapshotEpoch`, so the replica had no epoch and every enveloped event was discarded on
+  // arrival — the envelope looked like the culprit when the missing epoch was. Rows carry
+  // `snapshotEpoch`/`snapshotSeq` now, so the ordered path finally has an anchor.
+  // The channel is `agents` / `agent-upserted`, NOT `roster`.
+  //
+  // Every payload shape we tried was correct and every one was thrown away, because the name
+  // was wrong. The event never reached the renderer at all: the coordinator decodes the frame,
+  // looks the channel up in its own table, and drops anything missing from it —
+  //
+  //   const family = coordinatorEventFamilyForSseChannel(event.channel);
+  //   if (family == null) return;                       // silent, no log, no error
+  //
+  // and its table (`SSE_CHANNEL_BY_FAMILY`) lists exactly: transcript · agents ·
+  // agent-upserted · tray · workflows · subagents · async-tasks · automations · mcp-servers ·
+  // forever-box · teach-recording · box-disk-pressure · computer-action · outline · sharing ·
+  // host-settings. "roster" is not one of them, so the roster replica was never offered a
+  // single event — which is why six correct-looking fixes to the payload changed nothing.
+  //
+  // `agent-upserted` carries one changed agent; `agents` carries the whole list. Both are
+  // forwarded as `{kind, event: payload}` to the renderer.
+  if (agent) broadcast("agent-upserted", { ordered: nextRosterOrdered(), agent, activeAgentId: agent.id });
+  broadcast("agents", { agents: listAgents() });
 });
 setInterval(() => {
   for (const r of sseClients) {

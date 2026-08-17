@@ -18,9 +18,18 @@
 const CDP_BASE = (): string => process.env.GROKBOT2_BROWSER_CDP ?? "http://127.0.0.1:9223";
 const CALL_TIMEOUT_MS = 20_000;
 
-/** One CDP connection to the active page, reused across calls and reopened when it drops. */
-let socket: WebSocket | null = null;
-let socketUrl = "";
+/**
+ * One CDP connection PER BOT, not one for the whole backend.
+ *
+ * Every bot used to drive `pages[0]` — the first tab it happened to find — so two bots working
+ * at once fought over the same page, and the computer pane showed all of them the same thing.
+ * The original gives each bot its own screen; the least we can do on a single shared box is
+ * give each its own tab, created on demand and remembered.
+ */
+interface Session { socket: WebSocket; targetId: string }
+const sessions = new Map<string, Session>();
+/** Which bot a call belongs to. Set per call so the 16 actions need no signature change. */
+let currentAgent = "default";
 let nextId = 0;
 const pendingCalls = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 
@@ -32,16 +41,45 @@ async function listTargets(): Promise<Target[]> {
   return (await res.json()) as Target[];
 }
 
-/** The page we drive: first ordinary page target. */
-async function pageTarget(): Promise<Target> {
+/**
+ * The tab this bot owns, creating one the first time it browses.
+ *
+ * Falls back to an existing page only when the browser endpoint refuses to open a new tab —
+ * better a shared tab than no browser at all.
+ */
+async function pageTarget(agentId: string): Promise<Target> {
   const pages = (await listTargets()).filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
+  const mine = sessions.get(agentId)?.targetId;
+  const kept = mine ? pages.find((t) => t.id === mine) : undefined;
+  if (kept) return kept;
+
+  const created = await createTab();
+  if (created) {
+    for (let i = 0; i < 10; i++) {
+      const again = (await listTargets()).find((t) => t.id === created && t.webSocketDebuggerUrl);
+      if (again) return again;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
   if (pages.length === 0) throw new Error("no page target — is Chrome running on the box?");
   return pages[0]!;
 }
 
+/** Open a fresh tab through the browser-level endpoint; null when that is not possible. */
+async function createTab(): Promise<string | null> {
+  try {
+    const res = await fetch(`${CDP_BASE()}/json/new?about:blank`, { method: "PUT", signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const t = (await res.json()) as { id?: string };
+    return typeof t.id === "string" ? t.id : null;
+  } catch { return null; }
+}
+
 async function connect(): Promise<WebSocket> {
-  if (socket != null && socket.readyState === WebSocket.OPEN) return socket;
-  const target = await pageTarget();
+  const agentId = currentAgent;
+  const live = sessions.get(agentId);
+  if (live != null && live.socket.readyState === WebSocket.OPEN) return live.socket;
+  const target = await pageTarget(agentId);
   const url = target.webSocketDebuggerUrl!;
   const ws = new WebSocket(url);
   // A socket that neither opens nor errors would hang every caller forever, so bound the wait.
@@ -65,13 +103,74 @@ async function connect(): Promise<WebSocket> {
   });
   // A dropped socket must not strand every later call on a dead handle.
   ws.addEventListener("close", () => {
-    if (socket === ws) socket = null;
+    if (sessions.get(agentId)?.socket === ws) sessions.delete(agentId);
     for (const [, slot] of pendingCalls) slot.reject(new Error("CDP socket closed"));
     pendingCalls.clear();
   }, { once: true });
-  socket = ws;
-  socketUrl = url;
+  sessions.set(agentId, { socket: ws, targetId: target.id });
   return ws;
+}
+
+/**
+ * Keep the box's Chrome window on screen.
+ *
+ * CDP renders and screenshots a page whether or not its window is mapped on the X display, so
+ * a minimized window produces a perfectly correct screenshot in the chat while the VNC pane
+ * shows an empty desktop. That is exactly what happened: `Browser.getWindowForTarget` reported
+ * `windowState: "minimized"` while the agent was browsing 24h.com.vn, and X agreed —
+ * `Map State: IsUnMapped`. The page was real; only the window was hidden.
+ *
+ * This runs on the BROWSER-level endpoint. The page session cannot do it: `Browser.*` is not
+ * available there, so reusing the existing socket silently fails.
+ */
+let lastWindowCheckMs = 0;
+const WINDOW_CHECK_EVERY_MS = 10_000;
+
+async function ensureWindowVisible(): Promise<void> {
+  const now = Date.now();
+  if (now - lastWindowCheckMs < WINDOW_CHECK_EVERY_MS) return;
+  lastWindowCheckMs = now;
+
+  let ws: WebSocket | null = null;
+  try {
+    const ver = await (await fetch(`${CDP_BASE()}/json/version`, { signal: AbortSignal.timeout(5000) })).json() as { webSocketDebuggerUrl?: string };
+    if (!ver.webSocketDebuggerUrl) return;
+    ws = new WebSocket(ver.webSocketDebuggerUrl);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("browser socket timeout")), 5000);
+      ws!.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
+      ws!.addEventListener("error", () => { clearTimeout(timer); reject(new Error("browser socket error")); }, { once: true });
+    });
+
+    let id = 0;
+    const waits = new Map<number, { res: (v: any) => void; rej: (e: Error) => void }>();
+    ws.addEventListener("message", (ev: MessageEvent) => {
+      let m: any; try { m = JSON.parse(String(ev.data)); } catch { return; }
+      const w = waits.get(m.id); if (!w) return;
+      waits.delete(m.id);
+      m.error ? w.rej(new Error(m.error.message ?? "CDP error")) : w.res(m.result);
+    });
+    const call = (method: string, params: Record<string, unknown> = {}) => new Promise<any>((res, rej) => {
+      const n = ++id;
+      waits.set(n, { res, rej });
+      setTimeout(() => { if (waits.delete(n)) rej(new Error(`${method} timeout`)); }, 5000);
+      ws!.send(JSON.stringify({ id: n, method, params }));
+    });
+
+    const { targetInfos } = await call("Target.getTargets");
+    const page = (targetInfos as { type: string; targetId: string }[]).find((t) => t.type === "page");
+    if (!page) return;
+    const win = await call("Browser.getWindowForTarget", { targetId: page.targetId });
+    if (win?.bounds?.windowState === "normal") return;
+    // Two calls on purpose: Chrome rejects a bounds object that sets a state AND a geometry.
+    await call("Browser.setWindowBounds", { windowId: win.windowId, bounds: { windowState: "normal" } });
+    await call("Browser.setWindowBounds", { windowId: win.windowId, bounds: { left: 120, top: 60, width: 1400, height: 900 } });
+    console.log("[grokbot2] [browser] box window was", win.bounds.windowState, "— restored to normal");
+  } catch {
+    // Never fail a browser action because the window could not be raised.
+  } finally {
+    try { ws?.close(); } catch { /* already closed */ }
+  }
 }
 
 async function send(method: string, params: Record<string, unknown> = {}): Promise<any> {
@@ -308,7 +407,14 @@ const ACTIONS: Record<string, { primary: string; run: Action }> = {
 export const BROWSER_TOOL_NAMES = Object.keys(ACTIONS);
 
 /** Anything a tool may do besides return text (mirrors chat.ts ToolCtx, kept local to avoid a cycle). */
-export interface BrowserCtx { attach(dataUrl: string, fileName: string, alt: string): void }
+export interface BrowserCtx { attach(dataUrl: string, fileName: string, alt: string): void; agentId?: string }
+
+/** Bring the current bot's tab to the front of the shared window. */
+async function activateOwnTab(): Promise<void> {
+  const id = sessions.get(currentAgent)?.targetId;
+  if (!id) return;
+  try { await fetch(`${CDP_BASE()}/json/activate/${id}`, { signal: AbortSignal.timeout(4000) }); } catch { /* best effort */ }
+}
 
 /** Capture the page as a data: URL — the only URL form the transcript renders without a host. */
 async function screenshotDataUrl(): Promise<string | null> {
@@ -330,8 +436,19 @@ export const isBrowserConfigured = (): boolean => process.env.GROKBOT2_BROWSER_C
 export async function runBrowserTool(name: string, rawArg: string, ctx?: BrowserCtx): Promise<string> {
   const action = ACTIONS[name];
   if (action == null) return `(unknown browser tool ${name})`;
+  // Route every CDP call in this action to the calling bot's own tab.
+  currentAgent = ctx?.agentId ?? "default";
   let text: string;
   try {
+    // Before anything else, make sure the user can SEE what is about to happen. The whole point
+    // of driving the box's Chrome rather than a headless one is that the VNC pane shows it.
+    await ensureWindowVisible();
+    // NOTE: this used to call activateOwnTab() here, pulling the acting bot's tab to the front.
+    // That is wrong while several bots share one Chrome window: a bot working in the background
+    // yanked the view away from the bot the user was actually watching — reported live, with the
+    // VNC pane jumping to another bot's page mid-task. Each bot keeps its own tab; nothing steals
+    // focus. Bringing a tab forward belongs to whoever knows which bot is on screen, which the
+    // backend does not.
     text = await action.run(parseArgs(rawArg, action.primary));
   } catch (e) {
     text = `browser error: ${(e as Error).message}`;
@@ -351,8 +468,10 @@ export async function runBrowserTool(name: string, rawArg: string, ctx?: Browser
  * Node alive, so any script that uses these tools must call this to exit.
  */
 export function closeBrowser(): void {
-  try { socket?.close(); } catch { /* already closed */ }
-  socket = null;
+  for (const [, s] of sessions) {
+    try { s.socket.close(); } catch { /* already closed */ }
+  }
+  sessions.clear();
 }
 
 /** Reachability check for startup logging — never throws. */

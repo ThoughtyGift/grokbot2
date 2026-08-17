@@ -133,7 +133,7 @@ export function renderTree(node: TreeNode | undefined, indent = "", isRoot = tru
 export const TOOLS: Record<string, ToolSpec> = {
   run_terminal_command_v2: {
     name: "run_terminal_command_v2",
-    summary: "Chạy một lệnh shell trong box",
+    summary: "Chạy một lệnh shell trên máy tính của bạn",
     usage: "run_terminal_command_v2(<lệnh>)",
     needsApproval: true,
     async run(arg) {
@@ -151,7 +151,7 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   read_file_v2: {
     name: "read_file_v2",
-    summary: "Đọc nội dung một file trong box",
+    summary: "Đọc nội dung một file trên máy tính của bạn",
     usage: "read_file_v2(<đường dẫn>[, <dòng bắt đầu>, <số dòng>])",
     needsApproval: false,
     async run(arg) {
@@ -177,7 +177,7 @@ export const TOOLS: Record<string, ToolSpec> = {
    */
   edit_file_v2: {
     name: "edit_file_v2",
-    summary: "Ghi (tạo hoặc thay toàn bộ) một file trong box",
+    summary: "Ghi (tạo hoặc thay toàn bộ) một file trên máy tính của bạn",
     usage: 'edit_file_v2({"path":"<đường dẫn>","content":"<toàn bộ nội dung mới>"})',
     needsApproval: true,
     async run(arg) {
@@ -205,7 +205,7 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   delete_file: {
     name: "delete_file",
-    summary: "Xoá một file trong box",
+    summary: "Xoá một file trên máy tính của bạn",
     usage: "delete_file(<đường dẫn>)",
     needsApproval: true,
     async run(arg) {
@@ -216,7 +216,7 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   list_dir_v2: {
     name: "list_dir_v2",
-    summary: "Liệt kê cây thư mục trong box",
+    summary: "Liệt kê cây thư mục trên máy tính của bạn",
     usage: "list_dir_v2(<thư mục>[, <độ sâu>])",
     needsApproval: false,
     async run(arg) {
@@ -231,7 +231,7 @@ export const TOOLS: Record<string, ToolSpec> = {
 
   glob_file_search: {
     name: "glob_file_search",
-    summary: "Tìm file theo mẫu tên trong box",
+    summary: "Tìm file theo mẫu tên trên máy tính của bạn",
     usage: "glob_file_search(<mẫu>[, <thư mục>])",
     needsApproval: false,
     async run(arg) {
@@ -267,14 +267,17 @@ export const TOOLS: Record<string, ToolSpec> = {
     alwaysAvailable: true,
     async run(arg) {
       const r = await webFetch(unquote(arg));
-      if (r.error) return `Không đọc được ${r.url}: ${r.error}`;
+      // A thin page sets `error` AND keeps what little it got: hiding the fragment would make
+      // the model refetch to see it, and showing it without the warning is what let it treat a
+      // bare page title as "I have read this site".
+      if (r.error) return `Không đọc được ${r.url}: ${r.error}${r.markdown.trim() ? `\n\nPhần lấy được:\n${r.markdown.trim()}` : ""}`;
       return trim(`${r.url}\n\n${r.markdown}`);
     },
   },
 
   ripgrep_raw_search: {
     name: "ripgrep_raw_search",
-    summary: "Tìm nội dung trong file của box",
+    summary: "Tìm nội dung trong file trên máy tính của bạn",
     usage: "ripgrep_raw_search(<mẫu>[, <thư mục>])",
     needsApproval: false,
     async run(arg) {
@@ -298,8 +301,12 @@ export function toolProtocol(): string {
   const available = availableTools();
   const lines = Object.values(available).map((t) => `- ${t.usage} — ${t.summary}`);
   const note = boxConfigured()
-    ? "Công cụ shell/file/tìm-kiếm-file chạy TRONG box Linux, không phải máy người dùng."
-    : "Hiện chưa nối box, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
+    ? // "box" is internal jargon. The original is explicit: to the user it is always "my computer",
+    // never a "box" — and the model repeats whatever word the tool list uses. It called itself
+    // a "Linux Box" in a live reply because every summary here said box.
+    "Công cụ shell/file/tìm-kiếm-file chạy trên MÁY TÍNH của bạn (một máy Linux riêng), " +
+      "không phải máy của người dùng. Khi nói với người dùng, gọi nó là \"máy tính của mình\", đừng gọi là \"box\"."
+    : "Hiện chưa nối máy tính, nên bạn CHỈ có các công cụ web ở trên: không chạy được lệnh shell, " +
       "không đọc file. Đừng hứa làm những việc đó.";
   return (
     "\n\nCÔNG CỤ: khi cần dùng, trả lời DUY NHẤT một dòng đúng dạng " +

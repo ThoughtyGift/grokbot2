@@ -24,7 +24,7 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowser
 import { stageImage } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
 import { boxConfigured, boxCall } from "./box-exec.js";
-import { requestBoxHelp, setHandBackSink, restoreHandoff, handoffEntries, type BoxHandoff } from "./forever-box.js";
+import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, restoreHandoff, handoffEntries, beginComputerUse, endComputerUse, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "./mcp.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
@@ -148,7 +148,7 @@ export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" } })
   // respondedValue / widgetDismissed live on the ENTRY, not inside message.widget — that is
   // what flips the card from "question" to "resolved" (client: HWn).
-  | (Base & { kind: "send-message"; author: Author; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
+  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   // status "failed", not "error": the FE picks the tool card's icon with
   // `status==="pending" ? loading : status==="failed" ? x-circle : wrench`, so an
   // "error" tool renders as an ordinary wrench and reads as if it had succeeded.
@@ -220,6 +220,47 @@ setHandBackSink((agentId, outcome) => {
   if (!waiting?.history) return;
   continueAfterTool(agentId, waiting.history, "request_box_help", waiting.arg ?? "", outcome);
 });
+
+/**
+ * The inline "Computer" card in the transcript.
+ *
+ * The right-rail "Needs your attention" panel came for free from `getForeverBoxStatus`, but
+ * the original ALSO puts a card in the conversation — the one reading
+ * `Computer · Done / <instruction> / [Open computer]`. It is driven entirely by fields on a
+ * `send-message` entry (client `Obn`):
+ *
+ *   entry.boxRequestId   — the trigger. No card without it, whatever else is set.
+ *   entry.boxInstruction — shown once the handoff is over.
+ *   entry.boxResolution  — handed_back → "Done" · replied → "Answered" · dismissed → "Skipped"
+ *
+ * While a handoff with the same `requestId` is still live, the client ignores those two and
+ * renders the waiting state (Take over / I'm done / Skip) from the live record instead. So the
+ * entry is written once, at the start, and only its resolution is patched afterwards.
+ */
+function postBoxHandoffCard(agentId: string, handoff: BoxHandoff): void {
+  tail(agentId).push({
+    id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+    message: { type: "text", content: "" },
+    boxRequestId: handoff.requestId,
+    boxInstruction: handoff.instruction,
+  });
+  onUpdate(agentId);
+}
+
+function settleBoxHandoffCard(agentId: string, resolution: "handed_back" | "replied" | "dismissed"): void {
+  const t = transcripts.get(agentId) ?? [];
+  for (let i = t.length - 1; i >= 0; i--) {
+    const e = t[i];
+    if (e.kind === "send-message" && e.boxRequestId != null && e.boxResolution == null) {
+      e.boxResolution = resolution;
+      onUpdate(agentId);
+      return;
+    }
+  }
+}
+
+setHandoffStartSink(postBoxHandoffCard);
+setHandoffEndSink(settleBoxHandoffCard);
 const park = (p: Parked): void => { parked.set(parkKey(p.kind, p.key), p); persist(); };
 const unpark = (kind: Parked["kind"], key: string): Parked | undefined => {
   const k = parkKey(kind, key);
@@ -372,6 +413,9 @@ export interface ToolCtx {
   draft(message: EmailDraftMsg | SlackDraftMsg): void;
 }
 
+/** Every tool the model is actually offered right now — used by scripts/tool-coverage.mjs. */
+export const toolNames = (): string[] => Object.keys(TOOLS);
+
 const TOOLS: Record<string, (arg: string, ctx: ToolCtx) => string | Promise<string>> = {
   echo: (a) => a || "(empty)",
   time: () => new Date().toISOString(),
@@ -445,10 +489,57 @@ TOOLS.message_agent = (arg, ctx) => {
     const m = arg.match(/^\s*([^:,]+)\s*[:,]\s*([\s\S]+)$/);   // "Sales: nội dung"
     spec = m ? { to: m[1], content: m[2] } : null;
   }
-  const to = String(spec?.to ?? spec?.agent ?? spec?.name ?? "").trim();
+  const raw = spec?.to ?? spec?.agent ?? spec?.name ?? spec?.agents ?? spec?.bots;
+  // One target or many. The client turns several consecutive outbound entries into
+  // "Messaged N agents" by itself (see the fan-out note on messageAgent), so briefing a whole
+  // team is just this tool called with a list — no new entry kind, no new gateway method.
+  const targets = (Array.isArray(raw) ? raw : String(raw ?? "").split(/[,;]/))
+    .map((t) => String(t).trim()).filter(Boolean);
   const content = String(spec?.content ?? spec?.message ?? spec?.text ?? "").trim();
-  if (!to || !content) return 'message_agent cần {"to":"tên bot","content":"nội dung"}';
-  return messageAgent(ctx.agentId, to, content);
+  if (targets.length === 0 || !content) return 'message_agent cần {"to":"tên bot" hoặc ["bot A","bot B"],"content":"nội dung"}';
+  return targets.map((t) => messageAgent(ctx.agentId, t, content)).join("; ");
+};
+
+/**
+ * Building the roster from inside a conversation.
+ *
+ * The original's agent does this — its history shows one bot answering "Tạo 3 con luôn. Con
+ * 'New Bot' trống mình đổi thành Quản lý, rồi thêm Gmail và Discord CSKH." and the roster
+ * gaining three bots. The activity table names the tools `CreateAgent` and `UpdateAgent`
+ * (both render as "Messaging"), which is why those are the activity strings used here.
+ *
+ * Creating is deliberately not auto-approved: it changes the user's sidebar, which is theirs.
+ */
+TOOLS.create_agent = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
+  const names = (Array.isArray(spec?.names) ? spec.names : [spec?.name ?? spec?.title ?? unquote(arg)])
+    .map((n: unknown) => String(n ?? "").trim()).filter(Boolean);
+  if (names.length === 0) return 'create_agent cần {"name":"tên bot"} hoặc {"names":["A","B"]}';
+  const made: AgentRecord[] = names.map((n: string) => createAgent({ name: n }));
+  // Brief each new bot with its purpose, if one was given — an empty bot is not a colleague.
+  const brief = String(spec?.brief ?? spec?.role ?? spec?.instructions ?? "").trim();
+  if (brief) for (const m of made) sendPrompt({ agentId: m.id, content: brief, fromAgent: { id: ctx.agentId, name: agents.get(ctx.agentId)?.name ?? "bot" } });
+  return `đã tạo ${made.map((m) => m.name).join(", ")}`;
+};
+
+TOOLS.rename_agent = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch {
+    const m = arg.match(/^\s*([^,]+)\s*,\s*([\s\S]+)$/);      // "Cũ, Mới"
+    spec = m ? { from: m[1], to: m[2] } : { to: unquote(arg) };
+  }
+  const wanted = String(spec?.to ?? spec?.name ?? spec?.newName ?? "").trim();
+  if (!wanted) return 'rename_agent cần {"from":"tên cũ","to":"tên mới"} (bỏ "from" để tự đổi tên mình)';
+  const fromRaw = String(spec?.from ?? spec?.agent ?? "").trim();
+  const target = fromRaw
+    ? agents.get(fromRaw) ?? [...agents.values()].find((a) => a.name.toLowerCase() === fromRaw.toLowerCase())
+    : agents.get(ctx.agentId);
+  if (!target) return `(không tìm thấy bot "${fromRaw}")`;
+  const was = target.name;
+  updateAgent({ id: target.id, profile: { name: wanted } });
+  rosterChanged(target.id);
+  return `đã đổi tên "${was}" thành "${wanted}"`;
 };
 
 /**
@@ -461,7 +552,7 @@ TOOLS.attach_file = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
   const path = String(spec?.path ?? spec?.file ?? spec?.target_file ?? "").trim();
-  if (!path) return 'attach_file cần {"path":"tên file trong box"}';
+  if (!path) return 'attach_file cần {"path":"tên file trên máy tính của bạn"}';
 
   // Resolve to the absolute box path: the renderer keys the preview off exactly the string
   // in `url`, so a relative path here and an absolute one at read time never meet.
@@ -556,9 +647,16 @@ TOOLS.create_plan = (arg, ctx) => {
 TOOLS.request_box_help = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { instruction: arg }; }
-  const instruction = String(spec?.instruction ?? spec?.prompt ?? arg ?? "").trim();
+  // Read the key the model actually used, not the one we hoped for. Falling back to the raw
+  // `arg` printed `{"message":"…"}` verbatim into the chat when it sent `message` — a JSON
+  // blob shown to the user as if it were a sentence. Any single string value will do.
+  const named = spec?.instruction ?? spec?.prompt ?? spec?.message ?? spec?.task ?? spec?.text ?? spec?.ask;
+  const onlyString = named == null && spec && typeof spec === "object"
+    ? Object.values(spec).find((v) => typeof v === "string" && v.trim())
+    : undefined;
+  const instruction = String(named ?? onlyString ?? (typeof spec === "string" ? spec : "")).trim();
   if (!instruction) return 'request_box_help cần {"instruction":"việc cần bạn làm trên màn hình"}';
-  ctx.note(`Mình cần bạn thao tác trên màn hình box: ${instruction}`);
+  ctx.note(`Mình cần bạn thao tác trên màn hình máy tính của mình: ${instruction}`);
   return ctx.requestBoxHelp(instruction);
 };
 
@@ -645,12 +743,22 @@ for (const [name, spec] of Object.entries(availableTools())) TOOLS[name] = (arg)
  * means a model that knows the original behaves correctly here.
  */
 const BROWSER_PROTOCOL = isBrowserConfigured()
-  ? "\n\nTRÌNH DUYỆT: các công cụ browser_* điều khiển Chrome trong box và người dùng nhìn thấy " +
+  // "box" is internal jargon; the original forbids saying it to the user, and the model repeats
+  // whatever the tool text uses — it introduced itself as running on a "Linux Box" in a live reply.
+  ? "\n\nTRÌNH DUYỆT: các công cụ browser_* điều khiển Chrome trên máy tính của bạn và người dùng nhìn thấy " +
     "trực tiếp trên màn hình. Đối số dạng JSON, ví dụ " +
     'TOOL_CALL: browser_navigate({"url":"https://example.com"}) hoặc ' +
     'TOOL_CALL: browser_fill({"selector":"#q","value":"xin chào"}). ' +
     "Mỗi hành động đã tự trả về trạng thái trang sau đó, nên KHÔNG cần gọi browser_snapshot " +
-    "hay browser_take_screenshot ngay sau một hành động khác."
+    "hay browser_take_screenshot ngay sau một hành động khác. " +
+    // Observed: asked to pull the images out of an article it had just opened, the model wrote a
+    // python3 + urllib scraper and called run_terminal_command_v2 — which needs approval, refetches
+    // the page as a bot, and loses everything JavaScript had rendered. The page was already there.
+    "Khi cần lấy nội dung TỪ trang đang mở (ảnh, link, tiêu đề, bảng...), dùng browser_evaluate " +
+    "trên chính trang đó — đừng tải lại trang bằng shell (curl/python) hay web_fetch: trang đang mở " +
+    "đã qua JavaScript và đã có cookie/đăng nhập, còn tải lại thường bị chặn và mất nội dung động. " +
+    'Ví dụ lấy ảnh: TOOL_CALL: browser_evaluate({"expression":' +
+    '"[...document.querySelectorAll(\'img\')].map(i=>i.currentSrc||i.src).filter(u=>u.startsWith(\'http\')).slice(0,20)"})'
   : "";
 
 const ASK_PROTOCOL =
@@ -684,11 +792,25 @@ const PEER_PROTOCOL =
   "\n\nNHẮN BOT KHÁC: các bot trong sidebar nhắn được cho nhau bằng " +
   'TOOL_CALL: message_agent({"to":"tên bot","content":"..."}). ' +
   "Dùng khi việc thuộc chuyên môn của bot khác; nói cho người dùng biết bạn đã nhắn ai. " +
-  "Trả lời của họ sẽ tới ở lượt sau, đừng chờ trong cùng một lượt.";
+  "Trả lời của họ sẽ tới ở lượt sau, đừng chờ trong cùng một lượt. " +
+  'Brief nhiều bot cùng lúc bằng danh sách: {"to":["Sales","Marketing"],"content":"..."}. ' +
+  "\n\nTẠO / ĐỔI TÊN BOT: " +
+  'TOOL_CALL: create_agent({"name":"Quản lý","brief":"vai trò và cách phối hợp"}) — thêm "names":[…] để tạo nhiều bot. ' +
+  'TOOL_CALL: rename_agent({"from":"New Bot","to":"Quản lý"}) — bỏ "from" nếu tự đổi tên mình. ' +
+  "Tạo bot xong thì brief vai trò cho nó ngay, đừng để bot rỗng.";
+
+/**
+ * Scaffolding from the first spike — `calc`, `echo` and friends. They stay callable so the
+ * older e2e scripts keep working, but they are no longer advertised: the original has nothing
+ * like them, and a model shown a `calc` tool reaches for it instead of doing arithmetic in an
+ * ordinary sentence.
+ */
+const DEV_TOOLS = new Set(["echo", "time", "reverse", "upper", "count", "calc"]);
 
 const TOOL_PROTOCOL =
   "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
-  "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " + Object.keys(TOOLS).join(", ") +
+  "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " +
+  Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
   BROWSER_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
@@ -747,14 +869,58 @@ export const agentById = (id: string): AgentRecord | undefined => {
 const rosterChanged = (agentId?: string): void => rosterSink(agentId);
 
 /** PascalCase names the client's activity table knows; anything else renders plain "Working". */
+/**
+ * Our tool names → the names the client's activity table knows.
+ *
+ * This is the ONLY tool feedback the original gives during a turn: it never renders a tool
+ * card (see the tool-call note at the top of this file), it changes the line beside the
+ * avatar. The client's `dse()` maps a name to a verb + icon:
+ *
+ *   WebSearch → "Searching the web"   Read/BoxRead   → "Reading file"
+ *   WebFetch  → "Reading the web"     Shell/BoxShell → "Running commands"
+ *   Task      → "Waiting on another agent"           (…with `detail` → "Drafting the file")
+ *   Screenshot / Computer / request_box_help → "On its computer"
+ *   SendToAgent → "Messaging <name>"  CallMcpTool → "Connecting to <service>"
+ *   anything starting `browser_` → "Browsing the web"
+ *   anything else → "Working"
+ *
+ * That last-but-one rule is why the browser tools are NOT listed here any more: they were
+ * being rewritten to `WebFetch`, which reads "Reading the web" while the agent is clicking
+ * around a page. Passing the real name through hits the `browser_` branch and says
+ * "Browsing the web", which is what the original shows.
+ */
 const ACTIVITY_TOOL: Record<string, string> = {
   web_search: "WebSearch",
   web_fetch: "WebFetch",
   read_file_v2: "Read",
-  browser_navigate: "WebFetch",
-  browser_take_screenshot: "WebFetch",
+  list_dir_v2: "Read",
+  glob_file_search: "Read",
+  ripgrep_raw_search: "Read",
+  run_terminal_command_v2: "Shell",
+  task_v2: "Task",
+  message_agent: "SendToAgent",
+  create_agent: "CreateAgent",
+  rename_agent: "UpdateAgent",
+  attach_file: "Screenshot",
+  call_mcp_tool: "CallMcpTool",
+  get_mcp_tools: "GetMcpTools",
   knowledge_base: "ReactToMessage",
+  // `Shell` + a non-empty `detail` is the client's "Drafting the file" state; the detail is
+  // attached at the call site, where the path is known.
+  edit_file_v2: "Shell",
+  edit_file: "Shell",
+  delete_file: "Shell",
 };
+
+/** The file a write-style tool is touching, for the "Drafting the file" activity detail. */
+function activityDetail(name: string, arg: string): string | undefined {
+  if (name !== "edit_file_v2" && name !== "edit_file" && name !== "delete_file") return undefined;
+  try {
+    const o = JSON.parse(arg);
+    if (o && typeof o.path === "string") return o.path;
+  } catch { /* positional form */ }
+  return unquote(arg.split(",")[0] ?? "") || undefined;
+}
 
 /**
  * Update presence and tell the roster, so the indicator actually moves.
@@ -774,8 +940,14 @@ function setPresence(agentId: string, patch: Partial<Pick<AgentRecord, "isRunnin
 }
 
 /** Everything presence-related back to idle. Called on every exit path, including failures. */
-const clearPresence = (agentId: string): void =>
+const clearPresence = (agentId: string): void => {
+  // A turn that stopped is not driving the computer any more, so its screen goes off — the
+  // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
+  // on screen, because that card exists precisely to make the user look at it.
+  endComputerUse(agentId);
+  finishComputerUseRun(agentId);
   setPresence(agentId, { isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null });
+};
 const onUpdate = (agentId: string): void => { sink(agentId); persist(); };
 const nextId = () => `e${entrySeq++}`;
 const tail = (agentId: string) => transcripts.get(agentId) ?? (transcripts.set(agentId, []), transcripts.get(agentId)!);
@@ -801,7 +973,11 @@ export function createAgent(args: { name?: string; profile?: { name?: string }; 
     id, name: wanted?.trim() || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false,
     isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null,
   };
-  agents.set(id, rec); transcripts.set(id, []); persist(); rosterChanged();
+  agents.set(id, rec); transcripts.set(id, []); persist();
+  // With the id: the client's roster replica applies an event by reading `ev.agent.id`, so the
+  // id-less branch (`{agents: […]}`) is a shape it has no case for and silently drops. Creating
+  // a bot therefore did not show up until a reload — measured: 12s, no new row.
+  rosterChanged(id);
   return rec;
 }
 /**
@@ -865,14 +1041,69 @@ function lastEntryOf(agentId: string): LastEntry | undefined {
 }
 
 /** The summary the sidebar renders, built fresh so `updatedAt`/`lastEntry` are never stale. */
-function summarise(a: AgentRecord): AgentRecord & { updatedAt: number; lastEntry?: LastEntry } {
+type RosterRow = AgentRecord & Record<string, unknown>;
+function summarise(a: AgentRecord): RosterRow {
   const t = transcripts.get(a.id);
   const updatedAt = t?.length ? t[t.length - 1].timestampMs : a.createdAtMs;
   const lastEntry = lastEntryOf(a.id);
-  return { ...a, updatedAt, ...(lastEntry ? { lastEntry } : {}) };
+  // `snapshotEpoch` / `snapshotSeq` anchor the ROSTER replica, exactly as `ordered` anchors the
+  // transcript one — and their absence broke presence the same way.
+  //
+  // The client reads the epoch off the first row of the polled list:
+  //
+  //     const Le = je.rows[0]?.snapshotEpoch;
+  //     if (Le == null) { …; x = b(je); return }      // rebuild, WITHOUT an epoch
+  //     x.ingestSnapshot({ replicaKey, epoch: Le, throughSequence, … })
+  //
+  // With no epoch the replica has nothing for a pushed event to line up against, so every
+  // roster event we sent — `{replicaKey:"roster", epoch, sequence}` from nextRosterOrdered —
+  // was dropped on arrival. The bot list therefore only ever changed on a full refetch, which
+  // is why `isRunning`/`currentActivity` were correct in the API and the avatar never moved.
+  // The client VALIDATES every roster row and drops the whole row on the first missing field:
+  //
+  //   if (!isObj(n) || typeof n.id !== "string" || !n.id.length || typeof n.name !== "string"
+  //       || typeof n.description !== "string" || typeof n.path !== "string"
+  //       || typeof n.createdAt !== "number" || !isFinite(n.createdAt)
+  //       || typeof n.updatedAt !== "number" || !isFinite(n.updatedAt)
+  //       || typeof n.hasUnread !== "boolean" || typeof n.notificationsEnabled !== "boolean"
+  //       || typeof n.notifyOnUpdatesEnabled !== "boolean" || typeof n.isGroup !== "boolean"
+  //       || typeof n.origin !== "string"
+  //       || (n.lastMessageId !== null && typeof n.lastMessageId !== "string")
+  //       || (n.lastEntry !== null && !isObj(n.lastEntry))
+  //       || (n.awaitingUserResponse !== null && !isObj(n.awaitingUserResponse))
+  //       || !isStringArray(n.memberIds) || !isStringArray(n.conversationPartnerIds)) return null;
+  //
+  // We were sending five of the sixteen. Names and previews still drew, because those come from
+  // a more forgiving path — but the ORDERED replica, the one that carries live presence, threw
+  // every row away. `null` and `[]` are values here, not omissions: an absent field fails the
+  // typeof check just as hard as a wrong one.
+  const t2 = transcripts.get(a.id);
+  const last = t2?.length ? t2[t2.length - 1] : null;
+  return {
+    ...a,
+    updatedAt,
+    snapshotEpoch: EPOCH,
+    snapshotSeq: rosterSeq,
+    description: "",
+    path: `/agents/${a.id}`,
+    createdAt: a.createdAtMs,
+    hasUnread: a.unread === true,
+    notificationsEnabled: a.notificationsEnabled === true,
+    notifyOnUpdatesEnabled: a.notifyOnUpdates === true,
+    isGroup: false,
+    origin: "user",
+    lastMessageId: last ? last.id : null,
+    awaitingUserResponse: a.awaitingUserResponse ?? null,
+    memberIds: [],
+    conversationPartnerIds: [],
+    lastEntry: lastEntry ?? null,
+    // The client prefers `isRunningTurn` over `isRunning` wherever both exist
+    // (`Bon(n) = n.isRunningTurn ?? n.isRunning`), and its own default row template sets both.
+    isRunningTurn: a.isRunning === true,
+  };
 }
 
-export const listAgents = (): (AgentRecord & { updatedAt: number })[] =>
+export const listAgents = (): RosterRow[] =>
   [...agents.values()].filter((a) => !a.hidden).map(summarise);
 export const countAgents = (): number => listAgents().length;
 // The FE sends {id, profile:{name,…}} — a bare `name` never arrives.
@@ -1065,6 +1296,31 @@ export interface SubagentRow {
 const subagentRuns = new Map<string, Map<string, SubagentRow>>();
 let subagentSeq = 1;
 
+/**
+ * The computer session, as a `computerUse` subagent.
+ *
+ * That name is not decoration: the client filters the panes it draws with
+ * `status === "running" && subagentType === "computerUse"` (`CTn`/`eht`), so a session under any
+ * other type contributes no screen. One per bot at a time — a bot has one desktop, and opening a
+ * second row would claim it has two.
+ */
+const COMPUTER_USE = "computerUse";
+const computerRuns = new Map<string, string>();   // agentId → subagentId
+
+function startComputerUseRun(agentId: string, tool: string): void {
+  beginComputerUse(agentId);
+  if (computerRuns.has(agentId)) return;
+  const title = tool.startsWith("browser_") ? "Đang dùng trình duyệt" : "Đang cần bạn thao tác";
+  computerRuns.set(agentId, startSubagentRun(agentId, COMPUTER_USE, title));
+}
+
+function finishComputerUseRun(agentId: string): void {
+  const id = computerRuns.get(agentId);
+  if (id == null) return;
+  computerRuns.delete(agentId);
+  finishSubagentRun(agentId, id, "done");
+}
+
 /** Register a starting subagent and return its id, so the caller can settle it later. */
 export function startSubagentRun(parentAgentId: string, subagentType: string, title: string): string {
   const subagentId = `sub-${subagentSeq++}`;
@@ -1218,6 +1474,17 @@ function runTool(agentId: string, toolCallId: string, name: string, arg: string,
     return;
   }
   tc.status = "running";
+  // Claim the computer for this bot. Browser actions drive its Chrome window; a handoff puts a
+  // card on screen the user has to act on. Either way this bot — and only this bot — should
+  // show a live screen while it lasts.
+  if (name.startsWith("browser_") || name === "request_box_help") startComputerUseRun(agentId, name);
+  // A box handoff waits on a human, which can be minutes or never. Leaving the turn "running"
+  // meanwhile is what made the app look dead: `isRunning` stayed true, the avatar spun behind
+  // a card that needed a click, and because the promise had not settled nothing ever cleared
+  // it. The same reasoning the ask_question branch below already applies — a parked turn is
+  // waiting, not working — just applied at the right moment rather than after the wait.
+  if (name === "request_box_help") clearPresence(agentId);
+
   void Promise.resolve(fn(arg, ctxFor(agentId, history)))
     .catch((e: Error) => `tool error: ${e.message}`)
     .then((result) => {
@@ -1424,6 +1691,10 @@ export function sendPrompt(args: SendArgs) {
     });
   }
 
+  // A new user message gets a fresh tool-step budget; without this the cap is cumulative and
+  // the tenth message of a session gets no tools at all.
+  resetToolSteps(agentId);
+
   // Manual trigger: "/tool echo hello"
   const m = text.match(/^\/tool\s+(.+)/i);
   if (m) { injectTool(agentId, m[1]); return { accepted: true, entryId: userEntry.id, agentId }; }
@@ -1452,6 +1723,11 @@ export function sendPrompt(args: SendArgs) {
       } as PoolMessage;
     });
   const image = readImageAttachment(args.attachments);
+  // Abort whatever was still running for this bot before replacing it. `inflight` is keyed by
+  // agent, so overwriting it left the previous turn streaming into an older bubble with no way
+  // to stop it — two turns writing at once, and the presence flags set by whichever finished
+  // last. Sending a new message means the user has moved on.
+  inflight.get(agentId)?.abort();
   const controller = new AbortController();
   inflight.set(agentId, controller);
   void startTurn(agentId, bubble, history.length ? history : [{ role: "user", content: text }], key, controller, image);
@@ -1473,7 +1749,12 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
 
   // Read-only tools and questions run straight away. `isAutoApproved` existed but nothing
   // called it, so every harmless read still made the user click Allow.
-  if (known && (AUTO_APPROVED.has(lower) || isAutoApproved(lower))) {
+  // Browser actions drive the BOX's own Chrome, which the user is watching live in the VNC
+  // pane. The original asks for nothing here — a sign-in flow there runs navigate → screenshot
+  // → click → screenshot in one breath, and a card per step would make that impossible. What
+  // still asks is anything that writes to disk.
+  const isBrowserAction = lower.startsWith("browser_");
+  if (known && (AUTO_APPROVED.has(lower) || isBrowserAction || isAutoApproved(lower))) {
     runTool(agentId, toolCallId, lower, arg, history);
     onUpdate(agentId);
     return;
@@ -1580,7 +1861,11 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // A tool call is not the end of the turn: stay running, and name what is being done.
   setPresence(agentId, {
     isComposingMessage: false,
-    currentActivity: { kind: "tool", tool: ACTIVITY_TOOL[call.name] ?? call.name },
+    currentActivity: {
+      kind: "tool",
+      tool: ACTIVITY_TOOL[call.name] ?? call.name,
+      ...(activityDetail(call.name, call.arg) ? { detail: activityDetail(call.name, call.arg) } : {}),
+    },
   });
   // Drop the bubble instead of rewriting it into a status line.
   //
@@ -1593,10 +1878,32 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   injectTool(agentId, `${call.name} ${call.arg}`, history);
 }
 
-/** After approval, hand the tool result back to the model for a final answer. */
+/**
+ * How many tools one user message may set off.
+ *
+ * This used to be 1: the follow-up prompt said "không gọi công cụ nữa", so a turn could open a
+ * page and then had to stop. The original chains — navigate, screenshot, narrate, click,
+ * screenshot, hand the box over — all from a single message, and a one-shot loop cannot
+ * reproduce any flow with more than one step in it.
+ *
+ * Bounded rather than open-ended because each step is a full model round trip, and a model
+ * that misreads a tool result can otherwise retry forever. On the last step the instruction
+ * goes back to "answer now", so the turn always ends with a reply rather than a silent stop.
+ */
+const MAX_TOOL_STEPS = 8;
+const toolSteps = new Map<string, number>();
+
+/** A fresh user message starts a new budget. */
+export const resetToolSteps = (agentId: string): void => { toolSteps.delete(agentId); };
+
+/** Hand the tool result back to the model, which may call another tool or answer. */
 function continueAfterTool(agentId: string, history: PoolMessage[], toolName: string, arg: string, result: string): void {
   const key = loadPoolKey(); if (!key) return;
   const t = tail(agentId);
+  const step = (toolSteps.get(agentId) ?? 0) + 1;
+  toolSteps.set(agentId, step);
+  const last = step >= MAX_TOOL_STEPS;
+
   const bubble: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
@@ -1604,7 +1911,12 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   void runTurn(agentId, bubble, [
     ...history,
     { role: "assistant", content: `TOOL_CALL: ${toolName}(${arg})` },
-    { role: "user", content: `Kết quả công cụ ${toolName}: ${result}\nHãy trả lời người dùng dựa trên kết quả này (không gọi công cụ nữa).` },
+    {
+      role: "user",
+      content: `Kết quả công cụ ${toolName}: ${result}\n` + (last
+        ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
+        : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
+    },
   ], key, controller);
 }
 

@@ -540,7 +540,445 @@ Confirmed at parity in the same pass, needing no change: `Messaged <bot>` and
 pane and the Routines rail. Still only in the original: the collapsed **"N messages with
 <bot>"** grouping, which appears once several agent-to-agent entries sit together.
 
-## 3. Tools: 9 of 54 — but most of the 45 do not matter
+## 2s. One tool per turn — the cap that made multi-step flows impossible
+
+The follow-up prompt after a tool said *"không gọi công cụ nữa"*. A turn could therefore run
+exactly one tool: the agent opened a page and stopped. The original chains from a single
+message — navigate, screenshot, narrate, click, screenshot, hand the box over — so no flow with
+more than one step could be reproduced, however good the individual tools were.
+
+Now bounded at `MAX_TOOL_STEPS = 8` per user message, reset on each new prompt. Bounded rather
+than open-ended because each step is a full model round trip and a model that misreads a result
+would otherwise retry forever; on the last step the instruction reverts to "answer now", so a
+turn always ends in a reply instead of a silent stop.
+
+Verified against the original's own flow: `browser_navigate` → screenshot attached →
+`browser_take_screenshot` → screenshot attached → `request_box_help`, ending with the
+"Needs your attention" card and its *Skip this step* / *I'm done, continue* buttons.
+
+Two fixes fell out of running it:
+
+* **Browser actions no longer ask for approval.** They were falling through to the permission
+  card because they are registered directly into the chat tool map and never had a
+  `needsApproval: false` spec. The original asks for nothing here — a sign-in flow there runs
+  navigate → screenshot → click in one breath — and the user is watching the box's own Chrome
+  live in the VNC pane. Anything that writes to disk still asks.
+* **`request_box_help` printed raw JSON.** The model sent `{"message": "…"}`; we read
+  `instruction` / `prompt` and fell back to the raw argument, so `{"message":"…"}` appeared in
+  the chat as if it were a sentence. It now reads any of the usual keys, and failing that any
+  single string value in the object.
+
+**Activity labels.** With no tool card, the line beside the avatar is the *only* feedback
+during a turn, and the client derives it from `currentActivity.tool` through its own table:
+`WebSearch` → "Searching the web", `Read`/`BoxRead` → "Reading file", `Shell`/`BoxShell` →
+"Running commands" (with a `detail` → "Drafting the file"), `Task` → "Waiting on another
+agent", `SendToAgent` → "Messaging <name>", `Screenshot`/`Computer`/`request_box_help` → "On
+its computer", anything starting `browser_` → "Browsing the web", everything else → "Working".
+
+Ours mapped `browser_navigate` and `browser_take_screenshot` onto `WebFetch`, which reads
+"Reading the web" while the agent is clicking around a page — passing the real name through
+hits the `browser_` branch instead. The map now also covers the shell, file, subagent and MCP
+tools, which all previously fell through to a bare "Working".
+
+## 2t. The app looked dead, and the browser looked broken — two separate causes
+
+Both were reported as "the browser doesn't work". Neither was the browser.
+
+### The turn never ended
+
+`request_box_help` returns a promise that resolves only when the user clicks *I'm done,
+continue*. Until then `.then()` had not run, so `clearPresence` had not run either:
+`isRunning` stayed true, the avatar spun behind a card waiting for a click, and every later
+message raced the stranded turn. Measured on the live agent: `isRunning=true`,
+`currentActivity={"kind":"thinking"}`, minutes after the reply had been posted.
+
+The ask_question branch already had the right rule written next to it — *"a parked turn is
+waiting on the user, not working"* — it just ran **after** the wait instead of before. Presence
+is now cleared when the handoff starts.
+
+A second stranding path: `sendPrompt` overwrote `inflight` without aborting the previous
+controller, so a new message left the old turn streaming into an older bubble with nobody able
+to stop it. It aborts the previous turn now.
+
+### The VNC pane was empty while the screenshots were correct
+
+The agent really did open 24h.com.vn — the chat screenshot showed the live page — yet the
+computer pane showed a bare desktop. Both were true at once:
+
+```
+Browser.getWindowForTarget →  windowState: "minimized"
+xwininfo -id 0x801952      →  Map State: IsUnMapped
+```
+
+**CDP renders and screenshots a page whether or not its window is mapped on the X display.** So
+a minimized window produces a perfectly correct screenshot while the pane the user is watching
+shows nothing. Chrome was healthy the whole time: one `type=page` target on the right URL, and
+an ad iframe on the page even reported `brdim=120,60,…,1400,900` — Chrome believed it had its
+window.
+
+`Browser.setWindowBounds` with `windowState: "normal"` puts it back, and `ensureWindowVisible()`
+now runs before every browser action (throttled to once per 10s). It must use the
+**browser-level** endpoint — `Browser.*` does not exist on a page session, so reusing the
+existing socket fails silently. Verified by forcing the window to `minimized` and watching a
+tool call restore it: `[browser] box window was minimized — restored to normal`.
+
+### Not a bug, but a bad habit: the "run commands on your local computer" card
+
+It came from `run_terminal_command_v2`, not from a browser tool — asked to pull images out of
+an article, the model reached for `python3` and `urllib` instead of the page it already had
+open. The alarming wording is the client's fixed copy for `local-tool-permission`; the command
+would have run in the box.
+
+The card was a symptom. Refetching a page the browser is already showing is worse than slow:
+it arrives as a bot (Cloudflare blocks it — the original narrates exactly this), it loses
+everything JavaScript rendered, and it drops whatever session the open tab holds. The browser
+protocol now says to read from the open page with `browser_evaluate` and never to re-download
+it with shell or `web_fetch`, with a worked example for images.
+
+Re-running the same request afterwards: `browser_navigate` → `browser_evaluate` → answer, no
+permission card at all. The model went one better than the example and returned `{src, alt}`
+pairs so it could caption each image.
+
+## 2u. Remote image URLs do not render — which is why the original attaches instead
+
+Asked to "extract some images", the model answered with `[Xem ảnh](https://…)` links. Markdown
+image syntax would seem like the fix, and the renderer really does handle it — `img({node, src})`
+routes to the same `Dj` component attachments use. But feeding it a real CDN URL renders
+
+```
+Couldn't load image i1-thethao.vnecdn.net
+```
+
+The client will not fetch a remote image. That is not a gap in our port: it explains the
+original's behaviour. **Every image in the original's transcript is an attachment** — a
+screenshot, or bytes staged through the gateway — never a link to a third-party host. Its
+media path resolves a *path* through `readAttachmentImage` / `readAttachmentChunk`, and a
+`https:` source has no such path.
+
+So "show me the images on this page" has one correct implementation: fetch the bytes and stage
+them as attachments, exactly like a screenshot. **Not built yet** — `stageImage()` currently
+measures PNG only (it reads the IHDR chunk), so JPEG sizing has to come first or the renderer
+gets no width/height and shows a blank frame.
+
+## 2v. The inline "Computer" card — DONE
+
+The right-rail "Needs your attention" panel came free from `getForeverBoxStatus`, but the
+original also puts a card **in the conversation**: `Computer · Done / <instruction> /
+[Open computer]`. It is driven entirely by fields on a `send-message` entry (client `Obn`):
+
+```
+entry.boxRequestId   — the trigger. No card without it, whatever else is set.
+entry.boxInstruction — shown once the handoff is over.
+entry.boxResolution  — handed_back → "Done" · replied → "Answered" · dismissed → "Skipped"
+```
+
+While a handoff with the same `requestId` is still live, the client ignores those two and
+renders the waiting state from the live record instead — so the entry is written once at the
+start and only patched on resolution.
+
+One trap: hooking the patch to `handBackSink` left the card stuck on "Action needed" forever.
+That sink only fires on the *restarted* path; when the turn is still in flight, `handBackBox`
+resolves the promise directly and returns. The settle now runs unconditionally inside
+`handBackBox`, before either branch.
+
+Verified in the app: `Computer · Action needed … Take over · I'm done · Skip`, then after
+hand-back `Computer · Done … Open computer`.
+
+## 2w. Presence never animates — SOLVED: the channel name was wrong
+
+**Root cause: we broadcast on `channel: "roster"`, and there is no such channel.**
+
+The SSE frame never reached the renderer. The coordinator process — not the renderer — decodes
+the stream, looks the channel up in its own table, and drops anything missing from it:
+
+```js
+const family = coordinatorEventFamilyForSseChannel(event.channel);
+if (family == null) return;          // silent: no log, no error, no throw
+```
+
+`SSE_CHANNEL_BY_FAMILY` lists exactly: `transcript` · `agents` · `agent-upserted` · `tray` ·
+`workflows` · `subagents` · `async-tasks` · `automations` · `mcp-servers` · `forever-box` ·
+`teach-recording` · `box-disk-pressure` · `computer-action` · `outline` · `sharing` ·
+`host-settings`. **`roster` is not one of them.** Roster changes go out as `agent-upserted`
+(one changed agent) or `agents` (the whole list), and the coordinator forwards them to the
+renderer as `{kind, event: payload}`.
+
+Fixed by renaming the channel. Measured immediately after:
+
+* a bot created through the gateway appears in the sidebar in **~1.5s, no reload** (was: still
+  absent after 12s);
+* the avatar animates while a turn runs — ten distinct screenshot hashes across a turn, where
+  before every sample was byte-identical.
+
+### Why it took six wrong fixes first
+
+Everything ruled out below was ruled out correctly — and none of it mattered, because the
+payload was never looked at. Each "fix" was a better-shaped envelope posted to an address that
+does not exist.
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Sampling the wrong element | hash sidebar row, header and transcript strip together | all three identical |
+| Background-window throttling | `bringToFront()`, assert `visibilityState:visible`, `hasFocus:true` | still identical |
+| Missing `snapshotEpoch` | added `snapshotEpoch`/`snapshotSeq` to every row | no change |
+| Incomplete row schema | filled all 16 validated fields (was sending 5) | no change |
+| Missing `isRunningTurn` | added (`Bon(n) = n.isRunningTurn ?? n.isRunning`) | no change |
+| Wrong event shape | tried enveloped and wholesale, then both | no change |
+
+The lesson is about *where* the reading was done, not how carefully. Six rounds went into the
+renderer bundle, reasoning about how it consumes an event — while the frame was being discarded
+one process earlier, by a table that is three lines long. When a payload change produces no
+effect at all, stop refining the payload and prove the message is being delivered.
+
+The row-schema and `snapshotEpoch` changes stay: the client's own validator requires them, and
+they were verified against it. They just were not the cause.
+
+### Still worth doing, found in the same table
+We use two of the sixteen channels. `forever-box` would push computer-pane status instead of
+waiting for the client's poll (visible as a lag before the Computer button appears), and
+`subagents`, `outline`, `automations`, `host-settings` and `tray` are all pushable too.
+
+## 2w-old. The eliminated hypotheses, in full
+
+Reported as "no animation after sending". The backend is not at fault: throughout a turn
+`listAgents` reports `isRunning: true, currentActivity: {kind:"thinking"}`, and it clears
+correctly when the turn ends.
+
+**Measuring it correctly took two attempts.** The first probe looked for the words
+"Thinking"/"Working" and for classes containing `spinner`/`typing`, found none, and declared the
+UI dead. That was a false negative: the original's indicator is an **animated avatar** (client
+`tln` maps a verb to thinking / searching / working / loading / orbit) — no label, none of those
+class names. The honest test is motion, so the probe now hashes screenshots of the avatar region
+(`scripts/probe-indicator.cjs`). Byte-identical across a whole turn = no animation.
+
+Eliminated, each by measurement:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Sampling the wrong element | hash sidebar row, header and transcript strip together | all three identical |
+| Background-window throttling | `bringToFront()`, assert `visibilityState:visible`, `hasFocus:true` | still identical |
+| Missing `snapshotEpoch` | added `snapshotEpoch`/`snapshotSeq` to every row | no change |
+| Incomplete row schema | filled all 16 validated fields (was sending 5) | no change |
+| Missing `isRunningTurn` | added (`Bon(n) = n.isRunningTurn ?? n.isRunning`) | no change |
+
+The last two changes stay regardless — the client's own validator requires them:
+
+```js
+if (!isObj(n) || typeof n.description !== "string" || typeof n.path !== "string"
+    || typeof n.createdAt !== "number" || typeof n.hasUnread !== "boolean"
+    || typeof n.origin !== "string" || !isStringArray(n.memberIds) || …) return null;
+```
+
+Five of sixteen fields were being sent. Names and previews still drew because those come from a
+more forgiving path; the ordered replica threw every row away. `null` and `[]` are values here,
+not omissions — an absent field fails `typeof` exactly as hard as a wrong one.
+
+**The one candidate left** is the host-reachability gate. Presence is computed as
+
+```js
+KCe(n) = n.awaitingUserResponse == null && n.isComposingMessage
+xge(n) = (n.awaitingUserResponse == null && n.isRunning) || KCe(n)
+ZCe(n, e) = e && xge(n) ? "working" : null        // e === isHostReachable
+```
+
+and `isHostReachable` is `Wtt().transport === "connected"`. `xge()` is satisfied — we send
+`awaitingUserResponse: null` and `isRunning: true` — so a false `e` would suppress presence
+everywhere at once, which is exactly the symptom. The flag is driven by
+`source.subscribeTransportState(gt)`, where `gt("down")` calls `noteTransportDown()`; the state
+itself is produced in the desktop layer, not by any field we return. Next step is to find what
+main.cjs reports as transport state for our gateway and why it is not "connected" — not to guess
+further at roster fields.
+
+## 2x. The KEEP list, audited against the bundle
+
+`KEEP` is a list of segment **indices**, so it goes silently wrong the moment the app updates
+and the segments shift. Two checks, in this order (`scripts/audit-keep.mjs`):
+
+1. **Re-extract and diff.** Running `extract-prompts.mjs` against the current host bundle
+   (24.7 MB) gives 179 segments / 59,430 chars — identical to the copy in `docs/extracted`,
+   segment for segment. The indices are still valid. `check-prompt.mjs` passes all five decoder
+   gates (no undecoded `\u`, `\n`, `\t`, no stray JS string enders, no invented separators).
+2. **Read every chapter and judge it.** The audit prints each segment with its heading and a
+   kept/dropped flag, because a count proves nothing about the selection.
+
+The audit found four chapters dropped that should not have been. All four were collateral from
+dropping "Where you work", which is *mostly* about the user's own machine — a surface we do not
+have — so the applicable paragraphs went out with it:
+
+| # | chapter | why it applies here |
+|---|---|---|
+| 83 | MCP discipline | we have `get_mcp_tools` / `call_mcp_tool`; it teaches re-reading a stale schema and reading back before re-firing a mutation |
+| 84 | the computer vs the desktop | states the architecture outright — see below |
+| 85 | the escalation ladder | what you have → MCP → the web → the signed-in browser → the desktop → hand back; every rung exists here |
+| 126 | matching the user's writing voice | we have the email/slack draft cards |
+
+**Segment 84 is the one that matters most**, because it answers a question we had been
+reverse-engineering from the client:
+
+> the machine is ONE computer shared by all of this user's agents (one filesystem — files,
+> installed tools, and browser logins set up by any agent are there for all of them), while the
+> desktop is **per-agent** — each agent gets its own screen and browser window on that shared
+> machine, and no agent sees or drives another's. Never claim each agent has its own machine.
+
+That is the model the computer pane implements, stated by the original's own prompt: one box,
+per-agent desktop and browser window. It matches the `computerUse` subagent finding in §2y.
+
+Correctly dropped, confirmed by reading the bodies rather than the headings:
+
+* **`## Security` (176-178)** — entirely about `ExternalShell` reading and modifying files on
+  *the user's own computer*. We have no such surface.
+* **`## The Grok Bot app UI` (121-123)** — tells the model to `Read` a UI map at
+  `${SAND_APP_UI_REFERENCE_PATH}` on the box. That file does not exist here, and a prompt that
+  points at a missing file is worse than silence.
+* `## Cursor Origin`, `## Code changes`, `## Threaded replies`, `## Long-running commands` —
+  surfaces this backend does not have.
+
+Headings live in their own segment, with the body in the following ones. Judging a chapter by
+its heading index alone is how "we dropped Security" reads alarming and turns out to be right.
+
+Result: **80 of 179 chapters, ~7.2k tokens** (was 76 / ~6.3k). Re-verified after regenerating:
+no `GetMcpTools`, `CallMcpTool`, `AuthenticateMcpServer`, `ExternalShell`, `ExternalRead`,
+`CopyToBox`, `CopyFromBox`, `SendMessage`, `Cursor Origin` or unresolved `${…}` survive in the
+output. `test-prompt-tiers` 20/20. The extra 900 tokens cost 561 ms on the pool.
+
+## 2y. Replaying the original's own conversation, input for input
+
+`scripts/dump-turns.mjs` extracts a conversation from a running instance **with roles** — the
+app right-aligns the user's bubbles, so geometry is the only reliable signal; innerText alone
+cannot tell who said what. `scripts/replay-goc.mjs` then sends those exact inputs to our
+backend and prints the two answers side by side. Same words in; the backend is the only
+variable.
+
+The original's "Thư ký" thread gives 26 user turns. What the replay showed:
+
+**A real defect, now fixed.** Asked what it can do, our bot introduced itself as running on a
+*"Linux Box"*. The original's prompt forbids exactly that — "to the user always call it 'my
+computer' … never a 'box'" — and the model repeats whatever word it is given. Two sources fed
+it:
+
+* our own tool text — every summary said `trong box` (`Chạy một lệnh shell trong box`, …), plus
+  the browser and box-handoff protocol strings;
+* the ported prompt — `[/\bthe box\b/]` missed `The box has`, `the box's`, `Box logins`,
+  `local/box file`, `your web/box tools`, `the box desktop`, `on the box`.
+
+Both are reworded. Down from 7 mentions to **2**, and those two are the sentence that *teaches*
+the rule, which has to keep the word to make sense. Re-ran the same inputs afterwards: the bot
+now says "máy tính riêng" / "trên máy tính".
+
+**A dangling reference, found the same way.** Segment 118 tells the model the debugging runbook
+"lives on your box at `${SAND_BOX_DEBUGGING_REFERENCE_PATH}` — Read it and follow it". That file
+does not exist here, and after the `${…}` strip the sentence reads "lives on your box at — Read
+it". Dropped from KEEP, same reason as the app-UI map. Now **79 of 179 chapters, ~7.2k tokens**.
+
+**Matching behaviour**, no change needed: both decline to name the underlying model when asked
+("Mình là Thư ký… không dùng định danh của các mô hình nền cụ thể nào"), and both answer in the
+language the user wrote in.
+
+### Both remaining differences, measured and closed
+
+`scripts/probe-behaviour.cjs` reports what a turn *did* — which tools ran, how long the reply
+is, how many headings it carries — rather than leaving it to a read-through.
+
+**Reaching for the browser.** Given "here is my website, work out how to make money from it":
+
+| | tools called | reply |
+|---|---|---|
+| before chapter 85 | none, 75s | generic business essay |
+| with chapter 85 | `web_fetch`, 19s | still generic |
+| after the fix below | `web_fetch` → `browser_navigate`, 28s | grounded in the real site |
+
+The middle row is why the prompt alone was not enough. `web_fetch` on cinai.tv returned
+**HTTP 200 and 65 characters** — the page title, nothing else, because the site renders in
+JavaScript and turns bots away. The tool reported `status=done`, so the model believed it had
+read the site and filled the rest in from general knowledge. A failure wearing a success
+costume.
+
+`webFetch` now flags a page whose extracted text is under 200 characters, keeps the fragment,
+and names the next step ("mở trang bằng browser_navigate rồi đọc bằng browser_evaluate"). With
+that, the agent escalates on its own — the same move the original narrates as "Site đang chặn
+bot, mình mở bằng trình duyệt luôn". `test-web` 28/28 after the change.
+
+**Verbosity.** Measured rather than assumed, and it was already mostly fine: "Thủ đô của Việt
+Nam là gì?" → 30 characters, one line; "chao ban" → one line. Chapters 42-50 are being obeyed.
+The headings only appeared on the open-ended business question — 8 of them — and once the same
+question was answered from the real page instead of invented structure, that dropped to **0**.
+The formatting was a symptom of ungrounded answering, not of a missing instruction.
+
+## 2z. Per-bot computer pane — DONE
+
+Reported as "every bot shows the same browser screen; whichever bot I open, it looks the same".
+Two layers were sharing, and only one had been fixed:
+
+* **the tab** (fixed earlier) — every bot drove `pages[0]`, so two bots working at once fought
+  over one page. Each bot now owns a CDP tab, created on demand.
+* **the pane** — `foreverBoxStatus` returned `state:"running"` with the same `vncUrl` for
+  *every* agent, so a bot idle since yesterday looked as busy as the one working.
+
+The original does not scope the screen to a bot. It scopes it to a **running `computerUse`
+subagent** — client `CTn`/`eht` keep only `status === "running" && subagentType === "computerUse"`
+and emit one `{subagentId, title, vncUrl}` per session, and the box is retained per
+`subagentId`. Its own prompt (segment 84, re-added in §2x) states the model:
+
+> the machine is ONE computer shared by all of this user's agents … while the desktop is
+> per-agent — each agent gets its own screen and browser window on that shared machine, and no
+> agent sees or drives another's. Never claim each agent has its own machine.
+
+Ported with the pieces already present: a browser action or a box handoff opens a `computerUse`
+subagent for that bot (`startComputerUseRun`), `getForeverBoxStatus` answers `running` only for a
+bot holding a session or a pending handoff, and the session settles when the turn ends.
+
+One X display cannot give each bot a different picture, but it can tell the truth about who is
+using it — which is the whole of the reported defect.
+
+Two details worth keeping:
+
+* **A grace period.** Releasing the screen the moment a tool returned measured at ~1.5s of
+  visible pane: the agent navigated, the turn ended, and the pane went dark while the user was
+  still reading the page it had opened. It now stays up for two minutes after the work stops,
+  and any new action cancels the pending release.
+* **A handoff pins it on.** `endComputerUse` refuses while a handoff card is live — that card
+  exists precisely to make the user look at the screen.
+
+Verified in the running app, not just the API: with `Surfer` browsing and `Idle` untouched,
+`Surfer` renders `webview=1` labelled "Surfer's screen" and `Idle` renders `webview=0` with no
+pane at all. `getSubagents` on Surfer returns one row of `subagentType: "computerUse"`; on Idle,
+an empty list.
+
+## 3. Tool coverage: 24 of 54
+
+Measured by `scripts/tool-coverage.mjs`, which reads the **live** tool map (so a tool that
+fails to register counts as missing — that is how the browser tools silently vanished once) and
+diffs it against `docs/extracted/tool-catalog.json`.
+
+Present (24, counting generation aliases like `read_file` → `read_file_v2`): the file and shell
+set, `web_search` / `web_fetch`, `task_v2`, `call_mcp_tool` / `get_mcp_tools`, `ask_question`,
+`todo_read` / `todo_write` / `create_plan`, `knowledge_base`, `edit_file` / `edit_file_v2` /
+`delete_file`.
+
+Of the 30 missing, most cannot apply:
+
+* **Cursor IDE heritage** (14) — `read_semsearch_files`, `semantic_search_full`, `reapply`,
+  `fetch_rules`, `search_symbols`, `fetch_pull_request`, `deep_search`, `fix_lints`,
+  `read_lints`, `go_to_definition`, `apply_agent_diff`, `connect_scm`,
+  `report_bugfix_results`, `background_composer_followup`. The Grok Bot desktop app has no code
+  workspace to point them at.
+* **Surfaces this backend does not have** (10) — `switch_mode`, `ai_attribution`, `mcp_auth`,
+  `read_project`, `update_project`, `record_screen`, `create_diagram`, `send_to_user`,
+  `computer_use`, `reflect`.
+* **Genuinely applicable, genuinely missing** (6) — `generate_image`, `await` / `await_task`
+  (we run subagents to completion, so there is nothing to poll), `write_shell_stdin` (our exec
+  is one-shot, so an interactive prompt cannot be answered), `list_mcp_resources` /
+  `read_mcp_resource` (we expose MCP tools but not MCP resources).
+
+27 of ours are not in that catalog, and only two groups matter: the 16 `browser_*` actions,
+which come from the original's own `cursor-ide-browser` subsystem rather than its
+`ClientSideToolV2` enum, and `message_agent` / `attach_file` / `request_box_help` /
+`email_draft` / `slack_draft`, which implement catalogued behaviour under our own names. The
+remaining six (`echo`, `time`, `reverse`, `upper`, `count`, `calc`) are scaffolding from the
+first spike; they stay callable for the older e2e scripts but are no longer advertised to the
+model, because a model shown a `calc` tool reaches for it instead of just doing the arithmetic.
+
+## 3b. Tools: the original's 54, in detail
 
 The catalog is Cursor's IDE heritage. Ignore `go_to_definition`, `fix_lints`, `read_lints`,
 `apply_agent_diff`, `connect_scm`, `fetch_pull_request`, `search_symbols`, `reapply` and friends —

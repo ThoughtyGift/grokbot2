@@ -45,8 +45,24 @@ const KEEP = [
   // and SearchPlugins, which we still do not have.
   106, 107, 108, 111, 112, 113, 114,
   82,                                 // the web is for looking things up — we have web_search/web_fetch
+  // Found by auditing KEEP against the segments (scripts/audit-keep.mjs), not by memory. All
+  // four describe surfaces we DO have and were dropped with the rest of "Where you work",
+  // which is mostly about the user's own machine:
+  //   83  MCP: read the schema first, re-read it when a call goes quiet, never double-fire
+  //       a mutation. We have get_mcp_tools / call_mcp_tool.
+  //   84  the computer vs the desktop — ONE shared machine, a PER-AGENT desktop and browser
+  //       window. This is the architecture the computer pane implements; the original states
+  //       it outright, including "never claim each agent has its own machine".
+  //   85  the escalation ladder: what you already have → MCP → the web → the signed-in
+  //       browser → the desktop → hand it back to the user. Every rung exists here.
+  //   126 sample the channel before drafting in someone's voice — we have the draft cards.
+  83, 84, 85, 126,
   94, 95,                             // delegating to a subagent — task_v2 exists now
-  117, 118, 119,                      // debugging the box, and staying audible while you do
+  // 118 is dropped, not kept: it tells the model to Read a runbook at
+  // ${SAND_BOX_DEBUGGING_REFERENCE_PATH} on the box. That file does not exist here, and after
+  // the ${…} strip the sentence reads "lives on your box at — Read it", pointing at nothing.
+  // Same reason the app-UI map (121-123) is out.
+  117, 119,                           // debugging the computer, and staying audible while you do
   150, 151, 152, 153, 154,            // autonomy, including "blocked on the user"
   156, 157, 158, 159, 160, 161, 162,  // initiative
   164, 166, 170, 171, 172, 174,       // when your own action needs approval — we have the card
@@ -92,6 +108,20 @@ const REPLACEMENTS = [
   [/ The one exception is a bare emoji tapback: when a ReactToMessage reaction is the whole response \(a reply would be overkill\), that reaction is the turn — send it alone, no reply needed\./g, ""],
   [/\bReactToMessage\b/g, "a reaction"],
 
+  // Tool names inside the chapters re-added from "Where you work" (83-85, 126).
+  [/\bGetMcpTools\b/g, "get_mcp_tools"],
+  [/\bCallMcpTool\b/g, "call_mcp_tool"],
+  // No AuthenticateMcpServer here: MCP servers are configured in .mcp.json, so an auth error
+  // is the user's to fix. Keep the surrounding advice, drop the tool that does not exist.
+  [/For auth\/needsAuth errors, call AuthenticateMcpServer instead of refetching — if auth stays stuck, ask the user for help rather than reaching the service through the browser — and/g,
+   "For auth errors, say so and ask the user to fix the server's credentials rather than reaching the service through the browser, and"],
+  [/\bWebSearch, WebFetch\b/g, "web_search, web_fetch"],
+  [/\(Read \/ Shell \/ CopyToBox \/ CopyFromBox act on it\)/g, "(read_file_v2 / run_terminal_command_v2 act on it)"],
+  // We have no access to the user's own machine, so the sentence contrasting the two
+  // filesystems has nothing to contrast with.
+  [/ It is a separate filesystem from the user's own computer where ExternalRead and ExternalShell run, which you call "your computer"\./g, ""],
+  [/files on the box/g, "files on the computer"],
+
   // Cross-references to chapters we do not include would point at nothing.
   [/ \(see "The box desktop" for which type\)/g, ""],
   [/ See "The box desktop" for how delegation and sign-in handoffs work\./g, ""],
@@ -100,7 +130,21 @@ const REPLACEMENTS = [
   [/\brun `gh auth login`\)/g, "run `gh auth login` through run_terminal_command_v2)"],
 
   // "box" is internal vocabulary in the original too; keep the user-facing wording.
+  //
+  // `the box` alone was not enough. The model introduced itself as running on a "Linux Box" in
+  // a live reply, because these other forms survived — and it repeats whatever word it is
+  // given. The one deliberate exception is the sentence that TEACHES the rule ("internally that
+  // computer is called the box … never a box"), which has to keep the word to make sense.
+  [/\bThe box has\b/g, "The computer has"],
+  [/\bthe box desktop\b/g, "the computer's desktop"],
+  [/\bon the box\b/g, "on that computer"],
+  [/\bthe box's\b/g, "the computer's"],
   [/\bthe box\b/g, "the computer"],
+  [/\bBox logins\b/g, "Logins on that computer"],
+  [/\blocal\/box file\b/g, "local file"],
+  [/\byour web\/box tools\b/g, "your web and file tools"],
+  [/\bbox tools\b/g, "file tools"],
+  [/"The box desktop"/g, '"the computer\'s desktop"'],
 
   // Tidy up what the substitutions leave behind.
   // Resolving the cloud-agents flag to its "off" branch leaves "a widget, or attachment".
