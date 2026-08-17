@@ -214,10 +214,24 @@ try {
 
   // ── 6. a tool call runs and its answer renders ──────────────────────────────
   if (opened) {
+    // Count the transcript BEFORE typing, so we can tell "the prompt never arrived" apart from "the
+    // prompt arrived and no tool ran". Without this the step reported `no completed tool-call in 60s`
+    // for both, which points the blame at the model or the box when the actual failure was that Enter
+    // did not submit — a harness fault reported as a system fault. Driving the same prompt straight
+    // through `sendPrompt` on the gateway completed `list_dir_v2` against the box in 6.1s, which is
+    // how we know the difference matters.
+    const before = ((await gw("getAgentTranscriptTail", { agentId }))?.entries ?? []).length;
+
     const composer = page.locator('[contenteditable="true"]').last();
     await composer.click({ timeout: 5000 });
     await page.keyboard.type("Dung cong cu list_dir_v2 xem thu muc . cua box, roi noi co bao nhieu muc.", { delay: 10 });
     await page.keyboard.press("Enter");
+
+    const arrived = await until(async () => {
+      const n = ((await gw("getAgentTranscriptTail", { agentId }))?.entries ?? []).length;
+      return n > before ? `${before} → ${n} entries` : null;
+    }, 20_000);
+    step("the typed prompt reaches the backend", Boolean(arrived), arrived ?? `still ${before} entries — Enter did not submit`);
 
     // Assert on the BACKEND transcript for the tool step (tool-call entries are deliberately not
     // rendered as bubbles — the client skips them, see chat.ts), and on the SCREEN for the answer.
