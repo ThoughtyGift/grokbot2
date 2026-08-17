@@ -4,6 +4,9 @@
  * The pool runs Claude via subscription CLI accounts with load-balancing + failover,
  * so this is a drop-in "brain" that costs no per-token API fees.
  * Contract: POST { prompt | messages, system?, model?, maxTokens? } -> { success, result }.
+ *
+ * The `system` field is part of that contract but is NOT usable: the pool discards it for every
+ * Claude model. See `foldSystem` for the measured channel table and what we send instead.
  */
 
 export interface PoolMessage {
@@ -33,15 +36,47 @@ export interface PoolResult {
   account?: string;
   error?: string;
   status?: number;
-  /** Set when the SSE route returned nothing and the non-streaming route answered instead. */
-  streamFellBack?: boolean;
+}
+
+/**
+ * Deliver the system prompt as the head of the FIRST user turn instead of the `system` field.
+ *
+ * The pool's `system` field is silently discarded for the entire Claude family. Proven with a canary
+ * system prompt ("your first word must be BANANA"): gemini and grok say BANANA, every Claude model
+ * ignores it and introduces itself as a generic "neutral API assistant" — it never received our
+ * 31k-char tool protocol. That is the whole reason Claude models reported having no tools, and it is
+ * why the earlier explanation in docs/agent-brain.md ("Claude ships its own agent identity that
+ * overrides our tool table") was wrong: nothing was overridden, because nothing arrived.
+ *
+ * Measured 17/08, three sequential attempts per cell, real 31,302-char prompt, "does the reply emit
+ * `TOOL_CALL: <name>(<args>)`":
+ *
+ *   channel                                            gemini-3.7  opus-4-8  opus-5  grok-4.5
+ *   A  /v1/claude          `system` field                  3/3        0/3       —      0/3
+ *   B  /v1/chat/completions role:"system" message          0/3        0/3       —       —
+ *   C  /v1/claude          folded into user message        3/3        3/3      3/3     0/3
+ *   D  /v1/chat/completions folded, stream:true            0/3        1/3       —       —
+ *
+ * C is the only channel that works for more than one family, and it costs gemini nothing. Note that
+ * a short canary passing through a channel does NOT mean the real prompt does — B carries the canary
+ * for every model yet carries the tool protocol for none. That mistake was made here first: channel
+ * B was shipped on canary evidence alone and regressed gemini from 3/3 to 0/3 before measurement
+ * caught it.
+ *
+ * grok-4.5 fails in every channel for an unrelated, structural reason — the xAI CLI behind the pool
+ * runs its own tools on the pool's VPS — so it is not a delivery problem and C costs nothing there.
+ */
+function foldSystem(messages: PoolMessage[], system?: string): PoolMessage[] {
+  if (!system) return messages;
+  const head = messages.findIndex((m) => m.role === "user");
+  if (head === -1) return [{ role: "user", content: system }, ...messages];
+  return messages.map((m, i) => (i === head ? { ...m, content: `${system}\n\n---\n\n${m.content}` } : m));
 }
 
 /** Call the pool once and return the full assistant text (non-streaming). */
 export async function callPool(messages: PoolMessage[], opts: PoolOptions): Promise<PoolResult> {
   const body = JSON.stringify({
-    messages,
-    system: opts.system,
+    messages: foldSystem(messages, opts.system),
     model: opts.model ?? "sonnet",
     maxTokens: opts.maxTokens ?? 2048,
     ...(opts.image ? { image: opts.image } : {}),
@@ -86,91 +121,43 @@ export async function callPool(messages: PoolMessage[], opts: PoolOptions): Prom
 }
 
 /**
- * Real token streaming via the pool's OpenAI-compatible route
- * (`/v1/chat/completions` with `stream:true` → SSE `choices[].delta.content`).
- * Falls back to the caller's non-streaming path if the route or key is unavailable.
+ * Deliver an assistant turn, reporting the text through `onDelta` as it becomes available.
+ *
+ * This used to stream tokens from `/v1/chat/completions` (SSE `choices[].delta.content`) and fall
+ * back to `callPool` only when the stream came back empty. That is no longer the primary path, and
+ * the reason is worth stating precisely, because the SSE route LOOKS healthier than it is.
+ *
+ * Two independent defects, both measured 17/08 over three sequential attempts per cell:
+ *
+ *   1. It frequently returns nothing at all — HTTP 200, one chunk carrying `delta:{}` and
+ *      `finish_reason:"stop"`, then `[DONE]`. gemini-3.7/3.6/3.5-flash 0/3 non-empty, 2.5-pro and
+ *      2.5-flash 1/3, while the non-streaming route answered every time. So this is the route, not
+ *      one bad model — switching models only changes how often you lose, a mistake made here once
+ *      already when the brain was moved to gemini-2.5-flash on the strength of ONE lucky sample.
+ *
+ *   2. Worse, when it DOES return text, that text does not honor the tool protocol. Asked to list a
+ *      directory with the real 31k prompt, the SSE route emitted `TOOL_CALL:` in 0/3 attempts for
+ *      gemini-3.7-flash — with the prompt as a system message AND with it folded into the user turn
+ *      (see `foldSystem` for the full channel table). The non-streaming `/v1/claude` route: 3/3.
+ *
+ * Defect 2 is the one that hid, because defect 1 masked it: the old empty-stream fallback fired ~2/3
+ * of the time and those turns worked, so the brain appeared functional while every turn that got a
+ * non-empty stream silently lost its tool call. That is the measured cause of the standing E2E
+ * failure "a tool actually ran against the box — no completed tool-call in 60s".
+ *
+ * So the reliable channel is the only channel used. The cost is real and named: token-by-token
+ * streaming is gone, and the whole answer arrives as one delta (callers doing typewriter output still
+ * animate). Restoring it needs a pool-side fix to `/v1/chat/completions`, not a change here; the
+ * previous SSE reader is in git history, one revert away, should that route start honoring prompts.
  */
 export async function streamPool(
   messages: PoolMessage[],
   opts: PoolOptions,
   onDelta: (chunk: string) => void,
 ): Promise<PoolResult> {
-  const url = opts.url.replace(/\/v1\/claude$/, "/v1/chat/completions");
-  const body = JSON.stringify({
-    model: opts.model ?? "sonnet",
-    messages: opts.system ? [{ role: "system", content: opts.system }, ...messages] : messages,
-    stream: true,
-    max_tokens: opts.maxTokens ?? 2048,
-  });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
-  if (opts.signal) {
-    if (opts.signal.aborted) controller.abort();
-    else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  }
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${opts.key}` },
-      body,
-      signal: controller.signal,
-    });
-    if (!res.ok || !res.body) return { ok: false, status: res.status, error: `stream HTTP ${res.status}` };
-
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    let full = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) !== -1) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") continue;
-        try {
-          const piece = JSON.parse(data)?.choices?.[0]?.delta?.content;
-          if (typeof piece === "string" && piece) { full += piece; onDelta(piece); }
-        } catch { /* keep-alive or partial frame */ }
-      }
-    }
-    // ── the empty-stream fallback ────────────────────────────────────────────
-    //
-    // The pool's SSE route regularly completes with NO content: HTTP 200, one chunk carrying
-    // `delta:{}` and `finish_reason:"stop"`, then `[DONE]`. Measured 17/08 with three attempts per
-    // model, same key, same prompt:
-    //
-    //   gemini-3.7-flash 0/3   gemini-3.6-flash 0/3   gemini-3.5-flash 0/3
-    //   gemini-2.5-pro   1/3   gemini-2.5-flash 1/3
-    //
-    // while the non-streaming route answered every single time. So this is not one bad model to be
-    // avoided by picking another — it is the streaming route, and switching models only changes how
-    // often you lose. (That mistake was made: the brain was moved to gemini-2.5-flash on the
-    // strength of ONE passing sample, which at 1/3 was luck rather than a fix.)
-    //
-    // Retrying here rather than in the caller is deliberate. `chat.ts` has a fallback of its own for
-    // this exact case and it was measured never firing, so a second one bolted on there would be a
-    // guess about why. At this layer the contract is simple and testable: streamPool RESOLVES WITH
-    // TEXT or it fails. Every caller — the turn loop, subagents, compaction — is fixed at once.
-    if (!full.trim()) {
-      const plain = await callPool(messages, opts);
-      if (plain.ok && (plain.text ?? "").trim()) {
-        // Hand the whole answer over as one delta so a caller doing typewriter output still animates.
-        onDelta(plain.text ?? "");
-        return { ...plain, streamFellBack: true };
-      }
-      return plain.ok ? { ok: false, status: plain.status, error: "pool returned no content on either route" } : plain;
-    }
-    return { ok: true, text: full, status: res.status };
-  } catch (e: any) {
-    return { ok: false, error: e?.name === "AbortError" ? "aborted" : String(e) };
-  } finally {
-    clearTimeout(timer);
-  }
+  const plain = await callPool(messages, opts);
+  if (plain.ok && (plain.text ?? "").trim()) onDelta(plain.text ?? "");
+  return plain;
 }
 
 /** GET /v1/health (no key) — returns the live pool roster. */

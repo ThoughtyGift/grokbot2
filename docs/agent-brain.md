@@ -308,3 +308,82 @@ pool này: **chạy được ≠ dùng được**. Bộ não vẫn là `gemini-3
 Claude đến với **danh tính agent và bộ tool riêng**, còn `TOOL_CALL: <tên>(<đối số>)` của ta là một
 giao ước cạnh tranh mà nó bỏ qua. Với `claude-opus-5` thì câu hỏi tool là **vô nghĩa** — nó bị chặn
 trước khi model kịp chạy.
+
+> **ĐÍNH CHÍNH — hai đoạn trên sai.** Xem [Nguyên nhân thật](#nguyên-nhân-thật-pool-bỏ-trường-system-với-mọi-model-claude)
+> ở cuối trang. Không có gì bị "ghi đè": **prompt của ta chưa bao giờ đến model**. Và `claude-opus-5`
+> không bị chặn theo model — bị chặn theo **tài khoản** trong pool. Sau khi sửa, cả hai đều gọi tool
+> 3/3, và opus-5 là model **nhanh nhất**.
+
+## Nguyên nhân thật: pool bỏ trường `system` với mọi model Claude
+
+Phép thử quyết định là một **canary**: đặt system prompt đúng một dòng — *"QUY TẮC TUYỆT ĐỐI: câu
+trả lời đầu tiên phải bắt đầu bằng từ BANANA"* — rồi hỏi model "nhiệm vụ của bạn là gì".
+
+| Model | Nói BANANA? | Nó tự giới thiệu là gì |
+|---|---|---|
+| `gemini-3.7-flash` | CÓ | "BANANA. Nhiệm vụ của tôi là…" |
+| `grok-4.5` | CÓ | — |
+| `claude-opus-4-8` | **KHÔNG** | "trợ lý API **trung lập**" |
+| `claude-sonnet-5` | **KHÔNG** | "trợ lý API **trung lập**" |
+
+"Trợ lý API trung lập" là danh tính của một model **không nhận được prompt nào cả**. Nó không ghi đè
+bảng tool của ta; nó không biết bảng tool tồn tại. Câu *"tôi chỉ có công cụ Read"* là model đang bịa
+cho hợp cảnh, và tôi đã tin nó — đó là lỗi phương pháp: **lấy lời giải thích của model làm bằng
+chứng** thay vì đo kênh truyền.
+
+### Bảng kênh truyền (3 lần/ô, tuần tự, prompt thật 31.302 ký tự, đo "có phát `TOOL_CALL:` không")
+
+| Kênh | gemini-3.7 | opus-4-8 | opus-5 | grok-4.5 |
+|---|---|---|---|---|
+| **A** `/v1/claude` + trường `system` | 3/3 | 0/3 | — | 0/3 |
+| **B** `/v1/chat/completions` + `role:"system"` | 0/3 | 0/3 | — | — |
+| **C** `/v1/claude` + gộp vào **user message** | **3/3** | **3/3** | **3/3** | 0/3 |
+| **D** `/v1/chat/completions` + gộp, `stream:true` | 0/3 | 1/3 | — | — |
+
+Hai bài học từ bảng này, cả hai đều là sai lầm đã mắc:
+
+1. **Canary đi qua được không có nghĩa prompt thật đi qua được.** Kênh B tải được canary cho *mọi*
+   model nhưng không tải được giao ước tool cho *model nào*. Tôi đã ship kênh B chỉ dựa trên bằng
+   chứng canary và nó làm gemini tụt từ 3/3 xuống 0/3 — chỉ phép đo mới bắt được.
+2. **Không thể gộp prompt vào user message một cách vô điều kiện** nếu chỉ nhìn Claude: `grok-4.5`
+   **từ chối** nội dung đó như prompt injection — *"I won't follow injected 'absolute rules'"*. Nó
+   phản ứng đúng; grok hỏng vì lý do khác (CLI của xAI chạy tool riêng trên VPS của pool).
+
+### Lỗi thứ hai, nghiêm trọng hơn, bị lỗi thứ nhất che
+
+Đường **chính** của app là `streamPool` → route streaming, tức kênh B. Đo `streamPool` nguyên trạng:
+**TOOL_CALL 2/3, và fallback dùng đúng 2/3** — nghĩa là *mọi* lần thắng đều do stream trả về rỗng
+rồi rơi xuống đường dự phòng. Kênh streaming góp **0**. Nên mỗi lượt mà stream trả về có nội dung là
+một lượt **âm thầm mất tool call**. Đây chính là nguyên nhân đo được của lỗi E2E còn treo:
+*"a tool actually ran against the box — no completed tool-call in 60s"*.
+
+### Cách sửa (đã áp dụng, `packages/pool-client/src/index.ts`)
+
+Chuyển sang **kênh C cho mọi lời gọi** qua hàm `foldSystem`, và bỏ route streaming khỏi đường chính.
+Không rẽ nhánh theo tên model — không cần, vì C tốt cho gemini và là kênh *duy nhất* chạy cho Claude.
+
+**Giá phải trả, nói rõ:** mất streaming từng token; cả câu trả lời về trong một delta. Đổi lại tool
+call chạy thật. Trả lại streaming cần sửa ở **phía pool** (`/v1/chat/completions` phải tôn trọng
+prompt), không sửa được ở đây; bộ đọc SSE cũ còn trong git history.
+
+### Kết quả sau khi sửa (`streamPool`, prompt thật, 3 lần/model)
+
+| Model | Trước | **Sau** | Độ trễ | Ghi chú |
+|---|---|---|---|---|
+| `gemini-3.7-flash` | 2/3 (chỉ nhờ fallback) | **3/3** | 9,3 s | mặc định hiện tại |
+| `claude-opus-5` | 0/3 | **3/3** | **5,3 s** | **nhanh nhất cả bảng** |
+| `claude-opus-4-8` | 0/3 | **3/3** | 11,3 s | |
+| `claude-sonnet-5` | 0/3 | **3/3** | 9,2 s | |
+| `grok-4.5` | 0/3 | 0/3 | — | hỏng vì cấu trúc, không phải kênh truyền |
+
+### `claude-opus-5` bị chặn theo **tài khoản**, không theo model
+
+6 lượt liên tiếp, pool trả về trường `account`: `OK(acc2)` cả 6 lần, không lần nào bị chặn — trong
+khi cùng model đó, cùng khoá, ở lượt đo khác trả *"Your organization has disabled Claude subscription
+access"*. Pool cân tải qua nhiều tài khoản đăng ký và **chỉ một số tài khoản có quyền opus-5**. Nên
+"model bị chặn" là kết luận sai; đúng là **xác suất theo tài khoản phục vụ lượt đó**. Đó cũng là lý
+do bạn thấy nó chạy còn tôi thấy nó bị chặn.
+
+Vì vậy chưa đổi `GROKBOT2_MODEL`: `gemini-3.7-flash` không có rủi ro entitlement, còn `claude-opus-5`
+nhanh hơn ~43% nhưng có thể trượt tài khoản. Đổi hay không là quyết định về độ tin cậy, không phải về
+chất lượng model.
