@@ -39,7 +39,7 @@ import {
   bindHostSettings,
   chatSnapshot,
   type SendArgs,
-  orderedFor,
+  nextTranscriptOrdered,
   latestEntry,
   nextRosterOrdered,
   agentById,
@@ -54,7 +54,7 @@ import {
   runAgentAutomationNow,
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
-import { foreverBoxStatus, handBackBox, beginComputerUse } from "./forever-box.js";
+import { foreverBoxStatus, handBackBox, beginComputerUse, endComputerUse, setBoxStatusSink } from "./forever-box.js";
 import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 import { closeMcp, mcpServers } from "./mcp.js";
@@ -182,19 +182,42 @@ const announced = new Map<string, number>();
 setUpdateSink((agentId) => {
   const last = latestEntry(agentId);
   if (!last) { broadcast("transcript", { agentId }); return; }
-  // onUpdate fires on every streamed token, so the same entry would be announced over and
-  // over at the same sequence. A replica accepts a sequence once; repeats read as already
-  // seen and are dropped, taking the real update with them. So "added" is sent once per
-  // sequence, and later touches of that entry are "updated".
+  // onUpdate fires on every streamed token, so the same entry is announced many times. The
+  // first announcement of an entry is "added" and every later touch is "updated" — the event
+  // TYPE is what distinguishes them. The SEQUENCE must advance on every push regardless, and
+  // must advance by exactly one: see nextTranscriptOrdered for why the entry's own seq was the
+  // wrong number to send.
+  //
+  // The type name is `appended`, not `added`. The client's reducer is a bare switch with no
+  // default:
+  //
+  //   case "appended": …find by id, replace or push…
+  //   case "updated":  return n.map(t => t.id === e.entry.id ? e.entry : t)
+  //   case "removed":  …    case "cleared": return []
+  //
+  // `added` matches nothing there, so the reducer returns undefined for it. Renamed for that
+  // reason alone. It is NOT the cause of any observed bug: streaming measured working both
+  // before and after the rename (the screen tracked the backend 7/7 → 39/49 → 180/180 either
+  // way). An earlier reading that showed the screen frozen while the backend grew was taken
+  // against a conversation the app was not displaying — the giveaway was a negative delta,
+  // believed for one round before being re-measured with a conversation opened on purpose.
   const seen = announced.get(agentId);
-  const type = seen === last.seq ? "updated" : "added";
+  const type = seen === last.seq ? "updated" : "appended";
   announced.set(agentId, last.seq);
   broadcast("transcript", {
     agentId,
-    ordered: orderedFor(agentId, last.seq),
+    ordered: nextTranscriptOrdered(agentId),
     event: { type, entry: last },
   });
 });
+// Computer status: push it, rather than making the client wait for its own poll.
+//
+// The payload is the status object unchanged — the coordinator special-cases this channel and
+// runs `proxifyForeverBoxStatus(payload, vncProxy)` over it before forwarding, rewriting
+// `vncUrl` (and any `windows[].vncUrl`) through the VNC proxy. The renderer then files it by
+// `payload.agentId`: `ingestForeverBox: I => { const P = m(I.agentId); … }`. `foreverBoxStatus`
+// already returns exactly that shape, agentId included, so there is nothing to reshape here.
+setBoxStatusSink((agentId) => broadcast("forever-box", foreverBoxStatus({ id: agentId })));
 // Roster add/delete: push immediately so the sidebar doesn't wait for its next poll.
 setRosterSink((agentId) => {
   // A single-agent update needs the envelope or the client discards it outright; presence
@@ -471,9 +494,27 @@ const methods: Record<string, (args: any) => unknown> = {
    * with a progress bar that never finished. A person clicking "open the computer" IS the
    * session starting; only the poll should infer it from the agent's own activity.
    */
+  /**
+   * The client calls this when the user opens the computer pane.
+   *
+   * It must report `running`, not the truth-as-of-now. Answering `off` leaves the pane on its
+   * fallback branch for ever — `emptyMessage ?? "Booting up the computer"` with a spinner, and
+   * `emptyMessage` is a component prop we cannot reach from a status reply. That is the hang
+   * this line was added to fix.
+   *
+   * But a session opened this way had nothing to close it: the release timer is armed by the end
+   * of a TURN, and opening a pane is not a turn. So an idle bot the user glanced at kept
+   * reporting `running` until its next turn finished — an idle bot showing a live screen, which
+   * is the exact thing §2z set out to stop, reached from the other side. Arming the release here
+   * closes it with the machinery that already exists: any tool action cancels the timer
+   * (`beginComputerUse` clears it) and the end of a turn re-arms it, so nothing else changes.
+   *
+   * Safe against the client's own repeat calls — ensure is fired on open, focus and reconnect,
+   * not on a poll (the poll is `getForeverBoxStatus`), so this cannot be pushed out indefinitely.
+   */
   ensureForeverBox: (a) => {
     const id = typeof a?.id === "string" ? a.id : typeof a?.agentId === "string" ? a.agentId : "";
-    if (id) beginComputerUse(id);
+    if (id) { beginComputerUse(id); endComputerUse(id); }
     return foreverBoxStatus(a);
   },
   resetForeverBox: (a) => foreverBoxStatus(a),
@@ -644,15 +685,18 @@ export function handleGateway(
     sseClients.add(res);
     sseStats.opened += 1; sseStats.lastOpenedMs = Date.now();
     recordSseOpen();   // persisted, so a tsx restart does not erase the reconnect history
-    // Establish the replica epoch immediately with a FULL roster snapshot.
+    // A full roster snapshot the moment the stream opens, so a reconnect re-anchors instead of
+    // waiting for the next change.
     //
-    // Until the client has an epoch it treats every event as foreign — it buffers them and
-    // returns — so per-agent presence updates were being discarded no matter how correct
-    // their envelope was. `coverage: complete-roster` is the client's own expected kind
-    // (K0t is constructed with expectedCoverageKind: "complete-roster").
-    res.write(`data: ${JSON.stringify({ channel: "roster", payload: { agents: listAgents() } })}
-
-`);
+    // This frame used to be sent on `channel: "roster"` and was therefore never delivered at
+    // all: "roster" is the client's REPLICA key, not one of the sixteen SSE channel names its
+    // coordinator will forward, so the decoder dropped it silently — the same trap that hid the
+    // presence bug. The channel is `agents`; the replica key stays "roster" inside the envelope.
+    //
+    // Sent without `ordered` on purpose. The client's own handler reads that as "replace
+    // wholesale" (`we.ordered == null ? x = b(Pe) : x.ingestSnapshot(…)`), which is exactly what
+    // a fresh connection wants — no epoch negotiation, no chance of a stale sequence.
+    res.write(`data: ${JSON.stringify({ channel: "agents", payload: { agents: listAgents() } })}\n\n`);
     res.on("close", () => { sseClients.delete(res); sseStats.closed += 1; recordSseClose(); });
     return true;
   }

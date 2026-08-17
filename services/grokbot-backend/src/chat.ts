@@ -20,11 +20,11 @@ import { extname } from "node:path";
 import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
-import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe } from "./browser.js";
-import { stageImage } from "./attachments.js";
+import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, closeAgentTab } from "./browser.js";
+import { stageImage, imageSize } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
 import { boxConfigured, boxCall } from "./box-exec.js";
-import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, restoreHandoff, handoffEntries, beginComputerUse, endComputerUse, type BoxHandoff } from "./forever-box.js";
+import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, restoreHandoff, handoffEntries, beginComputerUse, endComputerUse, type BoxHandoff } from "./forever-box.js";
 import { runSubagent, SUBAGENT_TYPES } from "./subagents.js";
 import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "./mcp.js";
 import { compact, applyCompaction, needsCompaction, type CompactionState } from "./compaction.js";
@@ -261,6 +261,8 @@ function settleBoxHandoffCard(agentId: string, resolution: "handed_back" | "repl
 
 setHandoffStartSink(postBoxHandoffCard);
 setHandoffEndSink(settleBoxHandoffCard);
+// When a computer session is finally released, close the tab it was driving.
+setComputerReleaseSink((agentId) => { void closeAgentTab(agentId); });
 const park = (p: Parked): void => { parked.set(parkKey(p.kind, p.key), p); persist(); };
 const unpark = (kind: Parked["kind"], key: string): Parked | undefined => {
   const k = parkKey(kind, key);
@@ -501,6 +503,41 @@ TOOLS.message_agent = (arg, ctx) => {
 };
 
 /**
+ * Speak mid-turn — the port of the original's `SendMessage`.
+ *
+ * The two architectures are inverted, and this is the seam. In the original, the model's plain
+ * text is a private scratchpad and `SendMessage` is the ONLY channel that reaches the user, so
+ * every call is its own bubble and a long task narrates itself step by step. Here the plain
+ * text IS the message, which gives exactly one bubble per turn — so a multi-step turn ran the
+ * browser, attached screenshots, and said nothing at all until the very end. Reported as
+ * "agent làm việc rồi vất mấy tấm ảnh, không có phản hồi nào".
+ *
+ * Rather than invert our model (risky, and the streaming reply is the good part), this adds the
+ * missing half: the model can post an interim line whenever it wants, and its closing text is
+ * still the final bubble. `ctx.note` already emits the right entry — a `send-message` with
+ * `type:"text"` is exactly what the renderer draws as a bubble — so nothing new is needed on
+ * the transcript side.
+ *
+ * The name is the catalog's (`send_to_user`, CLIENT_SIDE_TOOL_V2_SEND_TO_USER). Its parameter
+ * shape is not in the extracted catalog (`paramsMessage: null`), so this takes plain text and a
+ * `{"text":…}` object rather than pretending to know the original's field name.
+ */
+TOOLS.send_to_user = (arg, ctx) => {
+  let text = arg.trim();
+  if (text.startsWith("{")) {
+    try {
+      const o = JSON.parse(text);
+      text = String(o?.text ?? o?.message ?? o?.content ?? "").trim();
+    } catch { text = unquote(arg); }
+  } else {
+    text = unquote(arg);
+  }
+  if (!text) return "(send_to_user cần nội dung)";
+  ctx.note(text);
+  return "đã gửi";
+};
+
+/**
  * Building the roster from inside a conversation.
  *
  * The original's agent does this — its history shows one bot answering "Tạo 3 con luôn. Con
@@ -567,6 +604,177 @@ TOOLS.attach_file = async (arg, ctx) => {
   const alt = String(spec?.alt ?? spec?.caption ?? fileName);
   postFileAttachment(ctx.agentId, abs, fileName, alt);
   return `Đã đính kèm ${fileName} (${size} byte).`;
+};
+
+/** Refuse anything larger than this. A transcript attachment is inlined as base64 to the client. */
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Is this host inside the machine or its network?
+ *
+ * Checking the literal string is not enough — `evil.test` can resolve to 127.0.0.1, and that is
+ * the ordinary way a fetcher is turned against its own host. So the name is resolved and every
+ * address it returns is judged; a name resolving to several addresses is only safe when all of
+ * them are. Unresolvable is treated as internal: the fetch would fail anyway, and defaulting a
+ * security check to "allow" on an error is how these fences stop working quietly.
+ */
+async function isInternalHost(hostname: string): Promise<boolean> {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  let addrs: string[];
+  try {
+    const { lookup } = await import("node:dns/promises");
+    addrs = (await lookup(host, { all: true })).map((a) => a.address);
+  } catch {
+    return true;
+  }
+  return addrs.length === 0 || addrs.some(isPrivateAddress);
+}
+
+/** Loopback, link-local, and the RFC1918 / unique-local ranges, for both address families. */
+function isPrivateAddress(addr: string): boolean {
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(addr);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 127 || a === 10
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || (a === 169 && b === 254)      // link-local, incl. the 169.254.169.254 metadata address
+      || (a === 100 && b >= 64 && b <= 127)
+      || a >= 224;                     // multicast and reserved
+  }
+  const v6 = addr.toLowerCase();
+  if (v6 === "::" || v6 === "::1") return true;
+  if (v6.startsWith("fe80") || v6.startsWith("fc") || v6.startsWith("fd")) return true;
+  // ::ffff:127.0.0.1 and friends — an IPv4 address wearing a v6 coat.
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v6);
+  return mapped ? isPrivateAddress(mapped[1]) : false;
+}
+
+/**
+ * Show a picture that lives on the web, by fetching the bytes and attaching them.
+ *
+ * This is the only implementation that works. The renderer will not load a third-party URL —
+ * a real CDN link renders as "Couldn't load image" — which is exactly why every image in the
+ * original's transcript is an attachment and never a link (parity.md §2u). Without this tool
+ * the model's only way to answer "show me the images on this page" was a markdown link, which
+ * is what it was doing.
+ *
+ * The URL comes from the model, so this is a request forger's tool by construction. It is
+ * fenced accordingly: http(s) only, and no address inside the machine or its network. That
+ * matters more here than the generic advice implies — the box's Chrome DevTools port listens
+ * on loopback and is unauthenticated remote code execution, so an unfenced fetcher would hand
+ * a prompt-injected page a way to reach it.
+ */
+TOOLS.attach_image = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { url: unquote(arg) }; }
+
+  // One call per image was the first shape, and it spends a tool step per picture against a
+  // budget of MAX_TOOL_STEPS for the whole turn: asking for six images left no steps to answer
+  // with. The batch form is the same tool, so the model can keep using `url` for one.
+  const list: string[] = Array.isArray(spec?.urls) ? spec.urls
+    : Array.isArray(spec?.url) ? spec.url
+    : [spec?.url ?? spec?.src ?? spec?.href];
+  const urls = list.map((u) => String(u ?? "").trim()).filter(Boolean);
+  if (urls.length === 0) return 'attach_image cần {"url":"https://…"} hoặc {"urls":["…","…"]}';
+
+  if (urls.length > 1) {
+    const capped = urls.slice(0, MAX_IMAGES_PER_CALL);
+    // Sequential, not Promise.all: each success posts an attachment, and the transcript should
+    // fill in the order the model asked for rather than in whichever order the CDNs answer.
+    const lines: string[] = [];
+    for (const [i, u] of capped.entries()) lines.push(`${i + 1}. ${await attachOneImage(ctx.agentId, u, spec?.alt)}`);
+    if (urls.length > capped.length) lines.push(`(bỏ qua ${urls.length - capped.length} ảnh: mỗi lần gọi tối đa ${MAX_IMAGES_PER_CALL})`);
+    return lines.join("\n");
+  }
+  return attachOneImage(ctx.agentId, urls[0], spec?.alt);
+};
+
+/** At most this many images in one batched call, so a turn cannot be flooded with attachments. */
+const MAX_IMAGES_PER_CALL = 8;
+
+/** Fetch, fence, measure and post a single image. Returns the sentence the model reads back. */
+async function attachOneImage(agentId: string, raw: string, altHint?: unknown): Promise<string> {
+  let target: URL;
+  try { target = new URL(raw); } catch { return `Không phải URL hợp lệ: ${raw}`; }
+  if (target.protocol !== "http:" && target.protocol !== "https:") return "Chỉ tải được ảnh qua http/https.";
+  if (await isInternalHost(target.hostname)) return "Không tải ảnh từ địa chỉ nội bộ.";
+
+  let bytes: Buffer;
+  let res: Response;
+  try {
+    res = await fetch(target, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return `Tải ảnh thất bại (HTTP ${res.status}).`;
+    // Cap what is read. Content-Length is a claim the server makes and can omit or lie about,
+    // so the buffer is checked after the read as well as before it.
+    const claimed = Number(res.headers.get("content-length") ?? 0);
+    if (claimed > MAX_IMAGE_BYTES) return `Ảnh quá lớn (${Math.round(claimed / 1024)} KB).`;
+    bytes = Buffer.from(await res.arrayBuffer());
+  } catch (e) {
+    return `Không tải được ảnh: ${(e as Error).message}`;
+  }
+  if (bytes.length > MAX_IMAGE_BYTES) return `Ảnh quá lớn (${Math.round(bytes.length / 1024)} KB).`;
+
+  // A redirect can leave http(s) for the internal network, and the fence above only saw the
+  // first hop. `res.url` is where the bytes actually came from, so re-check it.
+  try {
+    const landed = new URL(res.url || target.href);
+    if (await isInternalHost(landed.hostname)) return "Không tải ảnh từ địa chỉ nội bộ.";
+  } catch { /* keep the original verdict */ }
+
+  const measured = imageSize(bytes);
+  if (measured == null) return "Nội dung tải về không phải ảnh đọc được (PNG/JPEG/GIF/WebP).";
+
+  const fileName = decodeURIComponent(target.pathname.split("/").pop() || "") || `image.${measured.mime.slice(6)}`;
+  const alt = String(altHint ?? fileName);
+  postAttachment(agentId, `data:${measured.mime};base64,${bytes.toString("base64")}`, fileName, alt);
+  return `Đã đính kèm ${fileName} (${measured.width}×${measured.height}).`;
+}
+
+/**
+ * Make a picture from a description — `generate_image` in the original's catalog.
+ *
+ * The catalog entry carries no parameter message (`paramsMessage: null`) and the shipped prompt
+ * never describes it, so the contract came from the pool itself rather than from a guess:
+ *
+ *   POST /v1/images {model, prompt}
+ *     → {model, count, images:[{url, rel, mimeType}], edited, account}
+ *
+ * It answers with a URL, not bytes, so the second half is `attachOneImage` unchanged — the same
+ * download, internal-address fence, format measurement and staging that `attach_image` uses. The
+ * client cannot load a remote image (parity.md §2u), so staging is not an optimisation here; it
+ * is the only thing that puts the picture on screen.
+ */
+TOOLS.generate_image = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { prompt: unquote(arg) }; }
+  const prompt = String(spec?.prompt ?? spec?.description ?? spec?.text ?? "").trim();
+  if (!prompt) return 'generate_image cần {"prompt":"mô tả ảnh muốn vẽ"}';
+
+  const key = loadPoolKey();
+  if (!key) return "Chưa có key cho pool nên không tạo được ảnh.";
+
+  let payload: { images?: { url?: string }[] };
+  try {
+    const res = await fetch(config.imagesUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: config.imageModel, prompt }),
+      // Generation is slower than a chat turn; the pool answered in ~10s when probed.
+      signal: AbortSignal.timeout(120_000),
+    });
+    const text = await res.text();
+    if (!res.ok) return `Tạo ảnh thất bại (HTTP ${res.status}): ${text.slice(0, 160)}`;
+    payload = JSON.parse(text);
+  } catch (e) {
+    return `Không tạo được ảnh: ${(e as Error).message}`;
+  }
+
+  const url = payload?.images?.[0]?.url;
+  if (typeof url !== "string" || !url) return "Pool không trả về ảnh nào.";
+  const alt = String(spec?.alt ?? prompt).slice(0, 200);
+  return attachOneImage(ctx.agentId, url, alt);
 };
 
 TOOLS.email_draft = (arg, ctx) => {
@@ -758,8 +966,30 @@ const BROWSER_PROTOCOL = isBrowserConfigured()
     "trên chính trang đó — đừng tải lại trang bằng shell (curl/python) hay web_fetch: trang đang mở " +
     "đã qua JavaScript và đã có cookie/đăng nhập, còn tải lại thường bị chặn và mất nội dung động. " +
     'Ví dụ lấy ảnh: TOOL_CALL: browser_evaluate({"expression":' +
-    '"[...document.querySelectorAll(\'img\')].map(i=>i.currentSrc||i.src).filter(u=>u.startsWith(\'http\')).slice(0,20)"})'
+    '"[...document.querySelectorAll(\'img\')].map(i=>i.currentSrc||i.src).filter(u=>u.startsWith(\'http\')).slice(0,20)"})' +
+    // Having the URLs was only half of it: the model then wrote them out as markdown links,
+    // which is the one thing that cannot work — the client refuses to load a third-party image
+    // and shows "Couldn't load image" (parity.md §2u). Naming the tool here is what closes the
+    // loop between finding an image and the user seeing it.
+    "\nSau khi có URL ảnh, muốn NGƯỜI DÙNG NHÌN THẤY ảnh thì gọi " +
+    'TOOL_CALL: attach_image({"urls":["https://…","https://…"]}) — gửi HẾT các ảnh trong MỘT lần gọi ' +
+    '(tối đa 8); một ảnh thì dùng {"url":"https://…","alt":"mô tả"}. ' +
+    "Viết link markdown ![](…) sẽ KHÔNG hiện được ảnh."
   : "";
+
+/**
+ * Image generation is advertised separately from the browser rules.
+ *
+ * The `attach_image` instructions live inside BROWSER_PROTOCOL because they are about pictures
+ * found on a page, and that block disappears when no browser is configured. Drawing one does not
+ * need a browser, so putting it there would have hidden the tool on exactly the setups where it
+ * is the only way to produce an image at all.
+ */
+const IMAGE_PROTOCOL =
+  "\n\nVẼ ẢNH: khi người dùng muốn một hình ảnh chưa tồn tại (minh hoạ, logo nháp, ảnh bìa...), gọi " +
+  'TOOL_CALL: generate_image({"prompt":"mô tả chi tiết bằng tiếng Anh"}) — ảnh sẽ tự hiện trong khung chat. ' +
+  "Mô tả càng cụ thể (bố cục, màu, phong cách) thì càng sát ý. " +
+  "Đây là vẽ mới; còn ảnh đã có sẵn trên mạng thì dùng attach_image.";
 
 const ASK_PROTOCOL =
   "\n\nHỎI NGƯỜI DÙNG: khi cần người dùng chọn giữa nhiều hướng, dùng " +
@@ -793,6 +1023,13 @@ const PEER_PROTOCOL =
   'TOOL_CALL: message_agent({"to":"tên bot","content":"..."}). ' +
   "Dùng khi việc thuộc chuyên môn của bot khác; nói cho người dùng biết bạn đã nhắn ai. " +
   "Trả lời của họ sẽ tới ở lượt sau, đừng chờ trong cùng một lượt. " +
+  // The original narrates step by step because SendMessage is its only voice. Ours streams the
+  // final text, so without this a multi-step turn is silent until the end — screenshots pile up
+  // with no words. Tell the model it can speak between steps.
+  "\n\nNÓI GIỮA CHỪNG: việc nhiều bước thì đừng im lặng tới cuối. Sau mỗi bước đáng kể, " +
+  'TOOL_CALL: send_to_user("một câu ngắn về việc vừa làm và bước tiếp theo") — mỗi lần là một ' +
+  "tin nhắn riêng hiện ngay cho người dùng. Câu trả lời cuối cùng vẫn viết bình thường. " +
+  "Đừng dùng nó cho việc một bước, và đừng lặp lại nội dung đã nói. " +
   'Brief nhiều bot cùng lúc bằng danh sách: {"to":["Sales","Marketing"],"content":"..."}. ' +
   "\n\nTẠO / ĐỔI TÊN BOT: " +
   'TOOL_CALL: create_agent({"name":"Quản lý","brief":"vai trò và cách phối hợp"}) — thêm "names":[…] để tạo nhiều bot. ' +
@@ -808,11 +1045,17 @@ const PEER_PROTOCOL =
 const DEV_TOOLS = new Set(["echo", "time", "reverse", "upper", "count", "calc"]);
 
 const TOOL_PROTOCOL =
-  "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, trả lời DUY NHẤT một dòng đúng dạng " +
-  "TOOL_CALL: <tên>(<đối số>) và không nói gì thêm. Công cụ: " +
+  // "DUY NHẤT một dòng" is why a multi-step turn went silent. The model obeyed it exactly: every
+  // step was a bare TOOL_CALL, so the user watched screenshots pile up with no words — measured,
+  // the bubble mid-turn contained the call itself and nothing else. The parser already accepts
+  // prose in front (TOOL_CALL is anchored at the END) and the bubble now keeps whatever was
+  // said, so this instruction was the only thing forbidding it.
+  "\n\nCÔNG CỤ: khi cần một trong các công cụ sau, hãy nói MỘT câu ngắn về việc sắp làm, " +
+  "rồi KẾT THÚC câu trả lời bằng đúng một dòng dạng " +
+  "TOOL_CALL: <tên>(<đối số>). Sau dòng đó không viết gì thêm. Công cụ: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". Không cần công cụ thì trả lời bình thường. Sau khi nhận kết quả công cụ, trả lời dựa trên kết quả đó." +
-  BROWSER_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 function parseToolCall(text: string): { name: string; arg: string } | null {
   const m = text.match(/TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s);
@@ -835,9 +1078,32 @@ export function setUpdateSink(fn: (agentId: string) => void): void { sink = fn; 
 const EPOCH = Date.now();
 export const transcriptEpoch = (_agentId: string): number => EPOCH;
 
-/** The envelope the client's replica requires. `transcript:<id>` is its own key format. */
-export function orderedFor(agentId: string, sequence: number) {
-  return { replicaKey: `transcript:${agentId}`, epoch: EPOCH, sequence };
+/**
+ * The envelope the client's replica requires — with a sequence that is contiguous PER AGENT.
+ *
+ * This is where the transcript quietly stopped updating. The client's rule is strict:
+ *
+ *   if (t.sequence === this.acceptedSequence + 1) { applyEvent(…); acceptedSequence = t.sequence }
+ *   else { this.bufferBounded(t.sequence, e.event); this.startAttempt() }   // gap → park + resync
+ *
+ * Exactly `+1`, or the event is parked in a bounded buffer and the replica asks for a resync.
+ * We were passing the entry's **global** seq, which is shared by every agent — so as soon as
+ * any other bot wrote an entry, this bot's replica saw a jump and stopped applying anything.
+ * The roster never had the bug because it always used its own counter (`++rosterSeq`), which
+ * is why the sidebar preview kept updating while the bubble stood still: same push, same
+ * connection, two different sequence sources.
+ *
+ * Symptoms it explains: a bubble frozen at "Để" while the backend held 1118 characters, and a
+ * finished reply that appeared only minutes later when something forced a refetch.
+ *
+ * Counting pushes rather than entries is deliberate — a streamed reply emits many events for
+ * one entry, and each of those is an event the replica counts.
+ */
+const transcriptSeq = new Map<string, number>();
+export function nextTranscriptOrdered(agentId: string) {
+  const next = (transcriptSeq.get(agentId) ?? 0) + 1;
+  transcriptSeq.set(agentId, next);
+  return { replicaKey: `transcript:${agentId}`, epoch: EPOCH, sequence: next };
 }
 
 /** Newest entry of an agent, with its stable seq — what an event announces. */
@@ -902,6 +1168,8 @@ const ACTIVITY_TOOL: Record<string, string> = {
   create_agent: "CreateAgent",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
+  attach_image: "Screenshot",
+  generate_image: "Screenshot",
   call_mcp_tool: "CallMcpTool",
   get_mcp_tools: "GetMcpTools",
   knowledge_base: "ReactToMessage",
@@ -1115,7 +1383,12 @@ export function updateAgent(a: { id?: string; agentId?: string; name?: string; p
 }
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
   const ids = a.ids ?? a.agentIds ?? (a.id ? [a.id] : []);
-  for (const id of ids) { agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id); }
+  for (const id of ids) {
+    agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id);
+    // A deleted bot cannot own a browser tab. Without this the box kept one open per bot that
+    // ever browsed, long after the bot was gone.
+    void closeAgentTab(id);
+  }
   persist(); rosterChanged(); return { deleted: ids };
 }
 export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
@@ -1455,7 +1728,21 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
 // drop an image into the transcript with no prompt, so asking permission to show a file the
 // agent could already read with read_file_v2 buys nothing. The tools that WRITE (edit_file_v2,
 // edit_file, delete_file) still ask.
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "echo", "time", "reverse", "upper", "count", "calc"]);
+/**
+ * Tools that run without a permission card.
+ *
+ * The bar is not "is this harmless" but "does the card tell the truth about it". The client's
+ * copy for `local-tool-permission` is fixed and we cannot change it — the app is signed — and it
+ * reads *"Allow Grok Bot and all Bots to run commands on your local computer?"*. Asked to suggest
+ * a name for itself and told "Lumen", the model called `rename_agent({"to":"Lumen"})` and the user
+ * was shown that sentence. Renaming a bot writes one string in the roster: no shell, no file, no
+ * network. A warning that describes the wrong action is worse than no warning, because it teaches
+ * people to click through the ones that matter.
+ *
+ * `create_agent` is deliberately NOT here. It is equally mis-described by that copy, but it brings
+ * a new actor into the workspace rather than editing a label, so the call is the user's to make.
+ */
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /**
  * Run one tool and report it, whether it was auto-approved or the user clicked Allow.
@@ -1852,10 +2139,40 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     if (r.ok) reveal(bubble, r.text ?? "", agentId);
   }
   inflight.delete(agentId);
-  if (controller.signal.aborted) return;
+  if (controller.signal.aborted) {
+    // An aborted turn used to just return, and it left two kinds of wreckage on screen.
+    //
+    // `sendPrompt` aborts whatever is running for that bot before starting the next turn, which
+    // in a multi-agent conversation happens constantly — a peer messaging a bot mid-turn is the
+    // normal case, not an edge case. Measured in a real run: Frontend Dev's transcript held an
+    // EMPTY bubble right before an inbound message, and later a 28k-character bubble whose text
+    // ended in a complete `TOOL_CALL: edit_file_v2({...})` that never ran. Both come from here:
+    // the return happens before the bubble is tidied and before the call is parsed, so an empty
+    // bubble stays empty for ever and a finished answer is shown with its machine line exposed.
+    //
+    // Deliberately NOT running the tool. The turn was abandoned because the user (or a peer)
+    // moved on; acting on a superseded decision is worse than dropping it. Stripping the line is
+    // enough — what the model SAID is kept, what it was about to DO is discarded with the turn.
+    const text = textOf(bubble);
+    const spoken = text.replace(/TOOL_CALL:\s*[A-Za-z_][\w-]*\s*\([\s\S]*?\)\s*$/, "").trim();
+    if (spoken) {
+      setText(bubble, spoken);
+      if (bubble.kind === "send-message") bubble.streaming = false;
+    } else {
+      const at = tail(agentId).indexOf(bubble);
+      if (at >= 0) tail(agentId).splice(at, 1);
+    }
+    onUpdate(agentId);
+    return;
+  }
   if (!r.ok) {
     setText(bubble, `[grokbot2] Pool error: ${r.error}`);
     if (bubble.kind === "send-message") bubble.streaming = false;
+    // Presence has to be cleared here too, and it was not. Every other exit from this function
+    // clears it; this one returned early, so a pool failure left `isRunning` true with nothing
+    // generating behind it — the bot span in the sidebar until the process restarted. It is the
+    // one path the user is most likely to hit, because it is the path an outage takes.
+    clearPresence(agentId);
     onUpdate(agentId); return;
   }
   // Both routes can answer HTTP 200 with no content. Leaving the bubble empty looks like the
@@ -1877,14 +2194,26 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
       ...(activityDetail(call.name, call.arg) ? { detail: activityDetail(call.name, call.arg) } : {}),
     },
   });
-  // Drop the bubble instead of rewriting it into a status line.
+  // Keep whatever the model SAID; drop only the machine-readable line.
   //
-  // Its content at this point is the model's raw `TOOL_CALL: name(args)`, which must not stay
-  // on screen; replacing it with "Cần dùng công cụ `x`." only traded raw syntax for narration
-  // the original never shows. There, a turn that calls a tool renders nothing until the answer
-  // arrives — the working indicator (currentActivity, set just above) is the whole feedback.
-  const at = tail(agentId).indexOf(bubble);
-  if (at >= 0) tail(agentId).splice(at, 1);
+  // `parseToolCall` anchors `TOOL_CALL:` at the END of the text, so prose in front of it matches
+  // too — and this used to delete the whole bubble on the assumption that the content was
+  // "the model's raw TOOL_CALL: name(args)" and nothing else. That assumption was never checked.
+  // If the model narrated before acting ("Mình mở trang trước đã." then the call), the narration
+  // was thrown away, which is exactly the symptom we were blaming on the model: a multi-step
+  // turn that runs tools, attaches screenshots and says nothing until the end.
+  //
+  // So: strip the call, keep the words. An empty remainder still removes the bubble, which is
+  // the common case and the original's behaviour — a turn that only acts renders nothing.
+  const spoken = textOf(bubble).replace(/TOOL_CALL:\s*[A-Za-z_][\w-]*\s*\([\s\S]*?\)\s*$/, "").trim();
+  if (spoken) {
+    setText(bubble, spoken);
+    if (bubble.kind === "send-message") bubble.streaming = false;
+    onUpdate(agentId);
+  } else {
+    const at = tail(agentId).indexOf(bubble);
+    if (at >= 0) tail(agentId).splice(at, 1);
+  }
   injectTool(agentId, `${call.name} ${call.arg}`, history);
 }
 

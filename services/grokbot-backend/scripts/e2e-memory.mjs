@@ -11,7 +11,40 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// The gateway now runs with GROKBOT2_AUTH=enforce, so an unauthenticated call answers 401 and
+// the script fails on `undefined.id` two lines later. The spawned backend reads the SAME token
+// file rather than minting its own (auth-gate reuses a saved token), so sending it is correct
+// and keeps these tests going through the real auth path instead of switching it off.
+import { gwHeaders } from "./gw-auth.mjs";
+
 const PORT = 18995;
+
+/**
+ * Load the repo-root `.env` into this process.
+ *
+ * The backend reads that file itself, so the SPAWNED one was always configured — but this script
+ * also calls the box directly (`/memoryLoad` below) and guards on the same variables, and a plain
+ * `node scripts/...` shell has none of them. The guard therefore fired on a machine where
+ * everything needed was present, and the test read as "not applicable here" for weeks.
+ */
+{
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join: j } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = j(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  try {
+    for (const line of readFileSync(j(root, ".env"), "utf8").split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const eq = t.indexOf("=");
+      if (eq < 0) continue;
+      const k = t.slice(0, eq).trim();
+      // Never override something the caller set on purpose.
+      if (!(k in process.env)) process.env[k] = t.slice(eq + 1).trim();
+    }
+  } catch { /* no .env — the guard below will say what is missing */ }
+}
+
 if (!process.env.GROKBOT2_BOX_EXEC_URL) { console.error("needs GROKBOT2_BOX_EXEC_URL + GROKBOT2_EXEC_TOKEN"); process.exit(1); }
 
 const root = await mkdtemp(join(tmpdir(), "grokbot-mem-"));
@@ -37,7 +70,7 @@ procs.push(backend);
 for (let i = 0; i < 60; i += 1) { try { await fetch(`http://127.0.0.1:${PORT}/gw/health`); break; } catch { await wait(500); } }
 
 const gw = (m, b = {}) =>
-  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 const textOf = (e) => (e.kind === "message" ? e.content : e.message?.content ?? "");
 const entries = (id) => gw("getAgentTranscriptTail", { id, limit: 200 }).then((r) => r.entries ?? []);
 

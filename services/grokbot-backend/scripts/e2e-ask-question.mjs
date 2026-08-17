@@ -11,6 +11,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// The gateway now runs with GROKBOT2_AUTH=enforce, so an unauthenticated call answers 401 and
+// the script fails on `undefined.id` two lines later. The spawned backend reads the SAME token
+// file rather than minting its own (auth-gate reuses a saved token), so sending it is correct
+// and keeps these tests going through the real auth path instead of switching it off.
+import { gwHeaders } from "./gw-auth.mjs";
+
 const PORT = 18881;
 const root = await mkdtemp(join(tmpdir(), "grokbot-ask-"));
 const procs = [];
@@ -40,7 +46,7 @@ for (let i = 0; i < 60; i += 1) {
 }
 
 const gw = (m, b = {}) =>
-  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 
 let pass = 0, fail = 0;
 const check = (name, ok, detail = "") => {
@@ -106,7 +112,14 @@ if (w) {
     const t = textOf(reply);
     console.log(`      chose  : ${value}`);
     console.log(`      reply  : ${t.replace(/\s+/g, " ").slice(0, 150)}`);
-    check("reply reflects the choice", new RegExp(String(value).split(/\s+/)[0], "i").test(t), t.slice(0, 120));
+    // Match on the LABEL the user saw, not the machine value. The old ruler regex-tested the
+    // raw value ("tau_hoa") against a natural-language reply, so it could only pass if the model
+    // parroted an internal identifier — the one thing the prompt tells it not to do. It failed on
+    // "Bạn muốn đặt vé tàu hỏa", which reflects the choice perfectly.
+    const flat = (x) => String(x).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[_\s]+/g, " ").trim();
+    const label = choice.label ?? value;
+    check("reply reflects the choice", flat(t).includes(flat(label)) || flat(t).includes(flat(value)),
+      `looked for "${label}" in: ${t.slice(0, 90)}`);
   }
 }
 

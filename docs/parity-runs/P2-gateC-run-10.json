@@ -1,0 +1,122 @@
+{
+  "plan": "P2",
+  "run": 10,
+  "gate": "C",
+  "backendCommit": "65ef15b",
+  "local": {
+    "cdp": "http://127.0.0.1:9222",
+    "rowsVisited": 0,
+    "blockers": []
+  },
+  "goc": {
+    "cdp": "http://127.0.0.1:9333",
+    "rowsVisited": 0,
+    "blockers": [
+      "needs-ultra"
+    ]
+  },
+  "surfaces": [
+    {
+      "surface": "imageUnavailable",
+      "rule": "mustBeZero",
+      "local": 0,
+      "goc": 1,
+      "verdict": "ok"
+    },
+    {
+      "surface": "sidebarAvatarImages",
+      "rule": "informational",
+      "local": 0,
+      "goc": 1,
+      "verdict": "info"
+    },
+    {
+      "surface": "inlineImages",
+      "rule": "informational",
+      "local": 0,
+      "goc": 3,
+      "verdict": "info"
+    },
+    {
+      "surface": "attachments",
+      "rule": "informational",
+      "local": 0,
+      "goc": 19,
+      "verdict": "info"
+    },
+    {
+      "surface": "toolCards",
+      "rule": "informational",
+      "local": 4,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "openComputer",
+      "rule": "informational",
+      "local": 0,
+      "goc": 2,
+      "verdict": "info"
+    },
+    {
+      "surface": "screenPane",
+      "rule": "informational",
+      "local": 1,
+      "goc": 0,
+      "verdict": "info"
+    },
+    {
+      "surface": "questionWidgets",
+      "rule": "informational",
+      "local": 0,
+      "goc": 0,
+      "verdict": "info"
+    },
+    {
+      "surface": "routines",
+      "rule": "informational",
+      "local": 1,
+      "goc": 0,
+      "verdict": "info"
+    },
+    {
+      "surface": "routineEventTriggers",
+      "rule": "informational",
+      "local": 0,
+      "goc": 0,
+      "verdict": "info"
+    },
+    {
+      "surface": "controls",
+      "rule": "informational",
+      "local": 73,
+      "goc": 63,
+      "verdict": "info"
+    }
+  ],
+  "controls": [
+    {
+      "control": "new bot",
+      "present": true
+    },
+    {
+      "control": "search",
+      "present": true
+    },
+    {
+      "control": "plugins",
+      "present": true
+    },
+    {
+      "control": "attach file",
+      "present": true
+    },
+    {
+      "control": "voice input",
+      "present": true
+    }
+  ],
+  "scope": "build-level only: broken-render markers, blocking states, control labels. Data-dependent surfaces are Gate B's job (see e2e-avatar.mjs).",
+  "pass": true,
+  "mismatches": []
+}

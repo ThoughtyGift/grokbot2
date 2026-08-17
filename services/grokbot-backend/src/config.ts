@@ -42,6 +42,18 @@ export const config = {
   poolUrl: process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude",
   model: process.env.GROKBOT2_MODEL ?? process.env.CLAUDE_MODEL ?? "gemini-3.7-flash",
   /**
+   * Image generation. Same host, different route — the pool lists it in its own 404 text:
+   * `POST /v1/claude|messages|images|videos|music|embeddings`.
+   *
+   * The model MUST be sent explicitly. Left out, the pool defaults to
+   * `imagen-4.0-fast-generate-001` and Vertex answers 404 "not found or your project does not
+   * have access". Probed across six candidates, exactly one answered 200 on this account, so
+   * this default is measured rather than chosen — and overridable when the account changes.
+   */
+  imagesUrl: process.env.CLAUDE_IMAGES_URL
+    ?? (process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude").replace(/\/v1\/claude$/, "/v1/images"),
+  imageModel: process.env.GROKBOT2_IMAGE_MODEL ?? "gemini-2.5-flash-image",
+  /**
    * The original Grok Bot prompt, ported (src/prompt-base.ts, ~4.9k tokens). It is what makes
    * the app behave like the original — reply-first, its tone, its rules for asking a decision.
    *

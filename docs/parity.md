@@ -639,7 +639,7 @@ Re-running the same request afterwards: `browser_navigate` → `browser_evaluate
 permission card at all. The model went one better than the example and returned `{src, alt}`
 pairs so it could caption each image.
 
-## 2u. Remote image URLs do not render — which is why the original attaches instead
+## 2u. Remote image URLs do not render — which is why the original attaches instead — DONE
 
 Asked to "extract some images", the model answered with `[Xem ảnh](https://…)` links. Markdown
 image syntax would seem like the fix, and the renderer really does handle it — `img({node, src})`
@@ -656,9 +656,34 @@ media path resolves a *path* through `readAttachmentImage` / `readAttachmentChun
 `https:` source has no such path.
 
 So "show me the images on this page" has one correct implementation: fetch the bytes and stage
-them as attachments, exactly like a screenshot. **Not built yet** — `stageImage()` currently
-measures PNG only (it reads the IHDR chunk), so JPEG sizing has to come first or the renderer
-gets no width/height and shows a blank frame.
+them as attachments, exactly like a screenshot. **Built** — `attach_image({url, alt})`, with
+three pieces the feature does not work without:
+
+**Measuring four formats, not one.** `stageImage()` read the PNG IHDR chunk and returned null
+for anything else, and null there means the attachment is silently never posted — a JPEG from a
+CDN produced no error, just nothing. `imageSize()` now covers PNG · JPEG · GIF · WebP. JPEG has
+no fixed offset: the size lives in a start-of-frame segment behind however much EXIF and ICC the
+camera wrote, so the segment chain has to be walked, skipping standalone markers and padding
+`FF`s or the walk desynchronises. SOF4/SOF8/SOF12 are *not* frame headers, which is why the
+marker ranges have holes. WebP stores its size three different ways (`VP8X` / `VP8 ` / `VP8L`)
+and is worth handling because it is what image CDNs now serve by default.
+
+**Mime and extension come from the bytes.** Both were being taken from the caller — the gateway
+hardcodes `image/png` in the data URL prefix — and the renderer routes on the URL's extension
+and decodes by mime, so a WebP named `.png` reaches the image component and fails there. A CDN
+serving `photo.jpg` as WebP is ordinary, so the file name is not evidence.
+
+**A fence, because the URL comes from the model.** This is a request-forgery surface reachable
+from any page the agent reads. http(s) only; the hostname is *resolved* and every address
+checked against loopback / RFC1918 / link-local (including `169.254.169.254`) / ULA, since
+`evil.test` resolving to `127.0.0.1` is the ordinary attack; unresolvable counts as internal;
+and `res.url` is re-checked after redirects, which the first check cannot see. The concrete
+thing being protected is the box's Chrome DevTools port — unauthenticated RCE on loopback.
+
+Measured (`scripts/e2e-attach-image.mjs`, 14/14): JPEG 300×200, WebP 550×368, GIF 400×400 all
+attach, read back through `readAttachmentImage` with correct dimensions and mime; all five
+blocked URLs refused. End to end in a live turn — "open the Cat article and show me 2 images" —
+`browser_navigate` → `browser_evaluate` → `attach_image` ×2, and **zero** markdown links.
 
 ## 2v. The inline "Computer" card — DONE
 
@@ -944,6 +969,40 @@ Verified in the running app, not just the API: with `Surfer` browsing and `Idle`
 pane at all. `getSubagents` on Surfer returns one row of `subagentType: "computerUse"`; on Idle,
 an empty list.
 
+## 2aa. Streaming: ours works, the pool's does not
+
+Reported as "the answer arrives in one lump, there is no streaming". Measured on both sides
+rather than reasoned about, because `chat.ts` does call `streamPool` and "it calls the streaming
+function" proves nothing — the same trap as `web_fetch` reporting `status=done` for a page it
+never read.
+
+**Our backend streams.** Sampling the transcript every 250 ms, the reply grows in place:
+
+```
+t+0.3s   len=0      streaming=true
+t+20.9s  len=43     streaming=true
+t+21.2s  len=111
+t+21.5s  len=227
+…16 growth steps…
+t+24.1s  len=1206
+```
+
+**The pool does not.** Calling `/v1/chat/completions` with `stream:true` directly, no backend
+involved:
+
+```
+HTTP 200 · first content at 8860ms · 3 chunks · 9.3s total
+```
+
+Three chunks, the first at 95% of the total time. The route accepts `stream:true` and answers
+with an SSE-shaped body, but the content is buffered upstream and flushed near the end. So the
+visible behaviour — a long silence, then the text appearing almost at once — is the pool's
+shape, faithfully relayed.
+
+Nothing to fix in this backend. What would change the experience is upstream (a pool route that
+forwards tokens as they arrive); what we can do meanwhile is make the wait legible, which the
+"Thinking" indicator now does since §2w.
+
 ## 3. Tool coverage: 24 of 54
 
 Measured by `scripts/tool-coverage.mjs`, which reads the **live** tool map (so a tool that
@@ -1034,3 +1093,154 @@ change available per unit of effort, and it is now a copy-and-adapt job rather t
 5. ~~MCP tools~~ — **done**.
 6. **Channels/listeners** → event-triggered routines.
 7. `web_search`/`web_fetch`, `todo_*`, `create_plan`, box file mutation.
+
+## 2ab. A pool outage left the bot spinning forever
+
+Reported as two separate bugs — "a new bot gives no reply" and "the bot spins forever" — and
+they turned out to be one upstream failure plus one defect of ours.
+
+**Upstream.** The model pool stopped answering completions. Its own pages still served in
+86–239ms (`GET /v1/docs`, `/health`, `/` all 200), and the key is accepted, but
+`POST /v1/claude` and `POST /v1/chat/completions` both time out. Nothing to fix locally; the
+turn simply produces nothing until it recovers.
+
+**Ours.** `runTurn`'s `!r.ok` branch wrote the error into the bubble, cleared `streaming`, and
+returned — without clearing presence. Every other exit from that function clears it; this was
+the one that did not, and it is the branch an outage takes. Measured against a dead pool:
+`isRunning=true`, `currentActivity={"kind":"thinking"}` still set 20 seconds after the bubble
+already read `[grokbot2] Pool error: …`. One line, `clearPresence(agentId)`.
+
+**The test lied first, and that is the part worth keeping.** `scripts/e2e-pool-failure.mjs`
+passed with the fix deliberately removed. The cause was Windows process handling: `spawn(…,
+{shell: true})` puts `cmd.exe` between the script and `tsx`, so `child.kill()` killed the
+wrapper and left the backend listening on 8799. Every later run reused that stale process —
+still running the *fixed* build — so the test was measuring code that was no longer on disk.
+It now refuses to start when the port is already answering, and kills the tree with
+`taskkill /T /F`. Proven both ways afterwards: 4/4 with the fix, 2/4 without
+(`isRunning=true`, `activity={"kind":"thinking"}`).
+
+Also fixed while in here: an SSE drop is not fatal. The client reconnects on its own in ~5s and
+survives outages of at least 120s — measured with `/gw/__dropsse`, a diagnostic route that cuts
+the stream while the server keeps answering. Killing the backend cannot answer that question,
+because it removes the retry target at the same moment.
+
+## 2ac. The transcript froze because our sequence numbers had gaps
+
+The reported symptoms were three, and they were one bug: a bubble stuck at "Để" while the
+backend held 1118 characters; a finished reply that only appeared minutes later; and a sidebar
+preview that was always correct while the conversation pane was not.
+
+**How the client consumes events.** There is no EventSource and no WebSocket — the coordinator
+reads SSE off a `fetch` body itself, and every domain keeps an *ordered replica* keyed by
+`"roster"` or `` `transcript:${agentId}` ``, with an epoch and a sequence. The accept rule is
+strict:
+
+```js
+if (t.sequence === this.acceptedSequence + 1) { this.value = applyEvent(…); this.acceptedSequence = t.sequence; this.drainBuffer(); return }
+this.bufferBounded(t.sequence, e.event);   // a gap parks the event in a bounded buffer…
+this.startAttempt();                       // …and asks for a resync
+```
+
+**What we sent.** `orderedFor(agentId, last.seq)` — the entry's **global** sequence, shared by
+every agent. So any other bot writing an entry put a hole in this bot's replica. Measured on the
+wire with two bots writing alternately: `1064, 1068, 1072, 1076` — a gap of four before every
+single event. Only the first event of a turn was ever applied live.
+
+The roster never had this bug because it always used its own counter (`++rosterSeq`). Same push,
+same connection, two different sequence sources — which is exactly why the preview updated while
+the bubble stood still. That asymmetry was the clue that named the cause.
+
+Fixed by counting **pushes per agent** (`nextTranscriptOrdered`), not entries. A streamed reply
+emits many events for one entry and each is an event the replica counts, so the counter advances
+per push. Measured after: `transcript:agent-170 → 1,2,3,4,5,6` and `transcript:agent-171 →
+1,2,3,4`, both starting at 1. `scripts/e2e-ordered-sequence.mjs` reads the raw frames and
+asserts contiguity; it fails 3/5 when the global sequence is put back, so it can actually catch
+the regression. It needs no model, so it runs while the pool is down.
+
+**A snapshot on reconnect turned out NOT to be needed**, which was the plan going in. The client
+resyncs itself: it derives an anchor from the `ordered` envelopes we already send
+(`observedAnchor = {epoch, sequence}`), refetches through the ordinary transcript method, and
+installs `coverage: {kind: "transcript-live-range", fromSequence, throughSequence}`. That path
+was working all along — it just re-broke on the very next event, because the next event had a
+gap too. Fix the numbering and the built-in recovery does the rest.
+
+**One dead frame removed.** The connect-time snapshot was sent on `channel: "roster"`. "roster"
+is the replica KEY, not one of the sixteen channel names the coordinator forwards, so the frame
+was dropped silently — the same trap as the presence bug, in the code written to fix the
+presence bug. It goes out on `agents` now, deliberately without `ordered`, because the client
+reads a missing envelope as "replace wholesale" and that is what a fresh connection wants.
+
+## 2ad. The computer pane is pushed now, not polled
+
+`forever-box` is the third of the sixteen SSE channels we use (after `transcript` and
+`agents`/`agent-upserted`), and the only one the coordinator treats specially: it runs
+`proxifyForeverBoxStatus(payload, vncProxy)` on the way past, rewriting `vncUrl` and any
+`windows[].vncUrl` through the VNC proxy. So the payload must BE the status object, not a
+wrapper — and `foreverBoxStatus()` already returns exactly that, `agentId` included. The
+renderer files it by that field: `ingestForeverBox: I => { const P = m(I.agentId); … }`, so a
+frame without it lands under `undefined` and the pane never leaves "off".
+
+Fired on transitions only, from three points in `forever-box.ts`: taking the computer, the
+release after the grace period, and a handoff appearing or clearing. `beginComputerUse` runs on
+**every** browser action, so it announces only the off → running edge — 5 repeat calls put 0
+extra frames on the wire (measured). Cancelling a pending release is not a change either: the
+status was "running" throughout the countdown.
+
+`scripts/e2e-box-push.mjs` reads the raw frames — 6/6, no model and no window needed, so it runs
+while the pool is down.
+
+**A leak found by the test, then fixed.** The release timer is armed by the end of a *turn*
+(`clearPresence → endComputerUse`), but the session is *started* by `ensureForeverBox`, which the
+client calls when the user opens the pane. Opening a pane is not a turn, so an idle bot the user
+glanced at reported `running` until its next turn finished — the §2z symptom (an idle bot showing
+a live screen) reached from the other side. The first version of this test hit exactly that and
+sat out the grace period waiting for a release nothing had armed.
+
+The obvious fix — stop claiming `running` — is wrong, and the client says why. Its placeholder
+falls through to `emptyMessage ?? "Booting up the computer"` with a spinner, and `emptyMessage`
+is a component prop no status reply can reach: answer `off` to an *ensure* and the pane spins for
+ever. That is the hang `beginComputerUse` was added here to fix.
+
+So the fix is to arm the release at the same moment: `beginComputerUse(id); endComputerUse(id)`.
+Nothing else changes — any tool action cancels the timer (`beginComputerUse` clears it) and the
+end of a turn re-arms it. It cannot be pushed out indefinitely by the client either, because
+`ensureForeverBox` fires on open/focus/reconnect while the *poll* is `getForeverBoxStatus`.
+Measured 9/9, and 7/9 with the one call removed — the case fails for the right reason
+("still running — nothing armed the release").
+
+## 2ae. A message arriving mid-turn swallowed the tool call
+
+Seen in a real multi-agent run: Frontend Dev's transcript held a 28,146-character bubble whose
+text ended in a complete, valid `TOOL_CALL: edit_file_v2({"relative_workspace_path":"index.html",
+…})` that never executed. The file was never written and the user was shown the machine line.
+
+The parser was innocent, and checking that first is what kept this from being a guess: the exact
+28k string matches `parseToolCall`'s regex in 0ms and yields `edit_file_v2`, which is registered
+and runs correctly when invoked directly (pending card, then done). What actually gave it away was
+the entry two rows earlier — an **empty** bubble, immediately followed by an inbound message. That
+is the fingerprint of an aborted turn:
+
+```
+sendPrompt → inflight.get(agentId)?.abort()        // a new message kills the running turn
+runTurn    → if (controller.signal.aborted) return;   // returns BEFORE tidying and BEFORE parsing
+```
+
+In a multi-agent conversation a peer writing to a bot mid-turn is the normal case, not an edge
+case, so this fires constantly. The early return left an empty bubble sitting for ever when
+nothing had been produced, and a finished answer with its `TOOL_CALL:` line exposed when the
+non-streaming fallback had already revealed the whole text.
+
+The abort path now tidies up: strip the machine line, keep what was said, and remove the bubble
+entirely if nothing was said. The tool is **not** run — the turn was abandoned because someone
+moved on, and acting on a superseded decision is worse than dropping it.
+
+`scripts/e2e-abort-swallows-tool.mjs` reproduces it by sending a second message three seconds
+into a tool-bound turn: 1/2 before the fix (`1 empty bubble(s)`), 2/2 after.
+
+**Bundle note.** This session's earlier contract reading was done against `index-lA9cgT4O.js`
+while the installed app runs `index-DNC736IO.js` — a different build. Re-extracted to
+`grokbot-fe-running` and re-checked the two fixes already shipped on the old reading: the
+`sequence === acceptedSequence + 1` rule and the `appended|updated|removed|cleared` reducer are
+byte-identical in the running build, so both hold. The `Messaged X` chip logic is identical too
+(`pm` / `m_n` / the grouping predicate all still read `fromAgent`/`toAgent`), so the missing chip
+is still unexplained and is NOT a stale-bundle artifact.

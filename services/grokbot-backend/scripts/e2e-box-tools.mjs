@@ -14,6 +14,12 @@ import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// The gateway now runs with GROKBOT2_AUTH=enforce, so an unauthenticated call answers 401 and
+// the script fails on `undefined.id` two lines later. The spawned backend reads the SAME token
+// file rather than minting its own (auth-gate reuses a saved token), so sending it is correct
+// and keeps these tests going through the real auth path instead of switching it off.
+import { gwHeaders } from "./gw-auth.mjs";
+
 const TOKEN = "e2e-token";
 const DAEMON_PORT = 18447;
 const BACKEND_PORT = 18448;
@@ -103,7 +109,7 @@ for (let i = 0; i < 40; i += 1) {
 
 const gw = (m, body = {}) =>
   fetch(`http://127.0.0.1:${BACKEND_PORT}/gw/api/${m}`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(body),
   }).then((r) => r.json());
 
 const agent = (await gw("createAgent", { name: "BoxToolTest" })).agent;

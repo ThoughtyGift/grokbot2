@@ -50,9 +50,11 @@ function diskPath(virtual: string): string {
       const virtual = `${DIR}/${name}`;
       try {
         const bytes = readFileSync(join(DISK, name));
-        const size = pngSize(bytes);
+        // Mime comes from the bytes, not from a constant: staging now accepts JPEG/GIF/WebP, and
+        // restoring them all as image/png would hand the renderer a data URL it cannot decode.
+        const size = imageSize(bytes);
         if (size == null) continue;
-        store.set(virtual, { bytes, mime: "image/png", ...size });
+        store.set(virtual, { bytes, ...size });
         const n = Number(/^(\d+)-/.exec(name)?.[1] ?? 0);
         if (n >= seq) seq = n + 1;
       } catch { /* skip unreadable */ }
@@ -61,6 +63,8 @@ function diskPath(virtual: string): string {
   } catch { /* no state dir yet */ }
 }
 
+interface Measured { width: number; height: number; mime: string }
+
 /** PNG carries its size in the IHDR chunk: 8-byte signature, 4 length, 4 "IHDR", w, h. */
 function pngSize(bytes: Buffer): { width: number; height: number } | null {
   if (bytes.length < 24 || bytes.toString("ascii", 12, 16) !== "IHDR") return null;
@@ -68,21 +72,104 @@ function pngSize(bytes: Buffer): { width: number; height: number } | null {
 }
 
 /**
+ * JPEG states its size in a start-of-frame segment, which has to be walked to.
+ *
+ * There is no fixed offset: the file is a chain of `FF <marker> <2-byte length>` segments, and
+ * a photo from a page carries EXIF, ICC and thumbnails ahead of the frame — so the marker can
+ * be tens of kilobytes in. Only the SOF markers hold the dimensions, and SOF4/SOF8/SOF12 are
+ * NOT among them (they are DHT/JPG/DAC, which is why the ranges below have holes). Segments
+ * without a length (standalone markers, and the padding FFs allowed between segments) must be
+ * stepped over one byte at a time or the walk desynchronises and reads garbage as a size.
+ */
+function jpegSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 3 < bytes.length) {
+    if (bytes[i] !== 0xff) { i += 1; continue; }        // resync past padding
+    const marker = bytes[i + 1];
+    if (marker === 0xff) { i += 1; continue; }           // fill byte
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+    if (marker === 0xda || marker === 0xd9) return null; // scan data begins; no frame header found
+    const len = bytes.readUInt16BE(i + 2);
+    const isSof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7)
+      || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
+    if (isSof) {
+      if (i + 9 > bytes.length) return null;
+      return { height: bytes.readUInt16BE(i + 5), width: bytes.readUInt16BE(i + 7) };
+    }
+    if (len < 2) return null;                            // malformed; refuse rather than loop
+    i += 2 + len;
+  }
+  return null;
+}
+
+/** GIF: "GIF87a"/"GIF89a", then the logical screen width and height, little-endian. */
+function gifSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length < 10 || bytes.toString("ascii", 0, 3) !== "GIF") return null;
+  return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+}
+
+/**
+ * WebP, whose three variants store the size three different ways.
+ *
+ * Worth handling rather than skipping: it is what most image CDNs now serve to a modern
+ * browser, so a WebP-only reader is the common case, not the exotic one.
+ */
+function webpSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length < 30 || bytes.toString("ascii", 0, 4) !== "RIFF" || bytes.toString("ascii", 8, 12) !== "WEBP") return null;
+  const chunk = bytes.toString("ascii", 12, 16);
+  if (chunk === "VP8X") return { width: (bytes.readUIntLE(24, 3) & 0xffffff) + 1, height: (bytes.readUIntLE(27, 3) & 0xffffff) + 1 };
+  // Lossy: the 14-bit dimensions sit after the 3-byte frame tag and the "*" sync code.
+  if (chunk === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+  // Lossless: 14 bits each, packed across four bytes after the 0x2f signature.
+  if (chunk === "VP8L" && bytes[20] === 0x2f) {
+    const b = bytes.readUInt32LE(21);
+    return { width: (b & 0x3fff) + 1, height: ((b >> 14) & 0x3fff) + 1 };
+  }
+  return null;
+}
+
+/**
+ * Measure any image the renderer can draw, and report its real mime alongside.
+ *
+ * The format is read from the bytes, never from the URL or the file name: a CDN serving
+ * `photo.jpg` as WebP is ordinary, and a wrong mime here reaches the renderer as a broken
+ * picture rather than as an error anyone could trace.
+ */
+export function imageSize(bytes: Buffer): Measured | null {
+  const png = pngSize(bytes);
+  if (png) return { ...png, mime: "image/png" };
+  const jpeg = jpegSize(bytes);
+  if (jpeg) return { ...jpeg, mime: "image/jpeg" };
+  const gif = gifSize(bytes);
+  if (gif) return { ...gif, mime: "image/gif" };
+  const webp = webpSize(bytes);
+  if (webp) return { ...webp, mime: "image/webp" };
+  return null;
+}
+
+/**
  * Keep an image and return the virtual path to put in `message.url`.
- * Returns null when the bytes are not a PNG we can measure — the renderer needs real
+ * Returns null when the bytes are not an image we can measure — the renderer needs real
  * width/height, and guessing them produces a blank frame.
  */
 export function stageImage(dataUrl: string, fileName: string): string | null {
   const comma = dataUrl.indexOf(",");
   if (!dataUrl.startsWith("data:") || comma < 0) return null;
-  const mime = dataUrl.slice(5, dataUrl.indexOf(";") >= 0 ? dataUrl.indexOf(";") : comma);
   const bytes = Buffer.from(dataUrl.slice(comma + 1), "base64");
-  const size = pngSize(bytes);
+  // The declared mime in the data URL is ignored in favour of the measured one. Callers build
+  // that prefix from a URL or a guess (the gateway hardcodes image/png), so it is the least
+  // reliable thing available, and the renderer decodes by mime.
+  const size = imageSize(bytes);
   if (size == null) return null;
 
-  const safe = fileName.replace(/[^A-Za-z0-9._-]/g, "_") || "image.png";
+  // The extension is the renderer's only routing signal (gate 1 above), so it has to match the
+  // real format: a WebP saved as `.png` reaches the image component and fails to decode there.
+  const ext = size.mime.slice(6);
+  const base = fileName.replace(/[^A-Za-z0-9._-]/g, "_") || `image.${ext}`;
+  const safe = new RegExp(`\\.${ext}$`, "i").test(base) ? base : `${base.replace(/\.[A-Za-z0-9]+$/, "")}.${ext}`;
   const path = `${DIR}/${seq++}-${safe}`;
-  store.set(path, { bytes, mime, ...size });
+  store.set(path, { bytes, ...size });
   try {
     mkdirSync(DISK, { recursive: true });
     writeFileSync(diskPath(path), bytes);

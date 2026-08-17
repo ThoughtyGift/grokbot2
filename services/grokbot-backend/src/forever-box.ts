@@ -88,15 +88,40 @@ const computerUsers = new Set<string>();
  * it had just opened. The point of watching is to see the result, so the screen stays up for a
  * while after the work stops. Any new action cancels the pending release.
  */
-const RELEASE_AFTER_MS = 120_000;
+// Env-overridable so the release path is testable: waiting two real minutes in a test means
+// the path never gets tested, which is how a cleanup that does not run ships unnoticed.
+const RELEASE_AFTER_MS = Number(process.env.GROKBOT2_COMPUTER_RELEASE_MS ?? 120_000);
 const releaseTimers = new Map<string, NodeJS.Timeout>();
+
+/** Fired when a computer session is really over, so its browser tab can be closed. */
+let onComputerReleased: ((agentId: string) => void) | null = null;
+export const setComputerReleaseSink = (fn: (agentId: string) => void): void => { onComputerReleased = fn; };
+
+/**
+ * Fired when an agent's computer status changes, so the pane can be pushed instead of polled.
+ *
+ * The client has a channel for this — `forever-box`, one of the sixteen the coordinator
+ * forwards, and the only one it treats specially (it rewrites `vncUrl` through the VNC proxy on
+ * the way past). Without a push the pane waits for the client's own poll, which is the lag
+ * behind "the Computer button takes a while to appear".
+ *
+ * Only real transitions are announced. `beginComputerUse` runs on **every** browser action, so
+ * firing on each call would put a frame on the wire per click while saying nothing new.
+ */
+let onStatusChanged: ((agentId: string) => void) | null = null;
+export const setBoxStatusSink = (fn: (agentId: string) => void): void => { onStatusChanged = fn; };
+const statusChanged = (agentId: string): void => { if (agentId) onStatusChanged?.(agentId); };
 
 /** This agent has started using the computer (a browser action, or a handoff it must watch). */
 export const beginComputerUse = (agentId: string): void => {
   if (!agentId) return;
   const t = releaseTimers.get(agentId);
   if (t) { clearTimeout(t); releaseTimers.delete(agentId); }
+  const wasUsing = computerUsers.has(agentId);
   computerUsers.add(agentId);
+  // The off → running edge only. Cancelling a pending release is not a change either: the
+  // status was already "running" the whole time the grace period was counting down.
+  if (!wasUsing) statusChanged(agentId);
 };
 
 /** Released a couple of minutes after the turn ends — never while a handoff is still on screen. */
@@ -104,7 +129,11 @@ export const endComputerUse = (agentId: string): void => {
   if (!agentId || handoffs.has(agentId) || releaseTimers.has(agentId)) return;
   const timer = setTimeout(() => {
     releaseTimers.delete(agentId);
-    if (!handoffs.has(agentId)) computerUsers.delete(agentId);
+    if (handoffs.has(agentId)) return;
+    computerUsers.delete(agentId);
+    // The tab goes with the session. Keeping it would leak one Chrome tab per bot, for ever.
+    onComputerReleased?.(agentId);
+    statusChanged(agentId);   // running → off
   }, RELEASE_AFTER_MS);
   // Do not hold the process open just to turn a screen off.
   timer.unref?.();
@@ -151,6 +180,9 @@ export function requestBoxHelp(agentId: string, instruction: string, snapshotDat
   };
   handoffs.set(agentId, handoff);
   onHandoffStart?.(agentId, handoff);
+  // A pending handoff keeps the screen live on its own (see foreverBoxStatus), so this is a
+  // status change even when the agent was not otherwise using the computer.
+  statusChanged(agentId);
   return new Promise((resolve) => resumers.set(agentId, resolve));
 }
 
@@ -159,6 +191,7 @@ export function handBackBox(args: { id?: unknown; agentId?: unknown; trigger?: u
   const agentId = boxId(args);
   const trigger = typeof args?.trigger === "string" ? args.trigger : "button";
   handoffs.delete(agentId);
+  statusChanged(agentId);   // the card is gone; the pane may now be off
   // Always, on both paths below. The transcript card has to stop saying "Action needed"
   // whether the waiting turn is resumed here or restarted from persisted history — hooking it
   // to `handBackSink` alone left it stuck, because that only fires on the restarted path.

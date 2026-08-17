@@ -2,25 +2,39 @@
   "plan": "P2",
   "run": 8,
   "gate": "A",
-  "backendCommit": "fbf21ab",
+  "backendCommit": "65ef15b",
   "appVersion": "0.20.0",
   "base": "http://localhost:8788",
   "summary": {
     "routes": {
-      "checks": 17,
-      "failed": 8
+      "checks": 19,
+      "failed": 10
     },
     "auth": {
       "checks": 5,
       "failed": 2
     },
     "channels": {
-      "checks": 7,
+      "checks": 8,
       "failed": 0
     }
   },
   "pass": false,
   "mismatches": [
+    {
+      "gate": "A",
+      "check": "POST /gw/local-exec/responses",
+      "expected": "reachable",
+      "actual": "unreachable: fetch failed",
+      "loai": 1
+    },
+    {
+      "gate": "A",
+      "check": "POST /gw/prepare-upgrade",
+      "expected": "reachable",
+      "actual": "unreachable: fetch failed",
+      "loai": 1
+    },
     {
       "gate": "A",
       "check": "POST /gw/webauthn/responses",

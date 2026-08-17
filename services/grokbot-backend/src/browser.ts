@@ -28,6 +28,15 @@ const CALL_TIMEOUT_MS = 20_000;
  */
 interface Session { socket: WebSocket; targetId: string }
 const sessions = new Map<string, Session>();
+/**
+ * Which tab each bot owns, tracked separately from its socket.
+ *
+ * `sessions` is deleted when the CDP socket closes — which happens on idle, long before the bot
+ * is finished with the tab. Closing from `sessions` therefore did nothing in the common case:
+ * measured, a deleted bot kept its tab open because its socket had already gone. The tab
+ * outlives the socket, so the record of it has to as well.
+ */
+const ownedTabs = new Map<string, string>();
 /** Which bot a call belongs to. Set per call so the 16 actions need no signature change. */
 let currentAgent = "default";
 let nextId = 0;
@@ -103,11 +112,13 @@ async function connect(): Promise<WebSocket> {
   });
   // A dropped socket must not strand every later call on a dead handle.
   ws.addEventListener("close", () => {
+    // Only the socket died; the tab is still open and still this bot's, so `ownedTabs` stays.
     if (sessions.get(agentId)?.socket === ws) sessions.delete(agentId);
     for (const [, slot] of pendingCalls) slot.reject(new Error("CDP socket closed"));
     pendingCalls.clear();
   }, { once: true });
   sessions.set(agentId, { socket: ws, targetId: target.id });
+  ownedTabs.set(agentId, target.id);
   return ws;
 }
 
@@ -408,6 +419,24 @@ export const BROWSER_TOOL_NAMES = Object.keys(ACTIONS);
 
 /** Anything a tool may do besides return text (mirrors chat.ts ToolCtx, kept local to avoid a cycle). */
 export interface BrowserCtx { attach(dataUrl: string, fileName: string, alt: string): void; agentId?: string }
+
+/**
+ * Close the tab a bot owned, when its computer session is released.
+ *
+ * One tab per bot, reused — which is what the original does too ("By default reuses your tab;
+ * set newTab: true to open in a new tab"). What was missing is the other half: nothing ever
+ * closed them. After a day of testing the box had 25 open tabs, most belonging to bots that had
+ * been deleted, all holding memory in one Chrome.
+ */
+export async function closeAgentTab(agentId: string): Promise<void> {
+  const targetId = ownedTabs.get(agentId);
+  const session = sessions.get(agentId);
+  ownedTabs.delete(agentId);
+  sessions.delete(agentId);
+  if (session) { try { session.socket.close(); } catch { /* already closed */ } }
+  if (!targetId) return;
+  try { await fetch(`${CDP_BASE()}/json/close/${targetId}`, { signal: AbortSignal.timeout(4000) }); } catch { /* tab already gone */ }
+}
 
 /** Bring the current bot's tab to the front of the shared window. */
 async function activateOwnTab(): Promise<void> {

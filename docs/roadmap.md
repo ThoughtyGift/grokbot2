@@ -45,10 +45,15 @@ coordinator accepts; it dropped every frame silently before the renderer saw it.
 `agent-upserted` / `agents` (parity.md §2w). Measured: a new bot appears in ~1.5s without a
 reload, and the avatar animates during a turn.
 
-**Follow-up from the same discovery.** We use 2 of the 16 pushable channels. `forever-box` is
-the valuable next one — it would push computer-pane status instead of waiting for the client's
-poll, which is the lag behind "the Computer button takes a while to appear". Then `subagents`,
+**Follow-up from the same discovery.** ~~We use 2 of the 16 pushable channels.~~ Three now:
+`forever-box` pushes computer-pane status on transitions instead of leaving it to the client's
+poll (parity.md §2ad, `scripts/e2e-box-push.mjs` 9/9). Remaining and unpushed: `subagents`,
 `outline`, `automations`, `host-settings`, `tray`.
+
+**Closed while wiring that:** `ensureForeverBox` started a computer session with nothing to end
+it — only the end of a *turn* armed the release, and opening a pane is not a turn. It now arms
+the release at the same moment. Answering `off` instead would have been wrong: the client's
+placeholder spins for ever on an ensure that reports off (parity.md §2ad).
 
 ### 2. ~~Per-bot computer pane~~ — DONE
 Scoped to a running `computerUse` subagent, the way the original does it (parity.md §2z).
@@ -56,26 +61,77 @@ Verified in the app: a browsing bot shows `webview=1` / "Surfer's screen", an id
 pane. Remaining and separate: one X display still means one picture, so two bots browsing at the
 same moment see the same desktop. Giving each its own would need an Xvfb + x11vnc per bot.
 
-### 3. Agent exchange viewer
-Clicking a `Messaged X` marker in the original opens a read-only pane of the two bots'
-conversation (`openAgentExchange`, `tunnelPeer` / `tunnelEntries`, "This chat is view-only").
-The entries we already emit are the right data. The unknown is the method that loads
-`tunnelEntries` — no name in the client's 85-method table matches, so it needs a
-click-and-read-the-log pass on the original, the way `respondToWidget` was pinned. **Do not
-guess it.**
+### 3. Agent exchange viewer — the unknown was a wrong assumption, not a missing method
+The blocker here was "find the gateway method that loads `tunnelEntries`". There is none, and
+that is why no name in the 85-method table matched. Read off the bundle:
 
-### 4. Images from a URL
-Remote image URLs do not render — the client fetches nothing from third-party hosts
-("Couldn't load image"), which is why the original always attaches bytes. To show images found
-on a page we must download and stage them; `stageImage()` measures PNG only, so JPEG sizing
-comes first or the renderer gets no width/height and draws a blank frame.
+```js
+le = useMemo(() => v == null ? [] : v.isGroup ? O : Uan(u, v.id, self), [v, u, O, t])
+//                                              ^ u = the transcript ALREADY on screen
+function Uan(entries, peerId, self) {          // pure filter, no I/O
+  for (const r of entries) {
+    if (r.kind !== "message") continue;                       // not "send-message"
+    if (r.toAgent?.id !== peerId && r.fromAgent?.id !== peerId) continue;
+    out.push({ kind: "send-message", id: r.id, author: r.toAgent ? self : r.fromAgent,
+               message: { type: "text", content: r.content }, timestampMs: r.timestampMs });
+  }
+}
+```
+
+For a 1:1 peer the pane is a client-side filter over entries the app already holds. Only the
+group case loads anything, and it loads through the ordinary transcript store —
+`PBe(id) → $Mt(id) → transcript.load(id)` — the same path the main chat uses, which we already
+serve. So the contract is entirely a *shape* obligation on our entries, and `messageAgent`
+already meets it: outbound `{kind:"message", role:"assistant", content, toAgent:{id,name}}`,
+inbound `{kind:"message", role:"user", content, fromAgent:{id,name}}` written by `sendPrompt`.
+
+`scripts/e2e-exchange.mjs` asserts the shape by re-implementing `Uan` against a real exchange
+(4/4).
+
+**Still open, and now with a sharper question.** The click no longer needs a human —
+`element.click()` drives this app fine (`Input.dispatchMouseEvent` never did) — but there is
+nothing to click: `scripts/e2e-remaining.mjs` opens the sender's conversation and finds no
+`[aria-label^="Open exchange with"]` chip and no "Messaged" marker anywhere on screen. The
+messages render as ordinary bubbles instead.
+
+Every client gate our entries must pass, they pass on paper:
+
+```js
+VIn(entry) = entry.kind === "message" && fm(entry)
+fm(n)      = n.kind === "message" && (n.fromAgent != null || n.toAgent != null)
+Rde(n)     = n.toAgent != null && n.toAgent.kind !== "agent"   // exclusion; we send kind:"agent"
+```
+
+and `messageAgent` writes `{kind:"message", role:"assistant", content, toAgent:{id,name,kind:"agent"}}`.
+So something downstream of `KIn`/`YWn` rejects them for a reason not yet found — do NOT guess it.
+The next step is to find where an entry list becomes rows and see which branch ours takes,
+rather than adding fields speculatively.
+
+### 4. ~~Images from a URL~~ — DONE
+`attach_image({url, alt})` downloads and stages the bytes, the only thing that works: the
+client refuses third-party image URLs (parity.md §2u). `imageSize()` grew from PNG-only to
+PNG · JPEG · GIF · WebP, mime and extension are read from the bytes rather than the caller, and
+the fetch is fenced against internal addresses because the URL comes from the model. Measured
+14/14 in `scripts/e2e-attach-image.mjs`, plus a live turn that attached two Wikipedia photos
+with zero markdown links.
+
+The batch form is in too: `{"urls":[…]}` attaches up to 8 in ONE tool step, so a request for
+several images cannot eat the whole `MAX_TOOL_STEPS` budget. Fetched in order rather than in
+parallel, so the transcript matches what was asked for; the internal-address fence still applies
+per URL, asserted with a batch that mixes good URLs and `127.0.0.1:9223` (17/17).
 
 ### 5. Smaller, known-shaped
 - `getAsyncTasks` returns `[]`; its content is background shells and cloud agents, which this
   backend does not have.
 - `ingestSubagentsEvent({parentAgentId, subagents})` — the subagent list updates only on poll.
-- Three e2e scripts (`e2e-memory`, `e2e-ask-question`, `e2e-box-tools`) spawn their own backend
-  and die on the port; they need to reuse the running one.
+- ~~Three e2e scripts die on the port.~~ Not the port — they already guarded it and killed the
+  tree. Two real causes: the gateway now runs `GROKBOT2_AUTH=enforce`, so their unauthenticated
+  calls got 401 and the script died on `undefined.id` a line later (they send `gwHeaders()` now;
+  the spawned backend reuses the saved token rather than minting one, so nothing is clobbered);
+  and `e2e-memory` guarded on `GROKBOT2_BOX_EXEC_URL` in its OWN process, which a plain `node`
+  shell never has — it reads the repo-root `.env` itself now. Also fixed one ruler: the
+  ask_question test regex-matched the machine value (`tau_hoa`) against a natural-language reply,
+  so it could only pass if the model parroted an internal id. Now: 17/17 · 6/6 · 7/7.
 
 ## Not worth doing
 - **Channels / listeners.** The original ships exactly two connector manifests, Discord and
