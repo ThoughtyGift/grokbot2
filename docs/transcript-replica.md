@@ -178,7 +178,46 @@ inference that main forwards the envelope as-is rests on `replicaKey` appearing 
 `main.cjs` — which equally supports main not participating in this at all, with the renderer
 fed from somewhere else entirely.
 
-**Stop guessing here.** Three shapes tried blind is the signal. What settles it is seeing
-what a real box sends on that stream, which needs an entitled account, or finding the SSE
-parser in `main.cjs` by structure rather than by string search — every `text/event-stream`
-and `EventSource` hit so far has been undici's bundled library, not the app's own use of it.
+## Found: the parser is in a different process
+
+`main.cjs` was the wrong file. The SSE client lives in `dist/node-agent-coordinator/main.cjs`
+— a separate 140 KB bundle, unminified, with its original comments. That is the "coordinator"
+the renderer refers to, and it is the only place `text/event-stream`, `/events` and `/api`
+appear outside undici.
+
+```js
+var GATEWAY_API_PREFIX = "/api";
+var GATEWAY_EVENTS_PATH = "/events";
+var GATEWAY_HEALTH_PATH = "/health";
+
+dispatchEventBlock(block, vncProxy) {
+  const dataLines = block.split("
+").filter(l => l.startsWith("data:")).map(l => l.slice(5).trim());
+  if (dataLines.length === 0) return;
+  const event = JSON.parse(dataLines.join("
+"));
+  if (typeof event.channel !== "string" || event.channel.length === 0) return;   // <-- here
+  this.options.onEvent({ channel: event.channel, payload: event.payload });
+}
+```
+
+**Every event needs `channel` and `payload`.** This backend had been sending
+`{kind, agentId, ordered, event}` — no `channel` — so every event it ever emitted was
+discarded on that line, silently. That is why fixing the envelope *inside* the payload three
+times changed nothing: none of it ever got past the first check to be looked at.
+
+Channel names come from the client's own method-to-domain map: `transcript`, `roster`,
+`send`, `widgets`, `approvals`, `capabilities`, `sharing`, `automations`, plus `forever-box`.
+
+## Result
+
+Measured against the running app after wrapping events as `{channel, payload}`:
+
+| | before | after |
+|---|---|---|
+| reply appears in the window | 33s, or never | **0.4s** |
+| typing indicator | never | **"Thinking" shows** |
+
+The lesson worth keeping: three correct payloads failed because of a wrapper, and nothing
+reported an error at any point. When repeated correct-looking fixes change nothing at all,
+the thing to question is whether the message is being *read*, not what is inside it.

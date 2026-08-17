@@ -325,11 +325,28 @@ component takes `{draft, status, onSend, onDiscard}` and `status` has `sending` 
 states. Absence of a guessed name is not absence of a feature — the handler simply lives in a
 lazily-loaded chunk under a different one.
 
-**Still open:** which gateway method `onSend` calls. It could not be resolved statically, and
-the click-and-read-the-log approach that pinned `respondToWidget` has not landed on the card yet.
-Until it is known, the tools say plainly that nothing has been sent, and the prompt tells the
-model not to claim otherwise. Do not guess this one: emitting the wrong method name is the exact
-failure this document exists to record.
+**Resolved — there is no method.** The earlier search failed because it assumed one existed.
+The draft cards live in their own lazily-loaded chunks (`view-DdBVyaYO.js` for Slack,
+`view-VJCKZMro.js` for email), and each ends the same way:
+
+```js
+onDiscard: zs, onSend: Ss, status: q     // passed into the card
+function Ss(){}                          // onSend
+function zs(){}                          // onDiscard
+```
+
+Both handlers are empty, and neither identifier is assigned anywhere else in its chunk
+(`grep 'Ss='` / `'zs='` return nothing). The Send and Discard buttons render, they are
+clickable, and clicking them does nothing in this build.
+
+The half that *is* wired runs the other way: `status` comes from `entry.draftSendState`
+(`entry.draftSendState ?? "editable"`, values `editable | sending | sent`), and in the whole
+renderer `draftSendState` appears exactly once — inside the memo cache-key builder. The client
+only ever **reads** it. So the state is the backend's to drive, and there is no round trip to
+implement.
+
+Our behaviour therefore already matches the original: the cards render, nothing can be sent,
+and the tools say so. Note this is *not* "unfinished on our side" — it is unfinished upstream.
 
 ## 2m. Bot-to-bot messaging — DONE
 
@@ -401,6 +418,64 @@ keeps a socket bound while forwarding nothing, and reports which of three states
 whenever that changes: `up` (answers, whoever owns it), `blocked` (bound, no answer — needs a
 human), `dialing`. `-Status` prints the same in one line. Verified by killing the manual tunnel:
 detected and redialed in 19s.
+
+## 2p. `getSubagents` — shape resolved, and implemented
+
+`getSubagents({id}) → array`, where `id` is the **parent** agent. The host builds it in one
+place, so the shape is not a guess:
+
+```js
+function listSubagents() {
+  return [...subagentRegistry.entries()].map(([subagentId, record]) => ({
+    subagentId, subagentType: record.subagentType, title: record.title,
+    status: record.status, startedAtMs: record.startedAtMs
+  })).sort((a, b) => a.startedAtMs - b.startedAtMs);
+}
+```
+
+Two traps in the details:
+
+* **`status` is `running | done | aborted | error`.** Grepping for status strings near the
+  registry turns up `completed`, but that is the *outcome*'s vocabulary — the host translates
+  on the way in: `outcome.status === "completed" ? "done" : "error"`. Storing "completed"
+  would render a row the client has no state for.
+* **`subagentType` is a free string**, taken from the task's own `subagent_type`, not an enum.
+  Our `browserUse` / `explore` / `shell` belong there unchanged.
+
+There is a push channel too: `ingestSubagentsEvent({parentAgentId, subagents})`.
+
+Implemented against that: `task_v2` registers a row before dispatching (a list that only gains
+a row when the work *finishes* never shows anything running) and settles it after. Verified end
+to end — `running` while the subagent worked, `done` after, and empty for every other bot.
+
+Worth recording about the test itself: the first two attempts showed an empty list and looked
+like a bug in the new code. Neither had run a subagent. The model answered a trivial "list the
+workspace" by calling `list_dir_v2` directly instead of delegating, and the second attempt sat
+in `task_v2`'s approval card. Read the tool **name** in the transcript before concluding
+anything from an empty list.
+
+## 2q. Channels and listeners — matched, because there is nothing to build
+
+The original ships exactly two connector manifests, both unusable:
+
+```js
+var CONNECTOR_MANIFESTS = [
+  { platform: "discord", displayName: "Discord", blurb: "… (coming soon).",
+    credentialLabel: "bot token", availability: "coming-soon", connectGuide: "" },
+  { platform: "slack",   displayName: "Slack",   blurb: "… (coming soon).",
+    credentialLabel: "app token", availability: "coming-soon", connectGuide: "" },
+];
+```
+
+`connectGuide` is empty for both, and the agent-facing text ends with "Coming soon (not
+connectable yet)". So OAuth, a public webhook and platform clients are not the missing work —
+they are missing upstream too.
+
+What *was* wrong on our side was the shape. A "channels-view" is `{manifests, connections}`
+(the host returns `{manifests: CONNECTOR_MANIFESTS, connections: <filtered>}`); we were
+returning `{channels: []}`, an invented key, so our panel rendered empty where the original's
+lists both platforms as coming soon. Now we return the real manifests and an empty
+`connections`, which is byte-for-byte what the original produces with nothing connected.
 
 ## 3. Tools: 9 of 54 — but most of the 45 do not matter
 

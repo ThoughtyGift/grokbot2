@@ -58,6 +58,20 @@ import { foreverBoxStatus, handBackBox } from "./forever-box.js";
 import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 
+/**
+ * The connector manifests, copied from the original's `src/shared/channels.ts`.
+ *
+ * Both entries really are `coming-soon` in the shipped app, with an empty `connectGuide` —
+ * so the original cannot connect a channel either. This is not a stub standing in for
+ * something richer; it is the whole feature as it ships today.
+ */
+const CONNECTOR_MANIFESTS = [
+  { platform: "discord", displayName: "Discord", blurb: "Message in Discord servers and DMs (coming soon).", credentialLabel: "bot token", availability: "coming-soon", connectGuide: "" },
+  { platform: "slack", displayName: "Slack", blurb: "Message in Slack channels and DMs (coming soon).", credentialLabel: "app token", availability: "coming-soon", connectGuide: "" },
+] as const;
+
+const channelsView = () => ({ manifests: CONNECTOR_MANIFESTS, connections: [] });
+
 /** In-memory notification trays (the FE lists/dismisses these). */
 const trays: { id: string; kind: string; title: string; timestampMs: number }[] = [];
 
@@ -88,8 +102,24 @@ const sseClients = new Set<ServerResponse>();
 const sseStats: { opened: number; closed: number; lastOpenedMs: number; lastOpen?: unknown } = { opened: 0, closed: 0, lastOpenedMs: 0 };
 
 // Push a nudge so the frontend re-fetches the transcript when chat updates.
-const broadcast = (payload: unknown): void => {
-  const line = `data: ${JSON.stringify(payload)}\n\n`;
+/**
+ * Send one event on the stream.
+ *
+ * The coordinator's decoder is unforgiving, and silent about it:
+ *
+ *   const event = JSON.parse(dataLines.join("\n"));
+ *   if (typeof event.channel !== "string" || event.channel.length === 0) return;
+ *   this.options.onEvent({ channel: event.channel, payload: event.payload });
+ *
+ * No `channel`, no delivery — and no error either. Every event this backend has ever sent
+ * was dropped on that line, which is why correcting the envelope INSIDE the payload three
+ * times changed nothing: none of it ever got past the first check to be looked at.
+ *
+ * Channel names come from the client's own method-to-domain map: transcript, roster, send,
+ * widgets, approvals, capabilities, sharing, automations, plus forever-box.
+ */
+const broadcast = (channel: string, payload: unknown): void => {
+  const line = `data: ${JSON.stringify({ channel, payload })}\n\n`;
   for (const r of sseClients) {
     try { r.write(line); } catch { /* client gone */ }
   }
@@ -100,7 +130,7 @@ const broadcast = (payload: unknown): void => {
 const announced = new Map<string, number>();
 setUpdateSink((agentId) => {
   const last = latestEntry(agentId);
-  if (!last) { broadcast({ kind: "transcript-updated", agentId }); return; }
+  if (!last) { broadcast("transcript", { agentId }); return; }
   // onUpdate fires on every streamed token, so the same entry would be announced over and
   // over at the same sequence. A replica accepts a sequence once; repeats read as already
   // seen and are dropped, taking the real update with them. So "added" is sent once per
@@ -108,8 +138,7 @@ setUpdateSink((agentId) => {
   const seen = announced.get(agentId);
   const type = seen === last.seq ? "updated" : "added";
   announced.set(agentId, last.seq);
-  broadcast({
-    kind: "transcript-updated",
+  broadcast("transcript", {
     agentId,
     ordered: orderedFor(agentId, last.seq),
     event: { type, entry: last },
@@ -120,9 +149,9 @@ setRosterSink((agentId) => {
   // A single-agent update needs the envelope or the client discards it outright; presence
   // (isRunning / isComposingMessage) rides here, so without it the indicator never mounts.
   const agent = agentId ? agentById(agentId) : undefined;
-  broadcast(agent
-    ? { kind: "roster-updated", ordered: nextRosterOrdered(), agent, activeAgentId: agent.id }
-    : { kind: "roster-updated" });
+  broadcast("roster", agent
+    ? { ordered: nextRosterOrdered(), agent, activeAgentId: agent.id }
+    : { agents: listAgents() });
 });
 setInterval(() => {
   for (const r of sseClients) {
@@ -256,10 +285,14 @@ const methods: Record<string, (args: any) => unknown> = {
   updateAgentAutomation: (a) => updateAgentAutomation(a),
   deleteAgentAutomation: (a) => deleteAgentAutomation(a),
   runAgentAutomationNow: (a) => runAgentAutomationNow(a),
-  getAgentChannels: () => ({ channels: [] }),
-  connectChannel: () => ({ channels: [] }),
-  disconnectChannel: () => ({ channels: [] }),
-  refreshChannel: () => ({ channels: [] }),
+  // A "channels-view" is `{manifests, connections}` — the host builds it as
+  // `{manifests: CONNECTOR_MANIFESTS, connections: <filtered>}`. The previous `{channels: []}`
+  // was an invented key, so our channels panel rendered empty while the original's lists both
+  // platforms. Since nothing here is connectable, matching it exactly costs one constant.
+  getAgentChannels: () => channelsView(),
+  connectChannel: () => channelsView(),
+  disconnectChannel: () => channelsView(),
+  refreshChannel: () => channelsView(),
   getListenerConnectUrl: () => ({ url: "" }),
   getSkillPublishTargets: () => ({ targets: [] }),
   publishSkill: () => ({ ok: false }),
@@ -313,11 +346,13 @@ export function handleGateway(url: string, body: Buffer, res: ServerResponse, he
     // (K0t is constructed with expectedCoverageKind: "complete-roster").
     const snap = listAgents();
     res.write(`data: ${JSON.stringify({
-      kind: "roster-snapshot",
-      ordered: nextRosterOrdered(),
-      coverage: { kind: "complete-roster" },
-      agents: snap,
-      activeAgentId: snap[0]?.id ?? null,
+      channel: "roster",
+      payload: {
+        ordered: nextRosterOrdered(),
+        coverage: { kind: "complete-roster" },
+        agents: snap,
+        activeAgentId: snap[0]?.id ?? null,
+      },
     })}
 
 `);
