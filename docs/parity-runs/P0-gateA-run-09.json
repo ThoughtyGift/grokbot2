@@ -1,0 +1,20 @@
+{
+  "plan": "P0",
+  "run": 9,
+  "gate": "A",
+  "backendCommit": "fbf21ab",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 16,
+      "failed": 0
+    },
+    "auth": {
+      "checks": 6,
+      "failed": 0
+    }
+  },
+  "pass": true,
+  "mismatches": []
+}
