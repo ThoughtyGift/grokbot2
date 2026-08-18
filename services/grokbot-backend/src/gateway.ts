@@ -68,6 +68,7 @@ import {
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, type ChannelName } from "./channels.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
+import { handleGitHubEvent } from "./github-events.js";
 import { clearUnknown } from "./observe.js";
 
 /**
@@ -705,6 +706,17 @@ export function handleGateway(
     let parsed: Record<string, unknown> = {};
     try { parsed = body.length ? JSON.parse(body.toString("utf8")) : {}; } catch { /* bad JSON → treated as unknown event */ }
     const out = handleSlackEvent(parsed);
+    res.writeHead(out.status, { "content-type": "application/json" });
+    res.end(JSON.stringify(out.body));
+    return true;
+  }
+  // GitHub webhooks — the event name rides in the X-GitHub-Event header, not the body. Exempt from the
+  // gateway ticket in auth-gate.ts: GitHub signs with X-Hub-Signature-256, not our bearer.
+  if (url.startsWith("/gw/github/events")) {
+    let parsed: Record<string, unknown> = {};
+    try { parsed = body.length ? JSON.parse(body.toString("utf8")) : {}; } catch { /* bad JSON */ }
+    const event = String(headers["x-github-event"] ?? "");
+    const out = handleGitHubEvent(event, parsed);
     res.writeHead(out.status, { "content-type": "application/json" });
     res.end(JSON.stringify(out.body));
     return true;

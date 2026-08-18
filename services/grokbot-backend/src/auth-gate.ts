@@ -163,6 +163,7 @@ export function checkAuth(url: string, headers: Record<string, unknown>): AuthVe
   // authenticate with their own X-Slack-Signature instead (verified in slack-events.ts once the
   // signing secret is set). Gating this on our bearer would reject every real Slack event.
   if (url.startsWith("/gw/slack/events")) return { allow: true, saw };
+  if (url.startsWith("/gw/github/events")) return { allow: true, saw };  // GitHub signs with X-Hub-Signature-256, not our bearer
 
   const channel = requiresToken(url);
   if (saw === "no-header" || saw === "other-scheme") {
