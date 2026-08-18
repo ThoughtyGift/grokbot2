@@ -399,19 +399,35 @@ const methods: Record<string, (args: any) => unknown> = {
   // the entry point it never had. Only PNG can be measured (the renderer needs real width/height,
   // see attachments.ts), so anything else is refused with a reason rather than stored broken.
   uploadAttachment: (a) => {
-    const b64 = typeof a?.dataUrl === "string" ? a.dataUrl
+    // The client's field names are `filename` + `bytesBase64`, and it reads `path` back. Taken from
+    // its own commit step in the bundle, which is unambiguous:
+    //
+    //   return (await e.uploadAttachment({ filename: I, bytesBase64: R.toString("base64") })).path
+    //
+    // We accepted `dataUrl`/`bytes`/`pngBase64` + `fileName` and answered `{ok, url}` — so a real
+    // upload from the app matched NOTHING: `b64` came out empty, the call was refused, and the
+    // client read `.path` as undefined. That is the whole "Couldn't send your message" / no-thumbnail
+    // report: the bytes never landed, so there was no attachment to preview or to send. Our own test
+    // scripts passed because they spoke our invented dialect, which is exactly how a contract bug
+    // survives a green test suite. The old spellings stay accepted so those scripts keep working.
+    const b64 = typeof a?.bytesBase64 === "string" ? a.bytesBase64
+      : typeof a?.dataUrl === "string" ? a.dataUrl
       : typeof a?.bytes === "string" ? a.bytes
       : typeof a?.pngBase64 === "string" ? `data:image/png;base64,${a.pngBase64}`
       : "";
-    const name = typeof a?.fileName === "string" ? a.fileName : typeof a?.name === "string" ? a.name : "upload.png";
-    if (!b64) return { ok: false, reason: "uploadAttachment needs dataUrl / bytes / pngBase64" };
+    const name = typeof a?.filename === "string" ? a.filename
+      : typeof a?.fileName === "string" ? a.fileName
+      : typeof a?.name === "string" ? a.name : "upload.png";
+    if (!b64) return { ok: false, reason: "uploadAttachment needs bytesBase64 / dataUrl / bytes / pngBase64" };
     const dataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
     // Images go through stageImage (it measures dimensions the renderer needs); anything else — a PDF,
     // a .txt, a .docx — falls back to stageFile so "Attach files" is not images-only. The mime the
     // client declared in the data URL is what stageFile keeps.
     const mime = typeof a?.mimeType === "string" ? a.mimeType : undefined;
     const url = stageImage(dataUrl, name) ?? stageFile(dataUrl, name, mime);
-    return url ? { ok: true, url, fileName: name } : { ok: false, reason: "empty or unreadable attachment bytes" };
+    // `path` is what the client keeps and later sends back in `attachments[]`; `url`/`fileName` are
+    // kept for our own scripts. Same value — the staged virtual path readImageAttachment resolves.
+    return url ? { ok: true, path: url, url, fileName: name } : { ok: false, reason: "empty or unreadable attachment bytes" };
   },
 
   // ── P3-1 · connector card ───────────────────────────────────────────────────
