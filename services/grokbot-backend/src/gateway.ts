@@ -57,7 +57,7 @@ import {
 } from "./automations.js";
 import { loadState, scheduleSave } from "./store.js";
 import { foreverBoxStatus, handBackBox, beginComputerUse, endComputerUse, setBoxStatusSink } from "./forever-box.js";
-import { readAttachmentImage, readAttachmentText, readAttachmentChunk } from "./attachments.js";
+import { readAttachmentImage, readAttachmentText, readAttachmentChunk, stageFile } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 import { closeMcp, mcpServers } from "./mcp.js";
 import { stageImage, stagedCount } from "./attachments.js";
@@ -405,8 +405,13 @@ const methods: Record<string, (args: any) => unknown> = {
       : "";
     const name = typeof a?.fileName === "string" ? a.fileName : typeof a?.name === "string" ? a.name : "upload.png";
     if (!b64) return { ok: false, reason: "uploadAttachment needs dataUrl / bytes / pngBase64" };
-    const url = stageImage(b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`, name);
-    return url ? { ok: true, url, fileName: name } : { ok: false, reason: "only measurable PNG bytes can be staged" };
+    const dataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
+    // Images go through stageImage (it measures dimensions the renderer needs); anything else — a PDF,
+    // a .txt, a .docx — falls back to stageFile so "Attach files" is not images-only. The mime the
+    // client declared in the data URL is what stageFile keeps.
+    const mime = typeof a?.mimeType === "string" ? a.mimeType : undefined;
+    const url = stageImage(dataUrl, name) ?? stageFile(dataUrl, name, mime);
+    return url ? { ok: true, url, fileName: name } : { ok: false, reason: "empty or unreadable attachment bytes" };
   },
 
   // ── P3-1 · connector card ───────────────────────────────────────────────────

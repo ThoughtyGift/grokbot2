@@ -189,6 +189,37 @@ export function stageImage(dataUrl: string, fileName: string): string | null {
  * lookup misses, and feeds the result straight into the image component, which needs
  * `width`/`height` present or it renders "Image unavailable".
  */
+/**
+ * Stage a NON-image file — what "Attach files" needs beyond pictures.
+ *
+ * stageImage measures the bytes and refuses anything that is not a decodable image, which is right for
+ * the image component but rejects a PDF, a .txt, a .docx — every ordinary attachment. This keeps any
+ * bytes, records the mime the client declared (there is nothing to measure), and writes it to the same
+ * store so readAttachmentText/readAttachmentChunk can read it back. width/height are 0: not an image,
+ * and non-image attachments route by extension, not dimensions.
+ */
+export function stageFile(dataUrl: string, fileName: string, mimeType?: string): string | null {
+  const comma = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || comma < 0) return null;
+  const bytes = Buffer.from(dataUrl.slice(comma + 1), "base64");
+  if (bytes.length === 0) return null;
+  const declared = mimeType || dataUrl.slice(5, comma).split(";")[0] || "application/octet-stream";
+  const base = (fileName || "file").replace(/[^A-Za-z0-9._-]/g, "_");
+  const path = `${DIR}/${seq++}-${base}`;
+  store.set(path, { bytes, mime: declared, width: 0, height: 0 });
+  try {
+    mkdirSync(DISK, { recursive: true });
+    writeFileSync(diskPath(path), bytes);
+  } catch { /* memory-only for this run */ }
+  while (store.size > MAX_ENTRIES) {
+    const oldest = store.keys().next().value;
+    if (oldest === undefined) break;
+    store.delete(oldest);
+    try { unlinkSync(diskPath(oldest)); } catch { /* already gone */ }
+  }
+  return path;
+}
+
 export function readAttachmentImage(args: { path?: unknown }): { dataUrl: string; width: number; height: number } | null {
   const path = typeof args?.path === "string" ? args.path : "";
   const hit = store.get(path);
