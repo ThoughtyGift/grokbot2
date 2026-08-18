@@ -73,13 +73,74 @@ function foldSystem(messages: PoolMessage[], system?: string): PoolMessage[] {
   return messages.map((m, i) => (i === head ? { ...m, content: `${system}\n\n---\n\n${m.content}` } : m));
 }
 
+/**
+ * Vision goes through /v1/messages with a TOP-LEVEL `image` field, not /v1/claude.
+ *
+ * The pool's docs are explicit and were verified live (18/08): gemini-3.7-flash and the Claude family
+ * accept image input, but ONLY on the Anthropic-native /v1/messages route, with the image as a plain
+ * `image` field (base64 data URL or URL, alias image_input/image_urls) at the top of the body — NOT
+ * as /v1/claude's `image` (silently dropped), NOT as an Anthropic content block (400 "Could not
+ * process image"), NOT via chat/completions image_url (empty). With the right route and a valid PNG:
+ *   POST /v1/messages {model, messages, image: dataUrl} -> {content:[{type:"text", text:"…màu đỏ."}]}
+ * so an attached image finally reaches the model. Earlier "the pool has no vision" was a wrong route,
+ * not a missing capability.
+ */
+async function callVision(messages: PoolMessage[], opts: PoolOptions): Promise<PoolResult> {
+  const url = opts.url.replace(/\/v1\/claude$/, "/v1/messages");
+  const body = JSON.stringify({
+    model: opts.model ?? "sonnet",
+    messages: foldSystem(messages, opts.system),
+    image: opts.image,
+    max_tokens: opts.maxTokens ?? 2048,
+    stream: false,
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${opts.key}` },
+      body,
+      signal: controller.signal,
+    });
+    const raw = await res.text();
+    let json: any;
+    try { json = JSON.parse(raw); } catch {
+      return { ok: false, status: res.status, error: `pool bad response (${res.status}): ${raw.slice(0, 120)}` };
+    }
+    // Anthropic-native shape: content is an array of blocks; join the text ones.
+    const text = Array.isArray(json.content)
+      ? json.content.map((b: any) => (typeof b?.text === "string" ? b.text : "")).join("")
+      : undefined;
+    if (typeof text === "string" && text.trim()) {
+      return { ok: true, text, account: json.account, status: res.status };
+    }
+    const err = json.error?.message ?? json.error?.type ?? json.error ?? json.message;
+    return {
+      ok: false,
+      status: res.status,
+      error: typeof err === "string" ? err : `pool vision HTTP ${res.status}: ${JSON.stringify(err ?? json).slice(0, 200)}`,
+      account: json.account,
+    };
+  } catch (e: any) {
+    return { ok: false, error: e?.name === "AbortError" ? "aborted" : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Call the pool once and return the full assistant text (non-streaming). */
 export async function callPool(messages: PoolMessage[], opts: PoolOptions): Promise<PoolResult> {
+  // An image only reaches the model on the /v1/messages route (see callVision).
+  if (opts.image) return callVision(messages, opts);
   const body = JSON.stringify({
     messages: foldSystem(messages, opts.system),
     model: opts.model ?? "sonnet",
     maxTokens: opts.maxTokens ?? 2048,
-    ...(opts.image ? { image: opts.image } : {}),
   });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 185_000);
