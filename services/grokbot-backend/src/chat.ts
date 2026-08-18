@@ -40,6 +40,17 @@ const IMG_MIME: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
 };
 /** Read the first image attachment (a local file path the FE staged) as a data: URL for the pool. */
+/**
+ * Normalise the two attachment dialects into one list.
+ *
+ * The client sends `attachmentPaths` + `attachmentNames` (parallel arrays); our own scripts send
+ * `attachments: [{path,name}]`. Both are accepted so a real upload and the test suite agree.
+ */
+function attachmentsOf(a: SendArgs): { path?: string; name?: string }[] {
+  if (a.attachments?.length) return a.attachments;
+  return (a.attachmentPaths ?? []).map((path, i) => ({ path, name: a.attachmentNames?.[i] }));
+}
+
 function readImageAttachment(atts?: { path?: string; name?: string }[]): string | undefined {
   for (const a of atts ?? []) {
     if (!a.path) continue;
@@ -201,6 +212,8 @@ export type AgentActivity = { kind: "thinking" } | { kind: "tool"; tool: string;
 export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
   avatarDataUrl?: string; avatarVersion?: string; notificationsEnabled?: boolean; notifyOnUpdates?: boolean;
+  /** "What this Bot is for" from the Settings panel. The original calls it `purpose` on the record. */
+  description?: string;
   /**
    * Presence — what drives the typing/working indicator and the avatar animation.
    *
@@ -1522,12 +1535,24 @@ function summarise(a: AgentRecord): RosterRow {
     updatedAt,
     snapshotEpoch: EPOCH,
     snapshotSeq: rosterSeq,
-    description: "",
+    // Was hardcoded `""`, so the Settings field reset itself on every refresh no matter what was
+    // typed. It must stay a string: the client validates each roster row and drops the WHOLE row
+    // when `typeof n.description !== "string"` (see the validator quoted above), which would take
+    // the bot out of the sidebar entirely. The original also carries it as `purpose` on the record
+    // (`...e?.purpose != null ? {purpose: e.purpose} : {}`), so both names travel.
+    description: a.description ?? "",
+    ...(a.description ? { purpose: a.description } : {}),
     path: `/agents/${a.id}`,
     createdAt: a.createdAtMs,
     hasUnread: a.unread === true,
     notificationsEnabled: a.notificationsEnabled === true,
-    notifyOnUpdatesEnabled: a.notifyOnUpdates === true,
+    // Default ON, like the original — its own record builder ships
+    // `notificationsEnabled:!1, notifyOnUpdatesEnabled:!0`, i.e. the finish/needs-input toggle
+    // starts enabled and only the noisier one starts off. Ours read `=== true`, so a brand new bot
+    // began with the switch off while the panel drew it on, and the first click appeared to do
+    // nothing (it was writing the value it already displayed). `!== false` keeps an explicit
+    // opt-out intact while making "never set" mean on.
+    notifyOnUpdatesEnabled: a.notifyOnUpdates !== false,
     isGroup: false,
     origin: "user",
     lastMessageId: last ? last.id : null,
@@ -1571,16 +1596,26 @@ export function pushListenerConnect(agentId: string, platform: string, reason = 
   onUpdate(agentId);
 }
 
-export function updateAgent(a: { id?: string; agentId?: string; name?: string; profile?: { name?: string } }): AgentRecord | null {
+export function updateAgent(
+  a: { id?: string; agentId?: string; name?: string; description?: string; profile?: { name?: string; description?: string } },
+): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const name = a.profile?.name ?? a.name;
+  // The Settings panel sends BOTH fields together — measured, not guessed:
+  //   updateAgent { id: "agent-313", profile: { name: "Trưởng phòng", description: "" } }
+  // Only `name` was ever read, so every description typed in was accepted and silently discarded.
+  // An empty string is a real value here (clearing the field), so this checks the type, not truthiness.
+  const description = a.profile?.description ?? a.description;
+  if (typeof description === "string") rec.description = description;
   if (typeof name === "string" && name.length > 0 && name !== rec.name) {
     // Record the rename before applying it — the original keeps `from` and `to`, which is only
     // possible while the old name is still here.
     pushTranscriptEvent(rec.id, { type: "name-changed", from: rec.name, to: name });
     rec.name = name;
   }
-  persist(); return rec;
+  // Without this the sidebar and the panel keep rendering the pre-edit row until a full refetch,
+  // which is indistinguishable from "the edit did not save".
+  persist(); rosterChanged(rec.id); return rec;
 }
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
   const ids = a.ids ?? a.agentIds ?? (a.id ? [a.id] : []);
@@ -1604,16 +1639,16 @@ export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecor
 }
 // The FE sends {id, isUnread} / {id, isHidden} — accept both spellings.
 export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); rosterChanged(a.id ?? a.agentId); return {};
 }
 export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; persist(); return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.hidden = a.isHidden ?? a.hidden ?? true; persist(); rosterChanged(a.id ?? a.agentId); return {};
 }
 export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.isEnabled ?? a.enabled ?? true; persist(); return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notificationsEnabled = a.isEnabled ?? a.enabled ?? true; persist(); rosterChanged(a.id ?? a.agentId); return {};
 }
 export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.isEnabled ?? a.enabled ?? true; persist(); return {};
+  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.notifyOnUpdates = a.isEnabled ?? a.enabled ?? true; persist(); rosterChanged(a.id ?? a.agentId); return {};
 }
 export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase64?: string; bytes?: string }): AgentRecord | null {
   const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
@@ -2170,6 +2205,19 @@ function reveal(target: Entry, full: string, agentId: string): void {
 export interface SendArgs {
   agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string };
   clientNonce?: string; attachments?: { path?: string; name?: string }[];
+  /**
+   * What the CLIENT actually sends — two parallel arrays, not `attachments`.
+   *
+   * Captured from a real upload off the app (coverage lastArgs), not guessed:
+   *   { prompt: "", attachmentPaths: ["/workspace/attachments/184-….png"],
+   *     attachmentNames: ["….png"], directAddressedAcceptance: true, … }
+   *
+   * We only ever read `attachments`, so every image attached in the app arrived as `undefined`:
+   * readImageAttachment got nothing, the model was never shown the picture, and the turn answered
+   * about the text alone. Our own e2e passed because it sent `attachments` — the dialect we
+   * invented — which is the same way the uploadAttachment contract bug stayed hidden.
+   */
+  attachmentPaths?: string[]; attachmentNames?: string[];
   /** Set when the prompt came from another bot rather than the user — see messageAgent. */
   fromAgent?: { id: string; name: string };
 }
@@ -2228,6 +2276,22 @@ export function sendPrompt(args: SendArgs) {
   const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}) };
   t.push(userEntry);
 
+  // Show what the user attached, instead of only the text they typed alongside it.
+  //
+  // The bytes reached the model once `attachmentPaths` was understood, but the transcript still
+  // held a text-only entry, so the picture the user had just attached never appeared in the chat —
+  // the reply talked about an image nobody could see. `type:"attachment"` is the shape the renderer
+  // already draws for agent-side pictures (attach_image / screenshots), reused here for the user's
+  // own upload; the bytes are served back through readAttachmentImage exactly the same way.
+  for (const att of attachmentsOf(args)) {
+    if (!att.path) continue;
+    t.push({
+      id: nextId(), kind: "message", role: "user",
+      content: "", message: { type: "attachment", url: att.path, file_name: att.name ?? "", alt: att.name ?? "" },
+      timestampMs: Date.now(),
+    } as Entry);
+  }
+
   // Record acceptance so the composer's poll confirms the bubble and refreshes the transcript.
   if (args.clientNonce) {
     acceptance.set(args.clientNonce, {
@@ -2277,7 +2341,7 @@ export function sendPrompt(args: SendArgs) {
         content: from ? `[tin nhắn từ bot ${from.name}] ${textOf(e)}` : textOf(e),
       } as PoolMessage;
     });
-  const image = readImageAttachment(args.attachments);
+  const image = readImageAttachment(attachmentsOf(args));
   // Abort whatever was still running for this bot before replacing it. `inflight` is keyed by
   // agent, so overwriting it left the previous turn streaming into an older bubble with no way
   // to stop it — two turns writing at once, and the presence flags set by whichever finished
