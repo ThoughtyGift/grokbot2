@@ -21,7 +21,7 @@ import { callPool, streamPool, type PoolMessage } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { loadState, scheduleSave, type PersistedState } from "./store.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, closeAgentTab } from "./browser.js";
-import { stageImage, imageSize } from "./attachments.js";
+import { stageImage, imageSize, readAttachmentImage } from "./attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote } from "./tools.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "./tool-calls.js";
 import { boxConfigured, boxCall } from "./box-exec.js";
@@ -42,8 +42,17 @@ const IMG_MIME: Record<string, string> = {
 /** Read the first image attachment (a local file path the FE staged) as a data: URL for the pool. */
 function readImageAttachment(atts?: { path?: string; name?: string }[]): string | undefined {
   for (const a of atts ?? []) {
+    if (!a.path) continue;
+    // 1. An image the user just attached goes through uploadAttachment, which stages it under a
+    //    VIRTUAL path like /workspace/attachments/N-name — that path does NOT exist on this machine's
+    //    filesystem (the bytes live in the attachments store). Reading it with existsSync therefore
+    //    always missed, so an attached image never reached the model at all. Resolve it from the store
+    //    first, which is where uploadAttachment actually put it.
+    const staged = readAttachmentImage({ path: a.path });
+    if (staged?.dataUrl) return staged.dataUrl;
+    // 2. A real file path on the box or local fs (e.g. a screenshot the agent itself wrote).
     const mime = IMG_MIME[extname(a.path || a.name || "").toLowerCase()];
-    if (!mime || !a.path) continue;
+    if (!mime) continue;
     try {
       if (!existsSync(a.path) || statSync(a.path).size > 6_000_000) continue;
       return `data:${mime};base64,${readFileSync(a.path).toString("base64")}`;
