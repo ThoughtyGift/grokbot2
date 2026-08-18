@@ -276,13 +276,28 @@ export function getAgentAutomations(a: { id?: string; agentId?: string }): Autom
  * reads. Applied at the gateway boundary only; internally the cron string stays, because parseCron and
  * the scheduler are built on it.
  */
+/**
+ * The structured trigger object the editor renders, per platform — copied field-for-field from the
+ * original's own defaults (its `S3n` switch). The editor reads `trigger.type` and then the
+ * platform-specific fields; a missing field renders blank, a wholly missing object throws. So every
+ * one of the seven trigger types the "Add another" menu offers gets its full default shape here, even
+ * the ones we cannot yet FIRE — the display must not crash regardless of whether a receiver exists.
+ */
+function triggerObject(rawTrigger: string): Record<string, unknown> {
+  const p = listenerPlatform(rawTrigger);
+  switch (p) {
+    case "slack": return { type: "slack", channel: "", match: "message", keyword: "", emoji: "", bySelf: false };
+    case "github": return { type: "github", repo: "", events: ["pr-opened"], userAllowlist: "", ciBranch: "" };
+    case "microsoftTeams": return { type: "microsoftTeams", tenantId: "", teamIds: "", channelIds: "", messageContains: "", messageContainsIsRegex: false, blockUnauthenticatedTeamsUsers: false };
+    case "linear": return { type: "linear", event: "issueCreated", statusIds: "", cycleIds: "", projectIds: "", teamIds: "" };
+    case "sentry": return { type: "sentry", event: "issueCreated", projectIds: "" };
+    case "pagerduty": return { type: "pagerduty", event: "incidentTriggered", serviceIds: "" };
+    default: return { type: "cron", schedule: rawTrigger };
+  }
+}
+
 export function toClientAutomation(rec: Automation): Record<string, unknown> {
-  const platform = listenerPlatform(rec.trigger);
-  const trigger = platform
-    ? platform === "slack"
-      ? { type: "slack", channel: "", match: "message", keyword: "", emoji: "", bySelf: false }
-      : { type: platform }
-    : { type: "cron", schedule: rec.trigger };
+  const trigger = triggerObject(rec.trigger);
   return {
     ...rec,
     trigger,
@@ -345,7 +360,15 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
  */
 function listenerPlatform(trigger: string): string | null {
   const t = trigger.toLowerCase();
-  for (const p of ["slack", "discord", "telegram", "linear", "github"]) if (t.includes(p)) return p;
+  // The original's six non-cron listener platforms, from its own trigger switch — NOT discord/telegram
+  // (those are message CONNECTORS, not routine triggers), and "microsoftTeams" spelling matters because
+  // the trigger object keys off it.
+  const map: Array<[string, string]> = [
+    ["slack", "slack"], ["github", "github"], ["git", "github"],
+    ["teams", "microsoftTeams"], ["microsoftteams", "microsoftTeams"],
+    ["linear", "linear"], ["sentry", "sentry"], ["pagerduty", "pagerduty"], ["pager", "pagerduty"],
+  ];
+  for (const [needle, platform] of map) if (t.includes(needle)) return platform;
   return null;
 }
 
