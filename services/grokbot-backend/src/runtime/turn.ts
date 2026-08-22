@@ -26,7 +26,7 @@ import {
   isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget,
 } from "../conversation/index.js";
 import {
-  TOOLS, isKnownTool, isParallelSafe, TOOL_PROTOCOL, turnHooks, attachmentsOf, readImageAttachment,
+  TOOLS, isKnownTool, isParallelSafe, toolProtocolFor, turnHooks, attachmentsOf, readImageAttachment,
 } from "./tools.js";
 
 export type { SendArgs, ToolCtx, Entry, SubagentRow } from "../conversation/types.js";
@@ -753,7 +753,9 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
 async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
   // Tiered so the ~5k-token base prompt stays a stable cacheable prefix; the timestamp and
   // anything else per-turn goes last. See prompt.ts.
-  const system = buildSystemPrompt(TOOL_PROTOCOL, {
+  // Per-owner: the MCP paragraph names THIS account's servers, and picks up a plugin installed
+  // since boot. Was a module-level constant built from the default owner's config at import time.
+  const system = buildSystemPrompt(toolProtocolFor(ownerOf(agentId) ?? DEFAULT_USER.authId), {
     memory: renderMemory(await loadMemory(agentId)),
     agentName: agents.get(agentId)?.name,
     boxOn: boxConfigured(),

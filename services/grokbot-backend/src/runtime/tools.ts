@@ -9,7 +9,7 @@ import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
-import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "../mcp.js";
+import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
@@ -639,15 +639,21 @@ TOOLS.task_v2 = async (arg, ctx) => {
 
 /**
  * MCP tools (`get_mcp_tools` / `call_mcp_tool` in the original catalog) — structured access to
- * connected services. Only offered when `.mcp.json` declares at least one server.
+ * connected services.
+ *
+ * Registered UNCONDITIONALLY. They used to sit behind `if (isMcpConfigured())`, evaluated once when
+ * this module loaded — which had two consequences once servers became per-user and installable:
+ * installing a plugin could not make the tools appear (they were decided at boot), and an install
+ * on a machine whose default config was empty at startup was inert for ever. The tools are
+ * self-describing when there is nothing to reach ("chưa cấu hình MCP …"), and the PROMPT below only
+ * mentions MCP to owners who actually have servers, so nothing is advertised that cannot run.
+ *
+ * Multi-tenant Phase 6: servers run under the agent's OWNER, so one tenant's tokens never spawn for
+ * another. The turn is detached from the request, so ownerOf(agentId) is the identity — not
+ * currentOwner(), which would be the default here.
  */
-if (isMcpConfigured()) {
-  // Listing is read-only; calling one is not, so only the call needs an approval card.
-  // Multi-tenant Phase 6: MCP servers run under the agent's OWNER, so one tenant's tokens never
-  // spawn for another. The turn is detached from the request, so ownerOf(agentId) is the identity.
-  TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
-  TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
-}
+TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
+TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 
 /**
  * These protocol strings are ENGLISH on purpose, like the rest of the prompt.
@@ -669,12 +675,23 @@ if (isMcpConfigured()) {
  * What stays Vietnamese: every string the USER reads. `"[grokbot2] Pool trả về rỗng — thử gửi lại."`
  * and its kind are rendered in the app, not read by the model.
  */
-const MCP_PROTOCOL = isMcpConfigured()
-  ? "\n\nMCP: these services are already connected — " + Object.keys(mcpServers()).join(", ") + ". " +
+/**
+ * The MCP paragraph, for ONE owner, computed per turn.
+ *
+ * It was a module-level constant built from `mcpServers()` at import time, which read the DEFAULT
+ * owner's config outside any request. Two bugs followed: every tenant's bot was told the default
+ * user's server names (and never its own), and a plugin installed after boot stayed invisible to
+ * the model until the backend restarted. Naming a server the model cannot reach is worse than
+ * silence, so an owner with no servers gets no paragraph at all.
+ */
+const mcpProtocolFor = (owner: string): string => {
+  const names = Object.keys(mcpServers(owner));
+  if (names.length === 0) return "";
+  return "\n\nMCP: these services are already connected — " + names.join(", ") + ". " +
     "List a server's tools with TOOL_CALL: get_mcp_tools(<server name>), then call one with " +
     'TOOL_CALL: call_mcp_tool({"server":"…","tool_name":"…","tool_args":{…}}). ' +
-    "Prefer MCP over opening a browser when the service is already here."
-  : "";
+    "Prefer MCP over opening a browser when the service is already here.";
+};
 
 // Browser actions are only offered when a box browser is actually configured — advertising
 // tools that cannot run just teaches the model to call them and fail.
@@ -809,7 +826,7 @@ const PEER_PROTOCOL =
  */
 const DEV_TOOLS = new Set(["echo", "time", "reverse", "upper", "count", "calc"]);
 
-const TOOL_PROTOCOL =
+const toolProtocolBase = (): string =>
   // "DUY NHẤT một dòng" is why a multi-step turn went silent. The model obeyed it exactly: every
   // step was a bare TOOL_CALL, so the user watched screenshots pile up with no words — measured,
   // the bubble mid-turn contained the call itself and nothing else. The parser already accepts
@@ -828,7 +845,10 @@ const TOOL_PROTOCOL =
   "single response. Write nothing after those lines. Tools: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". If no tool is needed, just answer. Once tool results come back, answer from them." +
-  BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + MCP_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+
+/** The tool protocol for one owner — the shared part plus that owner's MCP servers. */
+const toolProtocolFor = (owner: string): string => toolProtocolBase() + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
@@ -855,5 +875,5 @@ const isParallelSafe = (name: string): boolean => {
 };
 
 
-export { TOOLS, isKnownTool, isParallelSafe, TOOL_PROTOCOL };
+export { TOOLS, isKnownTool, isParallelSafe, toolProtocolFor };
 
