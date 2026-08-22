@@ -178,8 +178,19 @@ function renderWidget(e: NativeEntry): HTMLElement {
 
 function renderEntry(e: NativeEntry): HTMLElement {
   if (e.kind === "event") {
-    const label = e.event?.type === "name-changed" ? `đổi tên ${e.event.from} → ${e.event.to}` : (e.event?.type ?? "event");
-    return el(`<div class="event">${escapeHtml(label)}</div>`);
+    /*
+     * Sự kiện hệ thống là một CHIP, không phải một dòng chữ xám giữa màn hình — app gốc dùng
+     * `sand-kit-system-event__chip`. Và `event` là union hai nhánh trong hợp đồng, nên nhánh
+     * `automation-changed` phải đọc được thay vì in ra chữ "automation-changed".
+     */
+    const ev = e.event;
+    const label = ev?.type === "name-changed"
+      ? `Đổi tên: ${ev.from} → ${ev.to}`
+      : ev?.type === "automation-changed"
+        ? `Routine ${ev.action === "created" ? "đã tạo" : ev.action === "deleted" ? "đã xoá" : "đã đổi"}: ${ev.automationName}`
+        // Union đã cạn hai nhánh, nên ở đây `ev` chỉ còn `undefined` — đọc `.type` là vô nghĩa.
+        : "sự kiện";
+    return el(`<div class="event"><span class="chip">${escapeHtml(label)}</span></div>`);
   }
   if (e.kind === "widget") return renderWidget(e);
   if (e.kind === "tool-call") {
@@ -342,6 +353,20 @@ async function toggleReaction(entryId: string, emoji: string): Promise<void> {
  *
  * Thẻ công cụ / widget / event không thuộc lượt nào: chúng cắt lượt đang mở.
  */
+/** Vỏ của một lượt nói: máng avatar bên trái, cột nội dung bên phải, nhãn tên chỉ ở lượt mở khối. */
+function openRun(e: NativeEntry, mine: boolean, opensBlock: boolean): HTMLElement {
+  const run = el(`<div class="run ${mine ? "mine" : "theirs"}${opensBlock ? " opens" : ""}"></div>`);
+  const gutter = el(`<div class="run-gutter"></div>`);
+  if (!mine && e.author) gutter.innerHTML = avatarOf({ id: e.author.id, name: e.author.name });
+  const col = el(`<div class="run-col"></div>`);
+  if (opensBlock) {
+    col.append(el(`<div class="run-author">${escapeHtml(mine ? "bạn" : (e.author?.name ?? "bot"))}</div>`));
+  }
+  run.append(gutter, col);
+  run.dataset.entry = e.id;   // id của entry MỞ lượt: đủ để neo, và ổn định khi lượt dài thêm
+  return run;
+}
+
 function renderRuns(entries: NativeEntry[]): HTMLElement[] {
   const out: HTMLElement[] = [];
   let run: HTMLElement | null = null;
@@ -357,7 +382,13 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
 
   for (const e of entries) {
     const isMsg = e.kind === "message" || e.kind === "agent-message";
-    if (!isMsg) { run = null; runKey = ""; out.push(renderEntry(e)); continue; }
+    if (!isMsg) {
+      run = null; runKey = "";
+      const solo = renderEntry(e);
+      solo.dataset.entry = e.id;   // neo cuộn bám vào đây, xem `captureAnchor`
+      out.push(solo);
+      continue;
+    }
 
     const mine = e.kind === "message";
     const key = mine ? "me" : `bot:${e.author?.id ?? "?"}`;
@@ -365,14 +396,7 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
       const opensBlock = key !== lastSpeaker;
       runKey = key;
       lastSpeaker = key;
-      run = el(`<div class="run ${mine ? "mine" : "theirs"}${opensBlock ? " opens" : ""}"></div>`);
-      const gutter = el(`<div class="run-gutter"></div>`);
-      if (!mine && e.author) gutter.innerHTML = avatarOf({ id: e.author.id, name: e.author.name });
-      const col = el(`<div class="run-col"></div>`);
-      if (opensBlock) {
-        col.append(el(`<div class="run-author">${escapeHtml(mine ? "bạn" : (e.author?.name ?? "bot"))}</div>`));
-      }
-      run.append(gutter, col);
+      run = openRun(e, mine, opensBlock);
       out.push(run);
     }
     const col = run!.querySelector(".run-col")!;
@@ -381,6 +405,7 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
     if (run!.classList.contains("opens") && col.querySelectorAll(".bubble").length === 0) {
       node.classList.add("first");
     }
+    node.dataset.entry = e.id;
     col.append(node);
   }
   return out;
@@ -680,7 +705,103 @@ function wireHandle(node: HTMLElement, kind: "sidebar" | "pane"): void {
   });
 }
 
+/* ── X4: transcript giữ được vị trí, và chỉ giữ một cửa sổ trong DOM ──────────
+ *
+ * Số đo trước khi viết (`pnpm measure:transcript`), vì ADR 0004 nói mục này sẽ kích hoạt việc
+ * chuyển sang React:
+ *
+ *      31 bubble ·    657 node  →  0,84 ms mỗi lần vẽ lại
+ *     124 bubble ·  2 628 node  →  4,52 ms
+ *     496 bubble · 10 512 node  →  21,8 ms
+ *   1 984 bubble · 42 048 node  →  52,0 ms
+ *
+ * Đọc ra hai điều. Một: ở cỡ đang dùng, "vẽ lại tất cả" KHÔNG phải vấn đề hiệu năng — 0,84ms. Hai:
+ * nó thành vấn đề từ khoảng 500 entry (21,8ms > một khung hình 16,7ms). Và React tự nó không chữa
+ * cái đó; thứ chữa là **chỉ dựng phần nhìn thấy**, làm được trong mô hình hiện tại.
+ *
+ * Lỗi thật hôm nay không phải hiệu năng mà là `log.scrollTop = log.scrollHeight` chạy vô điều kiện:
+ * mọi lần vẽ lại đều nhảy xuống đáy, đo được 7516 → 14103.
+ */
+const WINDOW_SIZE = 150;      // số entry giữ trong DOM; cuộn lên đầu thì nới thêm
+const NEAR_BOTTOM = 64;       // px — trong khoảng này coi như đang ghim đáy
+
+let shownCount = WINDOW_SIZE;
+let lastAgent = "";
+
+/**
+ * Trạng thái cuộn phải được CHỤP TRƯỚC khi vẽ, không đọc lại sau.
+ *
+ * Hai bản trước đều sai vì cùng một lý do, chỉ khác cách sai:
+ *   · bản 1 đọc `scrollTop` từ phần tử VỪA được tạo trong lượt vẽ này — luôn là 0, nên phép tính
+ *     "có đang ghim đáy không" luôn ra đúng và nó nhảy xuống đáy (7516 → 14103);
+ *   · bản 2 giữ đúng một phần tử rồi cắm lại — nhưng `root.replaceChildren()` TÁCH nó khỏi
+ *     document, và trình duyệt xoá vị trí cuộn của phần tử bị tách (7516 → 0).
+ *
+ * Nên vị trí cuộn không thể đọc được sau khi vẽ, dù bằng cách nào. Chụp trước, dùng sau.
+ */
+let pendingScroll: { top: number; h: number; view: number; key: string; delta: number } | null = null;
+
+function captureScroll(): void {
+  const log = root.querySelector<HTMLElement>(".transcript");
+  if (!log) { pendingScroll = null; return; }
+  const a = captureAnchor(log);
+  pendingScroll = { top: log.scrollTop, h: log.scrollHeight, view: log.clientHeight, key: a?.key ?? "", delta: a?.delta ?? 0 };
+}
+
+/**
+ * Neo theo PHẦN TỬ, không theo khoảng cách tới đáy.
+ *
+ * Neo theo đáy chỉ đúng khi nội dung mọc thêm ở trên; neo theo đỉnh chỉ đúng khi mọc thêm ở dưới.
+ * Transcript có cả hai — nới cửa sổ thì thêm ở trên, tin mới và tin đang stream thì thêm ở dưới.
+ * Nhớ một phần tử đang nhìn thấy rồi đặt lại đúng offset của nó thì cả hai trường hợp đều đúng.
+ */
+const captureAnchor = (log: HTMLElement): { key: string; delta: number } | null => {
+  const top = log.scrollTop;
+  // `Array.from` chứ không `for…of` thẳng: tsconfig ở đây không bật `downlevelIteration` cho NodeList.
+  for (const node of Array.from(log.querySelectorAll<HTMLElement>("[data-entry]"))) {
+    if (node.offsetTop + node.offsetHeight > top) {
+      return { key: node.dataset.entry ?? "", delta: node.offsetTop - top };
+    }
+  }
+  return null;
+};
+
+const restoreAnchor = (log: HTMLElement, a: { key: string; delta: number } | null): boolean => {
+  if (!a?.key) return false;
+  const node = log.querySelector<HTMLElement>(`[data-entry="${CSS.escape(a.key)}"]`);
+  if (!node) return false;
+  log.scrollTop = node.offsetTop - a.delta;
+  return true;
+};
+
+function renderTranscript(log: HTMLElement, selected: NativeAgent | undefined): void {
+  const switched = (selected?.id ?? "") !== lastAgent;
+  if (switched) { shownCount = WINDOW_SIZE; lastAgent = selected?.id ?? ""; }
+
+  const st = pendingScroll;
+  const pinned = switched || !st || st.h - st.top - st.view <= NEAR_BOTTOM;
+  const anchor = pinned || !st ? null : { key: st.key, delta: st.delta };
+
+  log.replaceChildren();
+  if (!selected) { log.append(el(`<div class="empty">Chưa chọn bot.</div>`)); return; }
+  if (!state.entries.length) { log.append(el(`<div class="empty">Bắt đầu một cuộc trò chuyện.</div>`)); return; }
+
+  const total = state.entries.length;
+  const from = Math.max(0, total - shownCount);
+  if (from > 0) {
+    // Phân trang về phía TRƯỚC, đúng ý `beforeSeq`: nới cửa sổ thay vì dựng cả nghìn hàng.
+    const more = el(`<button type="button" class="load-more">Xem ${Math.min(WINDOW_SIZE, from)} tin cũ hơn (còn ${from})</button>`);
+    more.onclick = () => { shownCount += WINDOW_SIZE; paint(); };
+    log.append(more);
+  }
+  for (const node of renderRuns(state.entries.slice(from))) log.append(node);
+
+  if (pinned) log.scrollTop = log.scrollHeight;
+  else if (!restoreAnchor(log, anchor)) log.scrollTop = log.scrollHeight;
+}
+
 function paint(): void {
+  captureScroll();   // PHẢI là việc đầu tiên: sau `replaceChildren` thì không còn gì để đọc
   const selected = state.agents.find((a) => a.id === state.selected);
   root.replaceChildren(el(`<div class="shell${state.paneOpen ? "" : " no-pane"}">
     <aside class="sidebar${state.ui.sidebarCollapsed ? " rail" : ""}">
@@ -853,15 +974,7 @@ function paint(): void {
     }
   }
 
-  const log = root.querySelector(".transcript")!;
-  /*
-   * Hai trạng thái rỗng KHÁC nhau, app gốc phân biệt: chưa chọn bot ("No Bot selected.") và đã
-   * chọn nhưng hội thoại trống. Trước đây cả hai đều ra một câu, tức nói sai với người vừa mở app.
-   */
-  if (!selected) log.append(el(`<div class="empty">Chưa chọn bot.</div>`));
-  else if (!state.entries.length) log.append(el(`<div class="empty">Bắt đầu một cuộc trò chuyện.</div>`));
-  for (const node of renderRuns(state.entries)) log.append(node);
-  log.scrollTop = log.scrollHeight;
+  renderTranscript(root.querySelector(".transcript")!, selected);
 
   /*
    * Từ đây trở xuống dùng `?.` chứ không `!`: đầu và đáy sidebar giờ dựng theo app gốc, nên `del`

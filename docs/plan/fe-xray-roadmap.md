@@ -308,10 +308,39 @@ Hai lỗi của chính bộ đo, đã sửa:
 
 ### X4 — transcript (chỗ mô hình cũ chặn đường)
 
-- [ ] X4.1 Ảo hoá + phân trang `beforeSeq` (`anchorTo:'end'`, `followOnAppend`)
-- [ ] X4.2 Ghim đáy khi tin cuối phình ra lúc stream
-- [ ] X4.3 Chip sự kiện hệ thống (`sand-kit-system-event__chip` — "Open exchange with …")
-- [ ] X4.4 Thẻ đính kèm `sand-attachment` bo **14px**, khung ảnh bo 12px
+**Đo trước khi viết, và số đo đổi quyết định.** ADR 0004 nói X4 sẽ kích hoạt việc chuyển sang React.
+`pnpm measure:transcript` nói khác:
+
+| transcript | node | một lần vẽ lại |
+|---|---|---|
+| 31 bubble | 657 | **0,84 ms** |
+| 124 bubble | 2 628 | 4,52 ms |
+| 496 bubble | 10 512 | 21,8 ms |
+| 1 984 bubble | 42 048 | 52,0 ms |
+
+"Vẽ lại tất cả" chỉ tốn **0,84 ms** ở cỡ đang dùng — 1/20 khung hình. Nó thành vấn đề từ khoảng
+**500 entry**. Và lỗi thật hôm nay không phải hiệu năng mà là **mất vị trí cuộn**, mà React không
+chữa cái đó. Nên X4 làm trên mô hình hiện tại; ADR 0004 chuyển sang **hoãn thi hành** kèm điều kiện
+kích hoạt viết lại.
+
+- [x] **X4.1** Cửa sổ **150 entry** trong DOM + nút *"Xem N tin cũ hơn"* — đúng ý `beforeSeq`: nới cửa
+  sổ về phía trước thay vì dựng cả nghìn hàng. Neo cuộn theo **phần tử** (`data-entry`), không theo
+  khoảng cách tới đáy: neo theo đáy chỉ đúng khi nội dung mọc ở trên, neo theo đỉnh chỉ đúng khi mọc
+  ở dưới, mà transcript có cả hai.
+- [x] **X4.2** Ghim đáy khi đang ở đáy (trong 64px), giữ nguyên chỗ đọc khi đang cuộn giữa chừng.
+  `pnpm measure:transcript-scroll` **4/4**, vị trí cuộn `7516 → 7516`.
+- [x] **X4.3** Sự kiện hệ thống là **chip** (`sand-kit-system-event__chip`), không phải dòng chữ xám
+  giữa màn hình. Nhân đó đọc được cả nhánh `automation-changed` — trước đây nó in ra đúng chữ
+  `"automation-changed"` cho người dùng xem.
+- [x] **X4.4** Thẻ tệp bo **14px**, khung ảnh bo **12px** — hai số đo **khác nhau** ở app gốc, nên
+  không dùng chung một token.
+
+> **Ba lần sai liên tiếp ở cùng một chỗ, đáng ghi lại.** Bản 1 đọc `scrollTop` từ phần tử *vừa được
+> tạo trong lượt vẽ này* — luôn là 0, nên phép tính "có đang ghim đáy không" luôn ra đúng và nó nhảy
+> xuống đáy (7516 → 14103). Bản 2 giữ đúng **một** phần tử rồi cắm lại — nhưng `replaceChildren()`
+> **tách** nó khỏi document và trình duyệt xoá vị trí cuộn của phần tử bị tách (7516 → 0). Bản 3 mới
+> đúng: **chụp trạng thái trước khi vẽ**, vì sau khi vẽ thì không còn gì để đọc, bằng cách nào cũng
+> không.
 
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 

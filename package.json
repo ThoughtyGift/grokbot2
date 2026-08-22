@@ -37,7 +37,9 @@
     "test:host-settings": "node services/grokbot-backend/scripts/e2e-host-settings.mjs",
     "measure:resize": "node services/grokbot-backend/scripts/measure-web-resize.mjs",
     "measure:pane": "node services/grokbot-backend/scripts/measure-pane-nav.mjs",
-    "measure:consistency": "node services/grokbot-backend/scripts/measure-ui-consistency.mjs"
+    "measure:consistency": "node services/grokbot-backend/scripts/measure-ui-consistency.mjs",
+    "measure:transcript": "node services/grokbot-backend/scripts/measure-transcript-cost.mjs",
+    "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

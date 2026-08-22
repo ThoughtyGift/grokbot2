@@ -191,7 +191,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   padding: 16px;
 }
 .empty { margin: auto; color: var(--fg-3); font-size: var(--fs-lg); }
-.event { align-self: center; font-size: var(--fs-meta); color: var(--fg-3); }
+/* Chip sự kiện hệ thống — app gốc: `sand-kit-system-event__chip`, không phải một dòng chữ xám. */
+.event { display: flex; justify-content: center; margin: 8px 0; }
+.event .chip {
+  padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r-pill);
+  background: var(--surface-2); color: var(--fg-3); font-size: var(--fs-meta); line-height: 18px;
+}
 
 /* ── bubble ───────────────────────────────────────────────────────────────── */
 /* Đo: nền 38,38,38 · bo `18px 18px 18px 6px` (đuôi góc dưới-trái) · đệm 8/12 · chữ 14/20. */
@@ -238,10 +243,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 .run.mine .run-col { align-items: flex-end; }
 .run.mine .run-author { padding: 0 6px 0 0; }
 
+/* Khung ảnh 12px, thẻ tệp 14px — hai số đo KHÁC nhau ở app gốc, nên không dùng chung một token. */
 .att { max-width: 320px; border-radius: var(--r-card); display: block; margin-top: 6px; }
 .att-file {
   display: flex; align-items: center; gap: 10px; margin-top: 6px;
-  padding: 8px 10px; border-radius: var(--r-card); background: var(--surface-2);
+  padding: 8px 10px; border-radius: 14px; background: var(--surface-2);
   color: inherit; text-decoration: none;
 }
 .att-file .ext {

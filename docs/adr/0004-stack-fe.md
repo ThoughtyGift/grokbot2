@@ -1,6 +1,7 @@
 # ADR 0004 — Stack cho `apps/grokbot-web`
 
-- **Trạng thái:** đã chấp nhận, thi hành **có điều kiện** (xem §Kích hoạt)
+- **Trạng thái:** ⚠️ **hoãn thi hành 2026-08-23** — điều kiện kích hoạt (X4) đã tới, đo lại thì
+  tiền đề không đúng. Xem §Kích hoạt đã được đo lại.
 - **Ngày:** 2026-08-22
 - **Liên quan:** [fe/fe-xray-roadmap.md](../plan/fe-xray-roadmap.md) · [system-pipeline.md](../plan/system-pipeline.md) T1.1
 
@@ -52,8 +53,40 @@ chạy `ui-diff` trước/sau.
 
 ## Kích hoạt — và điều kiện KHÔNG làm
 
-**Làm** khi bắt đầu X4, không sớm hơn. X1–X3 (đầu sidebar, rail, stack panel) làm được trên mô hình
-hiện tại; chuyển stack trước đó là trả giá trước khi cần.
+> ### Đo lại khi X4 thật sự tới (2026-08-23) — và kết luận đổi
+>
+> ADR này viết rằng X4 sẽ kích hoạt việc chuyển React. Khi tới X4 tôi đo trước
+> (`pnpm measure:transcript`), và **tiền đề của nó không đúng**:
+>
+> | transcript | node | một lần vẽ lại |
+> |---|---|---|
+> | 31 bubble | 657 | **0,84 ms** |
+> | 124 bubble | 2 628 | 4,52 ms |
+> | 496 bubble | 10 512 | 21,8 ms |
+> | 1 984 bubble | 42 048 | 52,0 ms |
+>
+> Ba điều đọc ra:
+>
+> 1. Ở cỡ đang dùng, "vẽ lại tất cả" **không** phải vấn đề hiệu năng — 0,84 ms, tức 1/20 khung hình.
+>    ADR viết dựa trên giả định nó đắt; giả định đó chưa từng được đo.
+> 2. Nó thành vấn đề từ khoảng **500 entry** (21,8 ms > 16,7 ms của một khung hình). Đó là ngưỡng,
+>    và nó xa hơn nhiều so với các hội thoại đang có.
+> 3. Lỗi thật hôm nay **không phải** hiệu năng mà là mất vị trí cuộn: `log.scrollTop =
+>    log.scrollHeight` chạy vô điều kiện mỗi lần vẽ, đo được 7516 → 14103. **React không chữa cái
+>    đó** — thứ chữa nó là chụp trạng thái cuộn trước khi vẽ và neo lại theo phần tử, 60 dòng
+>    vanilla. Và thứ chữa mục (2) là chỉ dựng phần nhìn thấy, cũng không cần React.
+>
+> Nên **hoãn**, không huỷ. X4 đã xong trên mô hình hiện tại: `pnpm measure:transcript-scroll` 4/4,
+> vị trí cuộn giữ đúng `7516 → 7516`, DOM chặn ở cửa sổ 150 entry kèm nút xem thêm.
+>
+> Điều kiện kích hoạt **mới**, thay cho "khi tới X4": khi một trong ba xảy ra
+> — (a) một hội thoại thật vượt ~500 entry *và* `measure:transcript` báo > 16 ms;
+> (b) cần chỉnh sửa tại chỗ trong transcript (edit/reply lồng nhau) khiến cập nhật có khoá là bắt
+> buộc; (c) `main.ts` vượt 1500 dòng hoặc `paint()` vượt 500 dòng. Hiện: **1214 dòng / `paint()` 400
+> dòng** — đã sát, nên đây là điều kiện gần nhất sẽ bật.
+
+**Làm** khi một trong ba điều kiện trên xảy ra, không phải "khi bắt đầu X4". X1–X4 đều làm được trên
+mô hình hiện tại; chuyển stack trước đó là trả giá trước khi cần.
 
 **Không làm** nếu đích của `apps/grokbot-web` quay về "chỗ debug backend + đường lùi R2". Lúc đó
 vanilla là đủ và rẻ hơn, và bốn lỗi trên là giá chấp nhận được cho một bề mặt phụ. ADR này **không**

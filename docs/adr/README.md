@@ -38,7 +38,7 @@ Sổ này trả lời câu *vì sao*; [architecture.md](../architecture.md) tr�
 | [ADR-P6-1](../architecture/architecture-decisions.md#adr-p6-1-s10-scheduler-clock-s11-public-webhooks-are-a-separate-process-crudhistoryseq-stay-on-the-bff) | S10 scheduler clock + S11 public webhooks are a separate process; CRUD/history/seq stay on the BFF | ✅ accepted (2026-08-20) |
 | [ADR-P7-1](../architecture/architecture-decisions.md#adr-p7-1-native-v1-on-the-bff-vite-fe-fallback-not-cutover) | Native `/v1` on the BFF + Vite FE (fallback, not cutover) | ⚠️ accepted (2026-08-20); cutover clause superseded by ADR-F0-1 |
 | [ADR-F0-1](../architecture/architecture-decisions.md#adr-f0-1-fe-gốc-đã-patch-là-ui-production-acl-là-lõi-vĩnh-viễn) | FE gốc đã patch là UI production; ACL là lõi vĩnh viễn | ✅ accepted (2026-08-20) |
-| [0004](0004-stack-fe.md) | Stack cho `apps/grokbot-web`: React + `react-resizable-panels` + `@tanstack/react-virtual` | ✅ chấp nhận **có điều kiện** — kích hoạt ở X4 (2026-08-22) |
+| [0004](0004-stack-fe.md) | Stack cho `apps/grokbot-web`: React + `react-resizable-panels` + `@tanstack/react-virtual` | ⚠️ **hoãn thi hành** (2026-08-23) — X4 tới, đo lại thì tiền đề sai: vẽ lại tất cả chỉ 0,84 ms, lỗi thật là mất vị trí cuộn. Điều kiện kích hoạt viết lại |
 
 ## Đọc gì trước
 
