@@ -28,6 +28,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetEffectiveUserPlugins",
   "GetCurrentPeriodUsage",
   "InstallUserPlugin",
+  "UninstallUserPlugin",
   "ListMarketplaces",
   "GetAvailableMcpServers",
 ] as const;
@@ -67,6 +68,8 @@ export interface RpcCtx {
     installedIds: number[];
     /** Install by catalog id; returns false when the id is unknown. Writes the user's MCP config. */
     install(pluginId: number): boolean;
+    /** Remove an install; false when it was not installed. Takes its server out of the config. */
+    uninstall?(pluginId: number): boolean;
   };
   /**
    * The MCP servers configured for the caller, from their own config (backend-owned, per-user under
@@ -127,6 +130,15 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
     const row = id == null ? undefined : (ctx.catalog ?? LOCAL_PLUGINS).find((p) => p.id === id);
     if (!row || !ctx.plugins?.install(row.id)) return message();   // unknown id / no port: empty reply
     return message(pbMsg(1, userPluginInstall(row)));
+  },
+
+  // The counterpart to Add. Request is UninstallUserPluginRequest{plugin_id @1}; the response is
+  // UninstallUserPluginResponse{success @1}, so an unknown or not-installed id answers success:false
+  // rather than an empty body the app would have to guess at.
+  UninstallUserPlugin: (ctx) => {
+    const id = ctx.body ? readVarintField(unframe(ctx.body), 1) : null;
+    const ok = id != null && (ctx.plugins?.uninstall?.(id) ?? false);
+    return message(pbBool(1, ok));
   },
 
   // DashboardService.GetCurrentPeriodUsage — the app's own usage bar ("your included API usage").

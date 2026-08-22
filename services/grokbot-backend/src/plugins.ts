@@ -73,8 +73,42 @@ export function installPlugin(pluginId: number, owner: string = currentOwner()):
   return true;
 }
 
+/**
+ * Remove an install and take its MCP server back out of the owner's config.
+ *
+ * Symmetric with `installPlugin`, and deliberately narrow: it deletes ONLY the server this plugin
+ * added, leaving anything the user configured by hand. Returns false when the plugin was not
+ * installed, so the app can tell "removed" from "there was nothing to remove".
+ */
+export function uninstallPlugin(pluginId: number, owner: string = currentOwner()): boolean {
+  const ids = installedIds(owner);
+  if (!ids.includes(pluginId)) return false;
+
+  const f = installsPath(owner);
+  mkdirSync(dirname(f), { recursive: true });
+  writeFileSync(f, `${JSON.stringify({ installed: ids.filter((i) => i !== pluginId) }, null, 2)}
+`);
+
+  const server = serverSpecFor(pluginId);
+  if (server) {
+    const cfgPath = configPathFor(owner);
+    if (existsSync(cfgPath)) {
+      try {
+        const cfg = JSON.parse(readFileSync(cfgPath, "utf8")) ?? {};
+        if (cfg.mcpServers && server.name in cfg.mcpServers) {
+          delete cfg.mcpServers[server.name];
+          writeFileSync(cfgPath, `${JSON.stringify(cfg, null, 2)}
+`);
+        }
+      } catch { /* unreadable config: the install record is still cleared */ }
+    }
+  }
+  return true;
+}
+
 /** The port shape `RpcCtx.plugins` expects, bound to one owner. */
 export const pluginsPortFor = (owner: string) => ({
   installedIds: installedIds(owner),
   install: (id: number) => installPlugin(id, owner),
+  uninstall: (id: number) => uninstallPlugin(id, owner),
 });
