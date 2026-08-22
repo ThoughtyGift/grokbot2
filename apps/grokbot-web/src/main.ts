@@ -706,6 +706,7 @@ function paint(): void {
           <hr />
           <button type="button" role="menuitem" data-act="logout">Đăng xuất</button>
         </div>` : ""}
+        <button type="button" class="foot-row rail-new" data-act="new" aria-label="New" title="bot mới">+</button>
         <button type="button" class="foot-row account" data-act="account" aria-expanded="${state.accountOpen}" aria-label="Open account menu">
           <span class="mono">${escapeHtml(initialsOf(api.currentEmail().split("@")[0] || "tk"))}</span>
           <span class="lbl">${escapeHtml(api.currentEmail() || "tài khoản")}</span>

@@ -42,6 +42,14 @@ const READ = (specs) => {
     const el = document.querySelector(a.sel);
     if (!el) { out[a.name] = null; continue; }
     const r = el.getBoundingClientRect();
+    /*
+     * `display: none` cũng là KHÔNG CÓ.
+     *
+     * Ở chế độ rail, cả app và FE đều ẩn ô Search / đầu nhóm / hàng đáy. App ẩn bằng cách không
+     * render, FE ẩn bằng `display: none` — nên bộ đo báo "app KHÔNG có vùng này" trong khi thực tế
+     * hai bên giống nhau. Một khác biệt trong CÁCH ẩn không phải một khác biệt của giao diện.
+     */
+    if (r.width < 2 && r.height < 2) { out[a.name] = null; continue; }
     const s = getComputedStyle(el);
     const v = {};
     for (const p of a.props) {
@@ -164,6 +172,48 @@ let totalSame = 0, totalDiff = 0, totalMissing = 0, totalNa = 0;
 const perSize = [];
 
 try {
+/*
+ * Đồng bộ TRẠNG THÁI trước khi so, không chỉ ghi chú là nó lệch.
+ *
+ * Lượt 2026-08-22 ra 67% khớp, nhưng phần lớn phần lệch là vì app đang ở rail còn FE đang mở, và
+ * panel hai bên rộng khác nhau — tức bộ đo đang báo "hai cửa sổ bố cục khác nhau", không phải
+ * "thiết kế khác nhau". Từ khi có `/v1/host/settings` thì việc này làm được: đọc bố cục THẬT của
+ * app qua CDP, PATCH cho FE giống y vậy, tải lại, rồi mới so. Sau bước này, một khác biệt là một
+ * khác biệt thật.
+ */
+const syncStateToApp = async () => {
+  const appLayout = await appPage.evaluate(() => {
+    const w = (q) => { const r = document.querySelector(q)?.getBoundingClientRect(); return r ? Math.round(r.width) : null; };
+    const rows = w(".sand-agents-list__rows");
+    return {
+      sidebarCollapsed: rows != null && rows < 140,
+      sidebarWidth: rows != null ? Math.min(400, Math.max(88, rows + 25)) : null,
+      paneWidth: w(".sand-info-pane"),
+      paneOpen: (w(".sand-info-pane") ?? 0) > 8,
+    };
+  });
+  const patch = {};
+  if (typeof appLayout.sidebarCollapsed === "boolean") patch.sidebarCollapsed = appLayout.sidebarCollapsed;
+  if (appLayout.sidebarWidth) patch.sidebarWidth = appLayout.sidebarWidth;
+  if (appLayout.paneWidth) patch.paneWidth = Math.min(480, Math.max(280, appLayout.paneWidth));
+  if (typeof appLayout.paneOpen === "boolean") patch.paneOpen = appLayout.paneOpen;
+  try {
+    const sess = await fetch("http://127.0.0.1:8788/v1/session").then((r) => r.json());
+    const r = await fetch("http://127.0.0.1:8788/v1/host/settings", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${sess.token}`, "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    console.log(`   đồng bộ bố cục theo app: ${JSON.stringify(patch)}`);
+    return true;
+  } catch (e) {
+    console.log(`   ! KHÔNG đồng bộ được bố cục (${e instanceof Error ? e.message : e}) — phần lệch bề rộng bên dưới có thể chỉ là khác trạng thái`);
+    return false;
+  }
+};
+const synced = await syncStateToApp();
+
   await webPage.goto(URL_FE, { waitUntil: "domcontentloaded" });
   await webPage.waitForSelector(".roster .bot", { timeout: 15_000 });
   // Mở bot nhiều chữ nhất, để chắc chắn có bubble để đo.

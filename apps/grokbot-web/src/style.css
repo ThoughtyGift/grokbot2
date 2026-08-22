@@ -378,7 +378,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 /* Không viền trái: cột chat đã có viền phải, thêm nữa là 1px ăn vào bề rộng khung màn hình
    (đo ra 324 thay vì 325). */
-.computer { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 16px; }
+/* Không padding ở đây: `.pane-page` đã có 16px. Để cả hai thì cộng dồn 32px mỗi bên và khung
+   màn hình ra 416 thay vì 448 như app gốc — lỗi sinh ra lúc bọc panel vào stack điều hướng. */
+.computer { display: flex; flex-direction: column; min-height: 0; }
 .computer .head { display: flex; align-items: center; height: 20px; font-size: var(--fs-body); font-weight: 600; }
 .computer .head .state { margin-left: auto; font-size: var(--fs-meta); font-weight: 400; color: var(--fg-2); }
 /* Khung xem màn hình đo 325×203. */
@@ -662,7 +664,8 @@ img.avatar { object-fit: cover; }
 /* Nút danh tính trên toolbar: 128x28 ở app gốc, và nó là NÚT chứ không phải h1 trơ. */
 .identity {
   display: inline-flex; align-items: center; gap: 4px; height: var(--h-control); max-width: 220px;
-  padding: 0 6px; border: 0; border-radius: var(--r-ctl); background: none;
+  /* 6px: đo được ở `View Bot settings` của app gốc, khác --r-ctl (8px) của nút thường. */
+  padding: 0 6px; border: 0; border-radius: 6px; background: none;
   color: var(--fg-1); font-size: var(--fs-title); font-weight: 600; cursor: pointer;
   transition: background-color 120ms ease;
 }
@@ -785,3 +788,16 @@ body.dragging { cursor: col-resize; user-select: none; }
 .btn.danger { color: var(--danger); border-color: var(--danger-line); }
 .btn.danger:hover:not(:disabled) { background: var(--danger-wash); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* Ở rail, app gốc: hàng tài khoản cao **54** như hàng bot, và nút `New` trên đầu KHÔNG hiện —
+   nó có một `rail-new` riêng ở đáy. Đo được: `[aria-label="New"]` ở rail ra 0×0. */
+/* Đầu sidebar VẪN CÓ ở rail — app gốc đo được `sand-agents-sidebar__header` 87×52 ngay ở rail.
+   Chỉ nút `New` bên trong là ẩn (nó có `rail-new` riêng ở đáy). Bản đầu tôi ẩn cả đầu sidebar và
+   bộ đo bắt đúng: "đầu sidebar — FE KHÔNG có vùng này". */
+.sidebar.rail .side-head .new-icon { display: none; }
+/* Plugins cũng ẩn ở rail, giống app gốc. */
+.sidebar.rail .foot-row[data-act="plugins"] { display: none; }
+.sidebar.rail .foot-row.account { height: var(--h-rail-item); }
+.sidebar.rail .rail-new { display: grid; }
+.rail-new { display: none; }
+.sidebar.rail .side-foot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
