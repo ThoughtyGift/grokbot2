@@ -27,7 +27,7 @@ Bốn loại phụ thuộc:
 | `apps/grokbot-desktop/package.json` | `pnpm start` → `run.ps1`. Không có source UI. |
 | `apps/grokbot-desktop/README.md` | Mô tả exe là FE. |
 | `.claude/commands/run.md` | Lệnh agent: mở exe. |
-| `docs/HANDOFF.md`, `docs/execution-roadmap.md` | Hướng dẫn local :9222 + gốc :9333 `--user-data-dir=.data/profile-real`. |
+| `docs/session/HANDOFF.md`, `docs/history/execution-roadmap.md` | Hướng dẫn local :9222 + gốc :9333 `--user-data-dir=.data/profile-real`. |
 
 **Trên máy (2026-08-19):** exe cài đặt **có**. `app.asar` tại đường cài **không có** (app unpacked: `resources/app/dist/renderer/index.html` **có**). Bản asar local **có** tại `grokbot2/Grok Bot/resources/app.asar` (~48.7 MB, gitignore `Grok Bot/`).
 
@@ -41,7 +41,7 @@ Chỉ **launcher + docs**, không đọc trong `src/` backend (backend lắng ng
 |---|---|
 | `infra/scripts/run.ps1` | Set cả hai = `http://localhost:8788`; `CURSOR_WEBSITE_URL=https://cursor.com` (tránh login `localhost:4443`). Unset `ELECTRON_RUN_AS_NODE`. |
 | `services/grokbot-backend/src/index.ts` | Comment + log hướng dẫn set env. |
-| `README.md`, `docs/architecture.md`, `docs/spike-findings.md`, `docs/HANDOFF.md` | Mô tả seam. |
+| `README.md`, `docs/architecture.md`, `docs/reverse/spike-findings.md`, `docs/session/HANDOFF.md` | Mô tả seam. |
 | `.env.example` | Comment: frontend trỏ `PORT`. |
 
 `.env` **không** chứa `CURSOR_*` (đúng: env thuộc process Electron, không thuộc Node backend).

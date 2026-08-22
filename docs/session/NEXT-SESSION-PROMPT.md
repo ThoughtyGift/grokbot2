@@ -7,7 +7,7 @@ Paste one of these into a fresh session opened on `C:\Users\admin\Desktop\grokbo
 ## A. Continue the VNC work (the open thread)
 
 ```
-Đọc docs/HANDOFF.md trong repo này trước, rồi tiếp tục phần còn dang dở: VNC workspace.
+Đọc docs/session/HANDOFF.md trong repo này trước, rồi tiếp tục phần còn dang dở: VNC workspace.
 
 Bối cảnh ngắn: app Grok Bot gốc (đã ký, không sửa được) chạy trên backend tự host của repo này.
 Chat/roster/tool-loop đã chạy thật. Box VNC đã dựng trên VPS và phục vụ được
@@ -20,7 +20,7 @@ và chưa từng mở webview (không có VNC target nào trong CDP).
 
 Mục tiêu: tìm điều kiện khiến app KHÔNG mở viewer, rồi sửa backend/box cho đúng.
 
-Đầu mối theo thứ tự (chi tiết ở cuối docs/HANDOFF.md):
+Đầu mối theo thứ tự (chi tiết ở cuối docs/session/HANDOFF.md):
 1. Cổng chặn nằm ở MAIN PROCESS, không phải gateway — app không hề hỏi gateway về màn hình
    (đã xác nhận qua log args). Trace n9n(gatewayUrl, gatewayToken, networkToken,
    {primaryUrl, forkBaseUrl}) trong electron-main/main.cjs.
@@ -46,7 +46,7 @@ Lưu ý môi trường (đọc kỹ, từng cái đã tốn hàng giờ):
 ## B. Turn the remaining stubs into real features
 
 ```
-Đọc docs/HANDOFF.md và docs/audit.md, rồi biến các stub thành tính năng thật.
+Đọc docs/session/HANDOFF.md và docs/history/audit.md, rồi biến các stub thành tính năng thật.
 
 Hiện 78/87 method đã map, nhưng nhiều cái chỉ trả đúng shape rỗng: workflows, automations,
 channels, skills publishing, subagents, async tasks, trays, groups, media search, MCP/plugins.

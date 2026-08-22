@@ -429,7 +429,7 @@ components:
       scheme: bearer
       description: |
         The local session token. Minted at startup by the backend, not a cloud credential — see
-        docs/architecture-decisions.md (ADR-P0-5).
+        docs/architecture/architecture-decisions.md (ADR-P0-5).
 
   parameters:
     AgentId:

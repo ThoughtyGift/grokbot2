@@ -6,7 +6,7 @@ Viết trước khi code, vì đây là ranh giới bảo mật (chạy code do 
 
 ## 0. Sửa tiền đề: app gốc KHÔNG chạy box local
 
-Đo từ `docs/box-architecture.md` (proxy `EnsureSandBox` từ tài khoản thật):
+Đo từ `docs/architecture/box-architecture.md` (proxy `EnsureSandBox` từ tài khoản thật):
 
 ```
 exec_daemon_url   https://<tenant>-<pod>-1337.us8.cursorvm.com

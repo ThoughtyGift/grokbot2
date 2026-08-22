@@ -57,7 +57,7 @@ Methods observed at boot: `getHostSettings`, `setHostSettings`, `getHostStatus`,
 
 Two of those are read without a guard and must not be minimised:
 `getSharingState` → `{ rooms: [] }` (the store maps `rooms`), and `getForeverBoxStatus` →
-the box status in [`box-architecture.md`](./box-architecture.md#what-actually-opens-the-viewer)
+the box status in [`box-architecture.md`](architecture/box-architecture.md#what-actually-opens-the-viewer)
 (this, not `EnsureSandBox`, is what opens the VNC viewer).
 
 ## Chat / transcript

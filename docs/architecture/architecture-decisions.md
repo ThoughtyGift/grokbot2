@@ -37,7 +37,7 @@
 ## ADR-P0-4: FE gốc là adapter tạm (legal wall)
 
 **Status:** superseded by [ADR-F0-1](#adr-f0-1-fe-gốc-đã-patch-là-ui-production-acl-là-lõi-vĩnh-viễn) (2026-08-20)
-**Decision (historical):** Binary Anysphere is a rented viewer; an independent product needed a grokbot2 UI. Do not redistribute the signed client. See [legal.md](legal.md).
+**Decision (historical):** Binary Anysphere is a rented viewer; an independent product needed a grokbot2 UI. Do not redistribute the signed client. See [legal.md](../legal.md).
 **What still holds:** no redistribution; `src/` still does not read `app.asar`.
 **What does not:** FE gốc is no longer “temporary”. The patched stock app is production UI; ACL stays.
 
@@ -115,7 +115,7 @@
 
 **Status:** accepted (2026-08-20)
 **Context:** `store.ts` ghi cả thế giới ra JSON mỗi 400 ms. 811 KB, 18 bot, 490 entry, 16 parked — một write hỏng mất hết. P4 cần hai process cùng đọc state; file JSON không có transaction.
-**Decision:** SQLite qua `node:sqlite` (đã có trên Node 22.16, không native compile). Một `saveNow`/`scheduleSave` = một `BEGIN IMMEDIATE` gồm agents + entries (seq per agent) + parked + automations + attachments_meta + các bảng phụ. `state.json` import một lần rồi không ghi nữa — rollback source, xem `docs/sqlite-rollback.md`. Backup rolling chuyển sang `grokbot.sqlite.N.bak`; vòng JSON `.bak` giữ nguyên tại thời điểm migrate. Test `NODE_TEST_CONTEXT` không được mở `.data` của user.
+**Decision:** SQLite qua `node:sqlite` (đã có trên Node 22.16, không native compile). Một `saveNow`/`scheduleSave` = một `BEGIN IMMEDIATE` gồm agents + entries (seq per agent) + parked + automations + attachments_meta + các bảng phụ. `state.json` import một lần rồi không ghi nữa — rollback source, xem `docs/architecture/sqlite-rollback.md`. Backup rolling chuyển sang `grokbot.sqlite.N.bak`; vòng JSON `.bak` giữ nguyên tại thời điểm migrate. Test `NODE_TEST_CONTEXT` không được mở `.data` của user.
 **Consequence:** Domain không đổi API (`loadState`/`scheduleSave`). Persist is UPSERT + keyed prune (ADR-P4-2), not DELETE+rewrite — so a second process INSERT is not wiped on the next BFF save.
 
 ---
@@ -161,7 +161,7 @@
 **Status:** accepted (2026-08-20); **cutover clause superseded by [ADR-F0-1](#adr-f0-1-fe-gốc-đã-patch-là-ui-production-acl-là-lõi-vĩnh-viễn)**
 **Context:** ROADMAP P7 wanted an independent UI that does not speak `/gw` or ConnectRPC. The OpenAPI was written in P2 (ADR-P2-3) with nothing serving it.
 **Decision:** `services/grokbot-backend/src/native.ts` serves `/v1/*` beside `/gw/*`. It calls directory / conversation / runtime / events directly — no `@grokbot2/cursor-acl`, no protobuf. `GET /v1/session` (unauthenticated, loopback) is the local login. `apps/grokbot-web` is a Vite UI. `infra/scripts/run-web.ps1` never spawns `Grok Bot.exe`.
-**Consequence:** Happy path on `apps/grokbot-web` is green (2026-08-20): send → `web_search` → reply, network only `/v1/*`. The UI stays as **fallback/debug** (risk R2 if a vendor update enables `OnlyLoadAppFromAsar`). There is **no Phase 8** that turns ACL off. Dual-run: [docs/dual-run.md](dual-run.md).
+**Consequence:** Happy path on `apps/grokbot-web` is green (2026-08-20): send → `web_search` → reply, network only `/v1/*`. The UI stays as **fallback/debug** (risk R2 if a vendor update enables `OnlyLoadAppFromAsar`). There is **no Phase 8** that turns ACL off. Dual-run: [docs/history/dual-run.md](../history/dual-run.md).
 
 ---
 
@@ -172,6 +172,6 @@
 **Decision:** The **patched stock client** is the production UI. `packages/cursor-acl` + `packages/grokbot-proto` are a **permanent** adapter, not a layer to delete. P7 stops where it stands (`apps/grokbot-web` kept for R2 + debug). P8 (cut ACL / protobuf / `/gw`) is **deleted**. Programme continues as F0–F7 in [ROADMAP.md](../ROADMAP.md).
 **Supersedes:** ADR-P0-4 (stock FE as a temporary adapter); the P8 cutover sentence in ADR-P7-1; any comment that “ACL comes off when S13 lives”.
 **Does not supersede:** ADR-P0-2 / P0-3 (modular monolith, capability boundaries); legal wall against distributing a patched client.
-**Consequence:** Every “ACL rồi sẽ gỡ” rationale in comments and ADRs is void. Patch the client **as code** (`infra/patches/`, F1). Do not `--advance` into a deleted P8. Do not set `GROKBOT2_CURSOR_ACL=0`. Baseline: [`docs/parity-runs/fe-goc-baseline.json`](parity-runs/fe-goc-baseline.json) (gateway + tools + SSE + bootstrap).
+**Consequence:** Every “ACL rồi sẽ gỡ” rationale in comments and ADRs is void. Patch the client **as code** (`infra/patches/`, F1). Do not `--advance` into a deleted P8. Do not set `GROKBOT2_CURSOR_ACL=0`. Baseline: [`docs/parity-runs/fe-goc-baseline.json`](../parity-runs/fe-goc-baseline.json) (gateway + tools + SSE + bootstrap).
 
 ---

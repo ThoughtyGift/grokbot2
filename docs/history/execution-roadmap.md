@@ -9,8 +9,8 @@
 > **Lưu ý số mục:** thứ tự thực thi khác thứ tự tên plan — §9 là **P6**, §10 là **P5**, §11 là **P7**.
 > P6 chen lên trước P5 có lý do, xem [§9.4](#94-cửa-kiểm-p6--và-vì-sao-cửa-c-mất-hiệu-lực).
 >
-> Tài liệu liên quan: [parity.md](parity.md) · [protocol-reference.md](protocol-reference.md) ·
-> [HANDOFF.md](HANDOFF.md) · [agent-brain.md](agent-brain.md) · [box-architecture.md](box-architecture.md)
+> Tài liệu liên quan: [parity.md](../parity.md) · [protocol-reference.md](../protocol-reference.md) ·
+> [HANDOFF.md](../session/HANDOFF.md) · [agent-brain.md](../reverse/agent-brain.md) · [box-architecture.md](../architecture/box-architecture.md)
 
 ---
 
@@ -90,7 +90,7 @@ node services/grokbot-backend/scripts/label-window.mjs --cdp http://127.0.0.1:93
 ```
 
 > Khoá single-instance được tính theo profile, nên `--user-data-dir` riêng là điều kiện để mở
-> được app thứ hai. Chi tiết: [HANDOFF.md §3](HANDOFF.md).
+> được app thứ hai. Chi tiết: [HANDOFF.md §3](../session/HANDOFF.md).
 
 ### 1.3 Nếu thiếu điều kiện thì mất gì
 
@@ -606,7 +606,7 @@ Cần một relay thật; tạo phòng không ai vào được thì tệ hơn kh
 
 ## 8. P4 — Lỗi presence — ✅ **ĐÃ XONG** (không còn là plan)
 
-> **Trạng thái:** giải quyết xong, ghi tại [`parity.md §2w`](parity.md) · commit `549b4db`
+> **Trạng thái:** giải quyết xong, ghi tại [`parity.md §2w`](../parity.md) · commit `549b4db`
 > **Công còn lại:** 0 — phần dư đã hạ xuống hàng chờ
 
 **Nguyên nhân gốc: ta phát trên `channel: "roster"`, mà không có kênh nào tên như vậy.**

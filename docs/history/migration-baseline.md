@@ -63,7 +63,7 @@ node services/grokbot-backend/scripts/e2e-box-push.mjs
 
 | Lệnh | Kết quả | Ghi chú |
 |---|---|---|
-| `parity-report.mjs` | **Chạy được** | Gateway **111/120**. 9 rooms skip. Tool **9/54** trong script này **lỗi đo** (hardcode list cũ). **Đã sửa F0:** số đúng là [`fe-goc-baseline.json`](parity-runs/fe-goc-baseline.json) — tools **28/54**, cộng SSE + bootstrap. |
+| `parity-report.mjs` | **Chạy được** | Gateway **111/120**. 9 rooms skip. Tool **9/54** trong script này **lỗi đo** (hardcode list cũ). **Đã sửa F0:** số đúng là [`fe-goc-baseline.json`](../parity-runs/fe-goc-baseline.json) — tools **28/54**, cộng SSE + bootstrap. |
 | `tsx .../tool-coverage.mjs` | **Chạy được** | **HAVE 28 / MISSING 26 / extra 31**. Dùng số này, không dùng parity-report tool. |
 | `extract-contract --check --asar "Grok Bot/resources/app.asar"` | **PASS** `contract unchanged` | 9 routes, 16 channels, 120 commands |
 | `extract-contract --check` (default install path) | **FAIL** | Không có `...\Programs\Grok Bot\resources\app.asar` (app unpacked) |

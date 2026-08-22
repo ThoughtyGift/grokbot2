@@ -1,0 +1,1670 @@
+# SINH TỰ ĐỘNG — đừng sửa tay.
+#
+#   nguồn:  packages/api-contract/src/v1.ts
+#   sinh:   node services/grokbot-backend/scripts/gen-openapi.mjs
+#   kiểm:   node services/grokbot-backend/scripts/gen-openapi.mjs --check  (nằm trong pnpm self-xray)
+#
+# Lý do thiết kế và các bề mặt còn để dành: docs/api/README.md
+openapi: "3.1.0"
+info:
+  title: grokbot2 native API
+  version: "1.0.0"
+  description: Hợp đồng /v1 mà apps/grokbot-web gọi. SINH TỰ ĐỘNG từ packages/api-contract — đừng sửa file này, sửa schema rồi chạy `node scripts/gen-openapi.mjs`. Lý do thiết kế nằm ở docs/api/README.md.
+servers:
+  - url: http://127.0.0.1:8788
+    description: BFF trên máy
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Agent:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - createdAtMs
+        - updatedAtMs
+        - unread
+        - hidden
+        - avatarVersion
+        - notificationsEnabled
+        - notifyOnUpdates
+        - presence
+        - lastEntry
+      properties:
+        id:
+          pattern: ^agent-[0-9]+$
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        createdAtMs:
+          type: integer
+        updatedAtMs:
+          type: integer
+        unread:
+          type: boolean
+        hidden:
+          type: boolean
+        avatarVersion:
+          anyOf:
+            - type: string
+            - type: "null"
+        notificationsEnabled:
+          type: boolean
+        notifyOnUpdates:
+          type: boolean
+        presence:
+          type: object
+          required:
+            - isRunning
+            - isComposingMessage
+            - isRetrying
+            - currentActivity
+          properties:
+            isRunning:
+              type: boolean
+            isComposingMessage:
+              type: boolean
+            isRetrying:
+              type: boolean
+            currentActivity:
+              anyOf:
+                - type: object
+                  required:
+                    - kind
+                  properties:
+                    kind:
+                      type: string
+                    tool:
+                      type: string
+                - type: "null"
+        lastEntry:
+          anyOf:
+            - anyOf:
+                - type: object
+                  required:
+                    - kind
+                    - text
+                  properties:
+                    kind:
+                      const: text
+                      type: string
+                    text:
+                      type: string
+                - type: object
+                  required:
+                    - kind
+                    - count
+                    - kinds
+                  properties:
+                    kind:
+                      const: attachment
+                      type: string
+                    count:
+                      type: integer
+                    kinds:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - kind
+                          - count
+                        properties:
+                          kind:
+                            type: string
+                          count:
+                            type: integer
+                - type: object
+                  required:
+                    - kind
+                    - url
+                  properties:
+                    kind:
+                      const: link
+                      type: string
+                    url:
+                      type: string
+            - type: "null"
+    Entry:
+      type: object
+      required:
+        - id
+        - seq
+        - timestampMs
+        - kind
+      properties:
+        id:
+          type: string
+        seq:
+          minimum: 1
+          type: integer
+        timestampMs:
+          type: integer
+        kind:
+          anyOf:
+            - const: message
+              type: string
+            - const: agent-message
+              type: string
+            - const: tool-call
+              type: string
+            - const: event
+              type: string
+            - const: widget
+              type: string
+        reactions:
+          type: array
+          items:
+            type: object
+            required:
+              - emoji
+              - by
+            properties:
+              emoji:
+                type: string
+              by:
+                type: string
+        isStreaming:
+          type: boolean
+        role:
+          const: user
+          type: string
+        content:
+          type: string
+        clientNonce:
+          type: string
+        author:
+          type: object
+          required:
+            - id
+            - name
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        attachment:
+          type: object
+          required:
+            - path
+            - name
+            - href
+          properties:
+            path:
+              type: string
+            name:
+              type: string
+            href:
+              type: string
+        toolCallId:
+          type: string
+        requestId:
+          type: string
+        needsApproval:
+          type: boolean
+        name:
+          type: string
+        rawArgs:
+          type: string
+        summary:
+          type: string
+        status:
+          anyOf:
+            - const: pending
+              type: string
+            - const: running
+              type: string
+            - const: done
+              type: string
+            - const: failed
+              type: string
+        result:
+          type: string
+        event:
+          anyOf:
+            - type: object
+              required:
+                - type
+                - from
+                - to
+              properties:
+                type:
+                  const: name-changed
+                  type: string
+                from:
+                  type: string
+                to:
+                  type: string
+            - type: object
+              required:
+                - type
+                - action
+                - automationId
+                - automationName
+              properties:
+                type:
+                  const: automation-changed
+                  type: string
+                action:
+                  anyOf:
+                    - const: created
+                      type: string
+                    - const: updated
+                      type: string
+                    - const: deleted
+                      type: string
+                automationId:
+                  type: string
+                automationName:
+                  type: string
+        widget:
+          type: object
+          required:
+            - prompt
+            - options
+          properties:
+            prompt:
+              type: string
+            helpText:
+              type: string
+            options:
+              type: array
+              items:
+                type: object
+                required:
+                  - label
+                properties:
+                  label:
+                    type: string
+                  value:
+                    type: string
+                  description:
+                    type: string
+                  style:
+                    anyOf:
+                      - const: default
+                        type: string
+                      - const: primary
+                        type: string
+                      - const: danger
+                        type: string
+            allowCustom:
+              type: boolean
+        respondedValue:
+          type: string
+    TranscriptPage:
+      type: object
+      required:
+        - entries
+        - hasMore
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - seq
+              - timestampMs
+              - kind
+            properties:
+              id:
+                type: string
+              seq:
+                minimum: 1
+                type: integer
+              timestampMs:
+                type: integer
+              kind:
+                anyOf:
+                  - const: message
+                    type: string
+                  - const: agent-message
+                    type: string
+                  - const: tool-call
+                    type: string
+                  - const: event
+                    type: string
+                  - const: widget
+                    type: string
+              reactions:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - emoji
+                    - by
+                  properties:
+                    emoji:
+                      type: string
+                    by:
+                      type: string
+              isStreaming:
+                type: boolean
+              role:
+                const: user
+                type: string
+              content:
+                type: string
+              clientNonce:
+                type: string
+              author:
+                type: object
+                required:
+                  - id
+                  - name
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+              attachment:
+                type: object
+                required:
+                  - path
+                  - name
+                  - href
+                properties:
+                  path:
+                    type: string
+                  name:
+                    type: string
+                  href:
+                    type: string
+              toolCallId:
+                type: string
+              requestId:
+                type: string
+              needsApproval:
+                type: boolean
+              name:
+                type: string
+              rawArgs:
+                type: string
+              summary:
+                type: string
+              status:
+                anyOf:
+                  - const: pending
+                    type: string
+                  - const: running
+                    type: string
+                  - const: done
+                    type: string
+                  - const: failed
+                    type: string
+              result:
+                type: string
+              event:
+                anyOf:
+                  - type: object
+                    required:
+                      - type
+                      - from
+                      - to
+                    properties:
+                      type:
+                        const: name-changed
+                        type: string
+                      from:
+                        type: string
+                      to:
+                        type: string
+                  - type: object
+                    required:
+                      - type
+                      - action
+                      - automationId
+                      - automationName
+                    properties:
+                      type:
+                        const: automation-changed
+                        type: string
+                      action:
+                        anyOf:
+                          - const: created
+                            type: string
+                          - const: updated
+                            type: string
+                          - const: deleted
+                            type: string
+                      automationId:
+                        type: string
+                      automationName:
+                        type: string
+              widget:
+                type: object
+                required:
+                  - prompt
+                  - options
+                properties:
+                  prompt:
+                    type: string
+                  helpText:
+                    type: string
+                  options:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - label
+                      properties:
+                        label:
+                          type: string
+                        value:
+                          type: string
+                        description:
+                          type: string
+                        style:
+                          anyOf:
+                            - const: default
+                              type: string
+                            - const: primary
+                              type: string
+                            - const: danger
+                              type: string
+                  allowCustom:
+                    type: boolean
+              respondedValue:
+                type: string
+        hasMore:
+          type: boolean
+    ComputerStatus:
+      type: object
+      required:
+        - agentId
+        - state
+      properties:
+        agentId:
+          type: string
+        state:
+          anyOf:
+            - const: running
+              type: string
+            - const: "off"
+              type: string
+        vncUrl:
+          type: string
+        screenConfigured:
+          type: boolean
+    SidebarSection:
+      type: object
+      required:
+        - id
+        - name
+        - agentIds
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        agentIds:
+          type: array
+          items:
+            type: string
+    Session:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+    ErrorBody:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    Author:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    Attachment:
+      type: object
+      required:
+        - path
+        - name
+        - href
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+        href:
+          type: string
+    Reaction:
+      type: object
+      required:
+        - emoji
+        - by
+      properties:
+        emoji:
+          type: string
+        by:
+          type: string
+    LastEntry:
+      anyOf:
+        - type: object
+          required:
+            - kind
+            - text
+          properties:
+            kind:
+              const: text
+              type: string
+            text:
+              type: string
+        - type: object
+          required:
+            - kind
+            - count
+            - kinds
+          properties:
+            kind:
+              const: attachment
+              type: string
+            count:
+              type: integer
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - kind
+                  - count
+                properties:
+                  kind:
+                    type: string
+                  count:
+                    type: integer
+        - type: object
+          required:
+            - kind
+            - url
+          properties:
+            kind:
+              const: link
+              type: string
+            url:
+              type: string
+    Activity:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+        tool:
+          type: string
+    Presence:
+      type: object
+      required:
+        - isRunning
+        - isComposingMessage
+        - isRetrying
+        - currentActivity
+      properties:
+        isRunning:
+          type: boolean
+        isComposingMessage:
+          type: boolean
+        isRetrying:
+          type: boolean
+        currentActivity:
+          anyOf:
+            - type: object
+              required:
+                - kind
+              properties:
+                kind:
+                  type: string
+                tool:
+                  type: string
+            - type: "null"
+    TranscriptEvent:
+      anyOf:
+        - type: object
+          required:
+            - type
+            - from
+            - to
+          properties:
+            type:
+              const: name-changed
+              type: string
+            from:
+              type: string
+            to:
+              type: string
+        - type: object
+          required:
+            - type
+            - action
+            - automationId
+            - automationName
+          properties:
+            type:
+              const: automation-changed
+              type: string
+            action:
+              anyOf:
+                - const: created
+                  type: string
+                - const: updated
+                  type: string
+                - const: deleted
+                  type: string
+            automationId:
+              type: string
+            automationName:
+              type: string
+    Widget:
+      type: object
+      required:
+        - prompt
+        - options
+      properties:
+        prompt:
+          type: string
+        helpText:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            required:
+              - label
+            properties:
+              label:
+                type: string
+              value:
+                type: string
+              description:
+                type: string
+              style:
+                anyOf:
+                  - const: default
+                    type: string
+                  - const: primary
+                    type: string
+                  - const: danger
+                    type: string
+        allowCustom:
+          type: boolean
+    WidgetOption:
+      type: object
+      required:
+        - label
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        description:
+          type: string
+        style:
+          anyOf:
+            - const: default
+              type: string
+            - const: primary
+              type: string
+            - const: danger
+              type: string
+    CreateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    PatchAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        unread:
+          type: boolean
+        hidden:
+          type: boolean
+        notificationsEnabled:
+          type: boolean
+        notifyOnUpdates:
+          type: boolean
+    TurnBody:
+      type: object
+      properties:
+        content:
+          type: string
+        clientNonce:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+            properties:
+              path:
+                type: string
+              name:
+                type: string
+    AvatarBody:
+      type: object
+      properties:
+        dataUrl:
+          type: string
+        pngBase64:
+          type: string
+    ReactionBody:
+      type: object
+      required:
+        - emoji
+      properties:
+        emoji:
+          minLength: 1
+          type: string
+    PermissionBody:
+      type: object
+      required:
+        - requestId
+        - approved
+      properties:
+        requestId:
+          type: string
+        approved:
+          type: boolean
+    WidgetReplyBody:
+      type: object
+      required:
+        - entryId
+        - value
+      properties:
+        entryId:
+          type: string
+        value:
+          type: string
+paths:
+  /v1/health:
+    get:
+      summary: Sống hay không
+      tags:
+        - health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - isBusy
+                properties:
+                  ok:
+                    type: boolean
+                  isBusy:
+                    type: boolean
+  /v1/session:
+    get:
+      summary: Lấy token cho FE
+      tags:
+        - session
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /v1/agents:
+    get:
+      summary: Danh sách bot
+      tags:
+        - agents
+      parameters:
+        - name: includeHidden
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    post:
+      summary: Tạo bot
+      tags:
+        - agents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentBody"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - agent
+                  - transcript
+                properties:
+                  agent:
+                    type: object
+                    required:
+                      - id
+                      - name
+                      - description
+                      - createdAtMs
+                      - updatedAtMs
+                      - unread
+                      - hidden
+                      - avatarVersion
+                      - notificationsEnabled
+                      - notifyOnUpdates
+                      - presence
+                      - lastEntry
+                    properties:
+                      id:
+                        pattern: ^agent-[0-9]+$
+                        type: string
+                      name:
+                        type: string
+                      description:
+                        type: string
+                      createdAtMs:
+                        type: integer
+                      updatedAtMs:
+                        type: integer
+                      unread:
+                        type: boolean
+                      hidden:
+                        type: boolean
+                      avatarVersion:
+                        anyOf:
+                          - type: string
+                          - type: "null"
+                      notificationsEnabled:
+                        type: boolean
+                      notifyOnUpdates:
+                        type: boolean
+                      presence:
+                        type: object
+                        required:
+                          - isRunning
+                          - isComposingMessage
+                          - isRetrying
+                          - currentActivity
+                        properties:
+                          isRunning:
+                            type: boolean
+                          isComposingMessage:
+                            type: boolean
+                          isRetrying:
+                            type: boolean
+                          currentActivity:
+                            anyOf:
+                              - type: object
+                                required:
+                                  - kind
+                                properties:
+                                  kind:
+                                    type: string
+                                  tool:
+                                    type: string
+                              - type: "null"
+                      lastEntry:
+                        anyOf:
+                          - anyOf:
+                              - type: object
+                                required:
+                                  - kind
+                                  - text
+                                properties:
+                                  kind:
+                                    const: text
+                                    type: string
+                                  text:
+                                    type: string
+                              - type: object
+                                required:
+                                  - kind
+                                  - count
+                                  - kinds
+                                properties:
+                                  kind:
+                                    const: attachment
+                                    type: string
+                                  count:
+                                    type: integer
+                                  kinds:
+                                    type: array
+                                    items:
+                                      type: object
+                                      required:
+                                        - kind
+                                        - count
+                                      properties:
+                                        kind:
+                                          type: string
+                                        count:
+                                          type: integer
+                              - type: object
+                                required:
+                                  - kind
+                                  - url
+                                properties:
+                                  kind:
+                                    const: link
+                                    type: string
+                                  url:
+                                    type: string
+                          - type: "null"
+                  transcript:
+                    type: object
+                    required:
+                      - entries
+                      - hasMore
+                    properties:
+                      entries:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - seq
+                            - timestampMs
+                            - kind
+                          properties:
+                            id:
+                              type: string
+                            seq:
+                              minimum: 1
+                              type: integer
+                            timestampMs:
+                              type: integer
+                            kind:
+                              anyOf:
+                                - const: message
+                                  type: string
+                                - const: agent-message
+                                  type: string
+                                - const: tool-call
+                                  type: string
+                                - const: event
+                                  type: string
+                                - const: widget
+                                  type: string
+                            reactions:
+                              type: array
+                              items:
+                                type: object
+                                required:
+                                  - emoji
+                                  - by
+                                properties:
+                                  emoji:
+                                    type: string
+                                  by:
+                                    type: string
+                            isStreaming:
+                              type: boolean
+                            role:
+                              const: user
+                              type: string
+                            content:
+                              type: string
+                            clientNonce:
+                              type: string
+                            author:
+                              type: object
+                              required:
+                                - id
+                                - name
+                              properties:
+                                id:
+                                  type: string
+                                name:
+                                  type: string
+                            attachment:
+                              type: object
+                              required:
+                                - path
+                                - name
+                                - href
+                              properties:
+                                path:
+                                  type: string
+                                name:
+                                  type: string
+                                href:
+                                  type: string
+                            toolCallId:
+                              type: string
+                            requestId:
+                              type: string
+                            needsApproval:
+                              type: boolean
+                            name:
+                              type: string
+                            rawArgs:
+                              type: string
+                            summary:
+                              type: string
+                            status:
+                              anyOf:
+                                - const: pending
+                                  type: string
+                                - const: running
+                                  type: string
+                                - const: done
+                                  type: string
+                                - const: failed
+                                  type: string
+                            result:
+                              type: string
+                            event:
+                              anyOf:
+                                - type: object
+                                  required:
+                                    - type
+                                    - from
+                                    - to
+                                  properties:
+                                    type:
+                                      const: name-changed
+                                      type: string
+                                    from:
+                                      type: string
+                                    to:
+                                      type: string
+                                - type: object
+                                  required:
+                                    - type
+                                    - action
+                                    - automationId
+                                    - automationName
+                                  properties:
+                                    type:
+                                      const: automation-changed
+                                      type: string
+                                    action:
+                                      anyOf:
+                                        - const: created
+                                          type: string
+                                        - const: updated
+                                          type: string
+                                        - const: deleted
+                                          type: string
+                                    automationId:
+                                      type: string
+                                    automationName:
+                                      type: string
+                            widget:
+                              type: object
+                              required:
+                                - prompt
+                                - options
+                              properties:
+                                prompt:
+                                  type: string
+                                helpText:
+                                  type: string
+                                options:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                      - label
+                                    properties:
+                                      label:
+                                        type: string
+                                      value:
+                                        type: string
+                                      description:
+                                        type: string
+                                      style:
+                                        anyOf:
+                                          - const: default
+                                            type: string
+                                          - const: primary
+                                            type: string
+                                          - const: danger
+                                            type: string
+                                allowCustom:
+                                  type: boolean
+                            respondedValue:
+                              type: string
+                      hasMore:
+                        type: boolean
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}:
+    get:
+      summary: Một bot
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    patch:
+      summary: Sửa bot
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchAgentBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    delete:
+      summary: Xoá bot
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/transcript:
+    get:
+      summary: Transcript, phân trang bằng beforeSeq
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: beforeSeq
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptPage"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/turns:
+    post:
+      summary: Gửi một lượt
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TurnBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptPage"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/computer:
+    get:
+      summary: Trạng thái màn hình bot
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComputerStatus"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/avatar:
+    get:
+      summary: Ảnh avatar (bytes)
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: v
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    put:
+      summary: Đặt avatar
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvatarBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    delete:
+      summary: Về avatar mặc định
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/entries/{entryId}/reactions:
+    post:
+      summary: Bật/tắt một reaction
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReactionBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/permissions:
+    post:
+      summary: Cho phép / từ chối một tool call
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionBody"
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/widgets:
+    post:
+      summary: Trả lời một widget
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WidgetReplyBody"
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/host/sidebar:
+    get:
+      summary: Nhóm sidebar
+      tags:
+        - host
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sections
+                properties:
+                  sections:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - agentIds
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        agentIds:
+                          type: array
+                          items:
+                            type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/events:
+    get:
+      summary: "SSE: agent.upserted · transcript.append · computer.status"
+      tags:
+        - events
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/attachments:
+    post:
+      summary: Nạp ảnh/tệp, trả path + href
+      tags:
+        - attachments
+      responses:
+        "204":
+          description: OK, không có thân
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []

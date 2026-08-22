@@ -5,13 +5,13 @@
 # ROADMAP — Tách grokbot2 khỏi Grok Bot gốc (Strangler Fig → microservices)
 
 **Ngày:** 2026-08-20  
-**Pointer:** **P7** — [`docs/phase-state.json`](docs/phase-state.json) / [`docs/parity-runs/phase-current.json`](docs/parity-runs/phase-current.json).  
+**Pointer:** **P7** — [`docs/state/phase-state.json`](../state/phase-state.json) / [`docs/parity-runs/phase-current.json`](../parity-runs/phase-current.json).  
 **Trạng thái:** Phase 7 **đang soak** — code FE + native `/v1` xong; happy path đã chứng trên FE. **Không** `--advance` P7. **Không** mở P8. **Không** `GROKBOT2_CURSOR_ACL=0`.  
 **Phạm vi:** hai bề mặt trong workspace — **Grok Bot gốc** (binary Anysphere `sand` v0.20.0) và **grokbot2** (clone/self-host backend).  
 **Mục tiêu:** grokbot2 trở thành hệ độc lập, kiến trúc theo **năng lực nghiệp vụ**, không còn phụ thuộc binary / protobuf / gateway contract của app gốc.  
-**Không nằm trong mục tiêu:** fork hay phân phối lại client đã ký; xem [docs/legal.md](docs/legal.md).
+**Không nằm trong mục tiêu:** fork hay phân phối lại client đã ký; xem [docs/legal.md](../legal.md).
 
-Tài liệu liên quan (parity, không thay thế roadmap này): [docs/architecture.md](docs/architecture.md) · [docs/execution-roadmap.md](docs/execution-roadmap.md) · [docs/parity.md](docs/parity.md) · [docs/box-architecture.md](docs/box-architecture.md).
+Tài liệu liên quan (parity, không thay thế roadmap này): [docs/architecture.md](../architecture.md) · [docs/history/execution-roadmap.md](execution-roadmap.md) · [docs/parity.md](../parity.md) · [docs/architecture/box-architecture.md](../architecture/box-architecture.md).
 
 ---
 
@@ -311,7 +311,7 @@ Giả định **1 software engineer**, calendar **~14 tuần** Phase 0–8 (khô
 
 ### Phase 7 — FE độc lập S13 (tuần 10–13) — **đang soak** (không cắt ACL)
 
-**Trạng thái (2026-08-20):** code xong. Pointer vẫn **P7**. `pnpm phase:gate` GREEN, `advanced: false` ([`docs/parity-runs/phase-gate-P7.json`](docs/parity-runs/phase-gate-P7.json)). Gate B stock app skipped (CDP :9222 down) — OK, không phải lý do `--advance`.
+**Trạng thái (2026-08-20):** code xong. Pointer vẫn **P7**. `pnpm phase:gate` GREEN, `advanced: false` ([`docs/parity-runs/phase-gate-P7.json`](../parity-runs/phase-gate-P7.json)). Gate B stock app skipped (CDP :9222 down) — OK, không phải lý do `--advance`.
 
 **Mục tiêu:** UI grokbot2 không dùng `Grok Bot.exe`. Việc implement FE **không** còn là next action.
 
@@ -319,7 +319,7 @@ Giả định **1 software engineer**, calendar **~14 tuần** Phase 0–8 (khô
 
 - [x] App Electron hoặc web (Vite) **viết mới**: roster, composer, transcript, approval, computer iframe noVNC. (`apps/grokbot-web`, BFF `native.ts` phục vụ `/v1/*` cạnh `/gw`)
 - [x] Chỉ gọi API native (OpenAPI Phase 2), không `/gw/api`, không ConnectRPC.
-- [x] Dual-run: gốc :9222 và FE mới cùng BFF — so hành vi chat/box. ([docs/dual-run.md](docs/dual-run.md))
+- [x] Dual-run: gốc :9222 và FE mới cùng BFF — so hành vi chat/box. ([docs/history/dual-run.md](dual-run.md))
 - [x] Không copy bundle minify Anysphere vào product (legal). Có thể **tham khảo** UX từ extracted FE.
 - [x] Image attachments (`POST /v1/attachments`), write-tool approval cards, interrupt (`DELETE …/turns/current`), roster rename/hide, chat thường (không chỉ `/tool`).
 - [x] Native `ask_question` widget: transcript `kind: widget` + nút trên grokbot-web; `POST /v1/agents/{id}/widgets`. (handoff vẫn backlog P8)
