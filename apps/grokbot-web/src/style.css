@@ -882,3 +882,23 @@ body.dragging { cursor: col-resize; user-select: none; }
 .routine-main .when { font-size: var(--fs-meta); color: var(--fg-3); }
 .routine-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
 .routine .icon-btn { width: 22px; height: 22px; font-size: var(--fs-body); }
+
+/* ── X6: nút trả lời và menu More trên tin nhắn ──────────────────────────── */
+/* Ba nút 24×24 như app gốc: Add reaction · Reply · More. Hộp menu More của họ 200×74, hai mục. */
+.msg-actions .act.reply, .msg-actions .act.more { font-size: var(--fs-body); }
+.more-menu {
+  position: absolute; right: 0; top: 28px; z-index: 4;
+  /* 200×74 là số đo hộp menu của app gốc (X0.2): viền 1 + đệm 4 + 32 + 32 + đệm 4 + viền 1. */
+  display: flex; flex-direction: column; width: 200px; padding: 4px;
+  border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--surface-3);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  animation: menu-in 100ms ease-out;
+}
+.more-menu[hidden] { display: none; }
+.more-menu button {
+  height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--fg); font-size: var(--fs-body); text-align: left; cursor: pointer;
+  transition: background-color var(--t-fast) ease;
+}
+.more-menu button:hover:not(:disabled) { background: var(--surface-4); }
+.more-menu button:disabled { opacity: 0.45; cursor: default; }

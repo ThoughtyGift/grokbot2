@@ -503,8 +503,24 @@ lúc tạo.
 
 ### X6 — cần thiết kế mới
 
-- [ ] X6.1 Reply vào một tin (`replyTo` chưa tồn tại ở đâu)
-- [ ] X6.2 `More message actions` — chỉ sau X0.2
+- [x] **X6.1 Trả lời — bằng TRÍCH DẪN, không phải luồng con.** Đã kiểm lại: `replyTo`, `threadId`,
+  `parentEntry` **không tồn tại ở đâu** — cả hợp đồng lẫn backend. Nên một nút "trả lời" chỉ gắn cờ
+  ở FE là thứ **model không bao giờ thấy**, tức trang trí. Bấm trả lời giờ chèn một dòng trích dẫn
+  (`> Tên: 160 ký tự đầu`) vào ô nhập: model đọc được vì nó nằm trong chính nội dung tin, và không
+  phải bịa ra một mô hình dữ liệu mà backend chưa honour được.
+
+  **Đây không phải luồng con**, và mục dưới nói rõ như vậy. Muốn luồng con thật thì phải thêm
+  `replyToEntryId` vào `TurnBody` + `Entry`, và runtime phải đưa tin được trích vào prompt — mà
+  `runtime/turn.ts` đang là file phiên khác sửa, nên tôi không đụng.
+- [x] **X6.2 `More message actions`** — hộp **200×74** đúng số đo, đúng **hai** mục như X0.2 đã đo:
+  `Sao chép` (chạy được) và `Tạo luồng` (**để mờ kèm lý do** — cần mô hình dữ liệu chưa có). Vẽ ra
+  một mục bấm vào không làm gì thì tệ hơn một mục mờ nói rõ vì sao.
+
+  Hàng nút hover giờ đủ ba như app gốc, cùng nhãn: `Add reaction` · `Reply to X message` ·
+  `More message actions`, mỗi nút **24×24**.
+
+  Clipboard bị chặn (không phải ngữ cảnh an toàn) thì **nói ra**, không im lặng nuốt — một nút
+  "sao chép" báo thành công mà không chép gì là kiểu hỏng khó phát hiện nhất.
 
 ---
 

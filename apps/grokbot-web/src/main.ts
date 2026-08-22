@@ -335,8 +335,11 @@ function messageActions(e: NativeEntry): HTMLElement {
   // `role="toolbar"` + nhãn mang theo giờ và id entry, đúng như thanh của app gốc: khi có nhiều
   // bubble giống nhau thì nhãn là thứ duy nhất phân biệt được cái nào đang hover.
   const bar = el(`<div class="msg-actions" role="toolbar" aria-label="Hành động cho tin của ${escapeHtml(who)} lúc ${escapeHtml(at)} (${escapeHtml(e.id)})">
-    <button type="button" class="act" aria-label="Thêm reaction"></button>
+    <button type="button" class="act" aria-label="Add reaction"></button>
     <div class="react-menu" hidden role="menu"></div>
+    <button type="button" class="act reply" aria-label="Reply to ${escapeHtml(who)} message" title="Trả lời">↩</button>
+    <button type="button" class="act more" aria-label="More message actions" title="Thêm">⋯</button>
+    <div class="more-menu" hidden role="menu"></div>
   </div>`);
   const menu = bar.querySelector<HTMLElement>(".react-menu")!;
   for (const emoji of REACTIONS) {
@@ -344,10 +347,59 @@ function messageActions(e: NativeEntry): HTMLElement {
     pick.onclick = (ev) => { ev.stopPropagation(); menu.hidden = true; void toggleReaction(e.id, emoji); };
     menu.append(pick);
   }
+  /*
+   * Menu `More message actions` — app gốc chỉ có HAI mục: `Start a thread` và `Copy` (đo được ở
+   * X0.2, hộp 200×74). Nên đây là toàn bộ menu, không phải một tập con.
+   *
+   * `Start a thread` để `disabled` kèm lý do: luồng con cần một mô hình dữ liệu chưa tồn tại ở đâu
+   * — `replyTo`/`threadId` không có trong hợp đồng lẫn backend. Vẽ ra một mục bấm vào không làm gì
+   * thì tệ hơn một mục mờ nói rõ vì sao.
+   */
+  const more = bar.querySelector<HTMLElement>(".more-menu")!;
+  const copyItem = el(`<button type="button" role="menuitem">Sao chép</button>`);
+  copyItem.onclick = async (ev) => {
+    ev.stopPropagation();
+    more.hidden = true;
+    try {
+      await navigator.clipboard.writeText(e.content ?? "");
+      state.error = "";
+    } catch {
+      // Clipboard bị chặn (không phải ngữ cảnh an toàn) — nói ra, đừng im lặng nuốt.
+      state.error = "trình duyệt không cho ghi clipboard ở đây";
+      paint();
+    }
+  };
+  const threadItem = el(`<button type="button" role="menuitem" disabled title="Luồng con chưa dựng: replyTo/threadId chưa có ở hợp đồng lẫn backend">Tạo luồng</button>`);
+  more.append(copyItem, threadItem);
+  bar.querySelector<HTMLButtonElement>(".more")!.onclick = (ev) => {
+    ev.stopPropagation();
+    root.querySelectorAll<HTMLElement>(".react-menu, .more-menu").forEach((o) => { if (o !== more) o.hidden = true; });
+    more.hidden = !more.hidden;
+  };
+
+  /*
+   * Trả lời = TRÍCH DẪN vào ô nhập, không phải luồng con.
+   *
+   * Không có `replyTo` ở backend thì một nút "trả lời" chỉ gắn cờ ở FE là thứ model không bao giờ
+   * thấy — tức trang trí. Đưa trích dẫn vào chính nội dung tin thì model đọc được, và không phải
+   * bịa ra một mô hình dữ liệu mà backend chưa honour được. Đây KHÔNG phải luồng con, và tài liệu
+   * nói rõ như vậy.
+   */
+  bar.querySelector<HTMLButtonElement>(".reply")!.onclick = (ev) => {
+    ev.stopPropagation();
+    const quoted = (e.content ?? "").trim().split("\n").slice(0, 3).join(" ").slice(0, 160);
+    if (!quoted) return;
+    const head = `> ${who}: ${quoted}${(e.content ?? "").length > 160 ? "…" : ""}`;
+    state.draft = state.draft.trim() ? `${head}\n\n${state.draft}` : `${head}\n\n`;
+    paint();
+    const box = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
+    if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  };
+
   bar.querySelector<HTMLButtonElement>(".act")!.onclick = (ev) => {
     ev.stopPropagation();
     // Chỉ một menu mở tại một thời điểm.
-    root.querySelectorAll<HTMLElement>('.react-menu').forEach((other) => { if (other !== menu) other.hidden = true; });
+    root.querySelectorAll<HTMLElement>(".react-menu, .more-menu").forEach((other) => { if (other !== menu) other.hidden = true; });
     menu.hidden = !menu.hidden;
   };
   return bar;
