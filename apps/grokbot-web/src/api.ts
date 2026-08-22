@@ -1,58 +1,24 @@
-export type NativeAgent = {
-  id: string;
-  name: string;
-  description: string;
-  unread: boolean;
-  hidden: boolean;
-  /** `/v1/agents` already sends these; declared so the row can show a timestamp like the stock app. */
-  createdAtMs?: number;
-  updatedAtMs?: number;
-  /** Có ảnh avatar hay không, và bản nào. `null`/thiếu ⇒ dùng initials. */
-  avatarVersion?: string | null;
-  presence: { isRunning: boolean; currentActivity?: { kind: string; tool?: string } | null };
-  lastEntry: { kind: string; text?: string } | null;
-};
+/**
+ * Cầu nối `/v1`.
+ *
+ * Kiểu đến từ `@grokbot2/api-contract` bằng `import type` — **không một byte runtime nào** vào
+ * bundle. Trước đây file này tự khai lại `NativeAgent`/`NativeEntry`/`ComputerStatus` như một tập
+ * con đoán được, và đã lệch với BE ở 6 chỗ (xem đầu `packages/api-contract/src/v1.ts`). Tự khai lại
+ * thì thêm trường ở BE là FE không bao giờ thấy, còn bỏ trường thì FE hỏng lúc chạy — không hỏng
+ * lúc typecheck.
+ *
+ * Tên `Native*` giữ nguyên để không phải sửa `main.ts` theo.
+ */
+import type {
+  Agent as NativeAgent,
+  ComputerStatus,
+  Entry as NativeEntry,
+  SidebarSection,
+  Widget as NativeWidget,
+  WidgetOption as NativeWidgetOption,
+} from "@grokbot2/api-contract";
 
-export type NativeWidgetOption = {
-  label: string;
-  value?: string;
-  description?: string;
-  style?: "default" | "primary" | "danger";
-};
-
-export type NativeEntry = {
-  id: string;
-  seq: number;
-  timestampMs: number;
-  kind: "message" | "agent-message" | "tool-call" | "event" | "widget";
-  content?: string;
-  author?: { id: string; name: string };
-  name?: string;
-  summary?: string;
-  status?: "pending" | "running" | "done" | "failed";
-  result?: string;
-  toolCallId?: string;
-  requestId?: string;
-  needsApproval?: boolean;
-  isStreaming?: boolean;
-  event?: { type: string; from?: string; to?: string };
-  attachment?: { path: string; name: string; href: string };
-  widget?: { prompt: string; helpText?: string; options: NativeWidgetOption[]; allowCustom?: boolean };
-  respondedValue?: string;
-  /** Reaction đã đặt trên entry này. `by: "me"` là của chủ máy. */
-  reactions?: { emoji: string; by: string }[];
-};
-
-/** Nhóm sidebar, đúng shape app gốc dùng. `__agents__` là mục catch-all. */
-export type SidebarSection = { id: string; name: string; agentIds: string[] };
-
-export type ComputerStatus = {
-  agentId: string;
-  state: "running" | "off";
-  vncUrl?: string;
-  /** Phân biệt "chưa cấu hình màn hình" với "đã cấu hình mà không ai đang dùng". */
-  screenConfigured?: boolean;
-};
+export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection };
 
 let token = "";
 

@@ -74,6 +74,9 @@ button:disabled { opacity: 0.4; cursor: default; }
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
   height: 100%;
 }
+/* `Close details` của app gốc: panel biến mất, cột chat ăn hết chỗ (1302 → 1659). */
+.shell.no-pane { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+.shell.no-pane .computer { display: none; }
 
 /* ── sidebar ──────────────────────────────────────────────────────────────── */
 
@@ -108,7 +111,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* Row 236 rộng trong sidebar 261, bo 10, hai dòng. */
 .bot {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 36px 1fr auto;
   grid-template-areas: "av name meta" "av prev prev";
   align-items: center; gap: 1px 8px;
   /* Row app cao đúng 54 (`sand-agent-item` 236×54). */
@@ -119,7 +122,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 .bot:hover { background: var(--row-hover); }
 .bot.active { background: var(--row-active); }
 .bot.dim { opacity: 0.45; }
-.bot .avatar { grid-area: av; width: 40px; height: 40px; }
+/* Avatar row sidebar đo được 36, không phải 40. */
+.bot .avatar { grid-area: av; width: 36px; height: 36px; }
 .bot .name { grid-area: name; font-size: 14px; font-weight: 500; }
 .bot .when { grid-area: meta; font-size: 12px; color: var(--fg-2); }
 .bot .dot { grid-area: meta; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
@@ -163,6 +167,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .head-actions .status { font-size: 12px; color: var(--fg-2); }
 .head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2); }
 .head-actions button:hover:not(:disabled) { background: rgb(64, 64, 64); }
+/* Nút icon vuông trong toolbar (đóng/mở panel) — 28×28, không phải pill có chữ. */
+.head-actions .icon-btn {
+  width: 28px; height: 28px; padding: 0; border-radius: var(--r-row);
+  background: transparent; color: var(--fg-2); font-size: 15px; line-height: 1;
+}
+.head-actions .icon-btn:hover { background: var(--row-hover); color: var(--fg); }
 
 .err {
   margin: 8px 16px; padding: 8px 12px; border-radius: var(--r-card);
@@ -187,23 +197,40 @@ button:disabled { opacity: 0.4; cursor: default; }
   white-space: pre-wrap; word-break: break-word;
   animation: bubble-in var(--t-slow) var(--e-out) both;
 }
-.bubble.agent {
-  align-self: flex-start; background: var(--bubble-agent);
-  border-radius: 18px 18px 18px 6px;
-}
-.bubble.user {
-  align-self: flex-end; background: var(--bubble-user);
-  border-radius: 18px 18px 6px 18px;
-}
-.bubble .meta { margin-bottom: 2px; font-size: 12px; line-height: 16px; color: var(--fg-2); }
+/*
+ * Bo đều 18px là MẶC ĐỊNH; đuôi chỉ ở bubble đầu lượt (`.first`).
+ * Đo 5 bubble trên app: "đuôi ⇔ lượt có hiện tên" khớp 5/5, "đuôi ⇔ tin cuối lượt" chỉ 2/5.
+ */
+.bubble.agent { align-self: flex-start; background: var(--bubble-agent); border-radius: 18px; }
+.bubble.user { align-self: flex-end; background: var(--bubble-user); border-radius: 18px; }
+.bubble.agent.first { border-bottom-left-radius: 6px; }
+.bubble.user.first { border-bottom-right-radius: 6px; }
 .bubble.streaming::after { content: "▍"; margin-left: 2px; animation: caret 1s steps(1) infinite; }
 
 @keyframes caret { 0%, 49% { opacity: 0.55; } 50%, 100% { opacity: 0.1; } }
 @keyframes bubble-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.msg-row { display: flex; align-items: flex-end; gap: 8px; animation: bubble-in var(--t-slow) var(--e-out) both; }
-.msg-row .avatar { width: 24px; height: 24px; flex: none; margin-bottom: 2px; }
-.msg-row .bubble { animation: none; }
+/* ── lượt nói ─────────────────────────────────────────────────────────────── */
+/*
+ * Đo app gốc: máng 22px, khoảng cách tới cột 8px (277 → 307), avatar 22×22 căn ĐÁY lượt,
+ * tên 12px thụt 6px và chỉ hiện một lần ở đầu lượt.
+ */
+.run { display: flex; align-items: flex-end; gap: 8px; }
+.run-gutter { width: 22px; flex: none; }
+.run-gutter .avatar { width: 22px; height: 22px; }
+.run-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* `inline-block` + `align-self`: nhãn tên của app là nút bó sát chữ (80×16), không phải khối
+   trải hết cột — của mình từng rộng 1240, chỉ thấy được khi so ẢNH chứ không phải so số. */
+.run-author {
+  align-self: flex-start; padding-left: 6px;
+  font-size: 12px; line-height: 16px; color: var(--fg-2);
+}
+.run.mine .run-author { align-self: flex-end; }
+
+/* Lượt của mình: máng bên phải, mọi thứ dồn phải. */
+.run.mine { flex-direction: row-reverse; }
+.run.mine .run-col { align-items: flex-end; }
+.run.mine .run-author { padding: 0 6px 0 0; }
 
 .att { max-width: 320px; border-radius: var(--r-card); display: block; margin-top: 6px; }
 .att-file {
@@ -308,8 +335,18 @@ button:disabled { opacity: 0.4; cursor: default; }
   font-size: 14px; line-height: 20px; max-height: 160px;
 }
 .composer textarea::placeholder { color: var(--fg-3); }
+.composer .mic {
+  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
+  border-radius: 50%; color: var(--fg-2); font-size: 14px;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.composer .mic:hover:not(:disabled) { background: var(--row-hover); color: var(--fg); }
+/* Đang nghe: đỏ và nhấp nháy, để không ai để mic bật mà không biết. */
+.composer .mic.on { background: rgba(232, 90, 82, 0.2); color: var(--danger); animation: pulse 1.1s ease-in-out infinite; }
+
+/* 28×28 là số đo từ `Attach file` và `Start voice input` của app; send/stop theo cùng cỡ. */
 .composer .attach, .composer .send, .composer .stop {
-  display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
   border-radius: 50%; font-size: 15px; line-height: 1;
   transition: background-color var(--t-fast) ease;
 }

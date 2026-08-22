@@ -19,7 +19,54 @@ const state = {
   query: "",
   /** Nhóm sidebar từ /v1/host/sidebar; rỗng ⇒ hiện phẳng như trước. */
   sections: [] as SidebarSection[],
+  /**
+   * Panel phải đang mở hay không (nút `Close details` của app gốc).
+   * Chưa lưu xuống backend — việc đó thuộc B3 (`/v1/host/settings`), nên đóng app là mất.
+   */
+  paneOpen: true,
 };
+
+/**
+ * Nút mic — đọc để nhập, dùng Web Speech API của trình duyệt.
+ *
+ * App gốc có `Start voice input`. Vẽ một cái nút bấm vào không làm gì thì tệ hơn là không vẽ, nên
+ * nút này CHỈ xuất hiện khi trình duyệt thật sự hỗ trợ; Firefox không có thì không có nút.
+ *
+ * Không gửi tiếng ra ngoài backend của mình: nhận dạng chạy ở phía trình duyệt.
+ */
+type SpeechCtor = new () => {
+  lang: string; continuous: boolean; interimResults: boolean;
+  start(): void; stop(): void;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }) => void) | null;
+  onend: (() => void) | null;
+};
+const SPEECH: SpeechCtor | undefined =
+  (window as unknown as { SpeechRecognition?: SpeechCtor; webkitSpeechRecognition?: SpeechCtor }).SpeechRecognition
+  ?? (window as unknown as { webkitSpeechRecognition?: SpeechCtor }).webkitSpeechRecognition;
+const SPEECH_OK = Boolean(SPEECH);
+let dictation: InstanceType<SpeechCtor> | null = null;
+
+function toggleDictation(btn: HTMLButtonElement): void {
+  if (dictation) { dictation.stop(); return; }
+  if (!SPEECH) return;
+  const box = root.querySelector<HTMLTextAreaElement>("textarea");
+  if (!box) return;
+  const rec = new SPEECH();
+  rec.lang = "vi-VN";
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.onresult = (ev) => {
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const text = ev.results[i]?.[0]?.transcript ?? "";
+      if (text) box.value = `${box.value}${box.value && !box.value.endsWith(" ") ? " " : ""}${text.trim()}`;
+    }
+  };
+  // `onend` bắn cả khi tự hết thời gian, không chỉ khi bấm dừng — nên trạng thái nút reset ở đây.
+  rec.onend = () => { dictation = null; btn.classList.remove("on"); };
+  dictation = rec;
+  btn.classList.add("on");
+  rec.start();
+}
 
 let closeMenusBound = false;
 
@@ -133,20 +180,15 @@ function renderEntry(e: NativeEntry): HTMLElement {
   const who = e.kind === "message" ? "bạn" : (e.author?.name ?? "bot");
   const cls = e.kind === "message" ? "user" : "agent";
   const streaming = e.kind === "agent-message" && e.isStreaming ? " streaming" : "";
-  const bubble = el(`<div class="bubble ${cls}${streaming}"><div class="meta">${escapeHtml(who)}</div></div>`);
-  /**
-   * Bọc bubble của bot vào một hàng có avatar ngoài lề — nhưng CHỈ Ở CUỐI.
+  /*
+   * Bubble trần: KHÔNG có tên tác giả, KHÔNG có avatar.
    *
-   * Trước đây nhánh này `return row` ngay tại đây, tức là trả về trước khi đính kèm và nội dung
-   * được gắn vào bubble: mọi câu trả lời của bot render ra chỉ còn đúng tên bot. Đo được ngày
-   * 2026-08-22 trên FE đang chạy — 5/5 `.bubble.agent` có `innerText` bằng đúng tên bot.
+   * Hai thứ đó thuộc về *lượt nói* chứ không thuộc về từng tin — app gốc gom các tin liên tiếp
+   * cùng một người vào `sand-author-run`, đặt tên một lần ở đầu và avatar một lần ở máng bên
+   * trái. Xem `renderRuns()`.
    */
-  const wrap = (node: HTMLElement): HTMLElement => {
-    if (cls !== "agent" || !e.author) return node;
-    const row = el(`<div class="msg-row">${avatarOf({ id: e.author.id, name: e.author.name })}</div>`);
-    row.append(node);
-    return row;
-  };
+  const bubble = el(`<div class="bubble ${cls}${streaming}"></div>`);
+  const wrap = (node: HTMLElement): HTMLElement => node;
   if (e.attachment?.href) {
     /**
      * Ảnh thì render `<img>`; mọi thứ khác là THẺ FILE.
@@ -261,6 +303,64 @@ async function toggleReaction(entryId: string, emoji: string): Promise<void> {
     state.error = err instanceof Error ? err.message : String(err);
   }
   await loadTranscript();
+}
+
+/**
+ * Gom các tin liên tiếp CÙNG một người thành một lượt nói, rồi vẽ.
+ *
+ * Đo trên app gốc (2026-08-22):
+ *   `.sand-author-run`   máng 22px + khoảng 8px + cột nội dung
+ *   `.sand-author-run__gutter`  22×22, avatar căn ĐÁY của lượt
+ *   `.sand-group-author` tên 12px, thụt vào 6px, chỉ hiện MỘT lần ở đầu lượt
+ *
+ * Đuôi bubble (`…6px` góc dưới-trái) đi cùng "lượt có hiện tên", không phải "tin cuối lượt":
+ * đo 5 bubble thật thì giả thiết "có tên" khớp 5/5, còn "tin cuối lượt" chỉ 2/5. Nói cách khác
+ * đuôi đánh dấu **mở đầu** một lượt nói, chứ không phải kết thúc — nên nó nằm ở bubble ĐẦU.
+ *
+ * Thẻ công cụ / widget / event không thuộc lượt nào: chúng cắt lượt đang mở.
+ */
+function renderRuns(entries: NativeEntry[]): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  let run: HTMLElement | null = null;
+  let runKey = "";
+  /**
+   * Người nói của lượt TRƯỚC, tính xuyên qua thẻ công cụ.
+   *
+   * Một thẻ công cụ cắt lượt (bubble sau nó không dồn vào lượt trước), nhưng app gốc KHÔNG in lại
+   * tên: đo được 3 lượt liên tiếp cùng bot mà chỉ lượt đầu có tên. Và vì đuôi bubble đi cùng nhãn
+   * tên (khớp 5/5), lượt tiếp nối cũng không có đuôi. Nên phải nhớ người nói qua cả dấu ngắt.
+   */
+  let lastSpeaker = "";
+
+  for (const e of entries) {
+    const isMsg = e.kind === "message" || e.kind === "agent-message";
+    if (!isMsg) { run = null; runKey = ""; out.push(renderEntry(e)); continue; }
+
+    const mine = e.kind === "message";
+    const key = mine ? "me" : `bot:${e.author?.id ?? "?"}`;
+    if (key !== runKey) {
+      const opensBlock = key !== lastSpeaker;
+      runKey = key;
+      lastSpeaker = key;
+      run = el(`<div class="run ${mine ? "mine" : "theirs"}${opensBlock ? " opens" : ""}"></div>`);
+      const gutter = el(`<div class="run-gutter"></div>`);
+      if (!mine && e.author) gutter.innerHTML = avatarOf({ id: e.author.id, name: e.author.name });
+      const col = el(`<div class="run-col"></div>`);
+      if (opensBlock) {
+        col.append(el(`<div class="run-author">${escapeHtml(mine ? "bạn" : (e.author?.name ?? "bot"))}</div>`));
+      }
+      run.append(gutter, col);
+      out.push(run);
+    }
+    const col = run!.querySelector(".run-col")!;
+    const node = renderEntry(e);
+    // Đuôi chỉ ở bubble đầu của một lượt MỞ ĐẦU khối — cùng điều kiện với nhãn tên.
+    if (run!.classList.contains("opens") && col.querySelectorAll(".bubble").length === 0) {
+      node.classList.add("first");
+    }
+    col.append(node);
+  }
+  return out;
 }
 
 function escapeHtml(s: string): string {
@@ -469,7 +569,7 @@ function screenPane(c: ComputerStatus | null): string {
 
 function paint(): void {
   const selected = state.agents.find((a) => a.id === state.selected);
-  root.replaceChildren(el(`<div class="shell">
+  root.replaceChildren(el(`<div class="shell${state.paneOpen ? "" : " no-pane"}">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-row">
@@ -497,6 +597,7 @@ function paint(): void {
           <span class="status">${selected?.presence.isRunning ? "đang trả lời" : "sẵn sàng"}</span>
           <button type="button" class="ghost" data-act="rename" ${selected ? "" : "disabled"}>đổi tên</button>
           <button type="button" class="ghost" data-act="avatar" ${selected ? "" : "disabled"}>ảnh</button>
+          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Đóng panel" : "Mở panel"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}">${state.paneOpen ? "›" : "‹"}</button>
           <button type="button" class="ghost" data-act="hide" ${selected ? "" : "disabled"}>${selected?.hidden ? "hiện" : "ẩn"}</button>
         </div>
       </div>
@@ -505,7 +606,8 @@ function paint(): void {
       <form class="composer">
         <div class="pending" hidden></div>
         <label class="attach" title="gửi ảnh">+<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ${selected ? "" : "disabled"} /></label>
-        <textarea name="q" rows="1" placeholder="Nhắn cho ${escapeHtml(selected?.name ?? "bot")}" ${selected ? "" : "disabled"}></textarea>
+        <textarea name="q" rows="1" aria-label="Prompt" placeholder="Hỏi bất cứ điều gì, hoặc kéo tệp vào." ${selected ? "" : "disabled"}></textarea>
+        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Đọc để nhập" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
         <button type="submit" class="send" title="gửi" ${selected && !state.busy && !selected?.presence.isRunning ? "" : "disabled"}>↑</button>
         <button type="button" class="stop" data-act="stop" title="dừng" ${selected?.presence.isRunning ? "" : "disabled"}>■</button>
       </form>
@@ -578,8 +680,13 @@ function paint(): void {
   }
 
   const log = root.querySelector(".transcript")!;
-  if (!state.entries.length) log.append(el(`<div class="empty">Bắt đầu một cuộc trò chuyện.</div>`));
-  for (const e of state.entries) log.append(renderEntry(e));
+  /*
+   * Hai trạng thái rỗng KHÁC nhau, app gốc phân biệt: chưa chọn bot ("No Bot selected.") và đã
+   * chọn nhưng hội thoại trống. Trước đây cả hai đều ra một câu, tức nói sai với người vừa mở app.
+   */
+  if (!selected) log.append(el(`<div class="empty">Chưa chọn bot.</div>`));
+  else if (!state.entries.length) log.append(el(`<div class="empty">Bắt đầu một cuộc trò chuyện.</div>`));
+  for (const node of renderRuns(state.entries)) log.append(node);
   log.scrollTop = log.scrollHeight;
 
   root.querySelector<HTMLButtonElement>("[data-act=new]")!.onclick = async () => {
@@ -631,6 +738,12 @@ function paint(): void {
     await refreshRoster();
   };
   // Hai chỗ mở bộ chọn ảnh: nút "ảnh" và chính cái avatar trên header.
+  root.querySelector<HTMLButtonElement>("[data-act=pane]")!.onclick = () => {
+    state.paneOpen = !state.paneOpen;
+    paint();
+  };
+  const mic = root.querySelector<HTMLButtonElement>("[data-act=mic]");
+  if (mic) mic.onclick = () => toggleDictation(mic);
   root.querySelectorAll<HTMLButtonElement>('[data-act=avatar]').forEach((btn) => {
     btn.onclick = () => { if (selected) openAvatarPicker(selected); };
   });
@@ -724,7 +837,9 @@ function paint(): void {
    * nghĩa: hàng trong roster (đang trả lời / có tin mới) và bot đang mở.
    */
   root.querySelectorAll<HTMLElement>(".avatar.face[data-bot]").forEach((host) => {
-    if (host.closest(".msg-row")) return;
+    // Máng lượt nói: có thể có hàng chục avatar 22px lặp lại cùng một bot trong transcript.
+    // (Trước A1 guard này trỏ vào `.msg-row` — class đó không còn, tức guard đã hở.)
+    if (host.closest(".run-gutter")) return;
     const id = host.dataset.bot!;
     liveAvatars.push(animateAvatar(host, id, moodOf(state.agents.find((x) => x.id === id))));
   });

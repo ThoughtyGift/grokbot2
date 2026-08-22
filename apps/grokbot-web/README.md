@@ -14,4 +14,4 @@ pnpm web              # Vite :5173, proxies /v1 → :8788
 Or `infra/scripts/run-web.ps1` — opens this UI, never `Grok Bot.exe`.
 
 Stock Grok Bot on CDP 9222 can stay running against the same BFF for comparison
-(see [`docs/dual-run.md`](../../docs/dual-run.md)).
+(see [`docs/history/dual-run.md`](../../docs/history/dual-run.md)).
