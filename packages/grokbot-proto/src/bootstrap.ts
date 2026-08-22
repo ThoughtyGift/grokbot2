@@ -26,6 +26,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "WatchSandBoxMigration",
   "ListMarketplacePlugins",
   "GetEffectiveUserPlugins",
+  "GetCurrentPeriodUsage",
 ] as const;
 
 /**
@@ -47,6 +48,12 @@ export interface RpcCtx {
    * enforce once a user is over quota.
    */
   access?: "granted" | "payment_required";
+  /**
+   * This period's usage for the caller, computed by the backend (it owns the `usage` table).
+   * Absent ⇒ `GetCurrentPeriodUsage` answers `enabled:false`, i.e. the app draws no usage bar —
+   * the historical behaviour when the RPC returned an empty message.
+   */
+  usage?: { used: number; limit: number; cycleStartMs: number; cycleEndMs: number; message?: string };
 }
 
 /** Map of RPC method name -> bare protobuf response body. */
@@ -88,6 +95,9 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
   // These are local stubs (not Cursor.com). yPa drops a Plugin with no mcp_servers and no skills.
   ListMarketplacePlugins: () => listMarketplacePlugins(),
   GetEffectiveUserPlugins: () => getEffectiveUserPlugins(),
+
+  // DashboardService.GetCurrentPeriodUsage — the app's own usage bar ("your included API usage").
+  GetCurrentPeriodUsage: (ctx) => currentPeriodUsage(ctx.usage),
 };
 
 /** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
@@ -185,6 +195,40 @@ function pluginJson(p: (typeof LOCAL_PLUGINS)[number]): Record<string, unknown> 
     ...("mcp" in p && p.mcp ? { mcpServers: [{ name: p.mcp.name, description: p.mcp.description }] } : {}),
     lifecycleState: "PLUGIN_LIFECYCLE_STATE_PUBLIC_LISTED",
   };
+}
+
+/**
+ * aiserver.v1.GetCurrentPeriodUsageResponse — the app's usage bar.
+ *
+ * Field numbers read verbatim from the vendor bundle (`electron-main/main.cjs`):
+ *   1 billing_cycle_start (int64)   2 billing_cycle_end (int64)   3 plan_usage (PlanUsage)
+ *   6 enabled (bool)                7 display_message (string)
+ * PlanUsage: 1 total_spend · 2 included_spend · 4 remaining · 5 limit (all int32).
+ *
+ * "Spend" is the vendor's unit; grokbot2 has no per-token price, so it reports ESTIMATED TOKENS —
+ * the same number the meter records (compaction.estimateTokens). Labelling it in `display_message`
+ * keeps that honest rather than implying a currency amount.
+ *
+ * With no usage in ctx (billing off, or an unknown caller) this answers `enabled:false`, which is
+ * what the app reads as "no usage bar" — identical in effect to the empty message it used to get.
+ */
+export function currentPeriodUsage(u?: { used: number; limit: number; cycleStartMs: number; cycleEndMs: number; message?: string }): Buffer {
+  if (!u) return message(pbBool(6, false));
+  const used = Math.max(0, Math.round(u.used));
+  const limit = Math.max(0, Math.round(u.limit));
+  const planUsage = message(
+    pbVar(1, used),                          // total_spend
+    pbVar(2, limit),                         // included_spend
+    pbVar(4, Math.max(0, limit - used)),     // remaining
+    pbVar(5, limit),                         // limit
+  );
+  return message(
+    pbVar(1, Math.round(u.cycleStartMs)),
+    pbVar(2, Math.round(u.cycleEndMs)),
+    pbMsg(3, planUsage),
+    pbBool(6, true),
+    pbStr(7, u.message ?? `${used.toLocaleString("en-US")} / ${limit.toLocaleString("en-US")} tokens (ước lượng)`),
+  );
 }
 
 /** aiserver.v1.ListMarketplacePluginsResponse: plugins (1) repeated, has_more (3). */

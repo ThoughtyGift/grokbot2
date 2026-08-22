@@ -151,6 +151,28 @@ export function accessVerdict(user: { authId: string; email: string }): "granted
   return monthlyTokens(u.authId) >= cap ? "payment_required" : "granted";
 }
 
+/**
+ * This period's usage for the app's own usage bar (GetCurrentPeriodUsage).
+ *
+ * Returns null when billing is off or the plan is uncapped — the RPC then answers `enabled:false`
+ * and the app draws no bar, which is the historical behaviour. The window is the same trailing 30
+ * days `accessVerdict` gates on, so the bar and the lock can never disagree.
+ */
+export function currentPeriodUsage(user: { authId: string; email: string }, now = Date.now()):
+  { used: number; limit: number; cycleStartMs: number; cycleEndMs: number } | null {
+  if (billingMode() === "off") return null;
+  const u = ensureUser(user.authId, user.email);
+  if (!u) return null;
+  const cap = getPlan(u.plan)?.monthlyTokenCap ?? null;
+  if (cap == null) return null;   // uncapped plan — nothing meaningful to draw
+  return {
+    used: monthlyTokens(u.authId, now),
+    limit: cap,
+    cycleStartMs: now - 30 * 86_400_000,
+    cycleEndMs: now,
+  };
+}
+
 /** Tokens (in + out) used in the trailing 30 days — what the monthly cap is checked against. */
 export function monthlyTokens(authId: string, now = Date.now()): number {
   if (!authId) return 0;

@@ -8,7 +8,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { handleAuth, userFromToken, ownerFromAuth, DEFAULT_USER } from "./auth.js";
-import { accessVerdict } from "./billing.js";
+import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
@@ -135,7 +135,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // Resolve the caller (falling back to the single default identity) so the access gate has a user.
   // Under GROKBOT2_BILLING off/warn, accessVerdict is always "granted" — this stays inert.
   const rpcUser = userFromToken(req.headers.authorization) ?? DEFAULT_USER;
-  const rpc = handleBootstrapRpc(url, ct, { user: rpcUser, access: accessVerdict(rpcUser) });
+  const rpc = handleBootstrapRpc(url, ct, { user: rpcUser, access: accessVerdict(rpcUser), usage: currentPeriodUsage(rpcUser) ?? undefined });
   if (rpc) {
     res.writeHead(rpc.status, { "content-type": rpc.contentType });
     return res.end(rpc.body);
