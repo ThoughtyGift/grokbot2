@@ -150,6 +150,35 @@ CREATE TABLE IF NOT EXISTS plans (
 );
 `;
 
+/**
+ * Multi-tenant Phase 1 — every user-owned table carries `owner_id`.
+ *
+ * Added by ALTER (idempotent) rather than in SCHEMA above, so one code path covers BOTH a fresh DB
+ * and the existing single-tenant `.data`. Backfill is the column DEFAULT: every pre-existing row
+ * becomes owned by the single default user (auth.ts DEFAULT_USER `auth0|grokbot2-user`).
+ *
+ * INERT: nothing filters on `owner_id` yet — that is Phase 2 (docs/multi-tenant-roadmap.md). Adding
+ * the column changes no behaviour; the app still sees every row because no query scopes by owner.
+ */
+const OWNED_TABLES = [
+  "agents", "entries", "parked", "automations", "todos", "handoffs", "compaction",
+  "attachments_meta", "acceptance",
+] as const;
+/** Kept in sync with auth.ts DEFAULT_USER.authId; a literal here avoids a store→auth import cycle. */
+const DEFAULT_OWNER = "auth0|grokbot2-user";
+
+function migrateOwnerId(database: DatabaseSync): void {
+  for (const t of OWNED_TABLES) {
+    try {
+      database.exec(`ALTER TABLE ${t} ADD COLUMN owner_id TEXT NOT NULL DEFAULT '${DEFAULT_OWNER}'`);
+    } catch (e) {
+      // "duplicate column name" means the column is already there — the whole point of idempotency.
+      // Anything else is a real problem and must not be swallowed.
+      if (!String((e as Error).message).toLowerCase().includes("duplicate column")) throw e;
+    }
+  }
+}
+
 let db: DatabaseSync | null = null;
 let dbFile = "";
 
@@ -162,6 +191,7 @@ function getDb(): DatabaseSync {
   dbFile = want;
   db.exec(SCHEMA);
   db.exec("PRAGMA journal_mode = WAL");
+  migrateOwnerId(db);
   importJsonIfNeeded(db);
   return db;
 }
@@ -204,7 +234,7 @@ function readJsonFile(): PersistedState {
 /**
  * One-shot: empty SQLite ← `state.json`. After this, JSON is not written again.
  *
- * The JSON file is left in place as the rollback source (docs/sqlite-rollback.md). A final
+ * The JSON file is left in place as the rollback source (docs/architecture/sqlite-rollback.md). A final
  * rotation of the `.bak` ring happens here so the last hot-path write is recoverable even
  * after days of sqlite-only saves.
  */
