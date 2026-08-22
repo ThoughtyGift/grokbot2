@@ -128,6 +128,26 @@ CREATE TABLE IF NOT EXISTS host_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   body TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  auth_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  plan TEXT NOT NULL DEFAULT 'free',
+  plan_expires_ms INTEGER,
+  created_at_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS usage (
+  auth_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  tokens_in INTEGER NOT NULL DEFAULT 0,
+  tokens_out INTEGER NOT NULL DEFAULT 0,
+  turns INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (auth_id, day)
+);
+CREATE TABLE IF NOT EXISTS plans (
+  name TEXT PRIMARY KEY,
+  monthly_token_cap INTEGER,
+  checkout_url TEXT
+);
 `;
 
 let db: DatabaseSync | null = null;
@@ -144,6 +164,17 @@ function getDb(): DatabaseSync {
   db.exec("PRAGMA journal_mode = WAL");
   importJsonIfNeeded(db);
   return db;
+}
+
+/**
+ * Run `fn` against the one open writer connection.
+ *
+ * `billing.ts` and any other satellite module MUST reach the database this way rather than opening
+ * its own `DatabaseSync`: the BFF already holds this file open in WAL, and a second writer racing it
+ * hits SQLITE_BUSY. One connection, one writer — the invariant getDb() exists to keep.
+ */
+export function withDb<T>(fn: (database: DatabaseSync) => T): T {
+  return fn(getDb());
 }
 
 function metaGet(database: DatabaseSync, key: string): string | undefined {

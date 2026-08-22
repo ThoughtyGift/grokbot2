@@ -5,7 +5,7 @@
  * speaks grokbot2 terms. The dialect stays on the wire forever (ADR-F0-1); keeping protobuf
  * out of the domain is so tests do not need Electron, not so this package can be deleted.
  */
-import { bootstrapResponses, bootstrapJsonResponses, connectStreamEnd } from "@grokbot2/proto";
+import { bootstrapResponses, bootstrapJsonResponses, connectStreamEnd, type RpcCtx } from "@grokbot2/proto";
 import type { ObservePort } from "./ports.js";
 
 /** `/<package>.v1.<Service>/<Method>` — how the client addresses a bootstrap RPC. */
@@ -20,7 +20,12 @@ export interface RpcReply { status: number; contentType: string; body: Buffer | 
  * — checking `connect+` first and stuffing proto bytes into those frames is how Marketplace
  * decoded `plugins: []` / threw (EuTQUZ) while GetMe (bare proto, tiny varints) still worked.
  */
-export function handleBootstrapRpc(url: string, contentType: string, observe: ObservePort): RpcReply | null {
+export function handleBootstrapRpc(
+  url: string,
+  contentType: string,
+  observe: ObservePort,
+  ctx: RpcCtx = { user: null },
+): RpcReply | null {
   const rpc = RPC_PATH.exec(url);
   if (!rpc) return null;
   const method = rpc[2];
@@ -28,14 +33,14 @@ export function handleBootstrapRpc(url: string, contentType: string, observe: Ob
   const json = contentType.includes("json");
   const framed = contentType.includes("connect+") || contentType.includes("grpc");
   if (json) {
-    const body = Object.hasOwn(bootstrapJsonResponses, method) ? bootstrapJsonResponses[method]() : "{}";
+    const body = Object.hasOwn(bootstrapJsonResponses, method) ? bootstrapJsonResponses[method](ctx) : "{}";
     if (framed) {
       return { status: 200, contentType, body: connectStreamEnd(Buffer.from(body)) };
     }
     return { status: 200, contentType: "application/json", body };
   }
   const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;
-  const payload = build ? build() : undefined;
+  const payload = build ? build(ctx) : undefined;
   if (framed) {
     return { status: 200, contentType, body: connectStreamEnd(payload) };
   }

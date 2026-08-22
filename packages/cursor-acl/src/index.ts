@@ -11,6 +11,7 @@
  */
 import { createGatewayRouter, type GatewayRouter } from "./http.js";
 import { handleBootstrapRpc, type RpcReply } from "./bootstrap.js";
+import type { RpcCtx } from "@grokbot2/proto";
 import type { AclPorts } from "./ports.js";
 
 export * from "./ports.js";
@@ -24,8 +25,8 @@ export interface CursorAcl {
   handleGateway: GatewayRouter["handle"];
   /** The host's `/health` body, also served at the bare `/health`. */
   hostHealth: GatewayRouter["hostHealth"];
-  /** A ConnectRPC bootstrap gate, or `null` if the URL is not one. */
-  handleBootstrapRpc(url: string, contentType: string): RpcReply | null;
+  /** A ConnectRPC bootstrap gate, or `null` if the URL is not one. `ctx` carries the caller's user. */
+  handleBootstrapRpc(url: string, contentType: string, ctx?: RpcCtx): RpcReply | null;
 }
 
 export function createCursorAcl(ports: AclPorts): CursorAcl {
@@ -33,6 +34,6 @@ export function createCursorAcl(ports: AclPorts): CursorAcl {
   return {
     handleGateway: router.handle,
     hostHealth: router.hostHealth,
-    handleBootstrapRpc: (url, contentType) => handleBootstrapRpc(url, contentType, ports.observe),
+    handleBootstrapRpc: (url, contentType, ctx) => handleBootstrapRpc(url, contentType, ports.observe, ctx),
   };
 }

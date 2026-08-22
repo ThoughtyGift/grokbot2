@@ -28,10 +28,35 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetEffectiveUserPlugins",
 ] as const;
 
+/**
+ * Per-request context handed to every bootstrap builder.
+ *
+ * `user` is decoded from the request's `Authorization` header by the backend (auth.ts
+ * `userFromToken`); it is `null` for an unauthenticated call. Threaded but not yet consumed —
+ * builders still return constants (GRANTED, the fixed GetMe). Step ④ is where GetSandAccessStatus
+ * reads `ctx.user` to gate on a plan. NOTE for ④: the fixed GetMe returns auth_id `"grokbot2-user"`
+ * while a token's `sub` is `"auth0|grokbot2-user"` — the two are NOT interchangeable, so switching
+ * GetMe to `ctx.user` is a deliberate output change, not a refactor.
+ */
+export interface RpcCtx {
+  user: { authId: string; email: string } | null;
+  /**
+   * The access decision, computed by the backend (it owns the plan/quota DB — this package stays
+   * pure protobuf, no storage). Absent/`"granted"` keeps the historical constant GRANTED, so an
+   * unset ctx is inert. `"payment_required"` is what the backend returns under GROKBOT2_BILLING
+   * enforce once a user is over quota.
+   */
+  access?: "granted" | "payment_required";
+}
+
 /** Map of RPC method name -> bare protobuf response body. */
-export const bootstrapResponses: Record<string, () => Buffer> = {
-  // DashboardService.GetSandAccessStatus -> state=GRANTED(1), block_reason=NONE(1)
-  GetSandAccessStatus: () => message(pbVar(1, 1), pbVar(3, 1)),
+export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
+  // DashboardService.GetSandAccessStatus. Enum numbers verified against the vendor bundle
+  // (SandAccessState / SandAccessBlockReason): GRANTED=1/NONE=1, PAYMENT_REQUIRED=3/PAYWALL_INDIVIDUAL=7.
+  // Default (ctx.access unset or "granted") is the historical constant, so this stays inert until
+  // the backend returns "payment_required" under GROKBOT2_BILLING enforce.
+  GetSandAccessStatus: (ctx) =>
+    ctx.access === "payment_required" ? message(pbVar(1, 3), pbVar(3, 7)) : message(pbVar(1, 1), pbVar(3, 1)),
 
   // DashboardService.GetMe
   GetMe: () =>
@@ -66,7 +91,7 @@ export const bootstrapResponses: Record<string, () => Buffer> = {
 };
 
 /** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
-export const bootstrapJsonResponses: Record<string, () => string> = {
+export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
   ListMarketplacePlugins: () => listMarketplacePluginsJson(),
   GetEffectiveUserPlugins: () => getEffectiveUserPluginsJson(),
 };

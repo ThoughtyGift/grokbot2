@@ -7,7 +7,8 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
-import { handleAuth } from "./auth.js";
+import { handleAuth, userFromToken, DEFAULT_USER } from "./auth.js";
+import { accessVerdict } from "./billing.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
 import { runtimeHealth } from "./brain.js";
@@ -124,7 +125,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // Framing and payloads are the ACL's business; this shell only carries bytes. The content type
   // is passed through because it decides the framing — a `connect+` stream has to be answered as
   // one, and the response echoes the request's own type.
-  const rpc = handleBootstrapRpc(url, ct);
+  // Resolve the caller (falling back to the single default identity) so the access gate has a user.
+  // Under GROKBOT2_BILLING off/warn, accessVerdict is always "granted" — this stays inert.
+  const rpcUser = userFromToken(req.headers.authorization) ?? DEFAULT_USER;
+  const rpc = handleBootstrapRpc(url, ct, { user: rpcUser, access: accessVerdict(rpcUser) });
   if (rpc) {
     res.writeHead(rpc.status, { "content-type": rpc.contentType });
     return res.end(rpc.body);

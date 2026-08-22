@@ -10,7 +10,9 @@ import { isAutoApproved, unquote } from "../tools.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
-import { compact, applyCompaction, needsCompaction } from "../compaction.js";
+import { compact, applyCompaction, needsCompaction, estimateTokens, historyTokens } from "../compaction.js";
+import { billingMode, recordUsage } from "../billing.js";
+import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
 import { loadMemory, renderMemory } from "../memory.js";
 import type { Entry, SendArgs, SubagentRow, ToolCtx } from "../conversation/types.js";
@@ -875,6 +877,21 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
     setText(bubble, "[grokbot2] Pool trả về rỗng — thử gửi lại.");
   }
   if (bubble.kind === "send-message") bubble.streaming = false;
+
+  // Usage meter (billing step ⑤, warn phase). Off unless GROKBOT2_BILLING is warn|enforce.
+  //
+  // ESTIMATES, not real counts: the pool returns no token usage (it runs Claude via subscription
+  // CLIs, no per-token metering), so estimateTokens (len/2.8) is the only signal — labelled as such
+  // so it is never mistaken for a measured number. `turns` is exact. Attributed to DEFAULT_USER
+  // until the turn path threads a per-request user (enforce/multi-user step). This is a successful
+  // model round trip: r.ok is true here and every earlier exit returned. A tool call recurses into
+  // startTurn, so each pool round trip meters once — which is the real cost.
+  if (billingMode() !== "off") {
+    const tin = historyTokens(history);
+    const tout = estimateTokens(r.text ?? acc ?? "");
+    recordUsage(DEFAULT_USER.authId, tin, tout);
+    console.log(`[grokbot2:billing] turn metered auth=${DEFAULT_USER.authId} ~in=${tin} ~out=${tout} (estimated)`);
+  }
 
   // P5-2. `parseToolCalls` reads every call in the reply, not just a trailing one, and `planBatches`
   // decides what may run together: read-only calls accumulate, anything side-effecting stands alone
