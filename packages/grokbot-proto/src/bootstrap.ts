@@ -28,6 +28,8 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetEffectiveUserPlugins",
   "GetCurrentPeriodUsage",
   "InstallUserPlugin",
+  "ListMarketplaces",
+  "GetAvailableMcpServers",
 ] as const;
 
 /**
@@ -66,6 +68,11 @@ export interface RpcCtx {
     /** Install by catalog id; returns false when the id is unknown. Writes the user's MCP config. */
     install(pluginId: number): boolean;
   };
+  /**
+   * The MCP servers configured for the caller, from their own config (backend-owned, per-user under
+   * multi-tenant Phase 6). Absent ⇒ `GetAvailableMcpServers` answers an empty list, as before.
+   */
+  mcpServers?: { name: string; command?: string; args?: string[]; url?: string }[];
 }
 
 /** Map of RPC method name -> bare protobuf response body. */
@@ -119,6 +126,14 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
 
   // DashboardService.GetCurrentPeriodUsage — the app's own usage bar ("your included API usage").
   GetCurrentPeriodUsage: (ctx) => currentPeriodUsage(ctx.usage),
+
+  // The registry this install offers plugins from. One self-hosted entry rather than Cursor's —
+  // the catalog is served by ListMarketplacePlugins from this same backend.
+  ListMarketplaces: () => listMarketplaces(),
+
+  // The MCP servers this account actually has configured, so the app's MCP pane lists real rows
+  // instead of nothing. Read from the caller's own config (per-user under Phase 6).
+  GetAvailableMcpServers: (ctx) => availableMcpServers(ctx.mcpServers),
 };
 
 /** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
@@ -250,6 +265,59 @@ export function currentPeriodUsage(u?: { used: number; limit: number; cycleStart
     pbBool(6, true),
     pbStr(7, u.message ?? `${used.toLocaleString("en-US")} / ${limit.toLocaleString("en-US")} tokens (ước lượng)`),
   );
+}
+
+/**
+ * aiserver.v1.ListMarketplacesResponse — which registries this install offers plugins from.
+ *
+ * Marketplace fields verbatim from the bundle: 1 id (int64), 2 name, 3 display_name, 4 description,
+ * 5 git_url, 10 created_at (int64). One entry: this backend itself, so the pane names a real source
+ * instead of showing none. `git_url` is a marker, not a fetch target — the catalog comes from
+ * ListMarketplacePlugins on this same server.
+ */
+export function listMarketplaces(): Buffer {
+  const m = message(
+    pbVar(1, 1),
+    pbStr(2, "grokbot2-local"),
+    pbStr(3, "Grokbot2 (self-hosted)"),
+    pbStr(4, "Plugins served by this local backend."),
+    pbStr(5, process.env.GROKBOT2_MARKETPLACE_URL ?? "https://local.test"),
+    pbVar(10, 0),
+  );
+  return message(pbMsg(1, m));
+}
+
+/**
+ * aiserver.v1.GetAvailableMcpServersResponse — the account's configured MCP servers.
+ *
+ * McpServerInfo fields verbatim: 1 id (int32), 2 name, 3 is_team_server, 4 enabled, 5 type,
+ * 6 command, 7 args (repeated string), 8 url, 10 is_unseen, 12 is_required,
+ * 13 managed_by_team_plugin_policy, 14 disabled_by_team_admin_policy, 15 server_identifier.
+ *
+ * `type` is "stdio" for a spawned command and "http" for a URL — the two transports the config
+ * shape distinguishes. NOTHING from `env` is emitted: those hold live tokens, and this response
+ * crosses to the renderer.
+ */
+export function availableMcpServers(servers?: { name: string; command?: string; args?: string[]; url?: string }[]): Buffer {
+  if (!servers?.length) return message();
+  const rows = servers.map((s, i) =>
+    pbMsg(1, message(
+      pbVar(1, i + 1),
+      pbStr(2, s.name),
+      pbBool(3, false),
+      pbBool(4, true),
+      pbStr(5, s.url ? "http" : "stdio"),
+      ...(s.command ? [pbStr(6, s.command)] : []),
+      ...(s.args ?? []).map((a) => pbStr(7, a)),
+      ...(s.url ? [pbStr(8, s.url)] : []),
+      pbBool(10, false),
+      pbBool(12, false),
+      pbBool(13, false),
+      pbBool(14, false),
+      pbStr(15, s.name),
+    )),
+  );
+  return message(...rows);
 }
 
 /** aiserver.v1.ListMarketplacePluginsResponse: plugins (1) repeated, has_more (3). */

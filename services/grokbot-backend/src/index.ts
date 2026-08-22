@@ -10,6 +10,7 @@ import { config } from "./config.js";
 import { handleAuth, userFromToken, ownerFromAuth, DEFAULT_USER } from "./auth.js";
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";
+import { mcpServers as mcpServersFor } from "./mcp.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
@@ -142,6 +143,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     usage: currentPeriodUsage(rpcUser) ?? undefined,
     body,
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
+    // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
+    // `env`, which holds live tokens and must not reach the renderer.
+    mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))
+      .map(([name, spec]) => ({ name, command: spec.command, args: spec.args, url: (spec as { url?: string }).url })),
   }));
   if (rpc) {
     res.writeHead(rpc.status, { "content-type": rpc.contentType });
