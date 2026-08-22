@@ -52,15 +52,71 @@ Bảng motion toàn màn hình: thời lượng `0.12s`(26 chỗ) · `0.2s`(12) 
 > `transitionend`/`animationend` thì ra 240ms. Ghi lại vì đây là cái bẫy sẽ tái diễn: một con số sai
 > vẫn trông như một con số.
 
+### Đã đo được bằng cách tự điều khiển app (2026-08-22, lượt sau)
+
+Ba việc ở bảng *"chưa lấy được"* bên dưới từng ghi là **cần chủ máy thao tác tay**. Hai trong ba
+không cần: `x-ray --drag --menu` tự kéo, tự mở, rồi **tự trả app về đúng trạng thái cũ** (kiểm bằng
+hình học: `81,0 12x1040` và `1440,0 10x1040`, đúng từng pixel như trước khi đo).
+
+**Sidebar có VÙNG CHẾT, không giãn liên tục.** Đây là phát hiện quan trọng nhất, và nó phủ định điều
+tôi định dựng:
+
+```
+dx=+10 … +120   rows=63   bar=88    chat=1357      ← kéo mà không có gì xảy ra
+dx=+240         rows=302  bar=327   chat=1118      ← nhảy một nhịp
+dx=+400         rows=375  bar=400   chat=1045      ← kẹp ở đây
+```
+
+Nghĩa là: rail 63px **không** kéo giãn dần thành panel. Nó đứng yên tới khoảng +200px rồi **snap**
+sang ~302px. Dựng bằng `react-resizable-panels` với `minSize` thường sẽ ra hành vi giãn dần — sai.
+Muốn giống thì cần một ngưỡng snap, không phải một `minSize`.
+
+| | sidebar | panel Details |
+|---|---|---|
+| khối bị kéo | `sand-agents-list__rows` | `sand-info-pane` |
+| mặc định | 63px (rail) | 480px |
+| giới hạn | 63–375px | 280–480px |
+| đi theo tay | có | có |
+| chỉnh lại lúc nhả | có (snap) | có (snap) |
+| kéo quá mức tối thiểu | kẹp lại | **đóng hẳn panel** — thanh chia biến mất, mở lại bằng `View Bot settings` |
+| chuyển động | `width`/`height`/`font-size` 200ms + keyframe `sand-18re5ia-B` 130ms | `background-color` 120ms |
+| kéo theo | `sand-agents-sidebar`, `sand-agents-list`, `sand-chat`, `sand-chat-stage`, `sand-virtual-transcript` | `sand-chat`, `sand-chat-stage`, `sand-virtual-transcript`, `sand-info-pane__inner`, `__nav-root`, `__section-content` |
+
+Thanh chia Details còn đặt tâm **lệch một hằng số 5px** so với con trỏ lúc nhả. Nghe như chi tiết vụn,
+nhưng nó là lý do bản đầu của phép dò làm app trôi 5px mỗi lượt chạy — và một FE clone nhắm thẳng
+vào toạ độ con trỏ sẽ trôi đúng như vậy.
+
+**Menu trên tin nhắn — đọc được nội dung thật:**
+
+| Mở bằng | Hộp | Mục |
+|---|---|---|
+| `More message actions` | 200×74 | `Start a thread` · `Copy` |
+| `Add reaction` | 246×44 | 👍 👎 ❤️ 😂 🎉 😮 · `More emoji` |
+
+Cả hai mở bằng `opacity` 100ms + `transform` 100ms. Chỉ **hai** mục trong menu More — nhẹ hơn nhiều
+so với mức tôi đã định thiết kế cho X6.2.
+
+> **Nút hover-actions có mặt trong DOM ngay từ đầu nhưng chỉ nhận chuột khi con trỏ đang ở trong tin
+> nhắn.** `click()` thẳng thì hết giờ; phải `mouse.move` vào nó trước. Bản kiểm kê control thấy nút
+> đó từ lượt đầu nên tôi đã tưởng là bấm được — thấy trong DOM không có nghĩa là bấm được.
+
+**Cái giá đã trả để học ba điều trên.** Bản đầu của phép dò để lại app của chủ máy lệch 312px và
+panel Details **đóng hẳn**, vì nó (a) đoán thanh chia thay đổi khối nào theo "khối rộng nhất nằm sát"
+— và ra `sand-chat`, tức phần co giãn còn lại chứ không phải panel đang bị kéo; (b) trả về theo bề
+rộng thay vì theo toạ độ thanh chia; (c) kéo cứng ±820px nên vượt qua ngưỡng đóng. Cả ba đã sửa và
+phép dò giờ tự kiểm phần trả về trước khi báo kết quả. Luật rút ra: **phép dò nào chạm vào app thật
+thì phải chứng minh trả về được, ngay trong cùng lượt chạy.**
+
 ### Chưa lấy được, và vì sao
 
-| Thứ | Vì sao | Cách lấy |
-|---|---|---|
-| Menu của `More message actions` | phải bấm mới biết, mà nút đó ngoài danh sách an toàn | mở tay một lần, chạy `x-ray` để chụp lúc menu đang mở |
-| Animation lúc **gửi** một request | nhãn `send` bị `NEVER` chặn có chủ ý | gửi tay một tin trong app, `x-ray` đang chạy để bắt `transitionend` |
-| Trạng thái gập nhóm sidebar | cần bấm `sand-agents-section__header` | thêm vào danh sách an toàn (không phá gì) |
+Còn đúng **một** thứ, và nó nên tiếp tục ở lại đây:
 
-Cách chung cho cả ba: **chủ máy thao tác tay, script chỉ ngồi bắt event.** Không cần script tự bấm.
+| Thứ | Vì sao vẫn chưa lấy | Cách lấy |
+|---|---|---|
+| Animation lúc **gửi** một request | `send` nằm trong `NEVER` **có chủ ý**. Script tự gửi tin là ghi vào hội thoại thật của chủ máy và tốn token pool — không phải chuyện khó, mà là chuyện không nên | chủ máy gửi một tin trong lúc `x-ray` đang nghe `transitionend` |
+
+Hai thứ còn lại đã tự đo được, xem mục trên. Trạng thái gập nhóm sidebar: `--probe-clicks` xử lý
+được vì nút đó vốn nằm trong danh sách an toàn.
 
 ---
 
@@ -134,9 +190,9 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 ### X0 — dựng thước cho phần chưa đo (làm trước mọi thứ)
 
 - [ ] X0.1 Thêm `sand-agents-section__header` vào danh sách an toàn của `x-ray`, chạy `--probe-clicks` → lấy chuyển động **gập nhóm**
-- [ ] X0.2 Chủ máy mở `More message actions` một lần → `x-ray` chụp menu → biết nó chứa gì (đang là **C2**, chưa dám thiết kế)
-- [ ] X0.3 Chủ máy gửi một tin → `x-ray` bắt `transitionend` → lấy **animation lúc gửi**
-- [ ] X0.4 Kéo thử hai thanh chia → ghi min/max width thật của sidebar và info-pane
+- [x] **X0.2** `x-ray --menu` tự mở: More = 200×74 gồm `Start a thread` · `Copy`; Add reaction = 246×44 gồm 6 emoji + `More emoji`. Không cần chủ máy bấm
+- [ ] X0.3 Chủ máy gửi một tin → `x-ray` bắt `transitionend` → lấy **animation lúc gửi** (cố ý không tự động: script tự gửi là ghi vào hội thoại thật)
+- [x] **X0.4** `x-ray --drag` tự kéo và tự trả về: sidebar 63–375px **có vùng chết ~200px rồi snap**, Details 280–480px và **đóng hẳn nếu kéo quá mức tối thiểu**
 
 ### X1 — nguyên tử: những thứ không phụ thuộc gì
 

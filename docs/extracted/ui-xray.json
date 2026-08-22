@@ -1,5 +1,5 @@
 {
-  "at": "2026-08-22T12:39:01.999Z",
+  "at": "2026-08-22T15:30:20.332Z",
   "viewport": "1920x1040",
   "controls": [
     {
@@ -31,7 +31,7 @@
       "cursor": "pointer"
     },
     {
-      "label": "Social Publisher",
+      "label": "Social Publisher, Unread activity",
       "tag": "button",
       "block": "sand-agent-item",
       "box": "17,288 54x54",
@@ -62,154 +62,350 @@
       "label": "View Bot settings",
       "tag": "button",
       "block": "sand-chat-header__identity",
-      "box": "96,12 128x28",
+      "box": "96,12 129x28",
       "cursor": "pointer"
     },
     {
-      "label": "Grok Bot's Computer",
-      "tag": "button",
-      "block": "sand-kit-icon-button",
-      "box": "1738,12 34x28",
-      "cursor": "pointer"
-    },
-    {
-      "label": "Open Marketing Lead's chat",
+      "label": "Open Social Publisher's chat",
       "tag": "button",
       "block": "sand-group-author",
-      "box": "140,-2416 95x16",
+      "box": "96,-888 95x16",
       "cursor": "pointer"
     },
     {
-      "label": "Open BAO_CAO_NGHIEM_THU_20260821.md",
+      "label": "Open image full screen",
       "tag": "button",
-      "block": "sand-euugli",
-      "box": "187,-2382 230x18",
-      "cursor": "pointer"
-    },
-    {
-      "label": "Save BAO_CAO_NGHIEM_THU_20260821.md",
-      "tag": "button",
-      "block": "sand-kit-icon-button",
-      "box": "425,-2377 24x24",
-      "cursor": "pointer"
+      "block": "sand-attachment__image-button",
+      "box": "90,-868 344x200",
+      "cursor": "zoom-in"
     },
     {
       "label": "Add reaction",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "600,-2377 24x24",
+      "box": "440,-780 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Reply to Marketing Lead message",
+      "label": "Reply to Social Publisher message",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "626,-2377 24x24",
+      "box": "466,-780 24x24",
       "cursor": "pointer"
     },
     {
       "label": "More message actions",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "652,-2377 24x24",
+      "box": "492,-780 24x24",
       "cursor": "pointer"
     },
     {
       "label": "Add reaction",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "780,-2264 24x24",
+      "box": "736,-647 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Reply to Marketing Lead message",
+      "label": "Reply to Social Publisher message",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "806,-2264 24x24",
+      "box": "762,-647 24x24",
       "cursor": "pointer"
     },
     {
       "label": "More message actions",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "832,-2264 24x24",
+      "box": "788,-647 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Open exchange with Trợ lý xinh đẹp",
-      "tag": "button",
-      "block": "sand-kit-system-event__chip",
-      "box": "989,-2108 108x24",
-      "cursor": "pointer"
-    },
-    {
-      "label": "Open Marketing Lead's chat",
+      "label": "Open Social Publisher's chat",
       "tag": "button",
       "block": "sand-group-author",
-      "box": "140,-2068 95x16",
+      "box": "96,-591 95x16",
       "cursor": "pointer"
+    },
+    {
+      "label": "Open image full screen",
+      "tag": "button",
+      "block": "sand-attachment__image-button",
+      "box": "90,-571 344x200",
+      "cursor": "zoom-in"
     },
     {
       "label": "Add reaction",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "780,-1123 24x24",
+      "box": "440,-483 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Reply to Marketing Lead message",
+      "label": "Reply to Social Publisher message",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "806,-1123 24x24",
+      "box": "466,-483 24x24",
       "cursor": "pointer"
     },
     {
       "label": "More message actions",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "832,-1123 24x24",
+      "box": "492,-483 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Open exchange with Trợ lý xinh đẹp",
+      "label": "Add reaction",
       "tag": "button",
-      "block": "sand-kit-system-event__chip",
-      "box": "989,-162 108x24",
+      "block": "sand-message-hover-actions__button",
+      "box": "736,-351 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Open Marketing Lead's chat",
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "762,-351 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "788,-351 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open Social Publisher's chat",
       "tag": "button",
       "block": "sand-group-author",
-      "box": "140,-122 95x16",
+      "box": "96,-295 95x16",
       "cursor": "pointer"
+    },
+    {
+      "label": "Open image full screen",
+      "tag": "button",
+      "block": "sand-attachment__image-button",
+      "box": "90,-275 344x200",
+      "cursor": "zoom-in"
     },
     {
       "label": "Add reaction",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "780,394 24x24",
+      "box": "440,-187 24x24",
       "cursor": "pointer"
     },
     {
-      "label": "Reply to Marketing Lead message",
+      "label": "Reply to Social Publisher message",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "806,394 24x24",
+      "box": "466,-187 24x24",
       "cursor": "pointer"
     },
     {
       "label": "More message actions",
       "tag": "button",
       "block": "sand-message-hover-actions__button",
-      "box": "832,394 24x24",
+      "box": "492,-187 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "636,-65 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "662,-65 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "688,-65 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open Social Publisher's chat",
+      "tag": "button",
+      "block": "sand-group-author",
+      "box": "96,-19 95x16",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open image full screen",
+      "tag": "button",
+      "block": "sand-attachment__image-button",
+      "box": "90,1 344x200",
+      "cursor": "zoom-in"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "440,89 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "466,89 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "492,89 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "736,221 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "762,221 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "788,221 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open Social Publisher's chat",
+      "tag": "button",
+      "block": "sand-group-author",
+      "box": "96,277 95x16",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open image full screen",
+      "tag": "button",
+      "block": "sand-attachment__image-button",
+      "box": "90,297 344x200",
+      "cursor": "zoom-in"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "440,385 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "466,385 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "492,385 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "433,507 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "459,507 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "485,507 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open Social Publisher's chat",
+      "tag": "button",
+      "block": "sand-group-author",
+      "box": "96,553 95x16",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open image full screen",
+      "tag": "button",
+      "block": "sand-attachment__image-button",
+      "box": "90,573 344x200",
+      "cursor": "zoom-in"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "440,661 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "466,661 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "492,661 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Add reaction",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "736,834 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Reply to Social Publisher message",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "762,834 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "More message actions",
+      "tag": "button",
+      "block": "sand-message-hover-actions__button",
+      "box": "788,834 24x24",
       "cursor": "pointer"
     },
     {
       "label": "Prompt",
       "tag": "div",
       "block": "sand-prompt-field",
-      "box": "149,991 1710x20",
+      "box": "149,991 1230x20",
       "cursor": "text"
     },
     {
@@ -223,15 +419,43 @@
       "label": "Start voice input",
       "tag": "button",
       "block": "sand-prompt-mic",
-      "box": "1867,987 28x28",
+      "box": "1387,987 28x28",
       "cursor": "pointer"
     },
     {
       "label": "Start voice input",
       "tag": "button",
       "block": "sand-prompt-send",
-      "box": "1867,987 28x28",
+      "box": "1387,987 28x28",
       "cursor": "pointer"
+    },
+    {
+      "label": "Back to details",
+      "tag": "button",
+      "block": "sand-kit-icon-button",
+      "box": "1452,12 28x28",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Close details",
+      "tag": "button",
+      "block": "sand-kit-icon-button",
+      "box": "1740,12 28x28",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Edit Bot avatar",
+      "tag": "button",
+      "block": "sand-avatar-trigger__button",
+      "box": "1648,78 64x64",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Bot name",
+      "tag": "input",
+      "block": "sand-cicffo",
+      "box": "1456,194 448x36",
+      "cursor": "text"
     }
   ],
   "draggables": [
@@ -240,13 +464,19 @@
       "block": "sand-sidebar-resize-handle",
       "box": "81,0 12x1040",
       "label": "Resize sidebar"
+    },
+    {
+      "why": "cursor:col-resize · role=separator",
+      "block": "sand-info-pane__resize-handle",
+      "box": "1440,0 10x1040",
+      "label": "Resize details"
     }
   ],
   "motion": {
     "duration": [
       {
         "v": "0.12s",
-        "n": 22
+        "n": 50
       },
       {
         "v": "0.2s",
@@ -254,37 +484,37 @@
       },
       {
         "v": "0.15s",
+        "n": 8
+      },
+      {
+        "v": "0.16s",
+        "n": 7
+      },
+      {
+        "v": "0.18s",
         "n": 6
+      },
+      {
+        "v": "0.13s",
+        "n": 4
       },
       {
         "v": "0.1s",
         "n": 4
       },
       {
-        "v": "0.13s",
-        "n": 3
-      },
-      {
         "v": "0.3s",
         "n": 3
-      },
-      {
-        "v": "0.24s",
-        "n": 2
-      },
-      {
-        "v": "0.05s",
-        "n": 2
       }
     ],
     "easing": [
       {
         "v": "ease",
-        "n": 27
+        "n": 70
       },
       {
         "v": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "n": 17
+        "n": 18
       },
       {
         "v": "ease-out",
@@ -302,19 +532,19 @@
     "property": [
       {
         "v": "background-color",
-        "n": 28
+        "n": 56
       },
       {
         "v": "color",
-        "n": 20
-      },
-      {
-        "v": "transform",
-        "n": 13
+        "n": 42
       },
       {
         "v": "opacity",
-        "n": 9
+        "n": 17
+      },
+      {
+        "v": "transform",
+        "n": 14
       },
       {
         "v": "width",
@@ -325,303 +555,116 @@
         "n": 7
       },
       {
-        "v": "height",
-        "n": 2
+        "v": "filter",
+        "n": 6
       },
       {
-        "v": "font-size",
-        "n": 1
+        "v": "height",
+        "n": 2
       }
     ],
     "keyframes": [
       {
         "v": "sand-18re5ia-B",
-        "n": 2
+        "n": 3
       }
     ]
   },
-  "transitions": [
+  "transitions": [],
+  "drags": [
     {
-      "control": "View Bot settings",
-      "changed": [
-        {
-          "block": "sand-chat",
-          "from": "88,0 1832x1040",
-          "to": "88,0 1475x1040"
-        },
-        {
-          "block": "sand-toolbar",
-          "from": "88,0 1832x52",
-          "to": "88,0 1475x52"
-        },
-        {
-          "block": "sand-chat-header",
-          "from": "96,12 1672x28",
-          "to": "96,12 1455x28"
-        },
-        {
-          "block": "sand-chat-header__identity-row",
-          "from": "96,12 1634x28",
-          "to": "96,12 1447x28"
-        },
-        {
-          "block": "sand-chat-header__controls",
-          "from": "1738,12 30x28",
-          "to": "(không có)"
-        },
-        {
-          "block": "sand-chat-stage",
-          "from": "88,0 1832x980",
-          "to": "88,0 1475x980"
-        },
-        {
-          "block": "sand-virtual-transcript",
-          "from": "88,0 1832x1040",
-          "to": "88,0 1475x1040"
-        },
-        {
-          "block": "sand-virtual-transcript__inner",
-          "from": "104,-7335 1800x8375",
-          "to": "104,-7335 1443x8375"
-        },
-        {
-          "block": "sand-virtual-transcript__row",
-          "from": "104,-2430 1800x98",
-          "to": "104,-2430 1443x98"
-        },
-        {
-          "block": "sand-row-content",
-          "from": "104,-2428 1800x94",
-          "to": "104,-2428 1443x94"
-        },
-        {
-          "block": "sand-author-run",
-          "from": "104,-2428 1800x94",
-          "to": "104,-2428 1443x94"
-        },
-        {
-          "block": "sand-author-run__column",
-          "from": "134,-2428 1770x94",
-          "to": "134,-2428 1413x94"
-        },
-        {
-          "block": "sand-message-block",
-          "from": "134,-2396 1770x62",
-          "to": "134,-2396 1413x62"
-        },
-        {
-          "block": "sand-row-timestamp",
-          "from": "1904,-2430 62x98",
-          "to": "1547,-2430 62x98"
-        },
-        {
-          "block": "sand-kit-timestamp",
-          "from": "965,-2156 78x28",
-          "to": "786,-2156 78x28"
-        },
-        {
-          "block": "sand-kit-system-event",
-          "from": "684,-2108 640x24",
-          "to": "506,-2108 640x24"
-        },
-        {
-          "block": "sand-kit-system-event__label",
-          "from": "912,-2104 75x16",
-          "to": "733,-2104 75x16"
-        },
-        {
-          "block": "sand-kit-system-event__chip",
-          "from": "989,-2108 108x24",
-          "to": "810,-2108 108x24"
-        },
-        {
-          "block": "sand-virtual-transcript__inset",
-          "from": "104,916 1800x124",
-          "to": "104,916 1443x124"
-        },
-        {
-          "block": "sand-chat-input-dock",
-          "from": "88,980 1832x60",
-          "to": "88,980 1475x60"
-        },
-        {
-          "block": "sand-input-area",
-          "from": "104,980 1800x44",
-          "to": "104,980 1443x44"
-        },
-        {
-          "block": "sand-vvtkfd",
-          "from": "88,1002 1832x38",
-          "to": "88,1002 1475x38"
-        },
-        {
-          "block": "sand-prompt-form",
-          "from": "104,980 1800x44",
-          "to": "104,980 1443x44"
-        },
-        {
-          "block": "sand-kit-message-input-frame",
-          "from": "104,980 1800x44",
-          "to": "104,980 1443x44"
-        },
-        {
-          "block": "sand-prompt-pad",
-          "from": "105,981 1798x42",
-          "to": "105,981 1441x42"
-        },
-        {
-          "block": "sand-prompt-content",
-          "from": "149,991 1710x20",
-          "to": "149,991 1353x20"
-        },
-        {
-          "block": "sand-prompt-field-host",
-          "from": "149,991 1710x20",
-          "to": "149,991 1353x20"
-        },
-        {
-          "block": "sand-prompt-field",
-          "from": "149,991 1710x20",
-          "to": "149,991 1353x20"
-        },
-        {
-          "block": "sand-prompt-actions-row",
-          "from": "113,987 1782x28",
-          "to": "113,987 1425x28"
-        },
-        {
-          "block": "sand-prompt-actions-trailing",
-          "from": "1867,987 28x28",
-          "to": "1510,987 28x28"
-        },
-        {
-          "block": "sand-prompt-cta-cluster",
-          "from": "1867,987 28x28",
-          "to": "1510,987 28x28"
-        },
-        {
-          "block": "sand-prompt-mic",
-          "from": "1867,987 28x28",
-          "to": "1510,987 28x28"
-        },
-        {
-          "block": "sand-prompt-send",
-          "from": "1867,987 28x28",
-          "to": "1510,987 28x28"
-        },
-        {
-          "block": "sand-info-pane",
-          "from": "(không có)",
-          "to": "1563,0 357x1040"
-        },
-        {
-          "block": "sand-info-pane__nav-root",
-          "from": "(không có)",
-          "to": "1563,0 357x1040"
-        },
-        {
-          "block": "sand-info-pane__top",
-          "from": "(không có)",
-          "to": "1563,0 357x52"
-        },
-        {
-          "block": "sand-info-pane__back",
-          "from": "(không có)",
-          "to": "1575,12 28x28"
-        },
-        {
-          "block": "sand-info-pane__subpage-title",
-          "from": "(không có)",
-          "to": "1648,17 48x18"
-        },
-        {
-          "block": "sand-info-pane__actions",
-          "from": "(không có)",
-          "to": "1740,12 28x28"
-        },
-        {
-          "block": "sand-info-pane__section-content",
-          "from": "(không có)",
-          "to": "1563,52 357x988"
-        },
-        {
-          "block": "sand-yfqnmn",
-          "from": "(không có)",
-          "to": "1563,52 357x988"
-        },
-        {
-          "block": "sand-agent-settings",
-          "from": "(không có)",
-          "to": "1579,54 325x372"
-        },
-        {
-          "block": "sand-avatar-trigger-row",
-          "from": "(không có)",
-          "to": "1579,78 325x64"
-        },
-        {
-          "block": "sand-avatar-trigger",
-          "from": "(không có)",
-          "to": "1710,78 64x64"
-        },
-        {
-          "block": "sand-avatar-trigger__button",
-          "from": "(không có)",
-          "to": "1710,78 64x64"
-        },
-        {
-          "block": "sand-avatar-trigger__overlay",
-          "from": "(không có)",
-          "to": "1706,74 72x72"
-        },
-        {
-          "block": "sand-cicffo",
-          "from": "(không có)",
-          "to": "1579,194 325x36"
-        },
-        {
-          "block": "sand-agent-settings__card",
-          "from": "(không có)",
-          "to": "1579,350 325x76"
-        },
-        {
-          "block": "sand-agent-settings__row",
-          "from": "(không có)",
-          "to": "1587,358 309x60"
-        },
-        {
-          "block": "sand-agent-settings__text",
-          "from": "(không có)",
-          "to": "1593,362 255x52"
-        },
-        {
-          "block": "sand-agent-settings__control",
-          "from": "(không có)",
-          "to": "1860,378 32x20"
-        },
-        {
-          "block": "sand-jyslct",
-          "from": "(không có)",
-          "to": "1860,378 32x20"
-        },
-        {
-          "block": "sand-gdialr",
-          "from": "(không có)",
-          "to": "1874,380 16x16"
-        },
-        {
-          "block": "sand-info-pane__resize-handle",
-          "from": "(không có)",
-          "to": "1563,0 10x1040"
-        }
+      "handle": "sand-sidebar-resize-handle",
+      "panel": "sand-agents-list__rows",
+      "alsoChanges": [
+        "sand-agents-sidebar",
+        "sand-agents-list",
+        "sand-tkmjcv",
+        "sand-chat",
+        "sand-chat-stage",
+        "sand-virtual-transcript"
+      ],
+      "w0": 63,
+      "range": [
+        63,
+        375
+      ],
+      "followsCursor": true,
+      "committedOnRelease": true,
+      "motion": [
+        "sand-18re5ia-B 130ms×9",
+        "font-size 200ms×6",
+        "height 200ms×6",
+        "width 200ms×6",
+        "sand-18re5ia-B 200ms×6",
+        "background-color 120ms×3",
+        "grid-template-columns 200ms×3"
+      ],
+      "restoredTo": 87,
+      "x0": 87,
+      "ok": true
+    },
+    {
+      "handle": "sand-info-pane__resize-handle",
+      "panel": "sand-info-pane",
+      "alsoChanges": [
+        "sand-chat",
+        "sand-chat-stage",
+        "sand-virtual-transcript",
+        "sand-info-pane__inner",
+        "sand-info-pane__nav-root",
+        "sand-info-pane__section-content",
+        "sand-yfqnmn"
+      ],
+      "w0": 480,
+      "range": [
+        280,
+        480
+      ],
+      "followsCursor": true,
+      "committedOnRelease": true,
+      "motion": [
+        "background-color 120ms×3"
+      ],
+      "restoredTo": 1445,
+      "x0": 1445,
+      "ok": true
+    }
+  ],
+  "menus": [
+    {
+      "opener": "More message actions",
+      "box": "788,862 200x74",
+      "items": [
+        "Start a thread",
+        "Copy"
       ],
       "motion": [
-        "background-color 120ms×1",
-        "opacity 160ms×1",
-        "padding-right 240ms×1",
-        "width 240ms×1"
+        "background-color 120ms×3",
+        "opacity 150ms×3",
+        "opacity 100ms×3",
+        "transform 100ms×3"
       ],
-      "events": 4
+      "closed": true
+    },
+    {
+      "opener": "Add reaction",
+      "box": "736,862 246x44",
+      "items": [
+        "React with 👍",
+        "React with 👎",
+        "React with ❤️",
+        "React with 😂",
+        "React with 🎉",
+        "React with 😮",
+        "More emoji"
+      ],
+      "motion": [
+        "background-color 120ms×9",
+        "background-color 0ms×3",
+        "opacity 100ms×3",
+        "transform 100ms×3"
+      ],
+      "closed": true
     }
   ]
 }
