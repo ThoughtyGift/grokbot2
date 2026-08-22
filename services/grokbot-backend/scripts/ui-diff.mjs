@@ -138,7 +138,27 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
 }
 
 const own = await chromium.launch({ channel: "chrome" }).catch(() => chromium.launch());
+/*
+ * Phải seed phiên trước khi mở FE.
+ *
+ * Từ multi-tenant Phase 4b, `:5173` hiện màn đăng nhập nếu `localStorage` chưa có token — và bộ đo
+ * này chỉ ngồi đợi `.roster .bot` rồi hết giờ, báo một lỗi timeout không nói gì về nguyên nhân.
+ * Token lấy từ `/v1/session` của chính backend, đúng đường mà client desktop dùng.
+ */
 const webPage = await own.newPage({ viewport: SIZES[0] });
+try {
+  const sess = await fetch("http://127.0.0.1:8788/v1/session").then((r) => r.json());
+  if (sess?.token) {
+    await webPage.addInitScript((t) => {
+      localStorage.setItem("grokbot2.token", t);
+      localStorage.setItem("grokbot2.email", "host@local");
+    }, sess.token);
+  } else {
+    console.log("! không lấy được token phiên — FE sẽ hiện màn đăng nhập và phép đo sẽ trắng");
+  }
+} catch {
+  console.log("! backend :8788 không trả /v1/session — FE sẽ hiện màn đăng nhập");
+}
 
 let totalSame = 0, totalDiff = 0, totalMissing = 0, totalNa = 0;
 const perSize = [];

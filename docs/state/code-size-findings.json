@@ -1,7 +1,7 @@
 {
   "files": 3,
   "functions": 16,
-  "at": "2026-08-22T15:36:19.644Z",
+  "at": "2026-08-22T15:59:14.452Z",
   "keys": [
     "apps/grokbot-web/src/avatar.ts:animateAvatar|fn",
     "apps/grokbot-web/src/main.ts:openAvatarPicker|fn",

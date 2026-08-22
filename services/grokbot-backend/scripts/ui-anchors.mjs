@@ -23,6 +23,21 @@ export const ANCHORS = [
    * So hai cái đó là so quả táo với quả cam — báo lệch 24px trong khi hàng hai bên bằng nhau.
    */
   { name: "row bot",      app: ".sand-agent-item",            web: ".roster .bot",   props: ["w", "h", "radius"] },
+  /*
+   * Vùng dựng ở X1. Thêm anchor NGAY khi dựng, không để sau: bốn mục X1 làm xong mà bảng anchor
+   * không có dòng nào cho chúng thì con số "khớp bao nhiêu %" chỉ nói về phần đã dựng từ trước —
+   * đúng cái bẫy "đo sai thứ" mà dự án này đã sập bốn lần.
+   *
+   * Vài neo bên app chỉ tồn tại khi sidebar đang MỞ (đầu nhóm, hàng đáy). Chủ máy hay để nó ở rail,
+   * nên các dòng này sẽ hiện "app KHÔNG có vùng này" lúc đó — đó là trạng thái, không phải lỗi.
+   */
+  { name: "đầu sidebar",  app: ".sand-agents-sidebar__header", web: ".side-head",     props: ["h"] },
+  { name: "nút New",      app: '[aria-label="New"]',           web: ".side-head .new-icon", props: ["w", "h"] },
+  { name: "ô Search",     app: ".sand-agents-sidebar__search", web: ".search-btn, .search", props: ["h", "radius"] },
+  { name: "đầu nhóm",     app: ".sand-agents-section__header", web: ".roster .group", props: ["h"] },
+  { name: "hàng đáy",     app: ".sand-agents-sidebar__plugins", web: ".side-foot .foot-row", props: ["h", "radius"] },
+  { name: "nút tài khoản", app: '[aria-label="Open account menu"]', web: ".foot-row.account", props: ["h"] },
+  { name: "nút danh tính", app: '[aria-label="View Bot settings"]', web: ".identity",     props: ["h", "radius"] },
   { name: "cột chat",     app: ".sand-chat",                  web: ".chat",          props: ["x", "w"] },
   { name: "transcript",   app: '[role="log"]',                web: ".transcript",    props: ["w"] },
   /*

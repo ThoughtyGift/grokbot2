@@ -217,10 +217,22 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 
 ### X1 — nguyên tử: những thứ không phụ thuộc gì
 
-- [ ] X1.1 Đầu sidebar: bỏ khối brand, `+` lên đúng hàng (ô chênh lệch sidebar đang sáng ~45px vì lệch này)
-- [ ] X1.2 Số đếm bên phải nhãn nhóm (`BOT HTML  1`)
-- [ ] X1.3 Đáy sidebar: `Open account menu` (nút `GL`) — nút `New` đã có
-- [ ] X1.4 Toolbar: nút danh tính `View Bot settings` 128×28 (hiện là `h1` trơ)
+- [x] **X1.1** Đầu sidebar cao **52px**, chỉ có nút `New` **24×24** căn phải — khối brand (`grokbot2` +
+  phụ đề) đã bỏ. App gốc không có brand ở đây; nó chỉ có đúng một nút.
+- [x] **X1.2** Đầu nhóm là **`button` có `aria-expanded`**, cao 30px, gập được, và **số đếm chỉ hiện
+  khi nhóm đang gập** — đúng như đo được (`BOT HTML 1` với `aria-expanded=false`, còn nhóm đang mở
+  thì không có số). Nên X1.2 và việc gập là **một** tính năng, không phải hai; phần co giãn chuyển
+  `grid-template-rows` 200ms, cùng thời lượng `height` của họ.
+- [x] **X1.3** Đáy sidebar hai hàng **40px**: `Plugins` (chưa dựng — X5.4, nên để `disabled` có
+  tooltip thay vì một nút bấm không làm gì) và `Open account menu`. Menu tài khoản nhận luôn ba hành
+  động vừa bỏ khỏi đáy (bot mới · hiện bot ẩn · xoá) cộng Đăng xuất, nên nút `⎋` nổi trên `<body>`
+  không còn cần thiết.
+- [x] **X1.4** Nút danh tính `View Bot settings` cao **28px** thay cho `h1` trơ; bấm mở panel phải —
+  đúng chỗ trang settings sẽ nằm khi làm X3.
+- [x] **X1.5** (thêm) Ô Search: app gốc để nó là **`button` 362×32**, bấm mới thành ô nhập. Bản
+  trước của tôi là `<input>` luôn — sai hành vi, và đó là lý do X5.2 tưởng là "chỉ cần nối API".
+- [x] **X1.6** (thêm) 7 anchor mới trong `ui-anchors.mjs` cho đúng những vùng trên. Không có anchor
+  thì con số "khớp bao nhiêu %" chỉ nói về phần đã dựng từ trước — đúng cái bẫy đã sập bốn lần.
 
 ### X2 — hai trạng thái + kéo được (cần `react-resizable-panels` nếu đổi stack)
 

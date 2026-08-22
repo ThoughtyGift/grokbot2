@@ -82,10 +82,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 .sidebar { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
 
-.brand { padding: 12px 12px 8px; }
-.brand-row { display: flex; align-items: center; gap: 8px; }
-.brand strong { font-size: 14px; font-weight: 600; }
-.brand small { display: block; margin-top: 2px; font-size: 12px; color: var(--fg-3); }
 .new-icon {
   margin-left: auto; width: 28px; height: 28px; border-radius: var(--r-row);
   font-size: 16px; line-height: 1; color: var(--fg-2);
@@ -94,19 +90,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 .new-icon:hover { background: var(--row-hover); color: var(--fg); }
 
 /* Ô tìm kiếm: app gốc đặt ở y=56, cao ~28, trong lề 12. */
-.search {
-  display: flex; align-items: center; gap: 8px; margin: 0 12px 8px;
-  padding: 6px 10px; border-radius: var(--r-row); background: var(--surface);
-}
 .search .ico { color: var(--fg-3); font-size: 13px; }
-.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 13px; }
-.search input::placeholder { color: var(--fg-3); }
 
 .roster { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; }
 
 /* Nhãn nhóm: 12px, màu chữ phụ, KHÔNG viết hoa — đo từ "Phòng marketing". */
-.group { margin: 12px 0 4px; font-size: 12px; line-height: 16px; color: var(--fg-2); }
-.group:first-child { margin-top: 4px; }
 
 /* Row 236 rộng trong sidebar 261, bo 10, hai dòng. */
 .bot {
@@ -136,7 +124,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* Đáy sidebar — app gốc để Plugins / Grok Local ở đây. */
-.side-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); }
 
 /* ── nút ──────────────────────────────────────────────────────────────────── */
 
@@ -161,7 +148,6 @@ button:disabled { opacity: 0.4; cursor: default; }
   height: var(--toolbar-h); padding: 0 16px; flex: none;
   border-bottom: 1px solid var(--line);
 }
-.chat-head h1 { margin: 0; font-size: 16px; font-weight: 600; }
 .chat-head .avatar { width: 22px; height: 22px; }
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .head-actions .status { font-size: 12px; color: var(--fg-2); }
@@ -571,3 +557,96 @@ img.avatar { object-fit: cover; }
   box-shadow: 0 6px 18px rgba(75, 59, 255, 0.4);
 }
 .gb2-upgrade:hover { filter: brightness(1.1); }
+
+/* ── X1: đầu/đáy sidebar, nhóm gập, nút danh tính ────────────────────────────
+ *
+ * Mọi con số dưới đây lấy từ `x-ray --groups` trên app gốc, không phải chọn cho đẹp:
+ *   sidebar mở  12 + 362 + 12 = 386px      hàng bot   362x54
+ *   đầu         nút New 24x24 ở 346,14     ô Search   362x32 tại y=56
+ *   đầu nhóm    362x30, có aria-expanded   đáy        362x40 mỗi hàng
+ *   gập         height 200ms trên phần co giãn, opacity 120ms
+ */
+.side-head { display: flex; align-items: center; justify-content: flex-end; height: 52px; padding: 0 16px; flex: 0 0 auto; }
+.side-head .new-icon { width: 24px; height: 24px; }
+
+.search-btn, .search {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; margin: 0 12px; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); color: var(--fg-3); font-size: 13px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.search-btn { width: calc(100% - 24px); cursor: text; text-align: left; }
+.search-btn:hover { background: var(--surface-3); border-color: var(--line-2); }
+.search-btn .lbl { flex: 1; }
+.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg-1); font-size: 13px; }
+.search input::placeholder { color: var(--fg-3); }
+
+/* Đầu nhóm: nút thật, không phải nhãn trang trí. Số đếm chỉ hiện khi gập — đo được ở app gốc. */
+.group {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  height: 30px; padding: 0 4px; border: 0; background: none;
+  color: var(--fg-2); font-size: 12px; line-height: 16px; text-align: left;
+  cursor: pointer; border-radius: 6px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.group:hover { background: var(--surface-2); color: var(--fg-1); }
+.group .caret { display: inline-block; transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.group[aria-expanded="true"] .caret { transform: rotate(90deg); }
+.group .lbl { flex: 1; text-transform: uppercase; letter-spacing: 0.04em; }
+.group .count {
+  min-width: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--surface-3); color: var(--fg-2);
+  font-size: 11px; line-height: 16px; text-align: center;
+}
+
+/* Phần co giãn: `grid-template-rows` cho chiều cao chuyển được mà không cần biết trước nó bao nhiêu.
+ * Đúng MỘT khối con — mẹo này chỉ co được hàng đầu của grid, nên nhiều con trực tiếp là không co. */
+.reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease; }
+.reveal > .reveal-in { min-height: 0; overflow: hidden; }
+.reveal.shut { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+
+.side-foot { flex: 0 0 auto; padding: 4px 12px 12px; position: relative; }
+.foot-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 40px;
+  padding: 0 8px; border: 0; border-radius: 8px; background: none;
+  color: var(--fg-2); font-size: 13px; text-align: left; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.foot-row:hover:not(:disabled) { background: var(--surface-2); color: var(--fg-1); }
+.foot-row:disabled { opacity: 0.45; cursor: default; }
+.foot-row .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot-row .mono {
+  display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px;
+  border-radius: 6px; background: var(--surface-3); color: var(--fg-1);
+  font-size: 11px; font-weight: 600;
+}
+
+.account-menu {
+  position: absolute; left: 12px; right: 12px; bottom: 56px; z-index: 3;
+  display: flex; flex-direction: column; padding: 4px;
+  border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-3);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  animation: menu-in 100ms ease-out;
+}
+@keyframes menu-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.account-menu button {
+  height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--fg-1); font-size: 13px; text-align: left; cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.account-menu button:hover:not(:disabled) { background: var(--surface-4, rgb(255 255 255 / 0.06)); }
+.account-menu button:disabled { opacity: 0.45; cursor: default; }
+.account-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line); }
+
+/* Nút danh tính trên toolbar: 128x28 ở app gốc, và nó là NÚT chứ không phải h1 trơ. */
+.identity {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; max-width: 220px;
+  padding: 0 6px; border: 0; border-radius: 8px; background: none;
+  color: var(--fg-1); font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.identity:hover { background: var(--surface-2); }
+.identity .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity .chev { color: var(--fg-3); font-size: 13px; }
+.identity.empty { color: var(--fg-3); font-weight: 500; cursor: default; }

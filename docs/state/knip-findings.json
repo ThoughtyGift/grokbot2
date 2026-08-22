@@ -1,6 +1,6 @@
 {
-  "count": 125,
-  "at": "2026-08-22T15:36:19.512Z",
+  "count": 123,
+  "at": "2026-08-22T15:59:14.324Z",
   "keys": [
     "apps/grokbot-web/src/api.ts|exports|health",
     "apps/grokbot-web/src/api.ts|exports|login",
@@ -30,10 +30,8 @@
     "services/grokbot-backend/src/automations.ts|exports|getAgentAutomations",
     "services/grokbot-backend/src/billing.ts|exports|ensureUser",
     "services/grokbot-backend/src/billing.ts|exports|getPlan",
-    "services/grokbot-backend/src/billing.ts|exports|getUser",
     "services/grokbot-backend/src/billing.ts|exports|monthlyTokens",
     "services/grokbot-backend/src/billing.ts|types|PlanRow",
-    "services/grokbot-backend/src/billing.ts|types|UserRow",
     "services/grokbot-backend/src/box-exec.ts|exports|BoxUnavailable",
     "services/grokbot-backend/src/browser.ts|exports|closeBrowser",
     "services/grokbot-backend/src/chat.ts|exports|AUTH_ID",

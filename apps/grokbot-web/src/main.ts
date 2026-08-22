@@ -24,6 +24,18 @@ const state = {
    * Chưa lưu xuống backend — việc đó thuộc B3 (`/v1/host/settings`), nên đóng app là mất.
    */
   paneOpen: true,
+  /** Menu tài khoản ở đáy sidebar (app gốc: `Open account menu`). */
+  accountOpen: false,
+  /** Ô Search: app gốc để nó là NÚT, bấm mới thành ô nhập — nên trạng thái này là của họ, không phải của tôi. */
+  searchOpen: false,
+  /**
+   * Nhóm đang gập, theo tên nhóm.
+   *
+   * Đo được ở app gốc: số đếm bên phải nhãn nhóm CHỈ hiện khi nhóm đang gập (`BOT HTML 1` với
+   * `aria-expanded=false`), còn nhóm đang mở thì không có số. Nên số đếm và việc gập là một tính
+   * năng, không phải hai.
+   */
+  collapsed: new Set<string>(),
 };
 
 /**
@@ -571,28 +583,38 @@ function paint(): void {
   const selected = state.agents.find((a) => a.id === state.selected);
   root.replaceChildren(el(`<div class="shell${state.paneOpen ? "" : " no-pane"}">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-row">
-          <strong>grokbot2</strong>
-          <button type="button" class="new-icon" data-act="new" title="bot mới">+</button>
-        </div>
-        <small>native /v1 · không qua Cursor ACL</small>
+      <div class="side-head">
+        <button type="button" class="new-icon" data-act="new" aria-label="New" title="bot mới">+</button>
       </div>
-      <label class="search">
-        <span class="ico">⌕</span>
-        <input type="search" placeholder="Tìm bot" value="${escapeHtml(state.query ?? "")}" />
-      </label>
+      ${state.searchOpen || state.query
+        ? `<label class="search"><span class="ico">⌕</span><input type="search" placeholder="Search" value="${escapeHtml(state.query)}" /></label>`
+        : `<button type="button" class="search-btn" data-act="search" aria-label="Search"><span class="ico">⌕</span><span class="lbl">Search</span></button>`}
       <div class="roster"></div>
-      <div class="side-actions">
-        <button type="button" class="primary" data-act="new">bot mới</button>
-        <button type="button" class="ghost" data-act="hidden">${state.showHidden ? "giấu bot ẩn" : "hiện bot ẩn"}</button>
-        <button type="button" class="danger" data-act="del" ${selected ? "" : "disabled"}>xóa</button>
+      <div class="side-foot">
+        <!-- disabled có chủ ý: X5.4 chưa dựng. Một nút bấm vào không làm gì thì tệ hơn một nút
+             mờ có nói lý do. Không dùng dấu backtick trong comment ở đây: nó đóng luôn
+             template literal của paint(), và lỗi hiện ra là TS1005 ở dòng khác. -->
+        <button type="button" class="foot-row" data-act="plugins" aria-label="Plugins" disabled
+                title="Plugins — chưa dựng (X5.4)">
+          <span class="ico">⊞</span><span class="lbl">Plugins</span>
+        </button>
+        ${state.accountOpen ? `<div class="account-menu" role="menu">
+          <button type="button" role="menuitem" data-act="new">Bot mới</button>
+          <button type="button" role="menuitem" data-act="hidden">${state.showHidden ? "Giấu bot ẩn" : "Hiện bot ẩn"}</button>
+          <button type="button" role="menuitem" data-act="del" ${selected ? "" : "disabled"}>Xoá bot đang chọn</button>
+          <hr />
+          <button type="button" role="menuitem" data-act="logout">Đăng xuất</button>
+        </div>` : ""}
+        <button type="button" class="foot-row account" data-act="account" aria-expanded="${state.accountOpen}" aria-label="Open account menu">
+          <span class="mono">${escapeHtml(initialsOf(api.currentEmail().split("@")[0] || "tk"))}</span>
+          <span class="lbl">${escapeHtml(api.currentEmail() || "tài khoản")}</span>
+        </button>
       </div>
     </aside>
     <section class="chat">
       <div class="chat-head">
         ${selected ? `<button type="button" class="avatar-btn" data-act="avatar" title="đổi ảnh">${avatarOf(selected)}</button>` : ""}
-        <h1>${escapeHtml(selected?.name ?? "chọn một bot")}</h1>
+        ${selected ? `<button type="button" class="identity" data-act="settings" aria-label="View Bot settings"><span class="nm">${escapeHtml(selected.name)}</span><span class="chev">›</span></button>` : `<span class="identity empty">chọn một bot</span>`}
         <div class="head-actions">
           <span class="status">${selected?.presence.isRunning ? "đang trả lời" : "sẵn sàng"}</span>
           <button type="button" class="ghost" data-act="rename" ${selected ? "" : "disabled"}>đổi tên</button>
@@ -652,7 +674,28 @@ function paint(): void {
 
   const rowsFor = (list: NativeAgent[]) => list;
   for (const g of groups) {
-    if (g.name) roster.append(el(`<div class="group">${escapeHtml(g.name)}</div>`));
+    /*
+     * Đầu nhóm dựng theo số đo ở app gốc (`x-ray --groups`): `button` cao 30px có `aria-expanded`,
+     * và số đếm CHỈ hiện khi nhóm đang gập. Phần co giãn là một khối riêng để `height` chuyển được
+     * trong 200ms — cùng thời lượng đo được ở họ.
+     */
+    const shut = state.collapsed.has(g.name);
+    if (g.name) {
+      const head = el(`<button type="button" class="group" aria-expanded="${!shut}">
+        <span class="caret">›</span><span class="lbl">${escapeHtml(g.name)}</span>
+        ${shut ? `<span class="count">${g.items.length}</span>` : ""}
+      </button>`);
+      head.onclick = () => {
+        if (shut) state.collapsed.delete(g.name); else state.collapsed.add(g.name);
+        paint();
+      };
+      roster.append(head);
+    }
+    // Một khối con duy nhất, có chủ ý: mẹo `grid-template-rows: 0fr` chỉ co được HÀNG ĐẦU của
+    // grid. Bản đầu cho 5 hàng bot làm con trực tiếp nên `aria-expanded` đổi mà chiều cao vẫn 275px.
+    const reveal = el(`<div class="reveal${shut ? " shut" : ""}"><div class="reveal-in"></div></div>`);
+    roster.append(reveal);
+    const bay = reveal.firstElementChild!;
     for (const a of rowsFor(g.items)) {
     const item = el(`<button type="button" class="bot ${a.id === state.selected ? "active" : ""} ${a.hidden ? "dim" : ""}">
       ${avatarOf(a)}
@@ -663,7 +706,7 @@ function paint(): void {
       <span class="preview">${escapeHtml(preview(a))}</span>
     </button>`);
       item.onclick = () => { state.selected = a.id; void loadTranscript(); void loadComputer(); paint(); };
-      roster.append(item);
+      bay.append(item);
     }
   }
 
@@ -689,21 +732,43 @@ function paint(): void {
   for (const node of renderRuns(state.entries)) log.append(node);
   log.scrollTop = log.scrollHeight;
 
-  root.querySelector<HTMLButtonElement>("[data-act=new]")!.onclick = async () => {
+  /*
+   * Từ đây trở xuống dùng `?.` chứ không `!`: đầu và đáy sidebar giờ dựng theo app gốc, nên `del`
+   * và `hidden` chỉ tồn tại KHI menu tài khoản đang mở. Bản đầu của tôi vẫn `!` và `paint()` ném
+   * lỗi ngay lần vẽ đầu — nút không còn thì phép khẳng định không-null là lời khai sai.
+   */
+  root.querySelector<HTMLButtonElement>("[data-act=search]")?.addEventListener("click", () => {
+    state.searchOpen = true; paint();
+  });
+  root.querySelector<HTMLButtonElement>("[data-act=account]")?.addEventListener("click", () => {
+    state.accountOpen = !state.accountOpen; paint();
+  });
+  root.querySelector<HTMLButtonElement>("[data-act=logout]")?.addEventListener("click", async () => {
+    await api.logout(); location.reload();
+  });
+  root.querySelector<HTMLButtonElement>("[data-act=settings]")?.addEventListener("click", () => {
+    // X3 sẽ làm stack điều hướng; bây giờ nút danh tính mở panel phải, đúng chỗ trang settings sẽ nằm.
+    state.paneOpen = true; paint();
+  });
+  // `new` có hai chỗ: nút + ở đầu sidebar và mục trong menu tài khoản. Nối cả hai.
+  root.querySelectorAll<HTMLButtonElement>("[data-act=new]").forEach((b) => { b.onclick = async () => {
     const name = prompt("Tên bot?", "Claude");
     if (!name) return;
     const created = await api.createAgent(name.trim());
     state.selected = created.agent.id;
     await refreshRoster();
-  };
-  root.querySelector<HTMLButtonElement>("[data-act=del]")!.onclick = async () => {
+  }; });
+
+  const delBtn = root.querySelector<HTMLButtonElement>("[data-act=del]");
+  if (delBtn) delBtn.onclick = async () => {
     if (!state.selected || !confirm("Xóa bot này?")) return;
     await api.deleteAgent(state.selected);
     state.selected = "";
     state.entries = [];
     await refreshRoster();
   };
-  root.querySelector<HTMLButtonElement>("[data-act=hidden]")!.onclick = () => {
+  const hidBtn = root.querySelector<HTMLButtonElement>("[data-act=hidden]");
+  if (hidBtn) hidBtn.onclick = () => {
     state.showHidden = !state.showHidden;
     void refreshRoster();
   };
