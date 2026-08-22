@@ -1,1 +1,0 @@
-MISSING function nt(n,e)

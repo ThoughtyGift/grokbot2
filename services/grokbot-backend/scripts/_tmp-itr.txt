@@ -1,1 +1,0 @@
-"application/proto",itr="application/json",otr="application/connect+proto",atr="application/connect+

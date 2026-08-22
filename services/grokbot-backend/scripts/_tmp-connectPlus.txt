@@ -1,1 +1,0 @@
-tion/proto",itr="application/json",otr="application/connect+proto",atr="application/connect+json"});function Ihn(t,e,n){var r;if(e&&new Headers(e).forEach((l,c)=>n.metadata.append(c,l)),typeof t!="object"||t==null||Array.isArray(t))throw n;let o=n.code;"code"in t&&typeof t.code=="string"&&(o=(r=ker(t.code))!==null&&r!==void 0?r:o);let s=t

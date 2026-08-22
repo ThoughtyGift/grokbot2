@@ -8,6 +8,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { ServerResponse } from "node:http";
 import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
 import { registerUser, loginUser } from "./web-auth.js";
+import { setPlan } from "./billing.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
 import {
   agentById,
@@ -137,6 +138,7 @@ function isNativePath(pathname: string): boolean {
     || pathname === "/v1/login"
     || pathname === "/v1/register"
     || pathname === "/v1/logout"
+    || pathname === "/v1/billing/webhook"
     || pathname === "/v1/events"
     || pathname === "/v1/agents"
     || pathname.startsWith("/v1/agents/")
@@ -172,6 +174,7 @@ export async function handleNative(
 
   const publicRoute = pathname === "/v1/health" || pathname === "/v1/session"
     || pathname === "/v1/login" || pathname === "/v1/register" || pathname === "/v1/logout"
+    || pathname === "/v1/billing/webhook"   // authenticated by its own shared secret, not a user token
     || (pathname === "/v1/attachments" && verb === "GET");
   if (!publicRoute) {
     const verdict = checkAuth(url, headers as Record<string, unknown>);
@@ -206,6 +209,25 @@ export async function handleNative(
     // Stateless JWT — the browser drops its token. No server revocation (a blocklist is not needed
     // at this stage); 204 lets the client clear its session on success.
     return empty(res, 204, origin);
+  }
+
+  // Checkout webhook (Phase 5). Provider-agnostic: Stripe/Lemonsqueezy/etc. POST here after a
+  // successful payment to flip the account onto a plan. Authenticated by a shared secret in
+  // `x-webhook-secret` (set GROKBOT2_BILLING_WEBHOOK_SECRET); disabled until that env is set, so it
+  // can never be hit anonymously. Body: { email | authId, plan, days? } — days omitted = no expiry.
+  if (pathname === "/v1/billing/webhook" && verb === "POST") {
+    const secret = process.env.GROKBOT2_BILLING_WEBHOOK_SECRET?.trim();
+    if (!secret) return json(res, { error: "billing webhook disabled" }, 503, origin);
+    if (String(headers["x-webhook-secret"] ?? "") !== secret) return json(res, { error: "unauthorized" }, 401, origin);
+    const b = parseJson(body);
+    if (!b.ok) return json(res, { error: b.error }, 400, origin);
+    const email = typeof b.value.email === "string" ? b.value.email.trim().toLowerCase() : "";
+    const authId = typeof b.value.authId === "string" && b.value.authId ? b.value.authId : (email ? `local|${email}` : "");
+    const plan = typeof b.value.plan === "string" ? b.value.plan : "pro";
+    const days = typeof b.value.days === "number" ? b.value.days : null;
+    if (!authId) return json(res, { error: "email or authId required" }, 400, origin);
+    setPlan(authId, plan, days != null ? Date.now() + days * 86_400_000 : null);
+    return json(res, { ok: true, authId, plan }, 200, origin);
   }
 
   if (pathname === "/v1/attachments" && verb === "GET") {

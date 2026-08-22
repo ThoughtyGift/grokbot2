@@ -11,7 +11,8 @@ import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from ".
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
 import { compact, applyCompaction, needsCompaction, estimateTokens, historyTokens } from "../compaction.js";
-import { billingMode, recordUsage } from "../billing.js";
+import { billingMode, recordUsage, accessVerdict } from "../billing.js";
+import { ownerOf } from "../directory/index.js";
 import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
 import { loadMemory, renderMemory } from "../memory.js";
@@ -728,6 +729,16 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
  * same way.
  */
 async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
+  // Per-user quota (multi-tenant Phase 5). Billed to the agent's OWNER, not the caller: this runs
+  // detached from the request, so `ownerOf(agentId)` is the reliable identity (currentOwner() would
+  // be the default here). Under GROKBOT2_BILLING=enforce an over-cap user does not spend a turn.
+  const turnOwner = ownerOf(agentId) ?? DEFAULT_USER.authId;
+  if (billingMode() === "enforce" && accessVerdict({ authId: turnOwner, email: "" }) === "payment_required") {
+    setText(bubble, "[grokbot2] Hết hạn mức tháng — nâng cấp gói để tiếp tục.");
+    if (bubble.kind === "send-message") bubble.streaming = false;
+    clearPresence(agentId); onUpdate(agentId); persist();
+    return;
+  }
   // The indicator must appear before the first token, not after it — that gap is exactly
   // what reads as a frozen app.
   setPresence(agentId, { isRunning: true, isComposingMessage: false, currentActivity: { kind: "thinking" } });
@@ -893,10 +904,13 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // model round trip: r.ok is true here and every earlier exit returned. A tool call recurses into
   // startTurn, so each pool round trip meters once — which is the real cost.
   if (billingMode() !== "off") {
+    // Attribute to the agent's OWNER (Phase 5) — the turn runs detached, so ownerOf(agentId) is the
+    // right identity, not currentOwner() (which would be the default here).
+    const meterOwner = ownerOf(agentId) ?? DEFAULT_USER.authId;
     const tin = historyTokens(history);
     const tout = estimateTokens(r.text ?? acc ?? "");
-    recordUsage(DEFAULT_USER.authId, tin, tout);
-    console.log(`[grokbot2:billing] turn metered auth=${DEFAULT_USER.authId} ~in=${tin} ~out=${tout} (estimated)`);
+    recordUsage(meterOwner, tin, tout);
+    console.log(`[grokbot2:billing] turn metered auth=${meterOwner} ~in=${tin} ~out=${tout} (estimated)`);
   }
 
   // P5-2. `parseToolCalls` reads every call in the reply, not just a trailing one, and `planBatches`
