@@ -48,7 +48,7 @@ console.log("── self-xray ──\n");
 // ── 1. code chết ─────────────────────────────────────────────────────────────
 {
   const r = run("npx", ["knip", "--no-progress", "--reporter", "json"], { cwd: REPO });
-  let n = null, kinds = "";
+  let n = null, kinds = "", keys = [];
   try {
     const j = JSON.parse(r.stdout.slice(r.stdout.indexOf("{")));
     const files = (j.files ?? []).length;
@@ -59,6 +59,13 @@ console.log("── self-xray ──\n");
       return acc;
     }, {});
     n = files + Object.values(issues).reduce((a, b) => a + b, 0);
+    for (const f of j.files ?? []) keys.push(`${f}|file|`);
+    for (const i of j.issues ?? []) {
+      for (const k of ["exports", "types", "dependencies", "unlisted", "unresolved"]) {
+        for (const x of i[k] ?? []) keys.push(`${i.file}|${k}|${x?.name ?? x}`);
+      }
+    }
+    keys.sort();
     kinds = `${files} file không ai import` + Object.entries(issues).filter(([, v]) => v).map(([k, v]) => ` · ${v} ${k}`).join("");
   } catch {
     kinds = `knip không trả JSON đọc được (exit ${r.status})`;
@@ -74,16 +81,44 @@ console.log("── self-xray ──\n");
   const baseFile = join(REPO, "docs", "state", "self-xray-baseline.json");
   let base = {};
   try { base = JSON.parse(readFileSync(baseFile, "utf8")); } catch { /* lượt đầu */ }
+  const listFile = join(REPO, "docs", "state", "knip-findings.json");
   const prev = base.knip ?? null;
   const grew = n != null && prev != null && n > prev;
+
+  /*
+   * Vi sao luu ca DANH SACH chu khong chi mot con so: luot 2026-08-22 bao "126 -> 127" va khong
+   * ai truy duoc cai +1 la gi, vi moc chi co mot con so nen khong co gi de tru. Mot phep do khong
+   * chan doan duoc thi chi tao tieng on. Khoa theo `file|loai|ten` nen delta hien ra ngay.
+   */
+  let prevKeys = null;
+  try { prevKeys = new Set(JSON.parse(readFileSync(listFile, "utf8")).keys ?? []); } catch { /* luot dau */ }
+  const nowSet = new Set(keys);
+  const added = prevKeys ? keys.filter((k) => !prevKeys.has(k)) : [];
+  const gone = prevKeys ? [...prevKeys].filter((k) => !nowSet.has(k)) : [];
+  const show = (list) => list.slice(0, 6).map((k) => {
+    const [f, kind, name] = k.split("|");
+    return `${f.split("/").pop()}:${name || kind}`;
+  }).join(", ") + (list.length > 6 ? ` (+${list.length - 6})` : "");
+  const delta = added.length || gone.length
+    ? ` — thêm: ${added.length ? show(added) : "không"}${gone.length ? ` · bớt: ${show(gone)}` : ""}`
+    : "";
   add("code chết (knip)", n != null && !grew,
-      n != null ? `${n} phát hiện${prev == null ? " (ghi làm mốc)" : grew ? ` — TĂNG từ ${prev}` : ` (mốc ${prev})`} — ${kinds}` : kinds,
+      n != null
+        ? `${n} phát hiện${prev == null ? " (ghi làm mốc)" : grew ? ` — TĂNG từ ${prev}` : ` (mốc ${prev})`} — ${kinds}${delta}`
+        : kinds,
       grew ? "thêm code chết: hoặc dọn, hoặc nói rõ vì sao rồi cập nhật mốc" : "không đo được code chết thì mỗi lần refactor là dọn mù");
-  if (n != null && (prev == null || n < prev)) {
+  if (n != null && !grew) {
     const { writeFileSync, mkdirSync } = await import("node:fs");
     mkdirSync(dirname(baseFile), { recursive: true });
-    writeFileSync(baseFile, `${JSON.stringify({ ...base, knip: n, at: new Date().toISOString() }, null, 2)}\n`);
-    console.log(`      ↳ mốc mới: ${n}`);
+    if (prev == null || n < prev) {
+      writeFileSync(baseFile, `${JSON.stringify({ ...base, knip: n, at: new Date().toISOString() }, null, 2)}
+`);
+      console.log(`      ↳ mốc mới: ${n}`);
+    }
+    // Danh sách cập nhật cả khi con số không đổi: cùng một tổng vẫn có thể đổi thành phần, và lần
+    // sau chỉ so được nếu danh sách là của lượt xanh gần nhất.
+    writeFileSync(listFile, `${JSON.stringify({ count: n, at: new Date().toISOString(), keys }, null, 2)}
+`);
   }
 }
 
