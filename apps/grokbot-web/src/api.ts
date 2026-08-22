@@ -75,6 +75,9 @@ export async function login(): Promise<void> {
 }
 
 export const health = () => fetch("/v1/health").then((r) => parse<{ ok: boolean; isBusy: boolean }>(r));
+/** Account + billing state — grokbot-web shows an Upgrade button when `overQuota` and a checkout URL is set. */
+export const me = () =>
+  fetch("/v1/me", { headers: headers() }).then((r) => parse<{ email: string; plan: string; overQuota: boolean; checkoutUrl: string }>(r));
 export const listAgents = (includeHidden = false) =>
   fetch(`/v1/agents${includeHidden ? "?includeHidden=1" : ""}`, { headers: headers() }).then((r) => parse<NativeAgent[]>(r));
 export const createAgent = (name: string) =>

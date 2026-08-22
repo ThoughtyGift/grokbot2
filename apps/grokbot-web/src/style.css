@@ -553,3 +553,21 @@ img.avatar { object-fit: cover; }
   cursor: pointer;
 }
 .gb2-logout:hover { color: #fff; border-color: #4b4bff; }
+
+/* Upgrade button — shown when over quota (Phase 6 web UX). Sits above the sign-out pill. */
+.gb2-upgrade {
+  position: fixed;
+  right: 12px;
+  bottom: 48px;
+  z-index: 51;
+  padding: 8px 14px;
+  border: 1px solid #6a5bff;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #5b5bff, #4b3bff);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(75, 59, 255, 0.4);
+}
+.gb2-upgrade:hover { filter: brightness(1.1); }

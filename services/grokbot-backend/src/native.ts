@@ -8,7 +8,8 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { ServerResponse } from "node:http";
 import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
 import { registerUser, loginUser } from "./web-auth.js";
-import { setPlan } from "./billing.js";
+import { setPlan, getUser, accessVerdict } from "./billing.js";
+import { currentOwner } from "./request-context.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
 import {
   agentById,
@@ -138,6 +139,7 @@ function isNativePath(pathname: string): boolean {
     || pathname === "/v1/login"
     || pathname === "/v1/register"
     || pathname === "/v1/logout"
+    || pathname === "/v1/me"
     || pathname === "/v1/billing/webhook"
     || pathname === "/v1/events"
     || pathname === "/v1/agents"
@@ -184,6 +186,22 @@ export async function handleNative(
 
   if (pathname === "/v1/health" && verb === "GET") {
     return json(res, nativeHealth(), 200, origin);
+  }
+
+  // Who am I + billing state (Phase 6 web UX). Authenticated; owner comes from the runWithOwner
+  // scope index.ts sets around this request. grokbot-web reads `overQuota` + `checkoutUrl` to show
+  // an Upgrade button when the account is out of quota.
+  if (pathname === "/v1/me" && verb === "GET") {
+    const owner = currentOwner();
+    const u = getUser(owner);
+    const email = u?.email ?? "";
+    return json(res, {
+      authId: owner,
+      email,
+      plan: u?.plan ?? "free",
+      overQuota: accessVerdict({ authId: owner, email }) === "payment_required",
+      checkoutUrl: process.env.GROKBOT2_CHECKOUT_URL ?? "",
+    }, 200, origin);
   }
 
   if (pathname === "/v1/session" && verb === "GET") {

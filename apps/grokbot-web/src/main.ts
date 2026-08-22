@@ -888,10 +888,11 @@ async function bootApp(): Promise<void> {
   await loadTranscript();
   await loadComputer();
   mountLogout();
+  void refreshUpgrade();
   const ac = new AbortController();
   void api.listenEvents((name, data) => {
     const d = data as { agentId?: string };
-    if (name === "agent.upserted") void refreshRoster();
+    if (name === "agent.upserted") { void refreshRoster(); void refreshUpgrade(); }
     if (name === "transcript.append" && (!d.agentId || d.agentId === state.selected)) void loadTranscript();
     if (name === "computer.status" && d.agentId === state.selected) void loadComputer();
   }, ac.signal).catch((e) => {
@@ -911,6 +912,25 @@ function mountLogout(): void {
   btn.title = "Đăng xuất";
   btn.addEventListener("click", async () => { await api.logout(); location.reload(); });
   document.body.append(btn);
+}
+
+/** An Upgrade button, shown only when the account is out of quota and a checkout URL is configured.
+ *  Mounted on <body> (survives paint()); opens the self-hosted checkout in a new tab. */
+function mountUpgrade(show: boolean, url: string): void {
+  document.getElementById("gb2-upgrade")?.remove();
+  if (!show || !url) return;
+  const btn = document.createElement("button");
+  btn.id = "gb2-upgrade";
+  btn.className = "gb2-upgrade";
+  btn.textContent = "⚡ Nâng cấp";
+  btn.title = "Hết hạn mức — nâng cấp gói để tiếp tục";
+  btn.addEventListener("click", () => window.open(url, "_blank", "noopener"));
+  document.body.append(btn);
+}
+
+async function refreshUpgrade(): Promise<void> {
+  try { const m = await api.me(); mountUpgrade(m.overQuota, m.checkoutUrl); }
+  catch { /* /v1/me is best-effort — never block the app on it */ }
 }
 
 /** Email + password gate. Register creates an account; login uses an existing one. */
