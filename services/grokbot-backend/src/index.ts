@@ -7,7 +7,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
-import { handleAuth, userFromToken, DEFAULT_USER } from "./auth.js";
+import { handleAuth, userFromToken, ownerFromAuth, DEFAULT_USER } from "./auth.js";
 import { accessVerdict } from "./billing.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
@@ -116,12 +116,15 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   // ── native API (S13; OpenAPI docs/api/grokbot2-v0.yaml) — beside /gw, not through it ──
-  if (await handleNative(url, body, res, req.headers, req.method ?? "?")) return;
+  // Native /v1 (grokbot-web) — scope to the caller's owner from a VERIFIED user JWT (Phase 4),
+  // default identity when absent/unsigned (the desktop, or the gateway-ticket session token).
+  const nativeOwner = ownerFromAuth(req.headers.authorization);
+  if (await runWithOwner(nativeOwner, () => handleNative(url, body, res, req.headers, req.method ?? "?"))) return;
 
   // ── box gateway (JSON + SSE + chat) ──
   // Multi-tenant Phase 2: scope every /gw command to the caller's owner (from the token, default
   // identity when absent). Domain code reads currentOwner(); this is the one place it is set.
-  const gwOwner = (userFromToken(req.headers.authorization) ?? DEFAULT_USER).authId;
+  const gwOwner = ownerFromAuth(req.headers.authorization);
   if (runWithOwner(gwOwner, () => handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?"))) return;
 
   // ── ConnectRPC bootstrap (protobuf) ──

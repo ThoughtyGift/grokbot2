@@ -7,6 +7,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { ServerResponse } from "node:http";
 import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
+import { registerUser, loginUser } from "./web-auth.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
 import {
   agentById,
@@ -133,6 +134,9 @@ function isNativePath(pathname: string): boolean {
   return (
     pathname === "/v1/health"
     || pathname === "/v1/session"
+    || pathname === "/v1/login"
+    || pathname === "/v1/register"
+    || pathname === "/v1/logout"
     || pathname === "/v1/events"
     || pathname === "/v1/agents"
     || pathname.startsWith("/v1/agents/")
@@ -167,6 +171,7 @@ export async function handleNative(
   if (!isNativePath(pathname)) return false;
 
   const publicRoute = pathname === "/v1/health" || pathname === "/v1/session"
+    || pathname === "/v1/login" || pathname === "/v1/register" || pathname === "/v1/logout"
     || (pathname === "/v1/attachments" && verb === "GET");
   if (!publicRoute) {
     const verdict = checkAuth(url, headers as Record<string, unknown>);
@@ -181,6 +186,26 @@ export async function handleNative(
   if (pathname === "/v1/session" && verb === "GET") {
     const token = ensureGatewayToken();
     return json(res, { token, tokenType: "bearer", auth: authMode() }, 200, origin);
+  }
+
+  // Web login (Phase 4). Public routes: exchange credentials for a signed user JWT that the browser
+  // then sends as Bearer on /v1, giving each account its own owner-scoped space.
+  if (pathname === "/v1/register" && verb === "POST") {
+    const b = parseJson(body);
+    if (!b.ok) return json(res, { error: b.error }, 400, origin);
+    const out = registerUser(String(b.value.email ?? ""), String(b.value.password ?? ""));
+    return json(res, out.ok ? { token: out.token, email: out.email } : { error: out.error }, out.ok ? 200 : 400, origin);
+  }
+  if (pathname === "/v1/login" && verb === "POST") {
+    const b = parseJson(body);
+    if (!b.ok) return json(res, { error: b.error }, 400, origin);
+    const out = loginUser(String(b.value.email ?? ""), String(b.value.password ?? ""));
+    return json(res, out.ok ? { token: out.token, email: out.email } : { error: out.error }, out.ok ? 200 : 401, origin);
+  }
+  if (pathname === "/v1/logout" && verb === "POST") {
+    // Stateless JWT — the browser drops its token. No server revocation (a blocklist is not needed
+    // at this stage); 204 lets the client clear its session on success.
+    return empty(res, 204, origin);
   }
 
   if (pathname === "/v1/attachments" && verb === "GET") {

@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS plans (
  * and the existing single-tenant `.data`. Backfill is the column DEFAULT: every pre-existing row
  * becomes owned by the single default user (auth.ts DEFAULT_USER `auth0|grokbot2-user`).
  *
- * INERT: nothing filters on `owner_id` yet — that is Phase 2 (docs/multi-tenant-roadmap.md). Adding
+ * INERT: nothing filters on `owner_id` yet — that is Phase 2 (docs/plan/multi-tenant-roadmap.md). Adding
  * the column changes no behaviour; the app still sees every row because no query scopes by owner.
  */
 const OWNED_TABLES = [
@@ -192,6 +192,9 @@ function getDb(): DatabaseSync {
   db.exec(SCHEMA);
   db.exec("PRAGMA journal_mode = WAL");
   migrateOwnerId(db);
+  // Phase 4: users carry a password hash for web login (null for the token/desktop identity).
+  try { db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT"); }
+  catch (e) { if (!String((e as Error).message).toLowerCase().includes("duplicate column")) throw e; }
   importJsonIfNeeded(db);
   return db;
 }
