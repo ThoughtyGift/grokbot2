@@ -38,6 +38,7 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redact } from "./redact.js";
+import { verifyJwt } from "./auth.js";
 
 const TOKEN_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 /** Where operator tools read the per-boot token from. Inside the gitignored state directory. */
@@ -109,7 +110,7 @@ export interface AuthVerdict {
   /** Set when the request should be refused: the host's own message for this case. */
   message?: string;
   /** What we saw, for the warn log. Never the token itself. */
-  saw: "matching-bearer" | "stale-literal" | "unknown-token" | "other-scheme" | "no-header";
+  saw: "matching-bearer" | "user-jwt" | "stale-literal" | "unknown-token" | "other-scheme" | "no-header";
 }
 
 /** Shape (never value) of the last unrecognised token, to tell a wrong guess from a stale cache. */
@@ -136,6 +137,10 @@ export function checkAuth(url: string, headers: Record<string, unknown>): AuthVe
   else {
     const presented = raw.replace(/^Bearer\s+/i, "").trim();
     if (presented === expected) saw = "matching-bearer";
+    // A signed grokbot-web user token (multi-tenant Phase 4) — a real credential, verified by HMAC,
+    // distinct from the desktop's gateway ticket. Accepting it is what lets GROKBOT2_AUTH=enforce
+    // protect the /v1 web surface without rejecting logged-in browser users.
+    else if (verifyJwt(raw)) saw = "user-jwt";
     // Restarting the app did NOT make it present the new ticket, and "wrong-bearer" alone cannot
     // say why. Two very different causes need opposite fixes:
     //
