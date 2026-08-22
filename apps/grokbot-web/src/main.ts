@@ -2,7 +2,7 @@ import "./style.css";
 import * as api from "./api";
 import type { AnimatedAvatar, BotMood } from "./avatar";
 import { AVATAR_COLORS, AVATAR_EXPRESSIONS, AVATAR_SHAPES, TILE_INK, animateAvatar, botAvatarPng, botAvatarSvg, pickFor } from "./avatar";
-import type { NativeAgent, NativeEntry, ComputerStatus, SidebarSection } from "./api";
+import type { NativeAgent, NativeEntry, ComputerStatus, Routine, SidebarSection } from "./api";
 
 const root = document.querySelector("#app")!;
 
@@ -47,6 +47,8 @@ const state = {
    * con, `Back to details` pop ra, ra/vào 240ms.
    */
   panePage: "details" as "details" | "settings",
+  /** Routine của bot đang chọn (X5.1). Nạp cùng lúc với transcript. */
+  routines: [] as Routine[],
   /**
    * Nội dung ô nhập.
    *
@@ -915,8 +917,25 @@ function paint(): void {
           <div class="screen">${screenPane(state.computer)}</div>
           <div class="caption">${escapeHtml(selected ? `Màn hình của ${selected.name}` : "chưa chọn bot")}</div>
           <div class="routines">
-            <p>Routine là việc lặp lại theo lịch mà bot tự chạy.</p>
-            <button type="button" class="btn" data-act="routine" ${selected ? "" : "disabled"}>Tạo routine</button>
+            <div class="routines-head">
+              <span>Routine</span>
+              <button type="button" class="icon-btn" data-act="routine-new" aria-label="Create Routine" ${selected ? "" : "disabled"}>+</button>
+            </div>
+            ${!selected
+              ? `<p class="empty-note">chọn một bot để xem routine</p>`
+              : state.routines.length
+                ? `<ul class="routine-list">${state.routines.map((r) => `
+                    <li class="routine${r.isEnabled ? "" : " off"}" data-routine="${escapeHtml(r.id)}">
+                      <div class="routine-main">
+                        <span class="nm">${escapeHtml(r.name)}</span>
+                        <span class="when">${escapeHtml(r.scheduleText || r.schedule)}</span>
+                      </div>
+                      <label class="routine-toggle" title="${r.isEnabled ? "đang bật" : "đang tắt"}">
+                        <input type="checkbox" data-act="routine-toggle" ${r.isEnabled ? "checked" : ""} />
+                      </label>
+                      <button type="button" class="icon-btn" data-act="routine-del" aria-label="Xoá routine">×</button>
+                    </li>`).join("")}</ul>`
+                : `<p class="empty-note">Routine là việc lặp lại theo lịch mà bot tự chạy. Chưa có cái nào.</p>`}
           </div>
         </section>
         <section class="pane-page settings" ${state.panePage === "settings" ? "" : "aria-hidden=\"true\""}>
@@ -1007,7 +1026,7 @@ function paint(): void {
         : `<span class="when">${escapeHtml(shortTime(a.updatedAtMs))}</span>`}
       <span class="preview">${escapeHtml(preview(a))}</span>
     </button>`);
-      item.onclick = () => { state.selected = a.id; void loadTranscript(); void loadComputer(); paint(); };
+      item.onclick = () => { state.selected = a.id; void loadTranscript(); void loadComputer(); void loadRoutines().then(paint); paint(); };
       bay.append(item);
     }
   }
@@ -1134,6 +1153,46 @@ function paint(): void {
       draftBox.setSelectionRange(state.draft.length, state.draft.length);
     }
   }
+
+  /*
+   * Ba nút của routine. Sau mỗi thao tác dùng LUÔN danh sách backend trả về, không tự sửa mảng ở
+   * FE: backend là chỗ duy nhất biết thứ tự và `scheduleText`, và một bản sao tự suy ở FE sẽ lệch
+   * ngay lần đầu ai đó sửa routine từ app gốc.
+   */
+  const applyRoutines = (list: Routine[]) => { state.routines = list; state.error = ""; paint(); };
+  const routineFail = (e: unknown) => {
+    state.error = e instanceof Error ? e.message : String(e);
+    paint();
+  };
+
+  root.querySelector<HTMLButtonElement>("[data-act=routine-new]")?.addEventListener("click", async () => {
+    if (!state.selected) return;
+    const name = prompt("Tên routine?", "Báo cáo sáng");
+    if (!name?.trim()) return;
+    const promptText = prompt("Bot phải làm gì?", "Tổng hợp việc hôm qua");
+    if (!promptText?.trim()) return;
+    // Cron, không phải câu tiếng Anh — backend từ chối 400 nếu không đọc được, nên nói trước ở đây.
+    const schedule = prompt("Lịch, dạng cron 5 trường (phút giờ ngày tháng thứ)", "0 9 * * *");
+    if (!schedule?.trim()) return;
+    try { applyRoutines((await api.createRoutine(state.selected, { name: name.trim(), prompt: promptText, schedule: schedule.trim() })).routines); }
+    catch (e) { routineFail(e); }
+  });
+
+  root.querySelectorAll<HTMLElement>("li.routine").forEach((li) => {
+    const id = li.dataset.routine;
+    if (!id || !state.selected) return;
+    const agentId = state.selected;
+    li.querySelector<HTMLInputElement>("[data-act=routine-toggle]")?.addEventListener("change", async (ev) => {
+      const on = (ev.target as HTMLInputElement).checked;
+      try { applyRoutines((await api.patchRoutine(agentId, id, { isEnabled: on })).routines); }
+      catch (e) { routineFail(e); }
+    });
+    li.querySelector<HTMLButtonElement>("[data-act=routine-del]")?.addEventListener("click", async () => {
+      if (!confirm("Xoá routine này?")) return;
+      try { applyRoutines((await api.deleteRoutine(agentId, id)).routines); }
+      catch (e) { routineFail(e); }
+    });
+  });
 
   root.querySelector<HTMLButtonElement>("[data-act=back]")?.addEventListener("click", () => {
     state.panePage = "details";
@@ -1297,6 +1356,22 @@ async function refreshRoster(): Promise<void> {
   }
   if (!state.selected && state.agents[0]) state.selected = state.agents[0].id;
   paint();
+}
+
+/**
+ * Nạp routine của bot đang chọn.
+ *
+ * Lỗi thì để danh sách rỗng và ghi vào `state.error`, KHÔNG ném: panel Details còn có màn hình và
+ * chú thích bên cạnh, làm vỡ cả panel vì một danh sách phụ là đổi một lỗi nhỏ thành một lỗi to.
+ */
+async function loadRoutines(): Promise<void> {
+  if (!state.selected) { state.routines = []; return; }
+  try {
+    state.routines = (await api.listRoutines(state.selected)).routines;
+  } catch (e) {
+    state.routines = [];
+    state.error = `routine: ${e instanceof Error ? e.message : e}`;
+  }
 }
 
 async function loadTranscript(): Promise<void> {

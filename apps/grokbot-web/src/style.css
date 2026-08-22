@@ -863,3 +863,22 @@ body.dragging { cursor: col-resize; user-select: none; }
    giữa một transcript dài. */
 .tool-card.pending { border-color: var(--danger-line); animation: card-in 200ms cubic-bezier(0.22, 1, 0.36, 1), wait 2s ease-in-out infinite 200ms; }
 @keyframes wait { 0%, 100% { border-color: var(--danger-line); } 50% { border-color: var(--danger); } }
+
+/* ── X5.1: danh sách routine trong panel Details ─────────────────────────── */
+.routines { display: flex; flex-direction: column; gap: 8px; }
+.routines-head { display: flex; align-items: center; height: var(--h-control); font-size: var(--fs-body); font-weight: 600; }
+.routines-head .icon-btn { margin-left: auto; }
+.routine-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.routine {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--r-row); background: var(--surface-2);
+  transition: background-color var(--t-fast) ease, opacity var(--t-fast) ease;
+}
+.routine:hover { background: var(--surface-3); }
+/* Routine tắt vẫn hiện, chỉ mờ đi: ẩn nó thì người dùng tưởng mình đã xoá mất. */
+.routine.off { opacity: 0.5; }
+.routine-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.routine-main .nm { font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.routine-main .when { font-size: var(--fs-meta); color: var(--fg-3); }
+.routine-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.routine .icon-btn { width: 22px; height: 22px; font-size: var(--fs-body); }

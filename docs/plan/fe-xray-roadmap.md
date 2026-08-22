@@ -462,6 +462,27 @@ tức phải gửi một tin — đó là X0.3, và tôi cố ý không tự g�
 - [ ] X5.3 ✅ đã xong ở X2 · **X5.4 plugins — của phiên khác đang làm** (`src/plugins.ts` chưa vào
   git), tôi không chạm.
 
+**FE (X5.1) đã nối:** panel Details trước đây là một đoạn chữ giới thiệu routine cộng một nút
+*Tạo routine* không nối gì — tức một nút bấm vào không xảy ra chuyện gì, đúng thứ dự án này cấm.
+Giờ là danh sách thật: tên · câu tả lịch · công tắc bật/tắt · nút xoá, thêm bằng nút `+` ở đầu khối.
+
+Hai quyết định nhỏ nhưng có lý do:
+
+- **Sau mỗi thao tác dùng luôn danh sách backend trả về**, không tự sửa mảng ở FE. Backend là chỗ
+  duy nhất biết thứ tự và `scheduleText`; một bản sao tự suy ở FE sẽ lệch ngay lần đầu ai đó sửa
+  routine từ **app gốc** — mà app gốc và FE này dùng chung một backend.
+- **Routine tắt thì mờ đi, không biến mất.** Ẩn nó thì người dùng tưởng mình vừa xoá mất.
+
+`pnpm measure:routines` — **8/8**, chạy trên stack thật: tạo → thấy trong panel → tắt trên UI thì
+backend tắt theo → xoá trên UI thì backend xoá theo. Bài kiểm tự dọn ở `finally` kể cả khi hỏng
+giữa chừng, và đã kiểm lại là không để routine thử nào sót trong dữ liệu của chủ máy.
+
+> Bài kiểm đó hỏng lần đầu với `element is not visible` sau 30 giây chờ — không phải vì UI sai, mà
+> vì **panel phải đang đóng**: bố cục nhớ theo tài khoản (X2.3) và lượt `ui-diff` trước đã đồng bộ
+> nó theo app, lúc đó app đang đóng panel. Danh sách nằm trong DOM nhưng `display: none`. Bài kiểm
+> phải **tự dựng trạng thái nó cần**, đây là lần thứ hai bài học đó xuất hiện (lần trước là
+> `measure-web-resize` dùng delta cố định).
+
 `pnpm test:routines` — **19/19**, gồm ba ca dễ bị bỏ qua: lịch không đọc được bị từ chối ở cả POST
 lẫn PATCH, routine của bot A **không** sửa được qua đường bot B (404), và `runs` là mảng ngay từ
 lúc tạo.

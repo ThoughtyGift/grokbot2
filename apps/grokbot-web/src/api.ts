@@ -16,11 +16,15 @@ import type {
   SidebarSection,
   UiPrefs,
   PatchAgentBody,
+  Routine,
+  CreateRoutineBody,
+  PatchRoutineBody,
+  SearchHit,
   Widget as NativeWidget,
   WidgetOption as NativeWidgetOption,
 } from "@grokbot2/api-contract";
 
-export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection , UiPrefs };
+export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection, UiPrefs, Routine, SearchHit };
 
 // Persisted so a reload keeps the account signed in (multi-tenant Phase 4). The token is a signed
 // user JWT from /v1/login; every /v1 call carries it, and the backend derives the owner from it.
@@ -118,6 +122,29 @@ export const hostSettings = () =>
 export const patchHostSettings = (ui: UiPrefs) =>
   fetch("/v1/host/settings", { method: "PATCH", headers: headers(), body: JSON.stringify(ui) })
     .then((r) => parse<{ ui: UiPrefs }>(r));
+
+/**
+ * Routine của một bot (X5.1).
+ *
+ * Mọi thao tác trả về CẢ DANH SÁCH sau khi đổi, và FE dùng luôn danh sách đó thay vì tự sửa mảng:
+ * backend là chỗ duy nhất biết thứ tự và `scheduleText`, nên một bản sao tự suy ở FE sẽ lệch ngay
+ * lần đầu ai đó sửa routine từ app gốc.
+ */
+export const listRoutines = (agentId: string) =>
+  fetch(`/v1/agents/${agentId}/routines`, { headers: headers() }).then((r) => parse<{ routines: Routine[] }>(r));
+export const createRoutine = (agentId: string, body: CreateRoutineBody) =>
+  fetch(`/v1/agents/${agentId}/routines`, { method: "POST", headers: headers(), body: JSON.stringify(body) })
+    .then((r) => parse<{ routines: Routine[] }>(r));
+export const patchRoutine = (agentId: string, routineId: string, body: PatchRoutineBody) =>
+  fetch(`/v1/agents/${agentId}/routines/${routineId}`, { method: "PATCH", headers: headers(), body: JSON.stringify(body) })
+    .then((r) => parse<{ routines: Routine[] }>(r));
+export const deleteRoutine = (agentId: string, routineId: string) =>
+  fetch(`/v1/agents/${agentId}/routines/${routineId}`, { method: "DELETE", headers: headers() })
+    .then((r) => parse<{ routines: Routine[] }>(r));
+
+/** Tìm bot theo tên VÀ nội dung transcript; `why` nói vì sao khớp (X5.2). */
+export const searchAgents = (q: string) =>
+  fetch(`/v1/search?q=${encodeURIComponent(q)}`, { headers: headers() }).then((r) => parse<{ hits: SearchHit[] }>(r));
 
 export const sidebarSections = () =>
   fetch("/v1/host/sidebar", { headers: headers() }).then((r) => parse<{ sections: SidebarSection[] }>(r));

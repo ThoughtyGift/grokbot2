@@ -41,7 +41,8 @@
     "measure:transcript": "node services/grokbot-backend/scripts/measure-transcript-cost.mjs",
     "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs",
     "measure:shot": "node services/grokbot-backend/scripts/measure-shot.mjs",
-    "test:routines": "node services/grokbot-backend/scripts/e2e-routines.mjs"
+    "test:routines": "node services/grokbot-backend/scripts/e2e-routines.mjs",
+    "measure:routines": "node services/grokbot-backend/scripts/measure-routines-ui.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
