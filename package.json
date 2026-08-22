@@ -39,7 +39,8 @@
     "measure:pane": "node services/grokbot-backend/scripts/measure-pane-nav.mjs",
     "measure:consistency": "node services/grokbot-backend/scripts/measure-ui-consistency.mjs",
     "measure:transcript": "node services/grokbot-backend/scripts/measure-transcript-cost.mjs",
-    "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs"
+    "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs",
+    "measure:shot": "node services/grokbot-backend/scripts/measure-shot.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

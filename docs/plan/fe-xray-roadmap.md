@@ -368,6 +368,39 @@ chưa đo được. Mở app bằng launcher F2 rồi `pnpm ui:xray` để chố
 > được BFF :8788"** trong khi backend hoàn toàn bình thường — một thông báo lỗi trỏ sai hoàn toàn
 > chỗ hỏng.
 
+### Đo chính xác từng pixel — hai đường, và biết khi nào dùng đường nào
+
+Câu hỏi của chủ máy: *"có cách nào đo chính xác từng pixel trên app mapping lại được không"*. Có,
+hai đường, và chúng khác nhau về độ tin cậy:
+
+| | cần gì | độ chính xác | dùng khi |
+|---|---|---|---|
+| **`pnpm ui:xray` / `ui:diff`** (CDP `:9222`) | app mở bằng `pnpm dev:app` | **tuyệt đối** — đọc thẳng `getBoundingClientRect()` và computed style của chính DOM app | mặc định, luôn ưu tiên |
+| **`pnpm measure:shot <ảnh.png>`** | chỉ cần một ảnh | tốt, nhưng **ảnh thường bị thu nhỏ** khi chụp/gửi, nên mọi số phải chia lại cho tỉ lệ | app mở kiểu thường, không có cổng gỡ lỗi |
+
+`measure:shot` quét một dải dọc, tự đoán mức nền (không giả định nền đen), gom các đoạn liên tiếp
+thành khối, rồi in ra hộp và khoảng cách tâm–tâm:
+
+```
+$ pnpm measure:shot docs/extracted/web-rail.png --x 43 --w 88
+ảnh 1920x1040 · dải x 0..88 · mức nền 7
+  y=  61   71x 44  x=17
+  y= 119   75x 44  x=13   cách khối trên 14px · tâm cách tâm 58px
+```
+
+Chụp app gốc rồi chạy đúng lệnh đó lên ảnh của họ là ra bảng so sánh bằng **số**, hết cảnh "trông
+bé hơn".
+
+> **Giới hạn phải nói rõ.** Ảnh chụp gửi qua chat thường bị thu về 0,77–0,96 lần, nên một khối "14px"
+> trong ảnh có thể là 18px thật. Tôi đã suýt chỉnh kích thước icon vài lần dựa trên ảnh bị thu nhỏ —
+> đó là cách chắc chắn để chỉnh sai. Số từ ảnh chỉ dùng để **so tỉ lệ trong cùng một ảnh** (hình bot
+> chiếm bao nhiêu phần trăm ô chứa), không dùng làm số tuyệt đối.
+
+**Đã sửa được nhờ đo tỉ lệ trong cùng ảnh:** hình bot chỉ lấp **42% chiều ngang** ô 36×36, vì
+`DEMI_VIEWBOX = 158` của bloub chừa lề cho vòng trang trí mà avatar tĩnh không vẽ. Giờ viewBox tính
+từ chính biên của hình, và hình được phép tràn nhẹ ra mép (ô không có viền cũng không cắt) — lấp
+**79–95%**. Ô ở rail lên **44px** (số đọc từ ảnh, chưa phải máy đo).
+
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 
 - [ ] X5.1 Routines · X5.2 tìm bot thật · X5.4 plugins · X5.5 khay subagent

@@ -135,6 +135,47 @@ export type AvatarOptions = {
  * Trên nền `rgb(7,7,7)` của mình thì lỗ thủng trên thân màu tối = mắt tàng hình. Nên mặc định vẽ
  * mắt đặc bằng màu chữ chính. Đây là chỗ đi chệch bản gốc có chủ ý, không phải dựng sai.
  */
+/**
+ * viewBox ôm sát chính hình vẽ, thay vì lấy `DEMI_VIEWBOX` cố định.
+ *
+ * `DEMI_VIEWBOX = 158` là nửa khung mà **bloub** cần cho vòng trang trí và vệt sao chổi — thứ avatar
+ * tĩnh ở đây không vẽ. Hậu quả đo được: thân bot chỉ chiếm 15×23 trên một ô 36×36, tức 42% chiều
+ * ngang, và trong sidebar rail nó trông bé hơn hẳn app gốc dù ô chứa đúng 54×54 và avatar đúng 36×36.
+ * Chủ máy nhìn ra điều đó trước khi tôi đo ra.
+ *
+ * Tính biên từ chính các số trong path (kể cả điểm điều khiển của đường cong, nên biên hơi rộng hơn
+ * hình thật một chút — thà hơi nhỏ còn hơn bị cắt mất). Mỗi hình vì thế lấp cùng một tỉ lệ khung,
+ * bất kể nó tròn hay thon.
+ */
+/**
+ * `fill` < 1 nghĩa là hình được phép TRÀN mép ô một chút.
+ *
+ * Hình của bloub có cái tròn, có cái thon. Ôm sát biên thì cái thon chỉ lấp ~62% chiều ngang của ô
+ * vuông, và trong rail nó trông bé hẳn so với app gốc — chủ máy chỉ ra điều đó hai lần trước khi
+ * tôi đo ra. Ô chứa không có viền cũng không cắt, nên cho hình tràn nhẹ là cách làm nó nặng bằng
+ * app gốc mà KHÔNG phải phóng to ô (ô 36/54 là số đo thật, không được đổi).
+ */
+function fitBox(paths: string[], pad = 0, fill = 0.86): { x: number; y: number; w: number; h: number } {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const d of paths) {
+    const nums = d.match(/-?\d+(?:\.\d+)?/g);
+    if (!nums) continue;
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      const x = Number(nums[i]), y = Number(nums[i + 1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!Number.isFinite(minX)) return { x: -DEMI_VIEWBOX, y: -DEMI_VIEWBOX, w: DEMI_VIEWBOX * 2, h: DEMI_VIEWBOX * 2 };
+  // Ô vuông, canh giữa: hình chữ nhật thì avatar méo khi ô chứa là hình vuông.
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const side = (Math.max(maxX - minX, maxY - minY) + pad * 2) * fill;
+  return { x: cx - side / 2, y: cy - side / 2, w: side, h: side };
+}
+
 export function botAvatarSvg(id: string, opts: AvatarOptions = {}): string {
   const pick = pickFor(id);
   const shape = opts.shapeId
@@ -147,6 +188,8 @@ export function botAvatarSvg(id: string, opts: AvatarOptions = {}): string {
 
   // `sample(0)` = khung đứng yên ở trạng thái nghỉ. Avatar là ảnh tĩnh, không chạy vòng đời.
   const frame = new BotEngine(RAYON, "idle", shape.radii, expression).sample(0);
+  const box = fitBox([frame.bodyPath]);
+  const vbAttr = `${box.x} ${box.y} ${box.w} ${box.h}`;
   const vb = DEMI_VIEWBOX;
   const eye = opts.eyeMode === "hole" ? "#000" : eyeFor(fill);
   const eyes = frame.eyes
@@ -155,12 +198,12 @@ export function botAvatarSvg(id: string, opts: AvatarOptions = {}): string {
 
   if (opts.eyeMode === "hole") {
     const uid = `m${(pickFor(id).shape % 100000).toString(36)}`;
-    return `<svg viewBox="${-vb} ${-vb} ${vb * 2} ${vb * 2}" xmlns="http://www.w3.org/2000/svg">`
+    return `<svg viewBox="${vbAttr}" xmlns="http://www.w3.org/2000/svg">`
       + `<mask id="${uid}"><path d="${frame.bodyPath}" fill="#fff"/>${eyes}</mask>`
-      + `<rect x="${-vb}" y="${-vb}" width="${vb * 2}" height="${vb * 2}" fill="${opts.paper ?? "transparent"}"/>`
+      + `<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${opts.paper ?? "transparent"}"/>`
       + `<path d="${frame.bodyPath}" fill="${fill}" mask="url(#${uid})"/></svg>`;
   }
-  return `<svg viewBox="${-vb} ${-vb} ${vb * 2} ${vb * 2}" xmlns="http://www.w3.org/2000/svg">`
+  return `<svg viewBox="${vbAttr}" xmlns="http://www.w3.org/2000/svg">`
     + `<path d="${frame.bodyPath}" fill="${fill}"/>${eyes}</svg>`;
 }
 
@@ -242,7 +285,14 @@ export function animateAvatar(host: HTMLElement, id: string, mood: BotMood = "id
   const engine = new BotEngine(RAYON, mood, shape.radii, expression);
   const vb = DEMI_VIEWBOX;
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", `${-vb} ${-vb} ${vb * 2} ${vb * 2}`);
+  /*
+   * Bản động dùng CÙNG viewBox với bản tĩnh, tính từ khung nghỉ.
+   *
+   * Không tính lại mỗi khung: hình phình ra co vào khi bot "thở", nên viewBox chạy theo sẽ làm cả
+   * con bot lắc lư như đang zoom — chọn một khung cố định thì nó thở trong khung, đúng như bloub.
+   */
+  const box0 = fitBox([engine.sample(0).bodyPath]);
+  svg.setAttribute("viewBox", `${box0.x} ${box0.y} ${box0.w} ${box0.h}`);
   const body = document.createElementNS(SVG_NS, "path");
   body.setAttribute("fill", fill);
   svg.append(body);

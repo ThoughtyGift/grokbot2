@@ -734,7 +734,11 @@ body.dragging { cursor: col-resize; user-select: none; }
   display: grid; place-items: center;
   width: 54px; height: 54px; margin: 4px auto; padding: 0;
 }
-.sidebar.rail .bot .avatar { width: 36px; height: 36px; }
+/* Ở RAIL, avatar to hơn hàng mở rộng.
+   36px là số đo `sand-agent-avatar` trong hàng sidebar ĐANG MỞ (đo bằng CDP). Ở rail thì không còn
+   chữ, và theo tỉ lệ đọc từ ảnh app đang chạy, hình bot chiếm ~81% bề ngang ô 54 — tức khoảng 44px.
+   Đây là số ĐỌC TỪ ẢNH, chưa phải số máy đo: mở app bằng `pnpm dev:app` rồi `pnpm ui:xray` để chốt. */
+.sidebar.rail .bot .avatar { width: 44px; height: 44px; }
 .sidebar.rail .bot .dot { position: absolute; right: 8px; top: 8px; }
 .sidebar.rail .foot-row { justify-content: center; padding: 0; }
 .sidebar.rail .account-menu { left: 8px; width: 200px; right: auto; }
