@@ -881,12 +881,13 @@ async function loadComputer(): Promise<void> {
   paint();
 }
 
-async function boot(): Promise<void> {
-  root.textContent = "đăng nhập local…";
-  await api.login();
+/** The app itself, once a session exists (multi-tenant Phase 4b). */
+async function bootApp(): Promise<void> {
+  root.textContent = "đang tải…";
   await refreshRoster();
   await loadTranscript();
   await loadComputer();
+  mountLogout();
   const ac = new AbortController();
   void api.listenEvents((name, data) => {
     const d = data as { agentId?: string };
@@ -900,6 +901,60 @@ async function boot(): Promise<void> {
   });
 }
 
-void boot().catch((e) => {
-  root.innerHTML = `<p class="err">Không kết nối được BFF :8788 — chạy <code>pnpm backend</code> rồi reload.<br>${escapeHtml(String(e))}</p>`;
-});
+/** A floating sign-out control, mounted on <body> so `paint()` (which owns #app) never wipes it. */
+function mountLogout(): void {
+  document.getElementById("gb2-logout")?.remove();
+  const btn = document.createElement("button");
+  btn.id = "gb2-logout";
+  btn.className = "gb2-logout";
+  btn.textContent = `⎋ ${api.currentEmail() || "đăng xuất"}`;
+  btn.title = "Đăng xuất";
+  btn.addEventListener("click", async () => { await api.logout(); location.reload(); });
+  document.body.append(btn);
+}
+
+/** Email + password gate. Register creates an account; login uses an existing one. */
+function renderLogin(err = ""): void {
+  document.getElementById("gb2-logout")?.remove();
+  root.innerHTML = `
+    <div class="login">
+      <form class="login__card" id="login-form">
+        <h1>Grok Bot <span>local</span></h1>
+        <p class="login__sub">Đăng nhập vào không gian của bạn</p>
+        <input id="login-email" type="email" placeholder="email" autocomplete="username" required />
+        <input id="login-pass" type="password" placeholder="mật khẩu (≥ 8 ký tự)" autocomplete="current-password" required />
+        ${err ? `<p class="login__err">${escapeHtml(err)}</p>` : ""}
+        <div class="login__row">
+          <button type="submit" data-act="login" class="login__go">Đăng nhập</button>
+          <button type="button" data-act="register" class="login__alt">Tạo tài khoản</button>
+        </div>
+      </form>
+    </div>`;
+  const form = document.getElementById("login-form") as HTMLFormElement;
+  const email = () => (document.getElementById("login-email") as HTMLInputElement).value.trim();
+  const pass = () => (document.getElementById("login-pass") as HTMLInputElement).value;
+  const submit = async (act: "login" | "register") => {
+    try {
+      if (act === "register") await api.registerAccount(email(), pass());
+      else await api.loginAccount(email(), pass());
+      await bootApp();
+    } catch (e) {
+      renderLogin(e instanceof Error ? e.message : String(e));
+    }
+  };
+  form.addEventListener("submit", (ev) => { ev.preventDefault(); void submit("login"); });
+  form.querySelector('[data-act="register"]')?.addEventListener("click", () => void submit("register"));
+}
+
+async function boot(): Promise<void> {
+  if (!api.hasSession()) { renderLogin(); return; }
+  try {
+    await bootApp();
+  } catch (e) {
+    // A stale/rejected token lands here — drop it and show the login gate rather than a dead app.
+    if (e instanceof Error && /401|unauthorized/i.test(e.message)) { await api.logout(); renderLogin("Phiên hết hạn — đăng nhập lại."); return; }
+    root.innerHTML = `<p class="err">Không kết nối được BFF :8788 — chạy <code>pnpm backend</code> rồi reload.<br>${escapeHtml(String(e))}</p>`;
+  }
+}
+
+void boot();

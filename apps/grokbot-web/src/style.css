@@ -487,3 +487,69 @@ img.avatar { object-fit: cover; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── Multi-tenant Phase 4b: login gate + sign-out ─────────────────────────── */
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(120% 120% at 50% 0%, #14141a 0%, #070707 60%);
+}
+.login__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 88vw);
+  padding: 32px 28px;
+  border: 1px solid #262630;
+  border-radius: 16px;
+  background: #0e0e12;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.login__card h1 { margin: 0; font-size: 22px; font-weight: 650; color: #fcfcfc; }
+.login__card h1 span { color: #7c7cff; font-weight: 500; }
+.login__sub { margin: 0 0 8px; font-size: 13px; color: #8a8a96; }
+.login__card input {
+  padding: 11px 13px;
+  border: 1px solid #2c2c38;
+  border-radius: 10px;
+  background: #08080b;
+  color: #fcfcfc;
+  font-size: 14px;
+  outline: none;
+}
+.login__card input:focus { border-color: #7c7cff; }
+.login__err { margin: 0; font-size: 13px; color: #ff6b6b; }
+.login__row { display: flex; gap: 10px; margin-top: 4px; }
+.login__go, .login__alt {
+  flex: 1;
+  padding: 11px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.12s ease, background 0.12s ease;
+}
+.login__go { background: #4b4bff; color: #fff; }
+.login__go:hover { filter: brightness(1.12); }
+.login__alt { background: transparent; border-color: #2c2c38; color: #c8c8d2; }
+.login__alt:hover { background: #16161c; }
+.gb2-logout {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 50;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 12px;
+  border: 1px solid #2c2c38;
+  border-radius: 999px;
+  background: rgba(14, 14, 18, 0.9);
+  color: #b8b8c4;
+  font-size: 12px;
+  cursor: pointer;
+}
+.gb2-logout:hover { color: #fff; border-color: #4b4bff; }

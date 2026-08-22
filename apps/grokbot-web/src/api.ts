@@ -20,12 +20,46 @@ import type {
 
 export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection };
 
-let token = "";
+// Persisted so a reload keeps the account signed in (multi-tenant Phase 4). The token is a signed
+// user JWT from /v1/login; every /v1 call carries it, and the backend derives the owner from it.
+let token = localStorage.getItem("grokbot2.token") ?? "";
+let sessionEmail = localStorage.getItem("grokbot2.email") ?? "";
 
 const headers = (): HeadersInit => ({
   authorization: `Bearer ${token}`,
   "content-type": "application/json",
 });
+
+export const hasSession = (): boolean => token.length > 0;
+export const currentEmail = (): string => sessionEmail;
+
+function setSession(t: string, email: string): void {
+  token = t;
+  sessionEmail = email;
+  localStorage.setItem("grokbot2.token", t);
+  localStorage.setItem("grokbot2.email", email);
+}
+
+function clearSession(): void {
+  token = "";
+  sessionEmail = "";
+  localStorage.removeItem("grokbot2.token");
+  localStorage.removeItem("grokbot2.email");
+}
+
+async function credential(path: "/v1/login" | "/v1/register", email: string, password: string): Promise<void> {
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+  const j = await parse<{ token: string; email: string }>(r);
+  setSession(j.token, j.email);
+}
+
+export const loginAccount = (email: string, password: string) => credential("/v1/login", email, password);
+export const registerAccount = (email: string, password: string) => credential("/v1/register", email, password);
+
+export async function logout(): Promise<void> {
+  try { await fetch("/v1/logout", { method: "POST", headers: headers() }); } catch { /* stateless — clearing locally is enough */ }
+  clearSession();
+}
 
 async function parse<T>(r: Response): Promise<T> {
   if (r.status === 204) return undefined as T;
