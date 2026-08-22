@@ -15,7 +15,15 @@
  * KHÔNG so chiều cao khối cuộn — nó phụ thuộc số tin nhắn, không phải thiết kế, so nó chỉ tạo nhiễu.
  */
 export const ANCHORS = [
-  { name: "shell",        app: "body",                        web: "body",           props: ["bg", "color"] },
+  /*
+   * Nền so trên `.sand-shell`, KHÔNG so trên `body`.
+   *
+   * `body` của app là cửa sổ Electron trong suốt (`rgba(0,0,0,0.5)`), nên so nó với `body` của một
+   * trang web luôn ra "lệch" trong khi hai bên vẽ ra cùng một màu. Phần tử đục ngoài cùng thật sự
+   * là `div.sand-shell` = `rgb(7, 7, 7)` — đúng bằng nền của mình.
+   */
+  { name: "shell",        app: ".sand-shell",                 web: ".shell",         props: ["bg", "color"] },
+  { name: "vạch thời gian", app: ".sand-kit-timestamp",       web: ".day-sep span",  props: ["h", "font"] },
   { name: "sidebar",      app: ".sand-agents-sidebar",        web: ".sidebar",       props: ["x", "w"] },
   /*
    * So RÒNG hàng với hàng, không so container.
@@ -31,6 +39,12 @@ export const ANCHORS = [
    * Vài neo bên app chỉ tồn tại khi sidebar đang MỞ (đầu nhóm, hàng đáy). Chủ máy hay để nó ở rail,
    * nên các dòng này sẽ hiện "app KHÔNG có vùng này" lúc đó — đó là trạng thái, không phải lỗi.
    */
+  /*
+   * Icon bot — thêm 2026-08-23 sau khi chủ máy chỉ ra ba lần rằng nó bé hơn app gốc mà bảng anchor
+   * không có dòng nào cho nó. Đúng cái bẫy: thứ không đo thì không ai biết là đã lệch.
+   */
+  { name: "avatar hàng bot", app: ".sand-agent-item .sand-agent-avatar", web: ".roster .bot .avatar", props: ["w", "h"] },
+  { name: "avatar toolbar", app: ".sand-chat-header__avatar", web: ".chat-head .avatar", props: ["w", "h"] },
   { name: "đầu sidebar",  app: ".sand-agents-sidebar__header", web: ".side-head",     props: ["h"] },
   { name: "nút New",      app: '[aria-label="New"]',           web: ".side-head .new-icon", props: ["w", "h"] },
   { name: "ô Search",     app: ".sand-agents-sidebar__search", web: ".search-btn, .search", props: ["h", "radius"] },

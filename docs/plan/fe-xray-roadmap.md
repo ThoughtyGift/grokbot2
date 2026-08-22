@@ -401,6 +401,41 @@ bé hơn".
 từ chính biên của hình, và hình được phép tràn nhẹ ra mép (ô không có viền cũng không cắt) — lấp
 **79–95%**. Ô ở rail lên **44px** (số đọc từ ảnh, chưa phải máy đo).
 
+### Chốt bằng số tuyệt đối (2026-08-23, CDP mở lại)
+
+Mở lại app bằng `Grok Bot.exe --remote-debugging-port=9222` (không chạy `run.ps1` để **không** đụng
+vào bốn tiến trình backend đang sống — launcher có guard `Test-HttpOk` nên nó cũng sẽ bỏ qua, nhưng
+làm tay thì chắc chắn hơn). Kết quả: **`ui-diff` 163/165 (99%), 0 mục lệch ở 1920×1040.**
+
+Và số đo **bác bỏ ba lần tôi chỉnh bằng mắt qua ảnh chụp**:
+
+| | tôi đoán từ ảnh | số đo qua CDP |
+|---|---|---|
+| ô avatar ở rail | 44px | **36px** — `.sand-agent-avatar` là 36×36 ở cả rail lẫn hàng mở rộng |
+| hình lấp bao nhiêu ô | "cho tràn nhẹ" → 116% | **88,4%** — `viewBox="-15 -15 259 259"`, tức 229/259, lề đều 5,8% mỗi bên |
+| nền `shell` | tưởng lệch | **trùng khớp** — `div.sand-shell` = `rgb(7,7,7)`, đúng bằng nền của mình; anchor cũ trỏ vào `body`, mà `body` của Electron là `rgba(0,0,0,0.5)` trong suốt |
+
+Nên `APP_VIEWBOX_RATIO = 259 / 229` giờ là hằng số trong `avatar.ts`, có xuất xứ ghi kèm. Ba lần
+đoán trước đó lần lượt cho 42% (viewBox cố định), 79% ("ôm sát biên"), 116% ("cho tràn nhẹ") — tức
+lúc bé hơn app, lúc to hơn app. **Một số đo chấm dứt cả ba.**
+
+Chốt thêm hai thứ trước đó là *giá trị tạm*:
+
+- **vạch thời gian** = `sand-kit-timestamp`, **cao 28px · chữ 12px/16px · màu `rgba(252,252,252,0.6)`**.
+  Chữ vẫn để tiếng Việt vì FE này nói tiếng Việt ở mọi chỗ khác — lựa chọn có ý thức, chỉ bề rộng khác họ.
+- **sidebar của app CO THEO KHỔ CỬA SỔ**: 400px ở 1920, 240px ở 1440. Đây là lý do `ui-diff` phải
+  đồng bộ lại ở **từng khổ**, không một lần trước vòng lặp — bản trước đồng bộ một lần rồi báo lệch
+  toàn bộ cột chat/transcript/composer/hàng bot ở hai khổ nhỏ, trong khi cái lệch thật chỉ là bộ đo
+  đang so bố cục khổ này với bố cục khổ khác.
+
+> Hai lỗi của chính bộ đo, sửa trong cùng lượt: khối đồng bộ lúc đầu bị chèn **sau** phép đọc nên nó
+> giúp khổ *sau* chứ không giúp khổ đang đo (1920 tụt xuống 44/11); và `/v1/session` không có thử
+> lại nên một lượt trượt là cả khổ đó báo "thiếu hẳn" — một bộ đo phụ thuộc may mắn thì con số của
+> nó không so được giữa hai lượt.
+
+**Còn đúng một giá trị tạm:** nhịp ba chấm lúc bot đang nghĩ. Muốn đo phải có lúc app *đang* nghĩ,
+tức phải gửi một tin — đó là X0.3, và tôi cố ý không tự gửi vào hội thoại thật của chủ máy.
+
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 
 - [ ] X5.1 Routines · X5.2 tìm bot thật · X5.4 plugins · X5.5 khay subagent

@@ -198,7 +198,17 @@ const syncStateToApp = async () => {
   if (appLayout.paneWidth) patch.paneWidth = Math.min(480, Math.max(280, appLayout.paneWidth));
   if (typeof appLayout.paneOpen === "boolean") patch.paneOpen = appLayout.paneOpen;
   try {
-    const sess = await fetch("http://127.0.0.1:8788/v1/session").then((r) => r.json());
+    /*
+     * Thử lại hai lần: một lượt đã trượt vì backend đang bận đúng lúc đó, và hậu quả là FE hiện màn
+     * đăng nhập rồi cả khổ đó báo "thiếu hẳn". Một bộ đo mà kết quả phụ thuộc may mắn thì con số nó
+     * đưa ra không dùng được để so hai lượt với nhau.
+     */
+    let sess = null;
+    for (let i = 0; i < 3 && !sess?.token; i++) {
+      if (i) await appPage.waitForTimeout(600);
+      sess = await fetch("http://127.0.0.1:8788/v1/session").then((r) => r.json()).catch(() => null);
+    }
+    if (!sess?.token) throw new Error("/v1/session không trả token sau 3 lần thử");
     const r = await fetch("http://127.0.0.1:8788/v1/host/settings", {
       method: "PATCH",
       headers: { authorization: `Bearer ${sess.token}`, "content-type": "application/json" },
@@ -212,7 +222,6 @@ const syncStateToApp = async () => {
     return false;
   }
 };
-const synced = await syncStateToApp();
 
   await webPage.goto(URL_FE, { waitUntil: "domcontentloaded" });
   await webPage.waitForSelector(".roster .bot", { timeout: 15_000 });
@@ -236,6 +245,18 @@ const synced = await syncStateToApp();
     // Cả hai bên cần một nhịp để layout lại.
     await appPage.waitForTimeout(1200);
     await webPage.waitForTimeout(800);
+
+    /*
+     * Đồng bộ lại Ở TỪNG KHỔ, không một lần trước vòng lặp.
+     *
+     * Sidebar của app CO THEO KHỔ CỬA SỔ — đo được: 400px ở 1920, 240px ở 1440. Đồng bộ một lần
+     * rồi so cả ba khổ thì hai khổ nhỏ báo lệch toàn bộ cột chat, transcript, composer và hàng bot,
+     * trong khi cái lệch thật chỉ là bộ đo đang so bố cục của khổ này với bố cục của khổ khác.
+     */
+    await syncStateToApp();
+    await webPage.goto(URL_FE, { waitUntil: "domcontentloaded" });
+    await webPage.waitForSelector(".roster .bot", { timeout: 15_000 }).catch(() => {});
+    await webPage.waitForTimeout(700);
 
     const app = await appPage.evaluate(READ, appSpec);
     const web = await webPage.evaluate(READ, webSpec);

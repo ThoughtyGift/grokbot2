@@ -148,14 +148,18 @@ export type AvatarOptions = {
  * bất kể nó tròn hay thon.
  */
 /**
- * `fill` < 1 nghĩa là hình được phép TRÀN mép ô một chút.
+ * `box` = số đo LẤY TỪ APP GỐC, không phải con số chọn cho vừa mắt.
  *
- * Hình của bloub có cái tròn, có cái thon. Ôm sát biên thì cái thon chỉ lấp ~62% chiều ngang của ô
- * vuông, và trong rail nó trông bé hẳn so với app gốc — chủ máy chỉ ra điều đó hai lần trước khi
- * tôi đo ra. Ô chứa không có viền cũng không cắt, nên cho hình tràn nhẹ là cách làm nó nặng bằng
- * app gốc mà KHÔNG phải phóng to ô (ô 36/54 là số đo thật, không được đổi).
+ * Đo qua CDP: `.sand-agent-avatar` của họ là 36×36 và SVG bên trong có
+ * `viewBox="-15 -15 259 259"` — hình chiếm 229/259 = **88,4%** khung, lề đều 5,8% mỗi bên.
+ *
+ * Ba lần trước tôi chỉnh con số này bằng mắt qua ảnh chụp và sai cả ba: `DEMI_VIEWBOX` cố định cho
+ * 42%, rồi "ôm sát biên" cho 79%, rồi "cho tràn nhẹ" thành 116% — tức lúc thì bé hơn app, lúc thì
+ * to hơn. Số đo chấm dứt cả ba lần đoán.
  */
-function fitBox(paths: string[], pad = 0, fill = 0.86): { x: number; y: number; w: number; h: number } {
+const APP_VIEWBOX_RATIO = 259 / 229;   // = 1,131 — khung rộng hơn hình 13,1%
+
+function fitBox(paths: string[], pad = 0, fill = APP_VIEWBOX_RATIO): { x: number; y: number; w: number; h: number } {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const d of paths) {
     const nums = d.match(/-?\d+(?:\.\d+)?/g);
