@@ -13,7 +13,8 @@ import { getMcpTools, callMcpTool, isMcpConfigured, mcpServers } from "../mcp.js
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
-import { createAgent, updateAgent, rosterChanged } from "../directory/index.js";
+import { createAgent, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
+import { DEFAULT_USER } from "../auth.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
 /** Late-bound so the catalog does not import the turn loop. */
@@ -642,8 +643,10 @@ TOOLS.task_v2 = async (arg, ctx) => {
  */
 if (isMcpConfigured()) {
   // Listing is read-only; calling one is not, so only the call needs an approval card.
-  TOOLS.get_mcp_tools = (arg) => getMcpTools(arg);
-  TOOLS.call_mcp_tool = (arg) => callMcpTool(arg);
+  // Multi-tenant Phase 6: MCP servers run under the agent's OWNER, so one tenant's tokens never
+  // spawn for another. The turn is detached from the request, so ownerOf(agentId) is the identity.
+  TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
+  TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 }
 
 /**

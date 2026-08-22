@@ -20,9 +20,25 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { currentOwner } from "./request-context.js";
+import { DEFAULT_USER } from "./auth.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const CONFIG = process.env.GROKBOT2_MCP_CONFIG ?? join(repoRoot, ".mcp.json");
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+
+/**
+ * MCP config is PER-USER (multi-tenant Phase 6): one tenant's server tokens (github, slack, …) must
+ * never be spawned for another's agent. The default identity (the single-user desktop) keeps using
+ * the global `.mcp.json` unchanged; every other account reads `.data/mcp/<safe-authId>.json`. Live
+ * server processes are keyed by owner too, so the same server name for two tenants is two processes
+ * with two credentials.
+ */
+function configPathFor(owner: string): string {
+  if (owner === DEFAULT_USER.authId) return CONFIG;
+  const safe = owner.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return join(DATA_DIR, "mcp", `${safe}.json`);
+}
 /** A server that will not answer must not hang the turn behind it. */
 const START_TIMEOUT_MS = 60_000;
 const CALL_TIMEOUT_MS = 60_000;
@@ -63,20 +79,21 @@ interface Live {
 
 const live = new Map<string, Live>();
 
-/** Declared servers, read fresh so editing .mcp.json does not need a restart. */
-export function mcpServers(): Record<string, ServerSpec> {
-  if (!existsSync(CONFIG)) return {};
+/** Declared servers for `owner` (default: the current request's owner), read fresh each call. */
+export function mcpServers(owner: string = currentOwner()): Record<string, ServerSpec> {
+  const path = configPathFor(owner);
+  if (!existsSync(path)) return {};
   try {
-    const parsed = JSON.parse(readFileSync(CONFIG, "utf8"));
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
     const servers = parsed?.mcpServers;
     return servers && typeof servers === "object" ? servers : {};
   } catch (e) {
-    console.warn(`[grokbot2] [mcp] ${CONFIG} is not readable JSON: ${(e as Error).message}`);
+    console.warn(`[grokbot2] [mcp] ${path} is not readable JSON: ${(e as Error).message}`);
     return {};
   }
 }
 
-export const isMcpConfigured = (): boolean => Object.keys(mcpServers()).length > 0;
+export const isMcpConfigured = (owner: string = currentOwner()): boolean => Object.keys(mcpServers(owner)).length > 0;
 
 function rpc(s: Live, method: string, params?: unknown): Promise<any> {
   const id = ++s.nextId;
@@ -101,13 +118,14 @@ function rpc(s: Live, method: string, params?: unknown): Promise<any> {
  */
 const isDirectExecutable = (command: string): boolean => /\.(exe|com)$/i.test(command.trim());
 
-/** Start a server and complete the MCP handshake, or throw with a usable reason. */
-async function start(name: string): Promise<Live> {
-  const existing = live.get(name);
+/** Start a server for `owner` and complete the MCP handshake, or throw with a usable reason. */
+async function start(name: string, owner: string): Promise<Live> {
+  const key = `${owner}::${name}`;
+  const existing = live.get(key);
   if (existing && existing.proc.exitCode == null) return existing;
 
-  const spec = mcpServers()[name];
-  if (!spec?.command) throw new Error(`no MCP server "${name}" in ${CONFIG}`);
+  const spec = mcpServers(owner)[name];
+  if (!spec?.command) throw new Error(`no MCP server "${name}" in ${configPathFor(owner)}`);
 
   const proc = spawn(spec.command, spec.args ?? [], {
     stdio: ["pipe", "pipe", "pipe"],
@@ -152,10 +170,10 @@ async function start(name: string): Promise<Live> {
   proc.on("exit", () => {
     for (const [, slot] of s.pending) slot.reject(new Error(`MCP server "${name}" exited`));
     s.pending.clear();
-    if (live.get(name) === s) live.delete(name);
+    if (live.get(key) === s) live.delete(key);
   });
 
-  live.set(name, s);
+  live.set(key, s);
 
   const handshake = (async () => {
     const hello = await rpc(s, "initialize", {
@@ -179,9 +197,9 @@ async function start(name: string): Promise<Live> {
 }
 
 /** `get_mcp_tools` — what is reachable, without starting anything the model did not ask for. */
-export async function getMcpTools(arg: string): Promise<string> {
-  const names = Object.keys(mcpServers());
-  if (names.length === 0) return `(chưa cấu hình MCP — tạo ${CONFIG} với {"mcpServers":{…}})`;
+export async function getMcpTools(arg: string, owner: string = currentOwner()): Promise<string> {
+  const names = Object.keys(mcpServers(owner));
+  if (names.length === 0) return `(chưa cấu hình MCP — tạo ${configPathFor(owner)} với {"mcpServers":{…}})`;
 
   const wanted = arg.trim().replace(/^["']|["']$/g, "");
   const targets = wanted ? names.filter((n) => n === wanted) : names;
@@ -190,7 +208,7 @@ export async function getMcpTools(arg: string): Promise<string> {
   const out: string[] = [];
   for (const name of targets) {
     try {
-      const s = await start(name);
+      const s = await start(name, owner);
       out.push(`${name}: ${s.tools.map((t) => t.name).join(", ") || "(không có tool)"}`);
     } catch (e) {
       out.push(`${name}: lỗi — ${(e as Error).message}`);
@@ -201,7 +219,7 @@ export async function getMcpTools(arg: string): Promise<string> {
 
 // ── resources ─────────────────────────────────────────────────────────────────
 //
-// The other half of MCP, and two of the six tools docs/execution-roadmap.md counts as genuinely
+// The other half of MCP, and two of the six tools docs/history/execution-roadmap.md counts as genuinely
 // missing: `list_mcp_resources` and `read_mcp_resource`. Tools are things a server DOES; resources
 // are things it HAS — a file, a document, a record — addressed by URI. Same transport, same
 // handshake, two more methods.
@@ -217,9 +235,9 @@ const servesResources = (s: Live): boolean =>
  * has no resources" and "this server does not do resources" are different facts, and the model
  * needs the second one to stop asking.
  */
-export async function listMcpResources(arg: string): Promise<string> {
-  const names = Object.keys(mcpServers());
-  if (names.length === 0) return `(chưa cấu hình MCP — tạo ${CONFIG} với {"mcpServers":{…}})`;
+export async function listMcpResources(arg: string, owner: string = currentOwner()): Promise<string> {
+  const names = Object.keys(mcpServers(owner));
+  if (names.length === 0) return `(chưa cấu hình MCP — tạo ${configPathFor(owner)} với {"mcpServers":{…}})`;
 
   const wanted = arg.trim().replace(/^["']|["']$/g, "");
   const targets = wanted ? names.filter((n) => n === wanted) : names;
@@ -228,7 +246,7 @@ export async function listMcpResources(arg: string): Promise<string> {
   const out: string[] = [];
   for (const name of targets) {
     try {
-      const s = await start(name);
+      const s = await start(name, owner);
       if (!servesResources(s)) { out.push(`${name}: (server này không hỗ trợ resources)`); continue; }
       const listed = await rpc(s, "resources/list");
       const items: McpResource[] = Array.isArray(listed?.resources) ? listed.resources : [];
@@ -257,7 +275,7 @@ export async function listMcpResources(arg: string): Promise<string> {
  * size and type rather than dumped: a base64 image in the transcript costs thousands of tokens and
  * the model cannot see it anyway. Attaching it properly is `attach_file`'s job.
  */
-export async function readMcpResource(arg: string): Promise<string> {
+export async function readMcpResource(arg: string, owner: string = currentOwner()): Promise<string> {
   let spec: any;
   try { spec = JSON.parse(arg); } catch {
     // A bare URI is the obvious thing to type, so accept it when only one server serves resources.
@@ -266,7 +284,7 @@ export async function readMcpResource(arg: string): Promise<string> {
   const uri = String(spec?.uri ?? spec?.resource ?? spec?.url ?? "").trim();
   if (!uri) return 'read_mcp_resource cần {"server":"…","uri":"…"}';
 
-  const names = Object.keys(mcpServers());
+  const names = Object.keys(mcpServers(owner));
   let server = String(spec?.server ?? spec?.server_name ?? "").trim();
   if (!server) {
     if (names.length === 1) server = names[0];
@@ -275,7 +293,7 @@ export async function readMcpResource(arg: string): Promise<string> {
   if (!names.includes(server)) return `(không có server "${server}"; có: ${names.join(", ")})`;
 
   try {
-    const s = await start(server);
+    const s = await start(server, owner);
     if (!servesResources(s)) return `(server "${server}" không hỗ trợ resources)`;
     const res = await rpc(s, "resources/read", { uri });
     const contents: any[] = Array.isArray(res?.contents) ? res.contents : [];
@@ -295,7 +313,7 @@ export async function readMcpResource(arg: string): Promise<string> {
 }
 
 /** `call_mcp_tool({server, tool_name, tool_args})`. */
-export async function callMcpTool(arg: string): Promise<string> {
+export async function callMcpTool(arg: string, owner: string = currentOwner()): Promise<string> {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { return 'call_mcp_tool cần {"server":"…","tool_name":"…","tool_args":{…}}'; }
   const server = String(spec?.server ?? spec?.server_name ?? "");
@@ -304,7 +322,7 @@ export async function callMcpTool(arg: string): Promise<string> {
   if (!server || !tool) return 'call_mcp_tool cần {"server":"…","tool_name":"…","tool_args":{…}}';
 
   try {
-    const s = await start(server);
+    const s = await start(server, owner);
     if (s.tools.length && !s.tools.some((t) => t.name === tool)) {
       return `(server "${server}" không có tool "${tool}"; có: ${s.tools.map((t) => t.name).join(", ")})`;
     }
