@@ -35,7 +35,9 @@
     "soak": "node services/grokbot-backend/scripts/soak-day.mjs",
     "soak:status": "node services/grokbot-backend/scripts/soak-day.mjs --status",
     "test:host-settings": "node services/grokbot-backend/scripts/e2e-host-settings.mjs",
-    "measure:resize": "node services/grokbot-backend/scripts/measure-web-resize.mjs"
+    "measure:resize": "node services/grokbot-backend/scripts/measure-web-resize.mjs",
+    "measure:pane": "node services/grokbot-backend/scripts/measure-pane-nav.mjs",
+    "measure:consistency": "node services/grokbot-backend/scripts/measure-ui-consistency.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -264,9 +264,47 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 
 ### X3 — stack điều hướng panel phải
 
-- [ ] X3.1 `details` ⇄ `settings`: `__back` + `__subpage-title`, ra/vào 240ms
-- [ ] X3.2 Trang settings: `Edit Bot avatar` 64×64 (nối bộ chọn ảnh đã có), `Bot name`, `Description`, toggle `Notifications`
-- [ ] X3.3 Toggle `Notifications` → `/v1` PATCH (backend đã có `setAgentNotificationsEnabled`)
+- [x] **X3.1** Hai trang xếp chồng và **trượt**, không ẩn/hiện — ẩn/hiện thì không có hướng, mà hướng
+  là thứ cho người dùng biết mình đang đi vào hay đi ra. Ra/vào **240ms** (`--t-pane`), nút
+  `Back to details` **28×28**, tiêu đề `Bot settings`.
+- [x] **X3.2** `Edit Bot avatar` **64×64** đúng số đo, nối vào bộ chọn ảnh đã có; `Bot name`,
+  `Description`, toggle `Notifications`. Tên/mô tả ghi khi **rời trường** (`change`), không ghi từng
+  ký tự — gõ một cái tên là hàng chục PATCH và hàng chục lần vẽ lại roster.
+- [x] **X3.3** Toggle → `PATCH /v1/agents/{id}`. Backend đã nhận `notificationsEnabled` từ lâu; chỗ
+  hỏng là **FE tự khai lại kiểu** `patchAgent(body: { name?, hidden?, description? })` nên trường đó
+  không lọt qua được TypeScript. Giờ lấy `PatchAgentBody` từ hợp đồng — đúng món nợ T3 tưởng đã trả.
+
+`pnpm measure:pane` — **10/10**, gồm ca đọc lại `/v1/agents` để xác nhận toggle **đi tới backend**
+chứ không chỉ đổi hình.
+
+> Bài kiểm đó lúc đầu báo FAIL `true → true`. Không phải tính năng sai: nó lấy `agents()[0]`, mà
+> sidebar đã gom nhóm nên bot đầu trong sidebar không phải bot đầu trong API — **bài kiểm đang soi
+> một con bot khác con bot vừa bị đổi.** Một bài kiểm đo sai đối tượng thì cái nó báo, đỏ hay xanh,
+> đều không có nghĩa.
+
+### X3.5 — gộp lại cho đồng nhất (làm cùng X3, vì cùng chỗ)
+
+Nhận xét "giao diện chưa đồng nhất" là đúng, và `pnpm measure:consistency` nói cụ thể nó sai ở đâu:
+
+| | trước | sau |
+|---|---|---|
+| dùng token | **47%** | **73%** |
+| bán kính bo | 6 giá trị, có **ba cách viết** cho hai ý (`9999px`, `999px`, `50%`) | `--r-ctl/--r-row/--r-card/--r-pill` + `50%` cho avatar |
+| cỡ chữ | 5 giá trị rời, 7 khai báo dùng token / 65 viết cứng | 60 / 12 |
+| nút đăng xuất | **hai** chỗ (menu tài khoản + nút nổi trên `<body>`) | một |
+| toolbar | 4 nút kiểu cũ (`đổi tên`, `ảnh`, `ẩn` bo viên thuốc 27px) cạnh nút mới bo 8px | nút danh tính + một nút icon, như app gốc |
+
+Ba việc bỏ khỏi toolbar không mất đi: chúng vào **trang settings** — đúng chỗ app gốc đặt chúng, nên
+việc gộp cho đồng nhất và việc làm X3 là **một** việc.
+
+Hai lỗi của chính bộ đo, đã sửa:
+
+- Bản đầu đếm "có bao nhiêu giá trị khác nhau" và coi mọi khác biệt là xấu — nên avatar **64×64**
+  (số đo thật) và checkbox 16px cũng bị tính là không đồng nhất. **Làm đúng theo phép đo đó thì sản
+  phẩm sai.** Số đáng đo là *tỉ lệ dùng token*: đa dạng có chủ ý là bình thường, cùng một ý viết
+  bằng ba giá trị cứng ở ba chỗ mới là vấn đề.
+- Một lượt thay hàng loạt quét cả **định nghĩa** token, làm `--r-pill: var(--r-pill)` tự trỏ chính
+  nó. Từ đó chỉ thao tác trên phần CSS **sau** `:root`, và có phép kiểm token tự trỏ.
 
 ### X4 — transcript (chỗ mô hình cũ chặn đường)
 

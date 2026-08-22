@@ -1,10 +1,10 @@
 {
   "count": 117,
-  "at": "2026-08-22T16:24:22.262Z",
+  "at": "2026-08-22T16:45:29.279Z",
   "keys": [
     "apps/grokbot-web/src/api.ts|exports|health",
     "apps/grokbot-web/src/api.ts|exports|login",
-    "apps/grokbot-web/src/api.ts|exports|patchAgent",
+    "apps/grokbot-web/src/api.ts|exports|renameAgent",
     "apps/grokbot-web/src/api.ts|types|NativeWidget",
     "apps/grokbot-web/src/api.ts|types|NativeWidgetOption",
     "apps/grokbot-web/src/vendor/bloub/decor.ts|exports|NOTIF_BLUE",

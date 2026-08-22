@@ -39,6 +39,24 @@
   --toolbar-h: 52px;
   --dock-h: 60px;
 
+  /* Thang chiều cao và cỡ chữ — thêm 2026-08-22 sau khi ĐO ra 10 chiều cao và 5 cỡ chữ rời rạc. */
+  --h-icon: 24px;      /* nút chỉ có icon: New, hover-action */
+  --h-control: 28px;   /* nút và nhãn thường */
+  --h-field: 32px;     /* ô nhập, ô Search */
+  --h-row: 40px;       /* hàng đáy sidebar */
+  --h-rail-item: 54px; /* hàng bot ở chế độ rail */
+  --fs-meta: 12px;
+  --fs-body: 13px;
+  --fs-title: 15px;
+  --t-pane: 240ms;     /* ra/vào panel phải — đo được ở app gốc */
+  --line-2: #3a3a3a;
+  --surface-3: #2f2f2f;
+  --danger-line: rgba(232, 90, 82, 0.4);
+  --danger-wash: rgba(232, 90, 82, 0.12);
+  --on-accent: #fff;
+  --r-ctl: 8px;      /* bán kính dùng nhiều nhất — đo ra 8px×8 mà trước đây không có token */
+  --fs-lg: 14px;
+  --surface-4: #404040;
   --r-row: 10px;
   --r-card: 12px;
   --r-pill: 9999px;
@@ -58,7 +76,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-size: var(--fs-lg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -83,14 +101,14 @@ button:disabled { opacity: 0.4; cursor: default; }
 .sidebar { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
 
 .new-icon {
-  margin-left: auto; width: 28px; height: 28px; border-radius: var(--r-row);
+  margin-left: auto; width: 28px; height: var(--h-control); border-radius: var(--r-row);
   font-size: 16px; line-height: 1; color: var(--fg-2);
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 .new-icon:hover { background: var(--row-hover); color: var(--fg); }
 
 /* Ô tìm kiếm: app gốc đặt ở y=56, cao ~28, trong lề 12. */
-.search .ico { color: var(--fg-3); font-size: 13px; }
+.search .ico { color: var(--fg-3); font-size: var(--fs-body); }
 
 .roster { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; }
 
@@ -112,12 +130,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .bot.dim { opacity: 0.45; }
 /* Avatar row sidebar đo được 36, không phải 40. */
 .bot .avatar { grid-area: av; width: 36px; height: 36px; }
-.bot .name { grid-area: name; font-size: 14px; font-weight: 500; }
-.bot .when { grid-area: meta; font-size: 12px; color: var(--fg-2); }
+.bot .name { grid-area: name; font-size: var(--fs-lg); font-weight: 500; }
+.bot .when { grid-area: meta; font-size: var(--fs-meta); color: var(--fg-2); }
 .bot .dot { grid-area: meta; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .bot .dot.live { animation: pulse 1.1s ease-in-out infinite; }
 .bot .preview {
-  grid-area: prev; font-size: 12px; line-height: 16px; color: var(--fg-2);
+  grid-area: prev; font-size: var(--fs-meta); line-height: 16px; color: var(--fg-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -128,13 +146,13 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* ── nút ──────────────────────────────────────────────────────────────────── */
 
 .primary, .ghost, .danger {
-  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px;
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body);
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
-.primary { background: var(--accent); color: #fff; }
+.primary { background: var(--accent); color: var(--on-accent); }
 .primary:hover:not(:disabled) { filter: brightness(1.1); }
 .ghost { background: var(--surface-2); }
-.ghost:hover:not(:disabled) { background: rgb(64, 64, 64); }
+.ghost:hover:not(:disabled) { background: var(--surface-4); }
 .danger { background: var(--surface-2); color: var(--danger); }
 .danger:hover:not(:disabled) { background: rgba(232, 90, 82, 0.18); }
 
@@ -148,21 +166,23 @@ button:disabled { opacity: 0.4; cursor: default; }
   height: var(--toolbar-h); padding: 0 16px; flex: none;
   border-bottom: 1px solid var(--line);
 }
-.chat-head .avatar { width: 22px; height: 22px; }
+/* 20×20: đo được ở `sand-chat-header__avatar` của app gốc, không phải chọn cho vừa mắt. */
+.chat-head .avatar { width: 20px; height: 20px; }
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.head-actions .status { font-size: 12px; color: var(--fg-2); }
-.head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2); }
-.head-actions button:hover:not(:disabled) { background: rgb(64, 64, 64); }
+.head-actions .status { font-size: var(--fs-meta); color: var(--fg-2); }
+.head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
+.head-actions button:hover:not(:disabled) { background: var(--surface-4); }
 /* Nút icon vuông trong toolbar (đóng/mở panel) — 28×28, không phải pill có chữ. */
-.head-actions .icon-btn {
-  width: 28px; height: 28px; padding: 0; border-radius: var(--r-row);
-  background: transparent; color: var(--fg-2); font-size: 15px; line-height: 1;
+.icon-btn {
+  display: inline-grid; place-items: center;
+  width: 28px; height: var(--h-control); padding: 0; border-radius: var(--r-row);
+  background: transparent; color: var(--fg-2); font-size: var(--fs-title); line-height: 1;
 }
-.head-actions .icon-btn:hover { background: var(--row-hover); color: var(--fg); }
+.icon-btn:hover { background: var(--row-hover); color: var(--fg); }
 
 .err {
   margin: 8px 16px; padding: 8px 12px; border-radius: var(--r-card);
-  background: rgba(232, 90, 82, 0.12); color: var(--danger); font-size: 13px;
+  background: rgba(232, 90, 82, 0.12); color: var(--danger); font-size: var(--fs-body);
 }
 
 .transcript {
@@ -170,8 +190,8 @@ button:disabled { opacity: 0.4; cursor: default; }
   display: flex; flex-direction: column; gap: 8px;
   padding: 16px;
 }
-.empty { margin: auto; color: var(--fg-3); font-size: 14px; }
-.event { align-self: center; font-size: 12px; color: var(--fg-3); }
+.empty { margin: auto; color: var(--fg-3); font-size: var(--fs-lg); }
+.event { align-self: center; font-size: var(--fs-meta); color: var(--fg-3); }
 
 /* ── bubble ───────────────────────────────────────────────────────────────── */
 /* Đo: nền 38,38,38 · bo `18px 18px 18px 6px` (đuôi góc dưới-trái) · đệm 8/12 · chữ 14/20. */
@@ -179,7 +199,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .bubble {
   position: relative;
   max-width: 640px; padding: 8px 12px;
-  font-size: 14px; line-height: 20px;
+  font-size: var(--fs-lg); line-height: 20px;
   white-space: pre-wrap; word-break: break-word;
   animation: bubble-in var(--t-slow) var(--e-out) both;
 }
@@ -209,7 +229,7 @@ button:disabled { opacity: 0.4; cursor: default; }
    trải hết cột — của mình từng rộng 1240, chỉ thấy được khi so ẢNH chứ không phải so số. */
 .run-author {
   align-self: flex-start; padding-left: 6px;
-  font-size: 12px; line-height: 16px; color: var(--fg-2);
+  font-size: var(--fs-meta); line-height: 16px; color: var(--fg-2);
 }
 .run.mine .run-author { align-self: flex-end; }
 
@@ -226,11 +246,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .att-file .ext {
   display: grid; place-items: center; width: 34px; height: 34px; flex: none;
-  border-radius: 8px; background: rgb(90, 90, 90); font-size: 10px; font-weight: 700;
+  border-radius: var(--r-ctl); background: rgb(90, 90, 90); font-size: 10px; font-weight: 700;
 }
-.att-file .fname { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-file .fname { flex: 1; min-width: 0; font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-file .dl { color: var(--fg-2); }
-.att-file:hover { background: rgb(64, 64, 64); }
+.att-file:hover { background: var(--surface-4); }
 
 /* ── thẻ công cụ và widget ────────────────────────────────────────────────── */
 
@@ -240,42 +260,42 @@ button:disabled { opacity: 0.4; cursor: default; }
   animation: bubble-in var(--t-mid) var(--e-out) both;
 }
 .tool-card header, .widget-card header {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: var(--fs-meta);
 }
-.tool-card header strong, .widget-card header strong { font-size: 13px; font-weight: 600; }
+.tool-card header strong, .widget-card header strong { font-size: var(--fs-body); font-weight: 600; }
 .tool-card header span, .widget-card header span { margin-left: auto; color: var(--fg-2); }
 .tool-card pre {
   margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px; line-height: 17px; color: var(--fg-2);
+  font-size: var(--fs-meta); line-height: 17px; color: var(--fg-2);
   white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
 }
 .tool-card.failed { background: rgba(232, 90, 82, 0.1); }
-.widget-card .prompt { margin: 0 0 8px; font-size: 14px; line-height: 20px; }
-.widget-card .help, .tool-card .ask, .widget-card .picked { margin: 0 0 8px; font-size: 12px; color: var(--fg-2); }
+.widget-card .prompt { margin: 0 0 8px; font-size: var(--fs-lg); line-height: 20px; }
+.widget-card .help, .tool-card .ask, .widget-card .picked { margin: 0 0 8px; font-size: var(--fs-meta); color: var(--fg-2); }
 .widget-card .actions, .tool-card .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .widget-card .actions button, .tool-card .actions button {
-  padding: 5px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2);
+  padding: 5px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2);
 }
-.widget-card .actions button:hover, .tool-card .actions button:hover { background: rgb(64, 64, 64); }
+.widget-card .actions button:hover, .tool-card .actions button:hover { background: var(--surface-4); }
 .widget-card .custom { display: flex; gap: 8px; margin-top: 8px; }
 .widget-card .custom input {
   flex: 1; padding: 6px 10px; border: 0; border-radius: var(--r-pill);
-  background: var(--surface-2); font-size: 13px; outline: none;
+  background: var(--surface-2); font-size: var(--fs-body); outline: none;
 }
 
 /* ── reaction (thanh hover 76×24, nút 24×24 bo 8 — đo từ app) ─────────────── */
 
 .msg-actions {
   position: absolute; top: -12px; right: 8px;
-  display: flex; align-items: center; gap: 2px; height: 24px;
-  padding: 0 2px; border-radius: 8px; background: var(--surface-2);
+  display: flex; align-items: center; gap: 2px; height: var(--h-icon);
+  padding: 0 2px; border-radius: var(--r-ctl); background: var(--surface-2);
   opacity: 0; pointer-events: none;
   transition: opacity var(--t-fast) ease;
 }
 .bubble:hover .msg-actions, .msg-actions:focus-within { opacity: 1; pointer-events: auto; }
 .msg-actions .act {
-  width: 24px; height: 24px; border-radius: 8px;
-  color: var(--fg-2); font-size: 13px; line-height: 1;
+  width: 24px; height: var(--h-icon); border-radius: var(--r-ctl);
+  color: var(--fg-2); font-size: var(--fs-body); line-height: 1;
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 /* Icon là CSS content: `opacity: 0` không loại text khỏi `innerText`, nên ký tự trong markup sẽ
@@ -292,7 +312,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .react-menu[hidden] { display: none; }
 .react-menu button {
-  width: 28px; height: 28px; border-radius: 8px; font-size: 16px; line-height: 1;
+  width: 28px; height: var(--h-control); border-radius: var(--r-ctl); font-size: 16px; line-height: 1;
   transition: background-color var(--t-fast) ease, transform var(--t-fast) var(--e-out);
 }
 .react-menu button:hover { background: var(--row-hover); transform: scale(1.15); }
@@ -302,7 +322,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .react-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 1px 7px 1px 5px; border: 1px solid transparent; border-radius: var(--r-pill);
-  background: var(--row-hover); font-size: 12px; line-height: 18px; color: var(--fg-2);
+  background: var(--row-hover); font-size: var(--fs-meta); line-height: 18px; color: var(--fg-2);
   transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 .react-chip:hover { background: var(--row-active); }
@@ -318,12 +338,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .composer textarea {
   flex: 1; min-width: 0; border: 0; outline: none; resize: none;
   padding: 10px 14px; border-radius: var(--r-pill); background: var(--surface);
-  font-size: 14px; line-height: 20px; max-height: 160px;
+  font-size: var(--fs-lg); line-height: 20px; max-height: 160px;
 }
 .composer textarea::placeholder { color: var(--fg-3); }
 .composer .mic {
-  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
-  border-radius: 50%; color: var(--fg-2); font-size: 14px;
+  display: grid; place-items: center; width: 28px; height: var(--h-control); flex: none;
+  border-radius: 50%; color: var(--fg-2); font-size: var(--fs-lg);
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 .composer .mic:hover:not(:disabled) { background: var(--row-hover); color: var(--fg); }
@@ -332,26 +352,26 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 /* 28×28 là số đo từ `Attach file` và `Start voice input` của app; send/stop theo cùng cỡ. */
 .composer .attach, .composer .send, .composer .stop {
-  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
-  border-radius: 50%; font-size: 15px; line-height: 1;
+  display: grid; place-items: center; width: 28px; height: var(--h-control); flex: none;
+  border-radius: 50%; font-size: var(--fs-title); line-height: 1;
   transition: background-color var(--t-fast) ease;
 }
 .composer .attach { color: var(--fg-2); cursor: pointer; }
 .composer .attach:hover { background: var(--row-hover); color: var(--fg); }
 /* Ô chọn file gốc của trình duyệt bị ẩn — nhãn `.attach` mới là nút. */
 .composer .attach input[type="file"] { display: none; }
-.composer .send { background: var(--accent); color: #fff; }
+.composer .send { background: var(--accent); color: var(--on-accent); }
 .composer .send:disabled { background: var(--surface-2); color: var(--fg-3); }
 .composer .stop { background: var(--surface-2); }
-.composer .stop:hover:not(:disabled) { background: rgb(64, 64, 64); }
+.composer .stop:hover:not(:disabled) { background: var(--surface-4); }
 
 .pending { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; order: -1; }
 .pending[hidden] { display: none; }
 .pending .chip { position: relative; }
-.pending .chip img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; display: block; }
+.pending .chip img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--r-ctl); display: block; }
 .pending .chip button {
   position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
-  border-radius: 50%; background: rgb(90, 90, 90); color: #fff; font-size: 11px; line-height: 1;
+  border-radius: 50%; background: rgb(90, 90, 90); color: var(--on-accent); font-size: 11px; line-height: 1;
 }
 
 /* ── panel phải (info-pane 357) ───────────────────────────────────────────── */
@@ -359,32 +379,32 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* Không viền trái: cột chat đã có viền phải, thêm nữa là 1px ăn vào bề rộng khung màn hình
    (đo ra 324 thay vì 325). */
 .computer { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 16px; }
-.computer .head { display: flex; align-items: center; height: 20px; font-size: 13px; font-weight: 600; }
-.computer .head .state { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--fg-2); }
+.computer .head { display: flex; align-items: center; height: 20px; font-size: var(--fs-body); font-weight: 600; }
+.computer .head .state { margin-left: auto; font-size: var(--fs-meta); font-weight: 400; color: var(--fg-2); }
 /* Khung xem màn hình đo 325×203. */
 .screen { aspect-ratio: 325 / 203; overflow: hidden; border-radius: var(--r-card); background: var(--surface); }
 .screen iframe { width: 100%; height: 100%; border: 0; display: block; }
 .screen .off {
   height: 100%; display: grid; place-content: center; gap: 6px; text-align: center;
-  padding: 16px; font-size: 12px; line-height: 17px; color: var(--fg-3);
+  padding: 16px; font-size: var(--fs-meta); line-height: 17px; color: var(--fg-3);
 }
 .screen .off .mon { font-size: 22px; }
 .screen .off code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
   padding: 1px 4px; border-radius: 4px; background: var(--surface-2);
 }
-.caption { font-size: 12px; color: var(--fg-2); }
+.caption { font-size: var(--fs-meta); color: var(--fg-2); }
 .routines { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
-.routines p { margin: 0 0 10px; font-size: 12px; line-height: 17px; color: var(--fg-2); }
-.routines button { padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2); }
-.routines button:hover:not(:disabled) { background: rgb(64, 64, 64); }
+.routines p { margin: 0 0 10px; font-size: var(--fs-meta); line-height: 17px; color: var(--fg-2); }
+.routines button { padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
+.routines button:hover:not(:disabled) { background: var(--surface-4); }
 
 /* ── avatar ───────────────────────────────────────────────────────────────── */
 
 .avatar {
   display: grid; place-items: center; flex: none;
   border-radius: 50%; overflow: hidden;
-  font-size: 11px; font-weight: 700; color: #fff; background: var(--surface-2);
+  font-size: 11px; font-weight: 700; color: var(--on-accent); background: var(--surface-2);
 }
 img.avatar { object-fit: cover; }
 /* Mặt bot là SVG có hình dạng riêng: không nền, không bo, không cắt. */
@@ -411,7 +431,7 @@ img.avatar { object-fit: cover; }
   animation: bubble-in var(--t-mid) var(--e-out);
 }
 .modal header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.modal header strong { font-size: 14px; font-weight: 600; }
+.modal header strong { font-size: var(--fs-lg); font-weight: 600; }
 .modal header .x {
   margin-left: auto; width: 26px; height: 26px; border-radius: 50%;
   color: var(--fg-2); font-size: 16px; line-height: 1;
@@ -425,7 +445,7 @@ img.avatar { object-fit: cover; }
 }
 .modal .preview svg { width: 96px; height: 96px; display: block; }
 
-.modal .pick-label { margin: 0 0 8px; font-size: 12px; color: var(--fg-2); }
+.modal .pick-label { margin: 0 0 8px; font-size: var(--fs-meta); color: var(--fg-2); }
 .modal .pick-label + * { margin-bottom: 16px; }
 
 /* Lưới 4 cột, ô 76×87 như bảng Shape của bloub (bộ chọn là phần mình tự thiết kế). */
@@ -438,7 +458,7 @@ img.avatar { object-fit: cover; }
 .shape .art { display: block; width: 58px; height: 58px; }
 .faces .art { width: 48px; height: 48px; }
 .shape svg { width: 100%; height: 100%; display: block; }
-.shape .lbl { font-size: 12px; line-height: 15px; color: var(--fg-2); }
+.shape .lbl { font-size: var(--fs-meta); line-height: 15px; color: var(--fg-2); }
 .shape:hover { background: var(--row-hover); }
 .shape.on { border-color: var(--accent); }
 .shape.on .lbl { color: var(--fg); }
@@ -452,16 +472,16 @@ img.avatar { object-fit: cover; }
 /* Vòng cách một khoảng nền: viền dính sát màu sẫm thì không đọc ra là đang chọn. */
 .swatch.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 
-.modal .hint { margin: 0 0 14px; font-size: 12px; line-height: 17px; color: var(--fg-2); }
+.modal .hint { margin: 0 0 14px; font-size: var(--fs-meta); line-height: 17px; color: var(--fg-2); }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 .modal-actions .up {
-  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; cursor: pointer;
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); cursor: pointer;
   background: var(--surface-2);
   transition: background-color var(--t-fast) ease;
 }
-.modal-actions .up:hover { background: rgb(64, 64, 64); }
-.modal-actions button { padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; }
-.modal-err { margin: 12px 0 0; font-size: 12px; color: var(--danger); }
+.modal-actions .up:hover { background: var(--surface-4); }
+.modal-actions button { padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); }
+.modal-err { margin: 12px 0 0; font-size: var(--fs-meta); color: var(--danger); }
 
 /* ── cuộn ─────────────────────────────────────────────────────────────────── */
 
@@ -494,30 +514,30 @@ img.avatar { object-fit: cover; }
 }
 .login__card h1 { margin: 0; font-size: 22px; font-weight: 650; color: #fcfcfc; }
 .login__card h1 span { color: #7c7cff; font-weight: 500; }
-.login__sub { margin: 0 0 8px; font-size: 13px; color: #8a8a96; }
+.login__sub { margin: 0 0 8px; font-size: var(--fs-body); color: #8a8a96; }
 .login__card input {
   padding: 11px 13px;
   border: 1px solid #2c2c38;
-  border-radius: 10px;
+  border-radius: var(--r-row);
   background: #08080b;
   color: #fcfcfc;
-  font-size: 14px;
+  font-size: var(--fs-lg);
   outline: none;
 }
 .login__card input:focus { border-color: #7c7cff; }
-.login__err { margin: 0; font-size: 13px; color: #ff6b6b; }
+.login__err { margin: 0; font-size: var(--fs-body); color: #ff6b6b; }
 .login__row { display: flex; gap: 10px; margin-top: 4px; }
 .login__go, .login__alt {
   flex: 1;
   padding: 11px;
-  border-radius: 10px;
-  font-size: 14px;
+  border-radius: var(--r-row);
+  font-size: var(--fs-lg);
   font-weight: 550;
   cursor: pointer;
   border: 1px solid transparent;
   transition: filter 0.12s ease, background 0.12s ease;
 }
-.login__go { background: #4b4bff; color: #fff; }
+.login__go { background: #4b4bff; color: var(--on-accent); }
 .login__go:hover { filter: brightness(1.12); }
 .login__alt { background: transparent; border-color: #2c2c38; color: #c8c8d2; }
 .login__alt:hover { background: #16161c; }
@@ -532,13 +552,13 @@ img.avatar { object-fit: cover; }
   white-space: nowrap;
   padding: 7px 12px;
   border: 1px solid #2c2c38;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgba(14, 14, 18, 0.9);
   color: #b8b8c4;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   cursor: pointer;
 }
-.gb2-logout:hover { color: #fff; border-color: #4b4bff; }
+.gb2-logout:hover { color: var(--on-accent); border-color: #4b4bff; }
 
 /* Upgrade button — shown when over quota (Phase 6 web UX). Sits above the sign-out pill. */
 .gb2-upgrade {
@@ -548,10 +568,10 @@ img.avatar { object-fit: cover; }
   z-index: 51;
   padding: 8px 14px;
   border: 1px solid #6a5bff;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: linear-gradient(180deg, #5b5bff, #4b3bff);
-  color: #fff;
-  font-size: 12px;
+  color: var(--on-accent);
+  font-size: var(--fs-meta);
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(75, 59, 255, 0.4);
@@ -567,26 +587,26 @@ img.avatar { object-fit: cover; }
  *   gập         height 200ms trên phần co giãn, opacity 120ms
  */
 .side-head { display: flex; align-items: center; justify-content: flex-end; height: 52px; padding: 0 16px; flex: 0 0 auto; }
-.side-head .new-icon { width: 24px; height: 24px; }
+.side-head .new-icon { width: var(--h-icon); height: var(--h-icon); font-size: var(--fs-body); }
 
 .search-btn, .search {
   display: flex; align-items: center; gap: 8px;
-  height: 32px; margin: 0 12px; padding: 0 8px;
-  border: 1px solid var(--line); border-radius: 8px;
-  background: var(--surface-2); color: var(--fg-3); font-size: 13px;
+  height: var(--h-field); margin: 0 12px; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--surface-2); color: var(--fg-3); font-size: var(--fs-body);
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 .search-btn { width: calc(100% - 24px); cursor: text; text-align: left; }
 .search-btn:hover { background: var(--surface-3); border-color: var(--line-2); }
 .search-btn .lbl { flex: 1; }
-.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg-1); font-size: 13px; }
+.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg-1); font-size: var(--fs-body); }
 .search input::placeholder { color: var(--fg-3); }
 
 /* Đầu nhóm: nút thật, không phải nhãn trang trí. Số đếm chỉ hiện khi gập — đo được ở app gốc. */
 .group {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  height: 30px; padding: 0 4px; border: 0; background: none;
-  color: var(--fg-2); font-size: 12px; line-height: 16px; text-align: left;
+  height: 30px;   /* 362x30 ở app gốc — số đo, không thuộc thang chung */ padding: 0 4px; border: 0; background: none;
+  color: var(--fg-2); font-size: var(--fs-meta); line-height: 16px; text-align: left;
   cursor: pointer; border-radius: 6px;
   transition: background-color 120ms ease, color 120ms ease;
 }
@@ -595,7 +615,7 @@ img.avatar { object-fit: cover; }
 .group[aria-expanded="true"] .caret { transform: rotate(90deg); }
 .group .lbl { flex: 1; text-transform: uppercase; letter-spacing: 0.04em; }
 .group .count {
-  min-width: 16px; padding: 0 4px; border-radius: 999px;
+  min-width: 16px; padding: 0 4px; border-radius: var(--r-pill);
   background: var(--surface-3); color: var(--fg-2);
   font-size: 11px; line-height: 16px; text-align: center;
 }
@@ -608,16 +628,16 @@ img.avatar { object-fit: cover; }
 
 .side-foot { flex: 0 0 auto; padding: 4px 12px 12px; position: relative; }
 .foot-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; height: 40px;
-  padding: 0 8px; border: 0; border-radius: 8px; background: none;
-  color: var(--fg-2); font-size: 13px; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; width: 100%; height: var(--h-row);
+  padding: 0 8px; border: 0; border-radius: var(--r-ctl); background: none;
+  color: var(--fg-2); font-size: var(--fs-body); text-align: left; cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
 }
 .foot-row:hover:not(:disabled) { background: var(--surface-2); color: var(--fg-1); }
 .foot-row:disabled { opacity: 0.45; cursor: default; }
 .foot-row .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .foot-row .mono {
-  display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px;
+  display: grid; place-items: center; width: 24px; height: var(--h-icon); flex: 0 0 24px;
   border-radius: 6px; background: var(--surface-3); color: var(--fg-1);
   font-size: 11px; font-weight: 600;
 }
@@ -625,14 +645,14 @@ img.avatar { object-fit: cover; }
 .account-menu {
   position: absolute; left: 12px; right: 12px; bottom: 56px; z-index: 3;
   display: flex; flex-direction: column; padding: 4px;
-  border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--surface-3);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
   animation: menu-in 100ms ease-out;
 }
 @keyframes menu-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .account-menu button {
-  height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
-  color: var(--fg-1); font-size: 13px; text-align: left; cursor: pointer;
+  height: var(--h-field); padding: 0 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--fg-1); font-size: var(--fs-body); text-align: left; cursor: pointer;
   transition: background-color 120ms ease;
 }
 .account-menu button:hover:not(:disabled) { background: var(--surface-4, rgb(255 255 255 / 0.06)); }
@@ -641,14 +661,14 @@ img.avatar { object-fit: cover; }
 
 /* Nút danh tính trên toolbar: 128x28 ở app gốc, và nó là NÚT chứ không phải h1 trơ. */
 .identity {
-  display: inline-flex; align-items: center; gap: 4px; height: 28px; max-width: 220px;
-  padding: 0 6px; border: 0; border-radius: 8px; background: none;
-  color: var(--fg-1); font-size: 15px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; height: var(--h-control); max-width: 220px;
+  padding: 0 6px; border: 0; border-radius: var(--r-ctl); background: none;
+  color: var(--fg-1); font-size: var(--fs-title); font-weight: 600; cursor: pointer;
   transition: background-color 120ms ease;
 }
 .identity:hover { background: var(--surface-2); }
 .identity .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.identity .chev { color: var(--fg-3); font-size: 13px; }
+.identity .chev { color: var(--fg-3); font-size: var(--fs-body); }
 .identity.empty { color: var(--fg-3); font-weight: 500; cursor: default; }
 
 /* ── X2: thanh chia và chế độ rail ───────────────────────────────────────────
@@ -696,3 +716,72 @@ body.dragging { cursor: col-resize; user-select: none; }
 .sidebar.rail .bot .dot { position: absolute; right: 8px; top: 8px; }
 .sidebar.rail .foot-row { justify-content: center; padding: 0; }
 .sidebar.rail .account-menu { left: 8px; width: 200px; right: auto; }
+
+/* ── X3: panel phải là một stack điều hướng ──────────────────────────────────
+ *
+ * Đo ở app gốc: `sand-info-pane__nav-root` + `__back` + `__subpage-title`; bấm `View Bot settings`
+ * đẩy vào trang con, `Back to details` pop ra, ra/vào **240ms**. Hai trang xếp chồng và trượt, không
+ * phải ẩn/hiện — ẩn/hiện thì không có hướng, mà hướng chính là thứ cho người dùng biết mình đang đi
+ * vào hay đi ra.
+ */
+.pane-nav { position: relative; overflow: hidden; height: 100%; }
+.pane-page {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  overflow-y: auto;
+  transition: transform var(--t-pane) var(--e-out), opacity 160ms ease;
+}
+.pane-nav[data-page="details"]  .pane-page.details  { transform: none; opacity: 1; }
+.pane-nav[data-page="details"]  .pane-page.settings { transform: translateX(100%); opacity: 0; pointer-events: none; }
+.pane-nav[data-page="settings"] .pane-page.details  { transform: translateX(-24px); opacity: 0; pointer-events: none; }
+.pane-nav[data-page="settings"] .pane-page.settings { transform: none; opacity: 1; }
+
+.pane-top { display: flex; align-items: center; gap: 6px; height: var(--h-control); }
+.subpage-title { font-size: var(--fs-title); font-weight: 600; }
+
+.set-body { display: flex; flex-direction: column; gap: 14px; }
+/* `Edit Bot avatar` ở app gốc là 64×64 — số đo, không phải chọn cho vừa mắt. */
+.avatar-trigger {
+  width: 64px; height: 64px; padding: 0; border: 0; border-radius: var(--r-card);
+  background: none; cursor: pointer;
+  transition: background-color var(--t-fast) ease, transform var(--t-fast) var(--e-out);
+}
+.avatar-trigger:hover { background: var(--surface-2); }
+.avatar-trigger:active { transform: scale(0.97); }
+.avatar-trigger .avatar { width: 64px; height: 64px; font-size: 22px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-meta); color: var(--fg-2); }
+.field input, .field textarea {
+  height: var(--h-field); padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--r-row);
+  background: var(--surface); color: var(--fg); font: inherit; font-size: var(--fs-body);
+  transition: border-color var(--t-fast) ease, background-color var(--t-fast) ease;
+}
+.field textarea { height: auto; min-height: 56px; padding: 8px 10px; resize: vertical; }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+
+.toggle { display: flex; align-items: center; gap: 8px; height: var(--h-control); font-size: var(--fs-body); cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.set-foot { display: flex; gap: 8px; margin-top: 4px; }
+.empty-note { margin: 0; font-size: var(--fs-body); color: var(--fg-3); }
+
+/* ── gộp thang: một kiểu nút, không phải bốn ─────────────────────────────────
+ *
+ * Đo được trước khi gộp: 10 chiều cao control (4 cái dùng đúng một lần), 6 bán kính bo — trong đó
+ * `var(--r-pill)`, `var(--r-pill)` và `50%` là ba cách viết cho hai ý — và 34 màu viết cứng ngoài `:root`. Đó là
+ * dấu hiệu dựng lẻ từng chỗ. Từ đây: nút thường dùng `.btn`, nút icon dùng `.icon-btn`, và cả hai
+ * lấy chiều cao/bo/màu từ token.
+ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--h-control); padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--r-row);
+  background: var(--surface-2); color: var(--fg);
+  font-size: var(--fs-body); cursor: pointer;
+  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-2); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.danger { color: var(--danger); border-color: var(--danger-line); }
+.btn.danger:hover:not(:disabled) { background: var(--danger-wash); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }

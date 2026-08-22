@@ -15,6 +15,7 @@ import type {
   Entry as NativeEntry,
   SidebarSection,
   UiPrefs,
+  PatchAgentBody,
   Widget as NativeWidget,
   WidgetOption as NativeWidgetOption,
 } from "@grokbot2/api-contract";
@@ -85,7 +86,9 @@ export const createAgent = (name: string) =>
   fetch("/v1/agents", { method: "POST", headers: headers(), body: JSON.stringify({ name }) })
     .then((r) => parse<{ agent: NativeAgent }>(r));
 export const deleteAgent = (id: string) => fetch(`/v1/agents/${id}`, { method: "DELETE", headers: headers() }).then(parse);
-export const patchAgent = (id: string, body: { name?: string; hidden?: boolean; description?: string }) =>
+// Kiểu lấy từ hợp đồng, không tự khai lại: bản tự khai thiếu `notificationsEnabled` nên trang
+// settings không ghi được toggle Notifications dù backend đã nhận nó từ lâu.
+export const patchAgent = (id: string, body: PatchAgentBody) =>
   fetch(`/v1/agents/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(body) })
     .then((r) => parse<NativeAgent>(r));
 export const renameAgent = (id: string, name: string) => patchAgent(id, { name });

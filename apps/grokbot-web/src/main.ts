@@ -41,6 +41,12 @@ const state = {
    * theo ngưỡng đo được ở app gốc). Mặc định là số đang dùng trước khi có route này.
    */
   ui: { sidebarWidth: 261, sidebarCollapsed: false, paneWidth: 357 },
+  /**
+   * Panel phải là một STACK điều hướng, không phải một khối tĩnh — đo được ở app gốc:
+   * `sand-info-pane__nav-root` + `__back` + `__subpage-title`, bấm `View Bot settings` đẩy vào trang
+   * con, `Back to details` pop ra, ra/vào 240ms.
+   */
+  panePage: "details" as "details" | "settings",
 };
 
 /**
@@ -709,14 +715,13 @@ function paint(): void {
     <div class="grip grip-sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
     <section class="chat">
       <div class="chat-head">
-        ${selected ? `<button type="button" class="avatar-btn" data-act="avatar" title="đổi ảnh">${avatarOf(selected)}</button>` : ""}
-        ${selected ? `<button type="button" class="identity" data-act="settings" aria-label="View Bot settings"><span class="nm">${escapeHtml(selected.name)}</span><span class="chev">›</span></button>` : `<span class="identity empty">chọn một bot</span>`}
+        ${selected ? `<button type="button" class="avatar-btn" data-act="settings" aria-label="View Bot settings">${avatarOf(selected)}</button>` : ""}
+        ${selected
+          ? `<button type="button" class="identity" data-act="settings" aria-label="View Bot settings"><span class="nm">${escapeHtml(selected.name)}</span><span class="chev">›</span></button>`
+          : `<span class="identity empty">chọn một bot</span>`}
         <div class="head-actions">
           <span class="status">${selected?.presence.isRunning ? "đang trả lời" : "sẵn sàng"}</span>
-          <button type="button" class="ghost" data-act="rename" ${selected ? "" : "disabled"}>đổi tên</button>
-          <button type="button" class="ghost" data-act="avatar" ${selected ? "" : "disabled"}>ảnh</button>
-          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Đóng panel" : "Mở panel"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}">${state.paneOpen ? "›" : "‹"}</button>
-          <button type="button" class="ghost" data-act="hide" ${selected ? "" : "disabled"}>${selected?.hidden ? "hiện" : "ẩn"}</button>
+          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Close details" : "Open details"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}">${state.paneOpen ? "›" : "‹"}</button>
         </div>
       </div>
       ${state.error ? `<div class="err">${escapeHtml(state.error)}</div>` : ""}
@@ -732,12 +737,40 @@ function paint(): void {
     </section>
     <div class="grip grip-pane" role="separator" aria-orientation="vertical" aria-label="Resize details" tabindex="0"></div>
     <aside class="computer">
-      <div class="head"><span>Màn hình</span><span class="state">${state.computer?.state === "running" ? "live" : "off"}</span></div>
-      <div class="screen">${screenPane(state.computer)}</div>
-      <div class="caption">${escapeHtml(selected ? `Màn hình của ${selected.name}` : "chưa chọn bot")}</div>
-      <div class="routines">
-        <p>Routine là việc lặp lại theo lịch mà bot tự chạy.</p>
-        <button type="button" data-act="routine" ${selected ? "" : "disabled"}>Tạo routine</button>
+      <div class="pane-nav" data-page="${state.panePage}">
+        <section class="pane-page details" ${state.panePage === "details" ? "" : "aria-hidden=\"true\""}>
+          <div class="head"><span>Màn hình</span><span class="state">${state.computer?.state === "running" ? "live" : "off"}</span></div>
+          <div class="screen">${screenPane(state.computer)}</div>
+          <div class="caption">${escapeHtml(selected ? `Màn hình của ${selected.name}` : "chưa chọn bot")}</div>
+          <div class="routines">
+            <p>Routine là việc lặp lại theo lịch mà bot tự chạy.</p>
+            <button type="button" class="btn" data-act="routine" ${selected ? "" : "disabled"}>Tạo routine</button>
+          </div>
+        </section>
+        <section class="pane-page settings" ${state.panePage === "settings" ? "" : "aria-hidden=\"true\""}>
+          <div class="pane-top">
+            <button type="button" class="icon-btn" data-act="back" aria-label="Back to details">‹</button>
+            <span class="subpage-title">Bot settings</span>
+          </div>
+          ${selected ? `
+          <div class="set-body">
+            <button type="button" class="avatar-trigger" data-act="avatar" aria-label="Edit Bot avatar">${avatarOf(selected)}</button>
+            <label class="field"><span>Bot name</span>
+              <input type="text" data-field="name" value="${escapeHtml(selected.name)}" />
+            </label>
+            <label class="field"><span>Description</span>
+              <textarea data-field="description" rows="2">${escapeHtml(selected.description)}</textarea>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" data-field="notifications" ${selected.notificationsEnabled ? "checked" : ""} />
+              <span>Notifications</span>
+            </label>
+            <div class="set-foot">
+              <button type="button" class="btn" data-act="hide">${selected.hidden ? "Hiện lại bot" : "Ẩn khỏi sidebar"}</button>
+              <button type="button" class="btn danger" data-act="del">Xoá bot</button>
+            </div>
+          </div>` : `<p class="empty-note">chọn một bot để xem cài đặt</p>`}
+        </section>
       </div>
     </aside>
   </div>`));
@@ -851,9 +884,8 @@ function paint(): void {
   root.querySelector<HTMLButtonElement>("[data-act=logout]")?.addEventListener("click", async () => {
     await api.logout(); location.reload();
   });
-  root.querySelector<HTMLButtonElement>("[data-act=settings]")?.addEventListener("click", () => {
-    // X3 sẽ làm stack điều hướng; bây giờ nút danh tính mở panel phải, đúng chỗ trang settings sẽ nằm.
-    state.paneOpen = true; paint();
+  root.querySelectorAll<HTMLButtonElement>("[data-act=settings]").forEach((b) => {
+    b.onclick = () => { state.paneOpen = true; state.panePage = "settings"; saveUi(); paint(); };
   });
   // `new` có hai chỗ: nút + ở đầu sidebar và mục trong menu tài khoản. Nối cả hai.
   root.querySelectorAll<HTMLButtonElement>("[data-act=new]").forEach((b) => { b.onclick = async () => {
@@ -877,21 +909,50 @@ function paint(): void {
     state.showHidden = !state.showHidden;
     void refreshRoster();
   };
-  root.querySelector<HTMLButtonElement>("[data-act=rename]")!.onclick = async () => {
+  /*
+   * Tên và mô tả giờ là TRƯỜNG trong trang settings, không còn nút "đổi tên" mở `prompt()`.
+   *
+   * Ghi khi rời trường (`change`), không ghi từng ký tự: gõ một cái tên là hàng chục PATCH và hàng
+   * chục lần vẽ lại roster. App gốc cũng ghi khi rời trường.
+   */
+  const saveField = async (field: "name" | "description", value: string) => {
     if (!state.selected) return;
-    const current = state.agents.find((a) => a.id === state.selected)?.name ?? "";
-    const name = prompt("Tên bot?", current);
-    if (!name?.trim() || name.trim() === current) return;
+    const rec = state.agents.find((a) => a.id === state.selected);
+    const before = field === "name" ? rec?.name : rec?.description;
+    if (value === before) return;
+    if (field === "name" && !value.trim()) return;   // tên rỗng thì bỏ qua, không xoá tên của họ
     try {
-      await api.renameAgent(state.selected, name.trim());
+      await api.patchAgent(state.selected, field === "name" ? { name: value.trim() } : { description: value });
       state.error = "";
     } catch (e) {
       state.error = e instanceof Error ? e.message : String(e);
     }
     await refreshRoster();
-    await loadTranscript();
   };
-  root.querySelector<HTMLButtonElement>("[data-act=hide]")!.onclick = async () => {
+  const nameField = root.querySelector<HTMLInputElement>('[data-field="name"]');
+  if (nameField) nameField.onchange = () => void saveField("name", nameField.value);
+  const descField = root.querySelector<HTMLTextAreaElement>('[data-field="description"]');
+  if (descField) descField.onchange = () => void saveField("description", descField.value);
+  const notif = root.querySelector<HTMLInputElement>('[data-field="notifications"]');
+  if (notif) notif.onchange = async () => {
+    if (!state.selected) return;
+    try {
+      await api.patchAgent(state.selected, { notificationsEnabled: notif.checked });
+      state.error = "";
+    } catch (e) {
+      state.error = e instanceof Error ? e.message : String(e);
+      notif.checked = !notif.checked;   // trả lại đúng trạng thái thật khi ghi thất bại
+    }
+    await refreshRoster();
+  };
+
+  root.querySelector<HTMLButtonElement>("[data-act=back]")?.addEventListener("click", () => {
+    state.panePage = "details";
+    paint();
+  });
+
+  const hideBtn = root.querySelector<HTMLButtonElement>("[data-act=hide]");
+  if (hideBtn) hideBtn.onclick = async () => {
     if (!state.selected) return;
     const rec = state.agents.find((a) => a.id === state.selected);
     const nextHidden = rec ? !rec.hidden : true;
@@ -1070,7 +1131,6 @@ async function bootApp(): Promise<void> {
   await refreshRoster();
   await loadTranscript();
   await loadComputer();
-  mountLogout();
   void refreshUpgrade();
   const ac = new AbortController();
   void api.listenEvents((name, data) => {
@@ -1085,17 +1145,6 @@ async function bootApp(): Promise<void> {
   });
 }
 
-/** A floating sign-out control, mounted on <body> so `paint()` (which owns #app) never wipes it. */
-function mountLogout(): void {
-  document.getElementById("gb2-logout")?.remove();
-  const btn = document.createElement("button");
-  btn.id = "gb2-logout";
-  btn.className = "gb2-logout";
-  btn.textContent = `⎋ ${api.currentEmail() || "đăng xuất"}`;
-  btn.title = "Đăng xuất";
-  btn.addEventListener("click", async () => { await api.logout(); location.reload(); });
-  document.body.append(btn);
-}
 
 /** An Upgrade button, shown only when the account is out of quota and a checkout URL is configured.
  *  Mounted on <body> (survives paint()); opens the self-hosted checkout in a new tab. */
