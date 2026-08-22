@@ -3,7 +3,7 @@
 **Ngày:** 2026-08-19  
 **Status:** accepted cho phạm vi Phase 0. Không tách process, không sửa nghiệp vụ.
 
-Đây không phải thư mục `docs/adr/` (chưa tạo). Quyết định lớn hơn nằm [ROADMAP.md](../ROADMAP.md). File này **đóng băng** những gì Phase 0 đã chọn.
+Đây không phải thư mục `docs/adr/` (chưa tạo). Quyết định lớn hơn nằm [ROADMAP.md](../../ROADMAP.md). File này **đóng băng** những gì Phase 0 đã chọn.
 
 ---
 
@@ -169,7 +169,7 @@
 
 **Status:** accepted (2026-08-20)
 **Context:** P0–P6 shipped the backend. P7 built `apps/grokbot-web` (~620 lines) as a vertical slice. The old Definition of Done required deleting `Grok Bot.exe` from the production path and setting `GROKBOT2_CURSOR_ACL=0`. That would throw away roster windows, routines, skills, computer pane, and widgets the stock app already has — and the fuse state on this machine already allows a patched `resources/app/`.
-**Decision:** The **patched stock client** is the production UI. `packages/cursor-acl` + `packages/grokbot-proto` are a **permanent** adapter, not a layer to delete. P7 stops where it stands (`apps/grokbot-web` kept for R2 + debug). P8 (cut ACL / protobuf / `/gw`) is **deleted**. Programme continues as F0–F7 in [ROADMAP.md](../ROADMAP.md).
+**Decision:** The **patched stock client** is the production UI. `packages/cursor-acl` + `packages/grokbot-proto` are a **permanent** adapter, not a layer to delete. P7 stops where it stands (`apps/grokbot-web` kept for R2 + debug). P8 (cut ACL / protobuf / `/gw`) is **deleted**. Programme continues as F0–F7 in [ROADMAP.md](../../ROADMAP.md).
 **Supersedes:** ADR-P0-4 (stock FE as a temporary adapter); the P8 cutover sentence in ADR-P7-1; any comment that “ACL comes off when S13 lives”.
 **Does not supersede:** ADR-P0-2 / P0-3 (modular monolith, capability boundaries); legal wall against distributing a patched client.
 **Consequence:** Every “ACL rồi sẽ gỡ” rationale in comments and ADRs is void. Patch the client **as code** (`infra/patches/`, F1). Do not `--advance` into a deleted P8. Do not set `GROKBOT2_CURSOR_ACL=0`. Baseline: [`docs/parity-runs/fe-goc-baseline.json`](../parity-runs/fe-goc-baseline.json) (gateway + tools + SSE + bootstrap).

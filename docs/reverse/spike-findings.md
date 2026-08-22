@@ -37,4 +37,4 @@ the HTTP layer (`createAgent → sendPrompt → transcript`).
 ## Reuse from OpenClaw (admin.halcion.vn)
 - **Brain:** the Claude pool endpoint — subscription CLI, LB+failover, no API-token cost.
 - **Box (future):** the VPS already runs `Xvfb + x11vnc + websockify + noVNC` per-account
-  (`flow-chrome@`, `flow-vnc.sh`) — the same stack the Grok Bot box needs. See [roadmap.md](../roadmap.md).
+  (`flow-chrome@`, `flow-vnc.sh`) — the same stack the Grok Bot box needs. See [roadmap.md](../../ROADMAP.md).

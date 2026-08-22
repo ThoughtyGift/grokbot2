@@ -248,7 +248,7 @@ For **chat**, we stub the box: `EnsureSandBox` points the gateway at this backen
 gateway serves healthy JSON so the window renders. Chat is implemented directly in the
 gateway (the box's agent host role), backed by the Claude pool.
 
-For a **working workspace/VNC**, run a real box — see [roadmap.md](roadmap.md).
+For a **working workspace/VNC**, run a real box — see [roadmap.md](../ROADMAP.md).
 
 ## Layers in this repo
 

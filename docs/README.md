@@ -20,7 +20,7 @@ Ba loại tài liệu, đừng lẫn:
 |---|---|
 | **Ngày đầu làm việc trên repo** | [onboarding.md](onboarding.md) |
 | Hiểu hệ thống trong 10 phút | [architecture.md](architecture.md) |
-| Biết đang làm tới đâu | [../ROADMAP.md](../ROADMAP.md) → [roadmap.md](roadmap.md) |
+| Biết đang làm tới đâu | [../ROADMAP.md](../ROADMAP.md) → [roadmap.md](../ROADMAP.md) |
 | Clone FE app gốc | [plan/fe-xray-roadmap.md](plan/fe-xray-roadmap.md) |
 | Sửa/thêm một lệnh của client | [protocol-reference.md](protocol-reference.md) |
 | Biết được phép làm gì, không được làm gì | [legal.md](legal.md) |
@@ -48,7 +48,7 @@ X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm
 | [architecture.md](architecture.md) | kiến trúc tổng: BFF · runtime · computer · ops · ACL |
 | [protocol-reference.md](protocol-reference.md) | hợp đồng client hãng: 120 lệnh `/gw`, 16 kênh SSE, bootstrap protobuf |
 | [parity.md](parity.md) | đối chiếu với app gốc: cái gì khớp, cái gì cố ý không khớp |
-| [roadmap.md](roadmap.md) | lộ trình theo phase (bản chi tiết; bản ngắn ở gốc repo) |
+| [roadmap.md](../ROADMAP.md) | lộ trình theo phase (bản chi tiết; bản ngắn ở gốc repo) |
 | [onboarding.md](onboarding.md) | từ `git clone` tới sửa được code và chứng minh không hỏng gì |
 | [runbooks/README.md](runbooks/README.md) | 5 sự cố **đã thật sự xảy ra**: triệu chứng → xác nhận → sửa |
 | [legal.md](legal.md) | ranh giới: không copy bundle/CSS/asset của hãng, không phân phối |
@@ -94,6 +94,7 @@ X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm
 
 | File | Vì sao còn |
 |---|---|
+| [history/ROADMAP-measured.archived.md](history/ROADMAP-measured.archived.md) | roadmap trước lần đổi hướng 2026-08-20. Giữ vì mệnh đề *"status is measured, not remembered"* là nguồn của kỷ luật đo hiện tại |
 | [history/ROADMAP-native-fe.archived.md](history/ROADMAP-native-fe.archived.md) | lộ trình P0–P8 (hướng FE tự viết). Là **đường lùi cho rủi ro R2** nên không xoá |
 | [history/execution-roadmap.md](history/execution-roadmap.md) | sổ thi công chi tiết của giai đoạn P |
 | [history/parity-thuky.md](history/parity-thuky.md) | biên bản đối chiếu dài, theo từng lượt |

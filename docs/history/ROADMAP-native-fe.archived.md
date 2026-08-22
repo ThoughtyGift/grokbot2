@@ -1,6 +1,6 @@
 > **ARCHIVED 2026-08-20.** Đây là roadmap hướng "FE native riêng" (P0→P8 cutover, bỏ protobuf/`/gw`).
 > Chủ project đã đổi hướng sang **dùng FE gốc (`Grok Bot.exe`) đã patch** làm UI production.
-> Roadmap đang hiệu lực: [../ROADMAP.md](../ROADMAP.md). Giữ file này vì P0–P6 vẫn là nền dùng lại được.
+> Roadmap đang hiệu lực: [ROADMAP.md](../../ROADMAP.md). Giữ file này vì P0–P6 vẫn là nền dùng lại được.
 
 # ROADMAP — Tách grokbot2 khỏi Grok Bot gốc (Strangler Fig → microservices)
 
