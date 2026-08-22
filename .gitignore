@@ -54,3 +54,9 @@ Grok Bot/
 *.asar.unpacked/
 resources/app/
 grokbot-fe-extracted/
+
+# Mẩu bundle của hãng lấy ra khi dịch ngược, và script dò dùng một lần.
+# 155 file `_tmp-*` đã từng bị commit (170 KB, 126 file .txt là trích đoạn bundle minify) —
+# vi phạm chính luật của dự án: docs/legal.md và ROADMAP R5 cấm commit bundle của hãng.
+# `.gitignore` trước đó chỉ chặn `*.asar`, không chặn mẩu đã trích ra.
+services/grokbot-backend/scripts/_tmp-*
