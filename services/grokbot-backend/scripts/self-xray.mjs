@@ -56,6 +56,27 @@ console.log("── self-xray ──\n");
      * Bản trước đọc `j.files` — khoá đó không tồn tại, nên mục này luôn báo "0 file không ai import"
      * kể cả khi knip đang liệt kê 114 file. Một phép đo luôn ra 0 thì tệ hơn không có phép đo.
      */
+    /*
+     * Chỉ tính code chết trong file ĐÃ VÀO GIT.
+     *
+     * Mốc này để so hai lượt chạy với nhau. Trên repo có hai phiên làm song song thì file nháp chưa
+     * `git add` của người kia làm nó đỏ cho người này — hai lượt liền là đủ để luật "không lặp lại"
+     * nổ, và thứ nó bảo "dừng tính năng, sửa cái sinh ra nó" lại là thứ mình không được chạm. Đo
+     * trên code đã commit thì con số nói về repo, không nói về bàn làm việc của ai.
+     *
+     * KHÔNG im lặng bỏ qua: số phát hiện bị loại được in ra ngay dưới.
+     */
+    const tracked = new Set(
+      execFileSync("git", ["ls-files"], { cwd: REPO, encoding: "utf8", maxBuffer: 32 << 20 })
+        .split("\n").filter(Boolean),
+    );
+    const isTracked = (f) => tracked.has(String(f).split("\\").join("/"));
+    const untrackedHits = (j.issues ?? []).filter((i) => !isTracked(i.file));
+    j.issues = (j.issues ?? []).filter((i) => isTracked(i.file));
+    if (untrackedHits.length) {
+      const names = [...new Set(untrackedHits.map((i) => String(i.file).split("/").pop()))];
+      console.log(`      (bỏ qua ${untrackedHits.length} file chưa vào git: ${names.slice(0, 4).join(", ")})`);
+    }
     const files = (j.issues ?? []).reduce((n, i) => n + (i.files?.length ?? 0), 0);
     const issues = (j.issues ?? []).reduce((acc, i) => {
       for (const k of ["exports", "types", "dependencies", "unlisted", "unresolved"]) {

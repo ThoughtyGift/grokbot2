@@ -812,6 +812,144 @@ components:
           type: integer
         paneOpen:
           type: boolean
+    Routine:
+      type: object
+      required:
+        - id
+        - agentId
+        - name
+        - prompt
+        - schedule
+        - scheduleText
+        - isEnabled
+        - createdAtMs
+        - lastRunAtMs
+        - runs
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        name:
+          type: string
+        prompt:
+          type: string
+        schedule:
+          type: string
+        scheduleText:
+          type: string
+        isEnabled:
+          type: boolean
+        createdAtMs:
+          type: integer
+        lastRunAtMs:
+          anyOf:
+            - type: integer
+            - type: "null"
+        runs:
+          type: array
+          items:
+            type: object
+            required:
+              - at
+              - status
+            properties:
+              at:
+                type: integer
+              status:
+                anyOf:
+                  - const: ok
+                    type: string
+                  - const: error
+                    type: string
+                  - const: running
+                    type: string
+              detail:
+                type: string
+    RoutineRun:
+      type: object
+      required:
+        - at
+        - status
+      properties:
+        at:
+          type: integer
+        status:
+          anyOf:
+            - const: ok
+              type: string
+            - const: error
+              type: string
+            - const: running
+              type: string
+        detail:
+          type: string
+    CreateRoutineBody:
+      type: object
+      required:
+        - name
+        - prompt
+        - schedule
+      properties:
+        name:
+          minLength: 1
+          type: string
+        prompt:
+          minLength: 1
+          type: string
+        schedule:
+          minLength: 1
+          type: string
+    PatchRoutineBody:
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        prompt:
+          minLength: 1
+          type: string
+        schedule:
+          minLength: 1
+          type: string
+        isEnabled:
+          type: boolean
+    SearchHit:
+      type: object
+      required:
+        - agentId
+        - name
+        - why
+      properties:
+        agentId:
+          type: string
+        name:
+          type: string
+        why:
+          anyOf:
+            - const: name
+              type: string
+            - const: transcript
+              type: string
+    SubagentKind:
+      type: object
+      required:
+        - id
+        - label
+        - description
+        - model
+        - toolCount
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        toolCount:
+          type: integer
 paths:
   /v1/health:
     get:
@@ -1605,6 +1743,476 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
         "404":
           description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/routines:
+    get:
+      summary: Routine của một bot
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - routines
+                properties:
+                  routines:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - agentId
+                        - name
+                        - prompt
+                        - schedule
+                        - scheduleText
+                        - isEnabled
+                        - createdAtMs
+                        - lastRunAtMs
+                        - runs
+                      properties:
+                        id:
+                          type: string
+                        agentId:
+                          type: string
+                        name:
+                          type: string
+                        prompt:
+                          type: string
+                        schedule:
+                          type: string
+                        scheduleText:
+                          type: string
+                        isEnabled:
+                          type: boolean
+                        createdAtMs:
+                          type: integer
+                        lastRunAtMs:
+                          anyOf:
+                            - type: integer
+                            - type: "null"
+                        runs:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - at
+                              - status
+                            properties:
+                              at:
+                                type: integer
+                              status:
+                                anyOf:
+                                  - const: ok
+                                    type: string
+                                  - const: error
+                                    type: string
+                                  - const: running
+                                    type: string
+                              detail:
+                                type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    post:
+      summary: Tạo routine
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoutineBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - routines
+                properties:
+                  routines:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - agentId
+                        - name
+                        - prompt
+                        - schedule
+                        - scheduleText
+                        - isEnabled
+                        - createdAtMs
+                        - lastRunAtMs
+                        - runs
+                      properties:
+                        id:
+                          type: string
+                        agentId:
+                          type: string
+                        name:
+                          type: string
+                        prompt:
+                          type: string
+                        schedule:
+                          type: string
+                        scheduleText:
+                          type: string
+                        isEnabled:
+                          type: boolean
+                        createdAtMs:
+                          type: integer
+                        lastRunAtMs:
+                          anyOf:
+                            - type: integer
+                            - type: "null"
+                        runs:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - at
+                              - status
+                            properties:
+                              at:
+                                type: integer
+                              status:
+                                anyOf:
+                                  - const: ok
+                                    type: string
+                                  - const: error
+                                    type: string
+                                  - const: running
+                                    type: string
+                              detail:
+                                type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/agents/{id}/routines/{routineId}:
+    patch:
+      summary: Sửa hoặc bật/tắt routine
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: routineId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchRoutineBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - routines
+                properties:
+                  routines:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - agentId
+                        - name
+                        - prompt
+                        - schedule
+                        - scheduleText
+                        - isEnabled
+                        - createdAtMs
+                        - lastRunAtMs
+                        - runs
+                      properties:
+                        id:
+                          type: string
+                        agentId:
+                          type: string
+                        name:
+                          type: string
+                        prompt:
+                          type: string
+                        schedule:
+                          type: string
+                        scheduleText:
+                          type: string
+                        isEnabled:
+                          type: boolean
+                        createdAtMs:
+                          type: integer
+                        lastRunAtMs:
+                          anyOf:
+                            - type: integer
+                            - type: "null"
+                        runs:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - at
+                              - status
+                            properties:
+                              at:
+                                type: integer
+                              status:
+                                anyOf:
+                                  - const: ok
+                                    type: string
+                                  - const: error
+                                    type: string
+                                  - const: running
+                                    type: string
+                              detail:
+                                type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    delete:
+      summary: Xoá routine
+      tags:
+        - agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: routineId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - routines
+                properties:
+                  routines:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - agentId
+                        - name
+                        - prompt
+                        - schedule
+                        - scheduleText
+                        - isEnabled
+                        - createdAtMs
+                        - lastRunAtMs
+                        - runs
+                      properties:
+                        id:
+                          type: string
+                        agentId:
+                          type: string
+                        name:
+                          type: string
+                        prompt:
+                          type: string
+                        schedule:
+                          type: string
+                        scheduleText:
+                          type: string
+                        isEnabled:
+                          type: boolean
+                        createdAtMs:
+                          type: integer
+                        lastRunAtMs:
+                          anyOf:
+                            - type: integer
+                            - type: "null"
+                        runs:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                              - at
+                              - status
+                            properties:
+                              at:
+                                type: integer
+                              status:
+                                anyOf:
+                                  - const: ok
+                                    type: string
+                                  - const: error
+                                    type: string
+                                  - const: running
+                                    type: string
+                              detail:
+                                type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/search:
+    get:
+      summary: Tìm bot theo tên VÀ nội dung transcript (?q=)
+      tags:
+        - search
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - hits
+                properties:
+                  hits:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - agentId
+                        - name
+                        - why
+                      properties:
+                        agentId:
+                          type: string
+                        name:
+                          type: string
+                        why:
+                          anyOf:
+                            - const: name
+                              type: string
+                            - const: transcript
+                              type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/subagents:
+    get:
+      summary: Các loại subagent có thể chạy
+      tags:
+        - subagents
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - kinds
+                properties:
+                  kinds:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - label
+                        - description
+                        - model
+                        - toolCount
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        description:
+                          type: string
+                        model:
+                          type: string
+                        toolCount:
+                          type: integer
+        "401":
+          description: thiếu hoặc sai bearer
           content:
             application/json:
               schema:

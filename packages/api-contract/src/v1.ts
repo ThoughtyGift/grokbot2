@@ -281,6 +281,79 @@ export const UiPrefs = Type.Object({
 });
 export type UiPrefs = Static<typeof UiPrefs>;
 
+/**
+ * Routine — việc lặp lại theo lịch mà bot tự chạy (`automations` ở phía trong).
+ *
+ * Hình dạng ở đây là hình dạng NATIVE, không phải blob mà client hãng nhận. `toClientAutomation()`
+ * gửi cả `trigger` (object) lẫn `schedule` (chuỗi) lẫn `body` lẫn `prompt` — cùng một thứ ba tên,
+ * vì các bản build của họ đọc chỗ khác nhau. FE của mình không cần chịu cái đó: một tên một nghĩa.
+ */
+export const RoutineRun = Type.Object({
+  at: Type.Integer(),
+  status: Type.Union([Type.Literal("ok"), Type.Literal("error"), Type.Literal("running")]),
+  detail: Type.Optional(Type.String()),
+});
+export type RoutineRun = Static<typeof RoutineRun>;
+
+export const Routine = Type.Object({
+  id: Type.String(),
+  agentId: Type.String(),
+  name: Type.String(),
+  prompt: Type.String(),
+  /**
+   * Lịch dạng **cron 5 trường**, ví dụ `0 9 * * *`.
+   *
+   * Không phải câu tiếng Anh: `parseCron` chỉ nhận cron, và backend từ chối 400 ngay ở biên nếu
+   * không đọc được. Câu tả cho người đọc nằm ở `scheduleText`, do backend sinh.
+   */
+  schedule: Type.String(),
+  /** Câu tả lịch đọc được — backend sinh, FE không tự đoán. */
+  scheduleText: Type.String(),
+  isEnabled: Type.Boolean(),
+  createdAtMs: Type.Integer(),
+  lastRunAtMs: Type.Union([Type.Integer(), Type.Null()]),
+  runs: Type.Array(RoutineRun),
+});
+export type Routine = Static<typeof Routine>;
+
+export const CreateRoutineBody = Type.Object({
+  name: Type.String({ minLength: 1 }),
+  prompt: Type.String({ minLength: 1 }),
+  schedule: Type.String({ minLength: 1 }),
+});
+export type CreateRoutineBody = Static<typeof CreateRoutineBody>;
+
+export const PatchRoutineBody = Type.Object({
+  name: Type.Optional(Type.String({ minLength: 1 })),
+  prompt: Type.Optional(Type.String({ minLength: 1 })),
+  schedule: Type.Optional(Type.String({ minLength: 1 })),
+  isEnabled: Type.Optional(Type.Boolean()),
+});
+export type PatchRoutineBody = Static<typeof PatchRoutineBody>;
+
+/**
+ * Kết quả tìm kiếm.
+ *
+ * `why` có mặt vì backend đã tìm cả trong nội dung transcript, không chỉ tên. Không nói rõ vì sao
+ * một bot khớp thì người dùng thấy một cái tên chẳng liên quan gì đến từ mình vừa gõ.
+ */
+export const SearchHit = Type.Object({
+  agentId: Type.String(),
+  name: Type.String(),
+  why: Type.Union([Type.Literal("name"), Type.Literal("transcript")]),
+});
+export type SearchHit = Static<typeof SearchHit>;
+
+/** Một loại subagent có thể chạy — khay subagent đọc danh sách này. */
+export const SubagentKind = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  description: Type.String(),
+  model: Type.String(),
+  toolCount: Type.Integer(),
+});
+export type SubagentKind = Static<typeof SubagentKind>;
+
 export const ROUTES = [
   { method: "get", path: "/v1/health", res: Type.Object({ ok: Type.Boolean(), isBusy: Type.Boolean() }), auth: false, summary: "Sống hay không" },
   { method: "get", path: "/v1/session", res: Session, auth: false, summary: "Lấy token cho FE" },
@@ -298,6 +371,12 @@ export const ROUTES = [
   { method: "post", path: "/v1/agents/{id}/entries/{entryId}/reactions", req: ReactionBody, res: Entry, summary: "Bật/tắt một reaction" },
   { method: "post", path: "/v1/agents/{id}/permissions", req: PermissionBody, summary: "Cho phép / từ chối một tool call" },
   { method: "post", path: "/v1/agents/{id}/widgets", req: WidgetReplyBody, summary: "Trả lời một widget" },
+  { method: "get", path: "/v1/agents/{id}/routines", res: Type.Object({ routines: Type.Array(Routine) }), summary: "Routine của một bot" },
+  { method: "post", path: "/v1/agents/{id}/routines", req: CreateRoutineBody, res: Type.Object({ routines: Type.Array(Routine) }), summary: "Tạo routine" },
+  { method: "patch", path: "/v1/agents/{id}/routines/{routineId}", req: PatchRoutineBody, res: Type.Object({ routines: Type.Array(Routine) }), summary: "Sửa hoặc bật/tắt routine" },
+  { method: "delete", path: "/v1/agents/{id}/routines/{routineId}", res: Type.Object({ routines: Type.Array(Routine) }), summary: "Xoá routine" },
+  { method: "get", path: "/v1/search", res: Type.Object({ hits: Type.Array(SearchHit) }), summary: "Tìm bot theo tên VÀ nội dung transcript (?q=)" },
+  { method: "get", path: "/v1/subagents", res: Type.Object({ kinds: Type.Array(SubagentKind) }), summary: "Các loại subagent có thể chạy" },
   { method: "get", path: "/v1/host/sidebar", res: Type.Object({ sections: Type.Array(SidebarSection) }), summary: "Nhóm sidebar" },
   { method: "get", path: "/v1/host/settings", res: Type.Object({ ui: UiPrefs }), summary: "Bố cục của chính người đang đăng nhập" },
   { method: "patch", path: "/v1/host/settings", req: UiPrefs, res: Type.Object({ ui: UiPrefs }), summary: "Ghi bố cục, kẹp theo ngưỡng đo được ở app gốc" },

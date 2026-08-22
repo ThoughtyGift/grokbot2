@@ -40,7 +40,8 @@
     "measure:consistency": "node services/grokbot-backend/scripts/measure-ui-consistency.mjs",
     "measure:transcript": "node services/grokbot-backend/scripts/measure-transcript-cost.mjs",
     "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs",
-    "measure:shot": "node services/grokbot-backend/scripts/measure-shot.mjs"
+    "measure:shot": "node services/grokbot-backend/scripts/measure-shot.mjs",
+    "test:routines": "node services/grokbot-backend/scripts/e2e-routines.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

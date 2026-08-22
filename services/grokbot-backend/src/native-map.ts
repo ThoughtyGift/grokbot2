@@ -230,3 +230,38 @@ export function toNativeTranscriptPage(entries: Entry[], hasMore: boolean): Nati
   });
   return { entries: mapped, hasMore };
 }
+
+/**
+ * `Automation` (bên trong) → `Routine` (hợp đồng `/v1`).
+ *
+ * Bên trong dùng `trigger` cho chuỗi lịch và `triggerDescription` cho câu tả; hợp đồng dùng
+ * `schedule` và `scheduleText`. Đổi tên ở ĐÂY, một chỗ, thay vì để FE học hai bộ từ vựng.
+ *
+ * `runs` không bao giờ được bỏ: ở client hãng, biểu tượng trạng thái đọc thẳng `runs[0]?.status`
+ * không kiểm tra gì, nên một bản ghi thiếu `runs` làm vỡ cả rail bên phải (xem chú thích ở
+ * `automations.ts`). Giữ nguyên bất biến đó cho FE của mình luôn.
+ */
+export function toNativeRoutine(rec: {
+  id: string; agentId: string; name: string; prompt: string; trigger: string;
+  isEnabled: boolean; createdAt: number; lastRunAt: number | null; triggerDescription: string;
+  runs?: { at?: number; status?: string; detail?: string }[];
+}): Record<string, unknown> {
+  const status = (s: unknown): "ok" | "error" | "running" =>
+    s === "error" || s === "failed" ? "error" : s === "running" ? "running" : "ok";
+  return {
+    id: rec.id,
+    agentId: rec.agentId,
+    name: rec.name,
+    prompt: rec.prompt,
+    schedule: rec.trigger,
+    scheduleText: rec.triggerDescription,
+    isEnabled: rec.isEnabled,
+    createdAtMs: rec.createdAt,
+    lastRunAtMs: rec.lastRunAt,
+    runs: (rec.runs ?? []).map((r) => ({
+      at: typeof r.at === "number" ? r.at : 0,
+      status: status(r.status),
+      ...(r.detail ? { detail: r.detail } : {}),
+    })),
+  };
+}

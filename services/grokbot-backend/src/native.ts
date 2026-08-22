@@ -12,6 +12,9 @@ import { setPlan, getUser, accessVerdict } from "./billing.js";
 import { currentOwner, runWithOwner } from "./request-context.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
 import { uiPrefs, patchUiPrefs } from "./host-settings.js";
+import { getAgentAutomations, createAgentAutomation, updateAgentAutomation, deleteAgentAutomation,
+  setAgentAutomationEnabled, parseCron } from "./automations.js";
+import { SUBAGENT_TYPES } from "./subagents.js";
 import {
   agentById,
   avatarRejection,
@@ -35,7 +38,7 @@ import type { Entry } from "./conversation/types.js";
 import { subscribe, type DomainEvent } from "./events.js";
 import { foreverBoxStatus } from "./forever-box.js";
 import { interruptAgentRun, isAgentRunning, resolveLocalToolPermission, respondToWidget, sendPrompt } from "./runtime/turn.js";
-import { attachmentHref, toNativeAgent, toNativeEntry, toNativeTranscriptPage } from "./native-map.js";
+import { attachmentHref, toNativeAgent, toNativeEntry, toNativeRoutine, toNativeTranscriptPage } from "./native-map.js";
 import { readAttachmentImage, stageImage } from "./attachments.js";
 
 const STARTED_AT = Date.now();
@@ -164,6 +167,8 @@ function isNativePath(pathname: string): boolean {
     || pathname.startsWith("/v1/agents/")
     || pathname === "/v1/host/sidebar"
     || pathname === "/v1/host/settings"
+    || pathname === "/v1/search"
+    || pathname === "/v1/subagents"
     || pathname === "/v1/attachments"
   );
 }
@@ -341,6 +346,38 @@ export async function handleNative(
    * `currentOwner()` chứ không phải một khoá dùng chung: hai tài khoản trên cùng backend phải có
    * bố cục riêng, nếu không người vào sau kéo sidebar là người trước mất bố cục mà không hiểu vì sao.
    */
+  /*
+   * X5.2 — tìm bot. `searchAgents` đã tìm cả TÊN lẫn NỘI DUNG transcript, nên trả kèm `why`: không
+   * nói vì sao một bot khớp thì người dùng thấy một cái tên chẳng liên quan gì tới từ vừa gõ.
+   */
+  if (pathname === "/v1/search" && verb === "GET") {
+    const q = (parsed.searchParams.get("q") ?? "").trim();
+    if (!q) return json(res, { hits: [] }, 200, origin);
+    const includeHidden = parsed.searchParams.get("includeHidden") === "1";
+    const hits = searchAgents({ query: q, includeHidden }).map((rec) => ({
+      agentId: rec.id,
+      name: rec.name,
+      why: rec.name.toLowerCase().includes(q.toLowerCase()) ? "name" as const : "transcript" as const,
+    }));
+    return json(res, { hits }, 200, origin);
+  }
+
+  /*
+   * X5.5 — các loại subagent. Chỉ ĐỌC: đây là bảng đăng ký tĩnh, không phải danh sách đang chạy.
+   * `toolCount` là số tiền tố tool mà loại đó được phép gọi, không phải số tool cụ thể — `allow`
+   * khớp theo tiền tố ("browser_" phủ cả bộ), nên đếm tool cụ thể sẽ ra một con số sai mà trông đúng.
+   */
+  if (pathname === "/v1/subagents" && verb === "GET") {
+    const kinds = Object.entries(SUBAGENT_TYPES).map(([id, t]) => ({
+      id,
+      label: t.label,
+      description: t.prompt.split("\n")[0].slice(0, 160),
+      model: t.model ?? "",
+      toolCount: t.allow.length,
+    }));
+    return json(res, { kinds }, 200, origin);
+  }
+
   if (pathname === "/v1/host/settings" && verb === "GET") {
     return json(res, { ui: uiPrefs(currentOwner()) }, 200, origin);
   }
@@ -416,6 +453,59 @@ export async function handleNative(
     const updated = agentById(agentId);
     if (!updated) return json(res, { error: "not found" }, 404, origin);
     return json(res, toNativeAgent(updated), 200, origin);
+  }
+
+  /*
+   * X5.1 — Routine (bên trong gọi là `automation`).
+   *
+   * Hình dạng trả về là hình dạng NATIVE, không phải blob mà client hãng nhận: `toClientAutomation`
+   * gửi cùng một thứ dưới ba tên (`trigger`/`schedule`, `prompt`/`body`) vì các bản build của họ đọc
+   * chỗ khác nhau. FE của mình không phải chịu cái đó — một tên một nghĩa.
+   */
+  if (tail === "routines" && verb === "GET") {
+    return json(res, { routines: getAgentAutomations({ id: agentId }).map(toNativeRoutine) }, 200, origin);
+  }
+  if (tail === "routines" && verb === "POST") {
+    const parsed = parseJson(body);
+    if (!parsed.ok) return json(res, { error: parsed.error }, 400, origin);
+    const b = parsed.value as { name?: unknown; prompt?: unknown; schedule?: unknown };
+    if (typeof b.name !== "string" || !b.name.trim()) return json(res, { error: "name là bắt buộc" }, 400, origin);
+    if (typeof b.prompt !== "string" || !b.prompt.trim()) return json(res, { error: "prompt là bắt buộc" }, 400, origin);
+    if (typeof b.schedule !== "string" || !b.schedule.trim()) return json(res, { error: "schedule là bắt buộc" }, 400, origin);
+    // Từ chối lịch không đọc được NGAY ở biên: nhận rồi mới im lặng không chạy thì tệ hơn nhiều.
+    if (!parseCron(b.schedule)) return json(res, { error: `không hiểu lịch "${b.schedule}"` }, 400, origin);
+    const list = createAgentAutomation({ id: agentId, spec: { name: b.name.trim(), prompt: b.prompt, trigger: b.schedule } });
+    return json(res, { routines: list.map(toNativeRoutine) }, 201, origin);
+  }
+  if (tail.startsWith("routines/") && (verb === "PATCH" || verb === "DELETE")) {
+    const routineId = decodeURIComponent(tail.slice("routines/".length));
+    const before = getAgentAutomations({ id: agentId });
+    if (!before.some((r) => r.id === routineId)) return json(res, { error: "not found" }, 404, origin);
+    if (verb === "DELETE") {
+      return json(res, { routines: deleteAgentAutomation({ id: agentId, automationId: routineId }).map(toNativeRoutine) }, 200, origin);
+    }
+    const parsed = parseJson(body);
+    if (!parsed.ok) return json(res, { error: parsed.error }, 400, origin);
+    const b = parsed.value as { name?: unknown; prompt?: unknown; schedule?: unknown; isEnabled?: unknown };
+    if (typeof b.schedule === "string" && !parseCron(b.schedule)) {
+      return json(res, { error: `không hiểu lịch "${b.schedule}"` }, 400, origin);
+    }
+    let list = before;
+    if (typeof b.name === "string" || typeof b.prompt === "string" || typeof b.schedule === "string") {
+      const cur = before.find((r) => r.id === routineId)!;
+      list = updateAgentAutomation({
+        id: agentId, automationId: routineId,
+        spec: {
+          name: typeof b.name === "string" ? b.name : cur.name,
+          prompt: typeof b.prompt === "string" ? b.prompt : cur.prompt,
+          trigger: typeof b.schedule === "string" ? b.schedule : cur.trigger,
+        },
+      });
+    }
+    if (typeof b.isEnabled === "boolean") {
+      list = setAgentAutomationEnabled({ id: agentId, automationId: routineId, isEnabled: b.isEnabled });
+    }
+    return json(res, { routines: list.map(toNativeRoutine) }, 200, origin);
   }
 
   if (tail === "" && verb === "DELETE") {

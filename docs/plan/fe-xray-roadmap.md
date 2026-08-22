@@ -438,7 +438,38 @@ tức phải gửi một tin — đó là X0.3, và tôi cố ý không tự g�
 
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 
-- [ ] X5.1 Routines · X5.2 tìm bot thật · X5.4 plugins · X5.5 khay subagent
+- [x] **X5.1 Routines** — bốn route `/v1/agents/{id}/routines[/{routineId}]`. Hình dạng trả về là
+  **native**, không phải blob của client hãng: `toClientAutomation` gửi cùng một thứ dưới ba tên
+  (`trigger`/`schedule`, `prompt`/`body`) vì các bản build của họ đọc chỗ khác nhau — FE của mình
+  không phải học hai bộ từ vựng.
+
+  Lịch là **cron 5 trường** (`0 9 * * *`), không phải câu tiếng Anh; backend **từ chối 400 ngay ở
+  biên** nếu `parseCron` không đọc được. Nhận rồi im lặng không chạy thì tệ hơn nhiều — người dùng
+  đợi một routine không bao giờ nổ. Câu tả cho người đọc (`scheduleText`, ví dụ *"9:00 daily"*) do
+  backend sinh, FE không tự đoán.
+
+  `runs` **luôn** là mảng kể cả routine vừa tạo: ở client hãng biểu tượng trạng thái đọc thẳng
+  `runs[0]?.status` không kiểm tra gì, nên một bản ghi thiếu `runs` làm vỡ cả panel bên phải. Giữ
+  nguyên bất biến đó cho FE của mình.
+- [x] **X5.2 Tìm bot** — `GET /v1/search?q=`. `searchAgents` đã tìm cả **tên lẫn nội dung
+  transcript**, nên kết quả trả kèm `why: "name" | "transcript"`: không nói vì sao một bot khớp thì
+  người dùng thấy một cái tên chẳng liên quan gì tới từ vừa gõ. `q` rỗng trả rỗng, **không** đổ cả
+  roster ra.
+- [x] **X5.5 Khay subagent** — `GET /v1/subagents`, chỉ đọc: đây là bảng đăng ký tĩnh, không phải
+  danh sách đang chạy. Bốn loại: `browserUse`, `pastConversationExplorer`, `explore`, `shell`.
+  `toolCount` là số **tiền tố** tool được phép gọi, không phải số tool cụ thể — `allow` khớp theo
+  tiền tố (`browser_` phủ cả bộ), nên đếm tool cụ thể sẽ ra một con số sai mà trông đúng.
+- [ ] X5.3 ✅ đã xong ở X2 · **X5.4 plugins — của phiên khác đang làm** (`src/plugins.ts` chưa vào
+  git), tôi không chạm.
+
+`pnpm test:routines` — **19/19**, gồm ba ca dễ bị bỏ qua: lịch không đọc được bị từ chối ở cả POST
+lẫn PATCH, routine của bot A **không** sửa được qua đường bot B (404), và `runs` là mảng ngay từ
+lúc tạo.
+
+> Phép **tự kiểm `NAMED`** thêm hôm qua lập tức trả công: nó bắt đúng sáu schema mới
+> (`Routine`, `RoutineRun`, `CreateRoutineBody`, `PatchRoutineBody`, `SearchHit`, `SubagentKind`)
+> mà tôi quên khai, thay vì để chúng bị nhúng thẳng vào từng route và không ai biết. Spec giờ
+> **27 route · 30 schema**.
 - [x] **X5.3** `/v1/host/settings` — GET + PATCH, **theo từng tài khoản**. Bảng `host_settings` đã có
   sẵn nên không đổi schema: bố cục nằm dưới `uiByOwner[ownerId]` trong cùng blob JSON. Những khoá
   khác trong đó là cài đặt của *cái máy* (múi giờ, quyền tool, MCP) và đúng là dùng chung; bề rộng
