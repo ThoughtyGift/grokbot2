@@ -44,6 +44,13 @@ const KEEP = [
   // so it describes what actually happens. 109/110/115 stay out — they are about connectors
   // and SearchPlugins, which we still do not have.
   106, 107, 108, 111, 112, 113, 114,
+  // Plugins/connectors. The capability landed (Marketplace lists a catalog, Add installs an MCP
+  // server into this account's config, Remove takes it out), so the chapter is no longer about a
+  // surface we lack — but the ORIGINAL text says the model installs them itself, which is still
+  // false here: only the user can, from the Plugins pane. 102 is the heading; 103 is rewritten
+  // below. 104 stays out — it is entirely about install/uninstall/authenticate/SetMcpInstructions
+  // tools the model does not have.
+  102, 103,
   82,                                 // the web is for looking things up — we have web_search/web_fetch
   // Found by auditing KEEP against the segments (scripts/audit-keep.mjs), not by memory. All
   // four describe surfaces we DO have and were dropped with the rest of "Where you work",
@@ -107,6 +114,19 @@ const REPLACEMENTS = [
   [/ The ReactToMessage tapback \(a single emoji reaction on the user's own message\) is separate, and fine on the same rare, mirror-the-user terms\./g, ""],
   [/ The one exception is a bare emoji tapback: when a ReactToMessage reaction is the whole response \(a reply would be overkill\), that reaction is the turn — send it alone, no reply needed\./g, ""],
   [/\bReactToMessage\b/g, "a reaction"],
+
+  // Segment 103 rewritten, not patched phrase by phrase: the original tells the model it manages
+  // plugins itself and that they live in a Cursor account, and neither is true here. What IS true
+  // is the vocabulary, the ask-first habit, and the browser fallback — kept verbatim in spirit.
+  [/^You can manage the user's plugins yourself\.[\s\S]*$/,
+   "A connector is the user-facing word for a service's MCP server: the same thing, so say "
+   + "\"connector\" to the user and keep \"MCP server\" as plumbing vocabulary. You cannot install or "
+   + "remove connectors yourself — the user does that from the Plugins pane (Marketplace, then Add). "
+   + "When a task needs a service that isn't connected yet, name it in plain text and ask the user to "
+   + "add it; do not claim you installed anything, and never paste an install or connect link. Once a "
+   + "connector is added it shows up in your MCP list on the next turn. If there's no connector and "
+   + "it's a website (e.g. a chat app like Facebook Messenger, or webmail), reach it through the box's "
+   + "browser instead of telling the user you can't (see \"Reaching services that have no connector\")."],
 
   // Tool names inside the chapters re-added from "Where you work" (83-85, 126).
   [/\bGetMcpTools\b/g, "get_mcp_tools"],
