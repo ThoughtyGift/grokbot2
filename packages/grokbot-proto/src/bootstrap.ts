@@ -6,7 +6,7 @@
  * descriptors (see docs/protocol-reference.md). Gate values:
  *   SandAccessState.GRANTED = 1, SandAccessBlockReason.NONE = 1, SandTrialClaimStatus.NONE = 1.
  */
-import { message, pbStr, pbVar, pbBool, pbMsg } from "./encode.js";
+import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
 
 export const SPIKE_AUTH_ID = "auth0|grokbot2-user";
 
@@ -27,6 +27,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "ListMarketplacePlugins",
   "GetEffectiveUserPlugins",
   "GetCurrentPeriodUsage",
+  "InstallUserPlugin",
 ] as const;
 
 /**
@@ -54,6 +55,17 @@ export interface RpcCtx {
    * the historical behaviour when the RPC returned an empty message.
    */
   usage?: { used: number; limit: number; cycleStartMs: number; cycleEndMs: number; message?: string };
+  /** The raw (unframed) request body, for the one RPC whose argument matters: InstallUserPlugin. */
+  body?: Buffer;
+  /**
+   * Plugin installs for the caller, owned by the backend (it writes the per-user `.mcp.json`).
+   * Absent ⇒ the historical hardcoded behaviour: plugin 1 shown installed, `Add` a no-op.
+   */
+  plugins?: {
+    installedIds: number[];
+    /** Install by catalog id; returns false when the id is unknown. Writes the user's MCP config. */
+    install(pluginId: number): boolean;
+  };
 }
 
 /** Map of RPC method name -> bare protobuf response body. */
@@ -94,7 +106,16 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
   // Plugins overlay. Empty proto used to decode as plugins:[] → Marketplace "isn't available".
   // These are local stubs (not Cursor.com). yPa drops a Plugin with no mcp_servers and no skills.
   ListMarketplacePlugins: () => listMarketplacePlugins(),
-  GetEffectiveUserPlugins: () => getEffectiveUserPlugins(),
+  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPlugins(ctx.plugins?.installedIds),
+
+  // The Marketplace "Add" button. Decodes plugin_id (field 1) from the request and asks the backend
+  // to install it; the app then reloads its MCP servers and the row moves to "Yours → Installed".
+  InstallUserPlugin: (ctx) => {
+    const id = ctx.body ? readVarintField(unframe(ctx.body), 1) : null;
+    const row = id == null ? undefined : LOCAL_PLUGINS.find((p) => p.id === id);
+    if (!row || !ctx.plugins?.install(row.id)) return message();   // unknown id / no port: empty reply
+    return message(pbMsg(1, userPluginInstall(row)));
+  },
 
   // DashboardService.GetCurrentPeriodUsage — the app's own usage bar ("your included API usage").
   GetCurrentPeriodUsage: (ctx) => currentPeriodUsage(ctx.usage),
@@ -103,7 +124,7 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
 /** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
 export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
   ListMarketplacePlugins: () => listMarketplacePluginsJson(),
-  GetEffectiveUserPlugins: () => getEffectiveUserPluginsJson(),
+  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPluginsJson(ctx.plugins?.installedIds),
 };
 
 /**
@@ -246,12 +267,38 @@ export function listMarketplacePluginsJson(): string {
  * Plugin 1 is marked installed+enabled so Yours → Installed has a row to inspect. Plugin 2 stays
  * catalog-only so Marketplace still has an Add button.
  */
-export function getEffectiveUserPlugins(): Buffer {
-  return message(pbMsg(1, message(pbMsg(1, plugin(LOCAL_PLUGINS[0])), pbBool(4, true))));
+/**
+ * aiserver.v1.UserPluginInstall — what `InstallUserPlugin` hands back.
+ *
+ * Fields verbatim from the vendor bundle: 1 user_id (int32), 2 plugin_id (int64), 4 is_enabled,
+ * 6 created_at, 7 updated_at, 8 plugin (the same Plugin message the catalog uses).
+ */
+function userPluginInstall(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
+  const now = Date.now();
+  return message(
+    pbVar(1, 1),
+    pbVar(2, p.id),
+    pbBool(4, true),
+    pbVar(6, now),
+    pbVar(7, now),
+    pbMsg(8, plugin(p)),
+  );
 }
 
-export function getEffectiveUserPluginsJson(): string {
-  return JSON.stringify({
-    plugins: [{ plugin: pluginJson(LOCAL_PLUGINS[0]), isEnabled: true }],
-  });
+/**
+ * Which plugins this account has installed.
+ *
+ * With no `installedIds` from the backend this keeps the historical stub (plugin 1 installed) so a
+ * caller that does not supply the port sees exactly what it used to.
+ */
+export function getEffectiveUserPlugins(installedIds?: number[]): Buffer {
+  const rows = installedIds
+    ? LOCAL_PLUGINS.filter((p) => installedIds.includes(p.id))
+    : [LOCAL_PLUGINS[0]];
+  return message(...rows.map((p) => pbMsg(1, message(pbMsg(1, plugin(p)), pbBool(4, true)))));
+}
+
+export function getEffectiveUserPluginsJson(installedIds?: number[]): string {
+  const rows = installedIds ? LOCAL_PLUGINS.filter((p) => installedIds.includes(p.id)) : [LOCAL_PLUGINS[0]];
+  return JSON.stringify({ plugins: rows.map((p) => ({ plugin: pluginJson(p), isEnabled: true })) });
 }

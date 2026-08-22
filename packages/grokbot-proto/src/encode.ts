@@ -58,3 +58,59 @@ export function connectStreamEnd(dataFrame?: Buffer): Buffer {
   frames.push(eh, end);
   return Buffer.concat(frames);
 }
+
+/**
+ * Read one top-level varint field out of a protobuf message. Returns null when absent.
+ *
+ * The bootstrap gates have been write-only until now — every builder produced bytes and nothing
+ * parsed the request. `InstallUserPlugin` is the first RPC whose ARGUMENT matters (which plugin), so
+ * this is the smallest reader that answers it: walk the top level, skip other fields by wire type,
+ * return the varint for `fieldNo`. Deliberately not a general decoder — a full parser would be more
+ * code than the one field it exists to read.
+ *
+ * A ConnectRPC body may be length-prefixed framing (5-byte header) rather than a bare message; the
+ * caller strips that first (`unframe`).
+ */
+export function readVarintField(buf: Buffer, fieldNo: number): number | null {
+  let i = 0;
+  const varint = (): number => {
+    let v = 0, shift = 0;
+    while (i < buf.length) {
+      const b = buf[i++];
+      v += (b & 0x7f) * 2 ** shift;
+      if ((b & 0x80) === 0) break;
+      shift += 7;
+    }
+    return v;
+  };
+  while (i < buf.length) {
+    const key = varint();
+    const no = key >>> 3;
+    const wire = key & 7;
+    if (wire === 0) {
+      const v = varint();
+      if (no === fieldNo) return v;
+    } else if (wire === 2) {
+      const len = varint();
+      i += len;
+    } else if (wire === 5) { i += 4; }
+    else if (wire === 1) { i += 8; }
+    else return null;   // unknown wire type — stop rather than misread
+  }
+  return null;
+}
+
+/**
+ * Strip Connect's length-prefixed framing if present, returning the bare message.
+ *
+ * `application/connect+proto` puts a 5-byte header (1 flag + 4-byte big-endian length) in front of
+ * the message; `application/proto` does not. Detected by checking whether the declared length
+ * matches what follows, so a bare message that happens to start with 0x00 is not mangled.
+ */
+export function unframe(body: Buffer): Buffer {
+  if (body.length >= 5 && (body[0] === 0 || body[0] === 1)) {
+    const len = body.readUInt32BE(1);
+    if (len === body.length - 5) return body.subarray(5);
+  }
+  return body;
+}
