@@ -1,0 +1,44 @@
+{
+  "//": "Plugin catalog for the Marketplace pane. Copy to plugin-registry.json (gitignored if it holds tokens), or point GROKBOT2_PLUGIN_REGISTRY at a path or an https URL for a shared/community registry. With neither, the two built-in demo rows are used.",
+  "//id": "Stable per plugin — installs are recorded by id, so renumbering re-points an install.",
+  "//env": "env is the INSTALL spec only. It is written into the user's MCP config and never sent to the app; the wire shape has no env field.",
+  "plugins": [
+    {
+      "id": 1,
+      "name": "memory",
+      "displayName": "Memory",
+      "description": "Knowledge graph the agent can write to and recall from.",
+      "mcp": {
+        "name": "memory",
+        "description": "@modelcontextprotocol/server-memory",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "filesystem",
+      "displayName": "Filesystem",
+      "description": "Read and write files under an allowed directory.",
+      "mcp": {
+        "name": "filesystem",
+        "description": "@modelcontextprotocol/server-filesystem",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+      }
+    },
+    {
+      "id": 3,
+      "name": "github",
+      "displayName": "GitHub",
+      "description": "Repositories, issues and pull requests.",
+      "mcp": {
+        "name": "github",
+        "description": "@modelcontextprotocol/server-github",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "put-your-token-here" }
+      }
+    }
+  ]
+}

@@ -73,6 +73,11 @@ export interface RpcCtx {
    * multi-tenant Phase 6). Absent ⇒ `GetAvailableMcpServers` answers an empty list, as before.
    */
   mcpServers?: { name: string; command?: string; args?: string[]; url?: string }[];
+  /**
+   * The plugin catalog, loaded by the backend (file or URL — see services/.../plugin-catalog.ts).
+   * Absent ⇒ the two built-in rows, so a caller that supplies nothing behaves as before.
+   */
+  catalog?: readonly PluginEntry[];
 }
 
 /** Map of RPC method name -> bare protobuf response body. */
@@ -112,14 +117,14 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
 
   // Plugins overlay. Empty proto used to decode as plugins:[] → Marketplace "isn't available".
   // These are local stubs (not Cursor.com). yPa drops a Plugin with no mcp_servers and no skills.
-  ListMarketplacePlugins: () => listMarketplacePlugins(),
-  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPlugins(ctx.plugins?.installedIds),
+  ListMarketplacePlugins: (ctx) => listMarketplacePlugins(ctx.catalog),
+  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPlugins(ctx.plugins?.installedIds, ctx.catalog),
 
   // The Marketplace "Add" button. Decodes plugin_id (field 1) from the request and asks the backend
   // to install it; the app then reloads its MCP servers and the row moves to "Yours → Installed".
   InstallUserPlugin: (ctx) => {
     const id = ctx.body ? readVarintField(unframe(ctx.body), 1) : null;
-    const row = id == null ? undefined : LOCAL_PLUGINS.find((p) => p.id === id);
+    const row = id == null ? undefined : (ctx.catalog ?? LOCAL_PLUGINS).find((p) => p.id === id);
     if (!row || !ctx.plugins?.install(row.id)) return message();   // unknown id / no port: empty reply
     return message(pbMsg(1, userPluginInstall(row)));
   },
@@ -138,8 +143,8 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
 
 /** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
 export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
-  ListMarketplacePlugins: () => listMarketplacePluginsJson(),
-  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPluginsJson(ctx.plugins?.installedIds),
+  ListMarketplacePlugins: (ctx) => listMarketplacePluginsJson(ctx.catalog),
+  GetEffectiveUserPlugins: (ctx) => getEffectiveUserPluginsJson(ctx.plugins?.installedIds, ctx.catalog),
 };
 
 /**
@@ -201,7 +206,21 @@ function skillDescriptor(name: string, description: string): Buffer {
 }
 
 /** aiserver.v1.Plugin — only fields the overlay's yPa() reads. No large int64 timestamps. */
-function plugin(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
+/**
+ * One catalog row on the wire. The BACKEND supplies these (it can read a file or a URL); this
+ * package only encodes them, so a community registry never means protobuf changes.
+ */
+export interface PluginEntry {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  /** The MCP server this plugin installs. `command`/`args`/`env` are the install spec, not wire data. */
+  mcp?: { name: string; description: string; command?: string; args?: string[]; env?: Record<string, string> };
+  skill?: { name: string; description: string };
+}
+
+function plugin(p: PluginEntry): Buffer {
   return message(
     pbVar(1, p.id),
     pbStr(2, p.name),
@@ -217,7 +236,7 @@ function plugin(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
   );
 }
 
-function pluginJson(p: (typeof LOCAL_PLUGINS)[number]): Record<string, unknown> {
+function pluginJson(p: PluginEntry): Record<string, unknown> {
   return {
     id: String(p.id),
     name: p.name,
@@ -321,12 +340,12 @@ export function availableMcpServers(servers?: { name: string; command?: string; 
 }
 
 /** aiserver.v1.ListMarketplacePluginsResponse: plugins (1) repeated, has_more (3). */
-export function listMarketplacePlugins(): Buffer {
-  return message(...LOCAL_PLUGINS.map((p) => pbMsg(1, plugin(p))), pbBool(3, false));
+export function listMarketplacePlugins(catalog: readonly PluginEntry[] = LOCAL_PLUGINS): Buffer {
+  return message(...catalog.map((p) => pbMsg(1, plugin(p))), pbBool(3, false));
 }
 
-export function listMarketplacePluginsJson(): string {
-  return JSON.stringify({ plugins: LOCAL_PLUGINS.map(pluginJson), hasMore: false });
+export function listMarketplacePluginsJson(catalog: readonly PluginEntry[] = LOCAL_PLUGINS): string {
+  return JSON.stringify({ plugins: catalog.map(pluginJson), hasMore: false });
 }
 
 /**
@@ -341,7 +360,7 @@ export function listMarketplacePluginsJson(): string {
  * Fields verbatim from the vendor bundle: 1 user_id (int32), 2 plugin_id (int64), 4 is_enabled,
  * 6 created_at, 7 updated_at, 8 plugin (the same Plugin message the catalog uses).
  */
-function userPluginInstall(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
+function userPluginInstall(p: PluginEntry): Buffer {
   const now = Date.now();
   return message(
     pbVar(1, 1),
@@ -359,14 +378,14 @@ function userPluginInstall(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
  * With no `installedIds` from the backend this keeps the historical stub (plugin 1 installed) so a
  * caller that does not supply the port sees exactly what it used to.
  */
-export function getEffectiveUserPlugins(installedIds?: number[]): Buffer {
+export function getEffectiveUserPlugins(installedIds?: number[], catalog: readonly PluginEntry[] = LOCAL_PLUGINS): Buffer {
   const rows = installedIds
-    ? LOCAL_PLUGINS.filter((p) => installedIds.includes(p.id))
+    ? catalog.filter((p) => installedIds.includes(p.id))
     : [LOCAL_PLUGINS[0]];
   return message(...rows.map((p) => pbMsg(1, message(pbMsg(1, plugin(p)), pbBool(4, true)))));
 }
 
-export function getEffectiveUserPluginsJson(installedIds?: number[]): string {
-  const rows = installedIds ? LOCAL_PLUGINS.filter((p) => installedIds.includes(p.id)) : [LOCAL_PLUGINS[0]];
+export function getEffectiveUserPluginsJson(installedIds?: number[], catalog: readonly PluginEntry[] = LOCAL_PLUGINS): string {
+  const rows = installedIds ? catalog.filter((p) => installedIds.includes(p.id)) : [LOCAL_PLUGINS[0]];
   return JSON.stringify({ plugins: rows.map((p) => ({ plugin: pluginJson(p), isEnabled: true })) });
 }

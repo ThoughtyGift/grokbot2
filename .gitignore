@@ -60,3 +60,6 @@ grokbot-fe-extracted/
 # vi phạm chính luật của dự án: docs/legal.md và ROADMAP R5 cấm commit bundle của hãng.
 # `.gitignore` trước đó chỉ chặn `*.asar`, không chặn mẩu đã trích ra.
 services/grokbot-backend/scripts/_tmp-*
+
+# Plugin catalog — may hold MCP server tokens in `env`. The .example is the committed template.
+plugin-registry.json

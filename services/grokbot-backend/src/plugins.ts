@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_USER } from "./auth.js";
 import { currentOwner } from "./request-context.js";
+import { isKnownPlugin, serverSpecFor } from "./plugin-catalog.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
@@ -30,17 +31,6 @@ function configPathFor(owner: string): string {
 /** Where the installed-id list per owner is kept — beside the MCP config it drives. */
 const installsPath = (owner: string): string =>
   join(DATA_DIR, "plugin-installs", `${owner.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
-
-/**
- * The MCP server a catalog plugin brings with it.
- *
- * The two built-in rows are local test servers; a real registry entry would carry its own command.
- * Unknown ids install nothing, which is why `install()` reports false rather than pretending.
- */
-const SERVER_FOR: Record<number, { name: string; spec: Record<string, unknown> } | undefined> = {
-  1: { name: "memory", spec: { command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"] } },
-  2: undefined,   // skill-only row: nothing to spawn
-};
 
 export function installedIds(owner: string = currentOwner()): number[] {
   try {
@@ -59,7 +49,8 @@ export function installedIds(owner: string = currentOwner()): number[] {
  * exact silent failure this replaces.
  */
 export function installPlugin(pluginId: number, owner: string = currentOwner()): boolean {
-  if (!(pluginId in SERVER_FOR)) return false;
+  // The catalog decides what exists and what it installs — see plugin-catalog.ts (file or URL).
+  if (!isKnownPlugin(pluginId)) return false;
 
   const ids = installedIds(owner);
   if (!ids.includes(pluginId)) {
@@ -68,7 +59,7 @@ export function installPlugin(pluginId: number, owner: string = currentOwner()):
     writeFileSync(f, `${JSON.stringify({ installed: [...ids, pluginId] }, null, 2)}\n`);
   }
 
-  const server = SERVER_FOR[pluginId];
+  const server = serverSpecFor(pluginId);
   if (server) {
     const cfgPath = configPathFor(owner);
     let cfg: { mcpServers?: Record<string, unknown> } = {};
