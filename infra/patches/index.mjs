@@ -10,5 +10,7 @@
  * exists to prevent: the drive-path fix lived only as a hand edit for two days.
  */
 import winDrivePath from "./win-drive-path.mjs";
+import attachUploadObservable from "./attach-upload-observable.mjs";
+import getUltraRedirect from "./get-ultra-redirect.mjs";
 
-export const PATCHES = [winDrivePath];
+export const PATCHES = [winDrivePath, attachUploadObservable, getUltraRedirect];

@@ -1,0 +1,23 @@
+{
+  "appliedAt": "2026-08-22T09:51:36.442Z",
+  "clientVersion": "0.20.0",
+  "vendorAsarSha256": "0efec942653a2686",
+  "patches": [
+    {
+      "id": "win-drive-path",
+      "file": "dist/electron-main/main.cjs",
+      "expected": 1
+    },
+    {
+      "id": "attach-upload-observable",
+      "file": "dist/host/host-main.cjs",
+      "expected": 1
+    },
+    {
+      "id": "get-ultra-redirect",
+      "file": "dist/renderer/assets/index-DNC736IO.js",
+      "expected": 1
+    }
+  ],
+  "note": "Written by infra/scripts/patch-client.mjs --apply. Personal install only — never redistribute a patched client (docs/legal.md)."
+}
