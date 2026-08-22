@@ -1,6 +1,6 @@
 {
-  "count": 126,
-  "at": "2026-08-22T15:16:42.173Z",
+  "count": 125,
+  "at": "2026-08-22T15:36:19.512Z",
   "keys": [
     "apps/grokbot-web/src/api.ts|exports|health",
     "apps/grokbot-web/src/api.ts|exports|login",
@@ -27,7 +27,6 @@
     "services/grokbot-backend/src/attachments.ts|exports|attachmentCatalog",
     "services/grokbot-backend/src/auth-gate.ts|exports|TOKEN_FILE",
     "services/grokbot-backend/src/auth-gate.ts|exports|expectedToken",
-    "services/grokbot-backend/src/auth.ts|exports|verifyJwt",
     "services/grokbot-backend/src/automations.ts|exports|getAgentAutomations",
     "services/grokbot-backend/src/billing.ts|exports|ensureUser",
     "services/grokbot-backend/src/billing.ts|exports|getPlan",

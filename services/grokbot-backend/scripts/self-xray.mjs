@@ -125,11 +125,15 @@ console.log("── self-xray ──\n");
 // ── 2. kích thước code (ngưỡng refactor T5.1) ───────────────────────────────
 {
   const r = run("node", ["scripts/code-size.mjs", "--json"]);
-  let big = null, long = null;
+  let big = null, long = null, keys2 = [];
   try {
     const j = JSON.parse(r.stdout.slice(r.stdout.indexOf("{")));
     big = j.files.length;
     long = j.functions.length;
+    keys2 = [
+      ...j.files.map((f) => `${f.file ?? f.path ?? f}|file`),
+      ...j.functions.map((f) => `${f.file ?? f.path}:${f.name}|fn`),
+    ].sort();
   } catch { /* để null, báo đỏ bên dưới */ }
 
   /*
@@ -144,18 +148,42 @@ console.log("── self-xray ──\n");
   const prevLong = base2.longFns ?? null;
   const grew2 = (prevBig != null && big > prevBig) || (prevLong != null && long > prevLong);
 
+  /*
+   * Lưu cả DANH SÁCH, cùng lý do như mục knip: hai lượt liền báo "15 → 16" mà không nói hàm nào,
+   * nên phải đi ngược git log để loại trừ. Khoá theo `file:hàm` thì delta hiện ra ngay dòng báo.
+   */
+  const listFile2 = join(REPO, "docs", "state", "code-size-findings.json");
+  let prevKeys2 = null;
+  try { prevKeys2 = new Set(JSON.parse(readFileSync(listFile2, "utf8")).keys ?? []); } catch { /* luot dau */ }
+  const nowSet2 = new Set(keys2);
+  const added2 = prevKeys2 ? keys2.filter((k) => !prevKeys2.has(k)) : [];
+  const gone2 = prevKeys2 ? [...prevKeys2].filter((k) => !nowSet2.has(k)) : [];
+  const show2 = (l) => l.slice(0, 5).map((k) => k.split("/").pop()).join(", ") + (l.length > 5 ? ` (+${l.length - 5})` : "");
+  const delta2 = added2.length || gone2.length
+    ? ` — thêm: ${added2.length ? show2(added2) : "không"}${gone2.length ? ` · bớt: ${show2(gone2)}` : ""}`
+    : "";
   add("kích thước code", big != null && !grew2,
       big == null ? "không đọc được code-size.mjs"
         : `${big} file > 800 dòng · ${long} hàm > 50 dòng`
-          + (prevBig == null ? " (ghi làm mốc)" : grew2 ? ` — TĂNG từ ${prevBig}/${prevLong}` : ` (mốc ${prevBig}/${prevLong})`),
+          + (prevBig == null ? " (ghi làm mốc)" : grew2 ? ` — TĂNG từ ${prevBig}/${prevLong}` : ` (mốc ${prevBig}/${prevLong})`) + delta2,
       grew2 ? "thêm file/hàm quá dài: tách, hoặc nói rõ vì sao rồi cập nhật mốc"
             : "không đo được thì 'file quá dài' chỉ là cảm giác");
-  if (big != null && (prevBig == null || big < prevBig || long < prevLong)) {
+  /*
+   * Ghi danh sách cả ở lượt ĐẦU (chưa có gì để trừ) chứ không chỉ lượt xanh: nếu đợi xanh mới ghi
+   * thì một mục đang đỏ sẽ đỏ mãi mà không bao giờ nêu được tên — đúng tình trạng của lượt
+   * 2026-08-22, phải truy `git log` bằng tay mới ra `checkAuth`.
+   */
+  if (big != null && (!grew2 || prevKeys2 == null)) {
     const { writeFileSync: w2, mkdirSync: mk2 } = await import("node:fs");
     mk2(dirname(baseFile2), { recursive: true });
-    w2(baseFile2, `${JSON.stringify({ ...base2, bigFiles: big, longFns: long, at: new Date().toISOString() }, null, 2)}\n`);
-    console.log(`      mốc mới: ${big} file / ${long} hàm`);
+    if (prevBig == null || big < prevBig || long < prevLong) {
+      w2(baseFile2, `${JSON.stringify({ ...base2, bigFiles: big, longFns: long, at: new Date().toISOString() }, null, 2)}\n`);
+      console.log(`      mốc mới: ${big} file / ${long} hàm`);
+    }
+    // Danh sách ghi cả khi con số không đổi, để lượt sau còn cái mà trừ.
+    w2(listFile2, `${JSON.stringify({ files: big, functions: long, at: new Date().toISOString(), keys: keys2 }, null, 2)}\n`);
   }
+
 }
 
 // ── 3. ranh giới tầng ────────────────────────────────────────────────────────

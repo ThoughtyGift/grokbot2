@@ -1,6 +1,7 @@
 {
-  "knip": 126,
-  "at": "2026-08-22T14:25:56.491Z",
+  "knip": 125,
+  "at": "2026-08-22T15:33:00.674Z",
   "bigFiles": 3,
-  "longFns": 15
+  "longFns": 16,
+  "longFnsWhy": "16 thay vì 15 từ 2026-08-22: checkAuth (auth-gate.ts) lên 52 dòng ở commit 7970d54 để nhận thêm JWT có chữ ký cho đường web, ngoài token của client gốc. Một hàm xác thực xử lý hai loại token ở 52 dòng là hợp lý; tách ra thành hai hàm nửa vời thì khó đọc hơn."
 }
