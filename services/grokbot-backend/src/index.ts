@@ -9,6 +9,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { config } from "./config.js";
 import { handleAuth, userFromToken, DEFAULT_USER } from "./auth.js";
 import { accessVerdict } from "./billing.js";
+import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
 import { runtimeHealth } from "./brain.js";
@@ -68,7 +69,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // Not in the extracted contract, which is gateway-relative — but the observe pass caught
   // something asking for `/health` at the ROOT, where it fell into the fallback and got `200 {}`.
   // Answering the same body as `/gw/health` costs one line and is strictly better than an empty
-  // object; who the caller is remains open (see docs/execution-roadmap.md §6 P2-6).
+  // object; who the caller is remains open (see docs/history/execution-roadmap.md §6 P2-6).
   if (url === "/health" || url.startsWith("/health?")) {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(hostHealth()));
@@ -118,7 +119,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (await handleNative(url, body, res, req.headers, req.method ?? "?")) return;
 
   // ── box gateway (JSON + SSE + chat) ──
-  if (handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?")) return;
+  // Multi-tenant Phase 2: scope every /gw command to the caller's owner (from the token, default
+  // identity when absent). Domain code reads currentOwner(); this is the one place it is set.
+  const gwOwner = (userFromToken(req.headers.authorization) ?? DEFAULT_USER).authId;
+  if (runWithOwner(gwOwner, () => handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?"))) return;
 
   // ── ConnectRPC bootstrap (protobuf) ──
   //

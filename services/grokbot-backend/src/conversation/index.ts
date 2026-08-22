@@ -5,7 +5,7 @@
 import { extname } from "node:path";
 import { stageImage } from "../attachments.js";
 import { ME } from "../identity/index.js";
-import { persist, onUpdate, tail, authorOf, nextId, nextEntryId, EPOCH, acceptance, transcripts } from "../chat/state.js";
+import { persist, onUpdate, tail, authorOf, nextId, nextEntryId, EPOCH, acceptance, transcripts, ownsAgent } from "../chat/state.js";
 import { ensureSeq as stampSeq, isToolEcho, textOf } from "./seq.js";
 import type { Entry, LastEntry, WidgetOption, TranscriptEvent } from "./types.js";
 
@@ -97,7 +97,8 @@ const PAGE = 200;
 export function transcriptTail(a?: { agentId?: string; id?: string; limit?: number; beforeSeq?: number; before?: string; cursor?: string } | string) {
   const args = typeof a === "string" || a === undefined ? { agentId: a as string | undefined } : a;
   const agentId = args.agentId ?? args.id;
-  const all = (agentId && transcripts.get(agentId)) || [];
+  // Multi-tenant Phase 2: never hand back a transcript for an agent the caller does not own.
+  const all = (agentId && ownsAgent(agentId) && transcripts.get(agentId)) || [];
   const withSeq = numbered(agentId, all);
   const limit = Math.max(1, Math.min(args.limit ?? PAGE, 1000));
 
@@ -147,7 +148,8 @@ export type OutlineItem =
   | { id: string; kind: "send-message"; message: unknown; timestampMs: number };
 
 export function getConversationOutline(a: { agentId?: string; id?: string }): OutlineItem[] {
-  const t = ((a.agentId ?? a.id) && transcripts.get((a.agentId ?? a.id)!)) || [];
+  const oid = a.agentId ?? a.id;
+  const t = (oid && ownsAgent(oid) && transcripts.get(oid)) || [];
   return t.flatMap((e): OutlineItem[] => {
     if (e.kind === "message" && e.role === "user" && e.content) {
       return [{ id: e.id, kind: "user" as const, text: textOf(e), timestampMs: e.timestampMs }];
@@ -170,7 +172,8 @@ export function getConversationOutline(a: { agentId?: string; id?: string }): Ou
 }
 
 export function reactToMessage(a: { agentId?: string; entryId?: string; id?: string; reaction?: string; emoji?: string }): Record<string, never> {
-  const t = ((a.agentId ?? a.id) && transcripts.get((a.agentId ?? a.id)!)) || [];
+  const rid = a.agentId ?? a.id;
+  const t = (rid && ownsAgent(rid) && transcripts.get(rid)) || [];
   const e = t.find((x) => x.id === a.entryId);
   const emoji = a.emoji ?? a.reaction;
   if (e && emoji) {

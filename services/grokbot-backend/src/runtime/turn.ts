@@ -18,7 +18,7 @@ import { loadMemory, renderMemory } from "../memory.js";
 import type { Entry, SendArgs, SubagentRow, ToolCtx } from "../conversation/types.js";
 import {
   agents, transcripts, inflight, compaction, persist, park, unpark, pending,
-  nextId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef,
+  nextId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef, ownsAgent,
 } from "../chat/state.js";
 import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
@@ -551,7 +551,13 @@ export function messageAgent(fromId: string, target: string, content: string): s
 }
 
 export function sendPrompt(args: SendArgs) {
-  let agentId = args.agentId || [...agents.keys()][0];
+  // Multi-tenant Phase 2: a caller may only prompt an agent they own. An explicit id they do not
+  // own is rejected without any write; with no id, fall back to their OWN first agent (or a new one).
+  // NOTE for future multi-user: internal bot-to-bot sends run in a background turn where
+  // currentOwner() is the default identity — fine while every agent is owned by that identity, but
+  // cross-user agent networks will need the owner threaded into the turn (roadmap Phase 6).
+  if (args.agentId && !ownsAgent(args.agentId)) return { rejected: true as const };
+  let agentId = args.agentId || [...agents.keys()].find(ownsAgent);
   if (!agentId) agentId = createAgent({}).id;
   if (args.askWriteTools) askWriteThisTurn.add(agentId);
   else askWriteThisTurn.delete(agentId);

@@ -6,13 +6,27 @@ import { loadState, scheduleSave, type PersistedState } from "../store.js";
 import { ensureSeq } from "../conversation/seq.js";
 import { publish } from "../events.js";
 import { restoreHandoff, handoffEntries, type BoxHandoff } from "../forever-box.js";
-import { ME } from "../identity/index.js";
+import { ME, AUTH_ID } from "../identity/index.js";
+import { currentOwner } from "../request-context.js";
 import type { CompactionState } from "../compaction.js";
 import type { AgentRecord, Entry, Parked, AcceptanceRecord, Todo } from "../conversation/types.js";
 
 export const agents = new Map<string, AgentRecord>();
 export const transcripts = new Map<string, Entry[]>();
 export const inflight = new Map<string, AbortController>();
+
+/**
+ * Multi-tenant Phase 2: does agent `id` belong to the caller (currentOwner)?
+ *
+ * Legacy rows with no `agentOwnerAuthId`, and every agent on the single-tenant desktop, map to the
+ * default owner (`AUTH_ID`), which equals `currentOwner()` outside a scoped request — so nothing
+ * changes for them. Command handlers that take an agent id from the client MUST gate on this before
+ * reading or mutating, or one tenant can reach another's agent by guessing an id.
+ */
+export const ownsAgent = (id: string): boolean => {
+  const a = agents.get(id);
+  return !!a && ((a.agentOwnerAuthId ?? AUTH_ID) === currentOwner());
+};
 export const parked = new Map<string, Parked>();
 export const parkKey = (kind: Parked["kind"], key: string) => `${kind}:${key}`;
 

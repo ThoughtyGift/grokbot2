@@ -5,6 +5,7 @@
 import { closeAgentTab } from "../browser.js";
 import { publish } from "../events.js";
 import { AUTH_ID } from "../identity/index.js";
+import { currentOwner } from "../request-context.js";
 import {
   agents, transcripts, inflight, persist, EPOCH, automationCleanupRef, nextAgentId,
 } from "../chat/state.js";
@@ -57,22 +58,37 @@ function summarise(a: AgentRecord): RosterRow {
   };
 }
 
+/**
+ * Multi-tenant Phase 2: does this agent belong to the caller? Rows created before Phase 1/2 (and
+ * every row on the single-tenant desktop) carry `agentOwnerAuthId = AUTH_ID`, which equals the
+ * default `currentOwner()`, so the desktop keeps seeing all of its agents unchanged.
+ */
+const ownedByCaller = (a: AgentRecord): boolean => (a.agentOwnerAuthId ?? AUTH_ID) === currentOwner();
+
+/** The record for `id`, but only if the caller owns it — command mutators resolve through this so
+ *  one tenant cannot rename/hide/duplicate another's agent by id. Background callers (setPresence,
+ *  the turn) keep using `agents.get` directly; they run outside a request and are not user-driven. */
+const ownedRec = (id: string): AgentRecord | undefined => {
+  const a = agents.get(id);
+  return a && ownedByCaller(a) ? a : undefined;
+};
+
 export const agentById = (id: string): AgentRecord | undefined => {
   const a = agents.get(id);
-  return a ? summarise(a) : undefined;
+  return a && ownedByCaller(a) ? summarise(a) : undefined;
 };
 
 export const listAgents = (): RosterRow[] =>
-  [...agents.values()].filter((a) => !a.hidden).map(summarise);
+  [...agents.values()].filter((a) => !a.hidden && ownedByCaller(a)).map(summarise);
 export const countAgents = (): number => listAgents().length;
 
-export const listAllAgents = (): RosterRow[] => [...agents.values()].map(summarise);
+export const listAllAgents = (): RosterRow[] => [...agents.values()].filter(ownedByCaller).map(summarise);
 
 export function createAgent(args: { name?: string; profile?: { name?: string }; displayName?: string; description?: string } = {}): AgentRecord {
   const wanted = args.name ?? args.profile?.name ?? args.displayName;
   const id = nextAgentId();
   const rec: AgentRecord = {
-    id, name: wanted?.trim() || "Claude", agentOwnerAuthId: AUTH_ID, createdAtMs: Date.now(), unread: false, hidden: false,
+    id, name: wanted?.trim() || "Claude", agentOwnerAuthId: currentOwner(), createdAtMs: Date.now(), unread: false, hidden: false,
     isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null,
     ...(typeof args.description === "string" ? { description: args.description } : {}),
   };
@@ -84,7 +100,7 @@ export function createAgent(args: { name?: string; profile?: { name?: string }; 
 export function updateAgent(
   a: { id?: string; agentId?: string; name?: string; description?: string; profile?: { name?: string; description?: string } },
 ): AgentRecord | null {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const name = a.profile?.name ?? a.name;
   const description = a.profile?.description ?? a.description;
   if (typeof description === "string") rec.description = description;
@@ -96,7 +112,8 @@ export function updateAgent(
 }
 
 export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
-  const ids = a.ids ?? a.agentIds ?? (a.id ? [a.id] : []);
+  // Multi-tenant Phase 2: only delete agents the caller owns; silently skip the rest.
+  const ids = (a.ids ?? a.agentIds ?? (a.id ? [a.id] : [])).filter((id) => ownedRec(id) != null);
   for (const id of ids) {
     agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id);
     void closeAgentTab(id);
@@ -106,14 +123,14 @@ export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: stri
 }
 
 export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
-  const src = agents.get(a.id ?? a.agentId ?? ""); if (!src) return null;
+  const src = ownedRec(a.id ?? a.agentId ?? ""); if (!src) return null;
   const rec = createAgent({ name: `${src.name} (copy)` });
   transcripts.set(rec.id, structuredClone(transcripts.get(src.id) ?? []));
   persist(); return rec;
 }
 
 export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); rosterChanged(a.id ?? a.agentId); return {};
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); rosterChanged(a.id ?? a.agentId); return {};
 }
 /**
  * Ba setter dưới đây từng mặc định `?? true`, tức **gọi thiếu cờ là BẬT**.
@@ -133,20 +150,20 @@ const boolArg = (...vals: unknown[]): boolean | null => {
 };
 
 export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? "");
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isHidden, a.hidden);
   if (rec && next != null) { rec.hidden = next; persist(); rosterChanged(a.id ?? a.agentId); }
   else if (rec) console.warn(`[directory] setAgentHiddenFromSidebar(${rec.id}) không có cờ boolean — không đổi gì`);
   return {};
 }
 export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? "");
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isEnabled, a.enabled);
   if (rec && next != null) { rec.notificationsEnabled = next; persist(); rosterChanged(a.id ?? a.agentId); }
   return {};
 }
 export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
-  const rec = agents.get(a.id ?? a.agentId ?? "");
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isEnabled, a.enabled);
   if (rec && next != null) { rec.notifyOnUpdates = next; persist(); rosterChanged(a.id ?? a.agentId); }
   return {};
@@ -179,7 +196,7 @@ export function avatarRejection(dataUrl: string): string | null {
 }
 
 export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase64?: string; bytes?: string }): AgentRecord | null {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const b64 = a.pngBase64 ?? a.bytes;
   if (!b64) return rec;
   const dataUrl = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
@@ -195,7 +212,7 @@ export function setAgentAvatarBytes(a: { id?: string; agentId?: string; pngBase6
 
 /** Bỏ ảnh → row roster quay về initials suy từ id. Idempotent. */
 export function clearAgentAvatar(a: { id?: string; agentId?: string }): AgentRecord | null {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   if (!rec.avatarVersion && !rec.avatarDataUrl) return rec;
   delete rec.avatarDataUrl;
   delete rec.avatarVersion;
@@ -204,7 +221,7 @@ export function clearAgentAvatar(a: { id?: string; agentId?: string }): AgentRec
   return rec;
 }
 export function getAgentAvatar(a: { id?: string; agentId?: string }) {
-  const rec = agents.get(a.id ?? a.agentId ?? "");
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
   return { avatarDataUrl: rec?.avatarDataUrl ?? "", avatarVersion: rec?.avatarVersion ?? "" };
 }
 
@@ -217,6 +234,6 @@ export function searchAgents(a: { query?: string; q?: string; text?: string; inc
 }
 
 export function kickstartAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
-  const rec = agents.get(a.id ?? a.agentId ?? ""); if (!rec) return null;
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   rec.unread = false; persist(); return rec;
 }
