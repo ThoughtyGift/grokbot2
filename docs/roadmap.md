@@ -13,7 +13,7 @@ chat bridge to the Claude pool.
 streaming (`streamPool` over `/v1/chat/completions` with `stream:true`, used by `chat.ts`) ·
 `setHostSettings` merges partial patches and persists.
 
-**Tools — 24 of the original's 54** (`scripts/tool-coverage.mjs`, read off the live tool map).
+**Tools — 28 of the original's 54** (`scripts/tool-coverage.mjs` via `tool-registry.mts`; floor in [`parity-runs/fe-goc-baseline.json`](parity-runs/fe-goc-baseline.json)). The older “24 of 54” / `parity-report` “9/54” figures were the same live map counted three different ways — F0 collapsed them.
 Shell and files (`run_terminal_command_v2`, `read_file_v2`, `edit_file_v2`, `edit_file`,
 `delete_file`, `list_dir_v2`, `glob_file_search`, `ripgrep_raw_search`) · `web_search` /
 `web_fetch` · `task_v2` subagents · MCP (`get_mcp_tools`, `call_mcp_tool`) · `ask_question` ·

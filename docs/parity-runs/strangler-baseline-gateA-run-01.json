@@ -1,0 +1,45 @@
+{
+  "plan": "strangler-baseline",
+  "run": 1,
+  "gate": "A",
+  "backendCommit": "2cb55e9",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 16,
+      "failed": 0
+    },
+    "auth": {
+      "checks": 6,
+      "failed": 0
+    },
+    "commands": {
+      "checks": 10,
+      "failed": 0
+    },
+    "channels": {
+      "checks": 9,
+      "failed": 2
+    }
+  },
+  "pass": false,
+  "mismatches": [
+    {
+      "gate": "A",
+      "check": "broadcast(\"agents-automation\") is a channel the coordinator accepts",
+      "expected": true,
+      "actual": false,
+      "loai": 1,
+      "note": "not in the 16-entry table — silently dropped. Valid: agent-upserted, agents, async-tasks, automations, box-disk-pressure, computer-action, forever-box, host-settings, mcp-servers, outline, sharing, subagents, teach-recording, transcript, tray, workflows"
+    },
+    {
+      "gate": "A",
+      "check": "does not broadcast the family name \"agents-automation\"",
+      "expected": false,
+      "actual": true,
+      "loai": 1,
+      "note": "the wire name is \"automations\""
+    }
+  ]
+}

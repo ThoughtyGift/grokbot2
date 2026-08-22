@@ -22,6 +22,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bindAttachmentCatalog } from "./store.js";
 
 /** The virtual directory the transcript refers to. Nothing is written here; see DISK. */
 const DIR = "/workspace/attachments";
@@ -234,6 +235,13 @@ export function readAttachmentImage(args: { path?: unknown }): { dataUrl: string
 /** For logging: how many images are held. */
 export const stagedCount = (): number => store.size;
 
+/** Catalog for `attachments_meta` — bytes stay on disk; sqlite only indexes them. */
+export function attachmentCatalog(): { path: string; mime: string; width: number; height: number; bytes: number; fileName: string }[] {
+  return [...store.entries()].map(([path, s]) => ({
+    path, mime: s.mime, width: s.width, height: s.height, bytes: s.bytes.length, fileName: basename(path),
+  }));
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Files that are not images.
  *
@@ -323,3 +331,5 @@ export async function readAttachmentChunk(args: { path?: unknown; offset?: unkno
   if (length <= 0 || from >= buf.length) return { totalSize: buf.length, bytesBase64: "" };
   return { totalSize: buf.length, bytesBase64: buf.subarray(from, from + length).toString("base64") };
 }
+
+bindAttachmentCatalog(attachmentCatalog);

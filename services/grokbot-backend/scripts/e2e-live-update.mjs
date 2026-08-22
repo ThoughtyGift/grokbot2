@@ -7,13 +7,14 @@
  * changed — which is the single cause behind "no indicator, no streaming, no reply".
  */
 import { chromium } from "playwright-core";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const CDP = process.env.CDP ?? "http://127.0.0.1:9222";
 const GW = process.env.GW ?? "http://127.0.0.1:8788";
 const MARK = `LIVE-${Date.now().toString(36).toUpperCase()}`;
 
 const gw = (m, b = {}) =>
-  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;

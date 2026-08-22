@@ -38,7 +38,32 @@ const LANGUAGE_RULE = [
 ].join("\n");
 
 export const config = {
-  port: Number(process.env.PORT ?? 8788),
+  port: Number(process.env.GROKBOT2_PORT ?? process.env.PORT ?? 8788),
+  /**
+   * S5 brain process. Unset ⇒ in-process pool (e2e that spawn only this backend).
+   * `scripts/dev-bff.mjs` sets `http://127.0.0.1:8789` when `pnpm backend` starts both.
+   * Read live so tests can point it at a dead port without re-importing this module.
+   */
+  get runtimeUrl() {
+    return process.env.GROKBOT2_RUNTIME_URL ?? "";
+  },
+  /**
+   * S6 computer process. Unset ⇒ in-process forever-box + exec (e2e that spawn only this BFF).
+   * `scripts/dev-bff.mjs` sets `http://127.0.0.1:8790` when `pnpm backend` starts both.
+   * A *set* URL that is down is pane `off`, not a 500 on sendPrompt (ROADMAP §5.5).
+   */
+  get computerUrl() {
+    return process.env.GROKBOT2_COMPUTER_URL ?? "";
+  },
+  /**
+   * S10/S11 ops process. Unset ⇒ in-process scheduler + BFF `/gw` Slack/GitHub (e2e that spawn
+   * only this BFF). `scripts/dev-bff.mjs` sets `http://127.0.0.1:8791` when `pnpm backend` starts
+   * ops. A *set* URL that is down does not 500 `sendPrompt`; cron does NOT fall back in-process
+   * (that would hide a dead ops). Explicit empty `GROKBOT2_OPS_URL=` keeps in-process.
+   */
+  get opsUrl() {
+    return process.env.GROKBOT2_OPS_URL ?? "";
+  },
   poolUrl: process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude",
   model: process.env.GROKBOT2_MODEL ?? process.env.CLAUDE_MODEL ?? "gemini-3.7-flash",
   /**

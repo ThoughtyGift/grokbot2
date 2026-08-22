@@ -1,0 +1,26 @@
+{
+  "phase": "P2",
+  "pass": true,
+  "next": "P3",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-avatar.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-app-full.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "P3"
+}

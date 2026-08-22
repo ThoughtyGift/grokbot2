@@ -1,0 +1,26 @@
+{
+  "phase": "F4",
+  "pass": true,
+  "next": "F5",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "parity-report.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-app-full.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "F5"
+}

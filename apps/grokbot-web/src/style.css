@@ -1,0 +1,452 @@
+/**
+ * Giao diện bám theo **app gốc** (nền tối). Mọi con số dưới đây đo từ app đang chạy qua CDP —
+ * `docs/extracted/ui-design-spec.md` cho màu/chữ, và lượt kiểm kê 2026-08-22 cho bố cục.
+ *
+ * Đây là lần đổi hướng THỨ HAI trong ngày, ghi lại để đừng ai lật đi lật lại nữa:
+ *   sáng   — bám app gốc (nền `rgb(7,7,7)`)
+ *   trưa   — đổi sang hệ bloub (giấy `#f9f9f9`) theo yêu cầu
+ *   chiều  — quay lại app gốc, lần này để **clone từng chi tiết**
+ * Phần bloub KHÔNG bỏ đi: avatar con bot, bộ chọn hình/biểu cảm/màu và animation đều giữ nguyên —
+ * chính app gốc cũng dùng đúng con bot đó. Chỉ lớp vỏ giao diện đổi.
+ *
+ * Số đo bố cục (1920×1040, sidebar mở):
+ *   sidebar 261 · toolbar cao 52 · cột chat 1302 · dock nhập 60 · info-pane 357
+ * Màu theo tần suất dùng thật: chữ 252 (469 lần) · chữ phụ 0.6 (167) · bubble 38,38,38 (9) ·
+ * nền 7,7,7 · accent 16,132,254 (5).
+ *
+ * Không một dòng CSS nào của hãng được chép vào đây (docs/legal.md, ROADMAP R4). Đo rồi tự viết.
+ */
+
+:root {
+  --bg: rgb(7, 7, 7);
+  --fg: rgb(252, 252, 252);
+  --fg-2: rgba(252, 252, 252, 0.6);
+  --fg-3: rgba(252, 252, 252, 0.4);
+  --row-hover: rgba(119, 119, 119, 0.173);
+  --row-active: rgba(119, 119, 119, 0.32);
+  --bubble-agent: rgb(38, 38, 38);
+  /* Đo trên app: bubble của mình là xám ĐẶC 90,90,90 — không phải xám mờ chồng nền. */
+  --bubble-user: rgb(90, 90, 90);
+  --surface: rgb(23, 23, 23);
+  --surface-2: rgb(47, 47, 47);
+  --accent: rgb(16, 132, 254);
+  --danger: rgb(232, 90, 82);
+  --line: rgba(252, 252, 252, 0.08);
+
+  /* Bố cục — đo 2026-08-22 trên app đang chạy, không phải số cũ 399. */
+  --sidebar-w: 261px;
+  --panel-w: 357px;
+  --toolbar-h: 52px;
+  --dock-h: 60px;
+
+  --r-row: 10px;
+  --r-card: 12px;
+  --r-pill: 9999px;
+
+  /* Motion đo từ app: 0.12s hay dùng nhất, easeOutQuint cho thứ xuất hiện. */
+  --t-fast: 0.12s;
+  --t-mid: 0.15s;
+  --t-slow: 0.2s;
+  --e-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea { font: inherit; color: inherit; }
+button { border: 0; background: none; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── khung ba cột ─────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
+  height: 100%;
+}
+
+/* ── sidebar ──────────────────────────────────────────────────────────────── */
+
+.sidebar { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+
+.brand { padding: 12px 12px 8px; }
+.brand-row { display: flex; align-items: center; gap: 8px; }
+.brand strong { font-size: 14px; font-weight: 600; }
+.brand small { display: block; margin-top: 2px; font-size: 12px; color: var(--fg-3); }
+.new-icon {
+  margin-left: auto; width: 28px; height: 28px; border-radius: var(--r-row);
+  font-size: 16px; line-height: 1; color: var(--fg-2);
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.new-icon:hover { background: var(--row-hover); color: var(--fg); }
+
+/* Ô tìm kiếm: app gốc đặt ở y=56, cao ~28, trong lề 12. */
+.search {
+  display: flex; align-items: center; gap: 8px; margin: 0 12px 8px;
+  padding: 6px 10px; border-radius: var(--r-row); background: var(--surface);
+}
+.search .ico { color: var(--fg-3); font-size: 13px; }
+.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 13px; }
+.search input::placeholder { color: var(--fg-3); }
+
+.roster { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; }
+
+/* Nhãn nhóm: 12px, màu chữ phụ, KHÔNG viết hoa — đo từ "Phòng marketing". */
+.group { margin: 12px 0 4px; font-size: 12px; line-height: 16px; color: var(--fg-2); }
+.group:first-child { margin-top: 4px; }
+
+/* Row 236 rộng trong sidebar 261, bo 10, hai dòng. */
+.bot {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-areas: "av name meta" "av prev prev";
+  align-items: center; gap: 1px 8px;
+  /* Row app cao đúng 54 (`sand-agent-item` 236×54). */
+  width: 100%; height: 54px; padding: 7px 8px; margin-bottom: 1px;
+  border-radius: var(--r-row); text-align: left;
+  transition: background-color var(--t-fast) ease;
+}
+.bot:hover { background: var(--row-hover); }
+.bot.active { background: var(--row-active); }
+.bot.dim { opacity: 0.45; }
+.bot .avatar { grid-area: av; width: 40px; height: 40px; }
+.bot .name { grid-area: name; font-size: 14px; font-weight: 500; }
+.bot .when { grid-area: meta; font-size: 12px; color: var(--fg-2); }
+.bot .dot { grid-area: meta; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.bot .dot.live { animation: pulse 1.1s ease-in-out infinite; }
+.bot .preview {
+  grid-area: prev; font-size: 12px; line-height: 16px; color: var(--fg-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Đáy sidebar — app gốc để Plugins / Grok Local ở đây. */
+.side-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); }
+
+/* ── nút ──────────────────────────────────────────────────────────────────── */
+
+.primary, .ghost, .danger {
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.primary { background: var(--accent); color: #fff; }
+.primary:hover:not(:disabled) { filter: brightness(1.1); }
+.ghost { background: var(--surface-2); }
+.ghost:hover:not(:disabled) { background: rgb(64, 64, 64); }
+.danger { background: var(--surface-2); color: var(--danger); }
+.danger:hover:not(:disabled) { background: rgba(232, 90, 82, 0.18); }
+
+/* ── cột chat ─────────────────────────────────────────────────────────────── */
+
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* Toolbar cao đúng 52px như `sand-toolbar`. */
+.chat-head {
+  display: flex; align-items: center; gap: 10px;
+  height: var(--toolbar-h); padding: 0 16px; flex: none;
+  border-bottom: 1px solid var(--line);
+}
+.chat-head h1 { margin: 0; font-size: 16px; font-weight: 600; }
+.chat-head .avatar { width: 22px; height: 22px; }
+.head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.head-actions .status { font-size: 12px; color: var(--fg-2); }
+.head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2); }
+.head-actions button:hover:not(:disabled) { background: rgb(64, 64, 64); }
+
+.err {
+  margin: 8px 16px; padding: 8px 12px; border-radius: var(--r-card);
+  background: rgba(232, 90, 82, 0.12); color: var(--danger); font-size: 13px;
+}
+
+.transcript {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px;
+}
+.empty { margin: auto; color: var(--fg-3); font-size: 14px; }
+.event { align-self: center; font-size: 12px; color: var(--fg-3); }
+
+/* ── bubble ───────────────────────────────────────────────────────────────── */
+/* Đo: nền 38,38,38 · bo `18px 18px 18px 6px` (đuôi góc dưới-trái) · đệm 8/12 · chữ 14/20. */
+
+.bubble {
+  position: relative;
+  max-width: 640px; padding: 8px 12px;
+  font-size: 14px; line-height: 20px;
+  white-space: pre-wrap; word-break: break-word;
+  animation: bubble-in var(--t-slow) var(--e-out) both;
+}
+.bubble.agent {
+  align-self: flex-start; background: var(--bubble-agent);
+  border-radius: 18px 18px 18px 6px;
+}
+.bubble.user {
+  align-self: flex-end; background: var(--bubble-user);
+  border-radius: 18px 18px 6px 18px;
+}
+.bubble .meta { margin-bottom: 2px; font-size: 12px; line-height: 16px; color: var(--fg-2); }
+.bubble.streaming::after { content: "▍"; margin-left: 2px; animation: caret 1s steps(1) infinite; }
+
+@keyframes caret { 0%, 49% { opacity: 0.55; } 50%, 100% { opacity: 0.1; } }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.msg-row { display: flex; align-items: flex-end; gap: 8px; animation: bubble-in var(--t-slow) var(--e-out) both; }
+.msg-row .avatar { width: 24px; height: 24px; flex: none; margin-bottom: 2px; }
+.msg-row .bubble { animation: none; }
+
+.att { max-width: 320px; border-radius: var(--r-card); display: block; margin-top: 6px; }
+.att-file {
+  display: flex; align-items: center; gap: 10px; margin-top: 6px;
+  padding: 8px 10px; border-radius: var(--r-card); background: var(--surface-2);
+  color: inherit; text-decoration: none;
+}
+.att-file .ext {
+  display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  border-radius: 8px; background: rgb(90, 90, 90); font-size: 10px; font-weight: 700;
+}
+.att-file .fname { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-file .dl { color: var(--fg-2); }
+.att-file:hover { background: rgb(64, 64, 64); }
+
+/* ── thẻ công cụ và widget ────────────────────────────────────────────────── */
+
+.tool-card, .widget-card {
+  align-self: flex-start; max-width: 640px; width: 100%;
+  padding: 10px 12px; border-radius: var(--r-card); background: var(--surface);
+  animation: bubble-in var(--t-mid) var(--e-out) both;
+}
+.tool-card header, .widget-card header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px;
+}
+.tool-card header strong, .widget-card header strong { font-size: 13px; font-weight: 600; }
+.tool-card header span, .widget-card header span { margin-left: auto; color: var(--fg-2); }
+.tool-card pre {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 17px; color: var(--fg-2);
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+}
+.tool-card.failed { background: rgba(232, 90, 82, 0.1); }
+.widget-card .prompt { margin: 0 0 8px; font-size: 14px; line-height: 20px; }
+.widget-card .help, .tool-card .ask, .widget-card .picked { margin: 0 0 8px; font-size: 12px; color: var(--fg-2); }
+.widget-card .actions, .tool-card .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.widget-card .actions button, .tool-card .actions button {
+  padding: 5px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2);
+}
+.widget-card .actions button:hover, .tool-card .actions button:hover { background: rgb(64, 64, 64); }
+.widget-card .custom { display: flex; gap: 8px; margin-top: 8px; }
+.widget-card .custom input {
+  flex: 1; padding: 6px 10px; border: 0; border-radius: var(--r-pill);
+  background: var(--surface-2); font-size: 13px; outline: none;
+}
+
+/* ── reaction (thanh hover 76×24, nút 24×24 bo 8 — đo từ app) ─────────────── */
+
+.msg-actions {
+  position: absolute; top: -12px; right: 8px;
+  display: flex; align-items: center; gap: 2px; height: 24px;
+  padding: 0 2px; border-radius: 8px; background: var(--surface-2);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t-fast) ease;
+}
+.bubble:hover .msg-actions, .msg-actions:focus-within { opacity: 1; pointer-events: auto; }
+.msg-actions .act {
+  width: 24px; height: 24px; border-radius: 8px;
+  color: var(--fg-2); font-size: 13px; line-height: 1;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+/* Icon là CSS content: `opacity: 0` không loại text khỏi `innerText`, nên ký tự trong markup sẽ
+   dính vào mọi cú copy tin nhắn. */
+.msg-actions .act::before { content: "☺"; }
+.msg-actions .act:hover { background: var(--row-hover); color: var(--fg); }
+
+.react-menu {
+  position: absolute; top: 26px; right: 0; z-index: 5;
+  display: flex; gap: 2px; padding: 4px;
+  border-radius: var(--r-card); background: var(--surface-2);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  animation: bubble-in var(--t-fast) var(--e-out);
+}
+.react-menu[hidden] { display: none; }
+.react-menu button {
+  width: 28px; height: 28px; border-radius: 8px; font-size: 16px; line-height: 1;
+  transition: background-color var(--t-fast) ease, transform var(--t-fast) var(--e-out);
+}
+.react-menu button:hover { background: var(--row-hover); transform: scale(1.15); }
+
+.reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.reacts[hidden] { display: none; }
+.react-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px 1px 5px; border: 1px solid transparent; border-radius: var(--r-pill);
+  background: var(--row-hover); font-size: 12px; line-height: 18px; color: var(--fg-2);
+  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+.react-chip:hover { background: var(--row-active); }
+.react-chip.mine { border-color: var(--accent); color: var(--fg); }
+
+/* ── composer: dock cao 60, pill 1268×42 bên trong ────────────────────────── */
+
+.composer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  min-height: var(--dock-h); padding: 9px 16px; flex: none;
+  border-top: 1px solid var(--line);
+}
+.composer textarea {
+  flex: 1; min-width: 0; border: 0; outline: none; resize: none;
+  padding: 10px 14px; border-radius: var(--r-pill); background: var(--surface);
+  font-size: 14px; line-height: 20px; max-height: 160px;
+}
+.composer textarea::placeholder { color: var(--fg-3); }
+.composer .attach, .composer .send, .composer .stop {
+  display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  border-radius: 50%; font-size: 15px; line-height: 1;
+  transition: background-color var(--t-fast) ease;
+}
+.composer .attach { color: var(--fg-2); cursor: pointer; }
+.composer .attach:hover { background: var(--row-hover); color: var(--fg); }
+/* Ô chọn file gốc của trình duyệt bị ẩn — nhãn `.attach` mới là nút. */
+.composer .attach input[type="file"] { display: none; }
+.composer .send { background: var(--accent); color: #fff; }
+.composer .send:disabled { background: var(--surface-2); color: var(--fg-3); }
+.composer .stop { background: var(--surface-2); }
+.composer .stop:hover:not(:disabled) { background: rgb(64, 64, 64); }
+
+.pending { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; order: -1; }
+.pending[hidden] { display: none; }
+.pending .chip { position: relative; }
+.pending .chip img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; display: block; }
+.pending .chip button {
+  position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+  border-radius: 50%; background: rgb(90, 90, 90); color: #fff; font-size: 11px; line-height: 1;
+}
+
+/* ── panel phải (info-pane 357) ───────────────────────────────────────────── */
+
+/* Không viền trái: cột chat đã có viền phải, thêm nữa là 1px ăn vào bề rộng khung màn hình
+   (đo ra 324 thay vì 325). */
+.computer { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 16px; }
+.computer .head { display: flex; align-items: center; height: 20px; font-size: 13px; font-weight: 600; }
+.computer .head .state { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--fg-2); }
+/* Khung xem màn hình đo 325×203. */
+.screen { aspect-ratio: 325 / 203; overflow: hidden; border-radius: var(--r-card); background: var(--surface); }
+.screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+.screen .off {
+  height: 100%; display: grid; place-content: center; gap: 6px; text-align: center;
+  padding: 16px; font-size: 12px; line-height: 17px; color: var(--fg-3);
+}
+.screen .off .mon { font-size: 22px; }
+.screen .off code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  padding: 1px 4px; border-radius: 4px; background: var(--surface-2);
+}
+.caption { font-size: 12px; color: var(--fg-2); }
+.routines { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.routines p { margin: 0 0 10px; font-size: 12px; line-height: 17px; color: var(--fg-2); }
+.routines button { padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; background: var(--surface-2); }
+.routines button:hover:not(:disabled) { background: rgb(64, 64, 64); }
+
+/* ── avatar ───────────────────────────────────────────────────────────────── */
+
+.avatar {
+  display: grid; place-items: center; flex: none;
+  border-radius: 50%; overflow: hidden;
+  font-size: 11px; font-weight: 700; color: #fff; background: var(--surface-2);
+}
+img.avatar { object-fit: cover; }
+/* Mặt bot là SVG có hình dạng riêng: không nền, không bo, không cắt. */
+.avatar.face { background: none; border-radius: 0; overflow: visible; }
+.avatar.face svg { width: 100%; height: 100%; display: block; }
+
+.avatar-btn { padding: 0; line-height: 0; border-radius: 50%; transition: opacity var(--t-fast) ease; }
+.avatar-btn:hover { opacity: 0.8; }
+
+/* ── bộ chọn ảnh ──────────────────────────────────────────────────────────── */
+
+.modal-back {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center; background: rgba(0, 0, 0, 0.6);
+  animation: fade var(--t-fast) var(--e-out);
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px); overflow-y: auto;
+  padding: 20px; border-radius: var(--r-card); background: var(--surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: bubble-in var(--t-mid) var(--e-out);
+}
+.modal header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.modal header strong { font-size: 14px; font-weight: 600; }
+.modal header .x {
+  margin-left: auto; width: 26px; height: 26px; border-radius: 50%;
+  color: var(--fg-2); font-size: 16px; line-height: 1;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.modal header .x:hover { background: var(--row-hover); color: var(--fg); }
+
+.modal .preview {
+  display: grid; place-items: center; margin-bottom: 16px;
+  padding: 16px; border-radius: var(--r-card); background: var(--bg);
+}
+.modal .preview svg { width: 96px; height: 96px; display: block; }
+
+.modal .pick-label { margin: 0 0 8px; font-size: 12px; color: var(--fg-2); }
+.modal .pick-label + * { margin-bottom: 16px; }
+
+/* Lưới 4 cột, ô 76×87 như bảng Shape của bloub (bộ chọn là phần mình tự thiết kế). */
+.shapes, .faces { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shape {
+  display: grid; justify-items: center; gap: 4px;
+  padding: 4px; border: 1px solid transparent; border-radius: var(--r-card);
+  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+.shape .art { display: block; width: 58px; height: 58px; }
+.faces .art { width: 48px; height: 48px; }
+.shape svg { width: 100%; height: 100%; display: block; }
+.shape .lbl { font-size: 12px; line-height: 15px; color: var(--fg-2); }
+.shape:hover { background: var(--row-hover); }
+.shape.on { border-color: var(--accent); }
+.shape.on .lbl { color: var(--fg); }
+
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.swatch {
+  aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(252, 252, 252, 0.12);
+  transition: transform var(--t-fast) var(--e-out), box-shadow var(--t-fast) ease;
+}
+.swatch:hover { transform: scale(1.1); }
+/* Vòng cách một khoảng nền: viền dính sát màu sẫm thì không đọc ra là đang chọn. */
+.swatch.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+.modal .hint { margin: 0 0 14px; font-size: 12px; line-height: 17px; color: var(--fg-2); }
+.modal-actions { display: flex; align-items: center; gap: 8px; }
+.modal-actions .up {
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; cursor: pointer;
+  background: var(--surface-2);
+  transition: background-color var(--t-fast) ease;
+}
+.modal-actions .up:hover { background: rgb(64, 64, 64); }
+.modal-actions button { padding: 6px 12px; border-radius: var(--r-pill); font-size: 13px; }
+.modal-err { margin: 12px 0 0; font-size: 12px; color: var(--danger); }
+
+/* ── cuộn ─────────────────────────────────────────────────────────────────── */
+
+.roster::-webkit-scrollbar, .transcript::-webkit-scrollbar { width: 8px; }
+.roster::-webkit-scrollbar-thumb, .transcript::-webkit-scrollbar-thumb {
+  border-radius: var(--r-pill); background: rgba(252, 252, 252, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

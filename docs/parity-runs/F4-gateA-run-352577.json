@@ -1,0 +1,28 @@
+{
+  "plan": "F4",
+  "run": 352577,
+  "gate": "A",
+  "backendCommit": "2cb55e9",
+  "appVersion": "0.20.0",
+  "base": "http://localhost:8788",
+  "summary": {
+    "routes": {
+      "checks": 16,
+      "failed": 0
+    },
+    "auth": {
+      "checks": 6,
+      "failed": 0
+    },
+    "commands": {
+      "checks": 10,
+      "failed": 0
+    },
+    "channels": {
+      "checks": 14,
+      "failed": 0
+    }
+  },
+  "pass": true,
+  "mismatches": []
+}

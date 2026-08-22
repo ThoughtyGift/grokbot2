@@ -1,18 +1,41 @@
 /**
- * Tiny JSON persistence — agents, transcripts and host settings survive a restart.
+ * Persistence — SQLite is the hot path; `state.json` is a frozen backup after migrate.
  *
- * The box host keeps this state on disk; without it every backend restart wiped the
- * user's bots and conversations. Writes are debounced so a chat burst is one save.
+ * Domain still speaks `loadState` / `scheduleSave` / `saveNow` with a `PersistedState`
+ * snapshot. This module is what turns that snapshot into rows (ROADMAP P3/P4). One call is one
+ * transaction covering agents + entries (with per-agent seq) + parked + the rest, so a crash
+ * cannot leave a turn half-written — the gap that froze the transcript when seq skipped
+ * (parity.md §2ac). Writes are UPSERT + keyed prune, not DELETE FROM the whole table.
+ *
+ * `node:sqlite` (Node ≥ 22.5) rather than better-sqlite3: no native compile on Windows, and
+ * the API is synchronous like the debounce this replaced. WAL so a reader (the gate) can
+ * inspect the file while the backend holds it open.
  */
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, statSync, copyFileSync } from "node:fs";
+import {
+  readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, statSync, copyFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
-// Overridable so a test backend can run against a throwaway state file instead of
-// trampling the state the live instance is using.
-const FILE = process.env.GROKBOT2_STATE_FILE ?? join(DIR, "state.json");
-const SNAPSHOT = join(DIR, "snapshot.json");
+const DEFAULT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+
+/**
+ * Tests under `node:test` must not open the user's `.data` — `cron.test.ts` imports automations
+ * which used to `loadState()` the live file as a side effect. `NODE_TEST_CONTEXT` is set by the
+ * test runner; production never has it.
+ */
+function dataDir(): string {
+  if (process.env.GROKBOT2_STATE_FILE) return dirname(process.env.GROKBOT2_STATE_FILE);
+  if (process.env.NODE_TEST_CONTEXT) return join(tmpdir(), "grokbot2-test-store");
+  return DEFAULT_DIR;
+}
+
+export const jsonPath = (): string => process.env.GROKBOT2_STATE_FILE ?? join(dataDir(), "state.json");
+export const sqlitePath = (): string => process.env.GROKBOT2_SQLITE_FILE ?? join(dataDir(), "grokbot.sqlite");
+
+const SNAPSHOT = join(DEFAULT_DIR, "snapshot.json");
 
 export interface PersistedState {
   agents?: unknown[];
@@ -21,27 +44,120 @@ export interface PersistedState {
   seq?: { agent?: number; entry?: number };
   acceptance?: unknown[];
   automations?: unknown[];
-  /** Per-agent context compaction, so a restart does not resend the whole transcript. */
   compaction?: Record<string, unknown>;
-  /**
-   * Turns parked waiting on the user: an approval card, an unanswered question, a box handoff.
-   *
-   * These lived only in memory, and every restart orphaned them — the card stayed on screen
-   * but answering it did nothing, because the map that knew how to continue the turn was gone.
-   * (It also reissued `req-1`, so two live approvals could collide.) What persists is the
-   * continuation *data*; the pending Promise itself cannot survive a process, so on restore the
-   * resume path re-enters the model loop from the stored history instead of resolving it.
-   */
   parked?: unknown[];
-  /** Box handoff cards, so a restart does not leave a dead "Needs your attention" on screen. */
   handoffs?: unknown[];
-  /** Per-agent checklist (todo_write / create_plan), so a restart mid-task keeps the plan. */
   todos?: Record<string, unknown[]>;
 }
 
-/** Load state.json, falling back to a snapshot.json import on first run. */
-export function loadState(): PersistedState {
-  for (const f of [FILE, SNAPSHOT]) {
+export interface AttachmentMeta {
+  path: string;
+  mime?: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  fileName?: string;
+}
+
+/** Optional catalog of staged files — filled by `bindAttachmentCatalog`, empty until then. */
+let attachmentCatalogRef: () => AttachmentMeta[] = () => [];
+export function bindAttachmentCatalog(fn: () => AttachmentMeta[]): void { attachmentCatalogRef = fn; }
+
+const SCHEMA = `
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  unread INTEGER NOT NULL DEFAULT 0,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS entries (
+  agent_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  timestamp_ms INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  body TEXT NOT NULL,
+  PRIMARY KEY (agent_id, id)
+);
+CREATE INDEX IF NOT EXISTS entries_agent_seq ON entries (agent_id, seq);
+CREATE TABLE IF NOT EXISTS parked (
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  PRIMARY KEY (kind, key)
+);
+CREATE TABLE IF NOT EXISTS automations (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS attachments_meta (
+  path TEXT PRIMARY KEY,
+  mime TEXT,
+  width INTEGER,
+  height INTEGER,
+  bytes INTEGER,
+  file_name TEXT
+);
+CREATE TABLE IF NOT EXISTS acceptance (
+  client_nonce TEXT PRIMARY KEY,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS todos (
+  agent_id TEXT PRIMARY KEY,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS handoffs (
+  agent_id TEXT PRIMARY KEY,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS compaction (
+  agent_id TEXT PRIMARY KEY,
+  body TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  body TEXT NOT NULL
+);
+`;
+
+let db: DatabaseSync | null = null;
+let dbFile = "";
+
+function getDb(): DatabaseSync {
+  const want = sqlitePath();
+  if (db && dbFile === want) return db;
+  db?.close();
+  mkdirSync(dirname(want), { recursive: true });
+  db = new DatabaseSync(want);
+  dbFile = want;
+  db.exec(SCHEMA);
+  db.exec("PRAGMA journal_mode = WAL");
+  importJsonIfNeeded(db);
+  return db;
+}
+
+function metaGet(database: DatabaseSync, key: string): string | undefined {
+  const row = database.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value?: string } | undefined;
+  return row?.value;
+}
+
+function metaSet(database: DatabaseSync, key: string, value: string): void {
+  database.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(key, value);
+}
+
+/** Read the frozen JSON (or snapshot.json on a first-ever machine). Never throws. */
+function readJsonFile(): PersistedState {
+  for (const f of [jsonPath(), SNAPSHOT]) {
     try {
       if (!existsSync(f)) continue;
       const parsed = JSON.parse(readFileSync(f, "utf8")) as PersistedState;
@@ -55,53 +171,310 @@ export function loadState(): PersistedState {
 }
 
 /**
- * Rolling backups — the only thing standing between a mistake and permanent loss.
+ * One-shot: empty SQLite ← `state.json`. After this, JSON is not written again.
  *
- * Every save rewrites `state.json` wholesale, so one bad write or one over-broad delete takes
- * the lot. That is not hypothetical: a 214 KB state holding 45 bots and 46 transcripts went to
- * 48 KB when the app sent a single `deleteAgents` carrying 43 ids. The call was legitimate and
- * the write was correct — and there was no way back.
- *
- * Rotation is time-based, not per-save. Saves are debounced to 400 ms and a chat burst produces
- * many of them; rotating each time would shift ten copies out of the ring inside a minute and
- * leave nothing but the last few seconds. One recovery point every ROTATE_EVERY_MS gives a
- * window measured in hours instead.
+ * The JSON file is left in place as the rollback source (docs/sqlite-rollback.md). A final
+ * rotation of the `.bak` ring happens here so the last hot-path write is recoverable even
+ * after days of sqlite-only saves.
  */
-const KEEP_BACKUPS = 10;
-const ROTATE_EVERY_MS = Number(process.env.GROKBOT2_BACKUP_EVERY_MS ?? 10 * 60_000);
-const backupPath = (n: number): string => `${FILE}.${n}.bak`;
+function importJsonIfNeeded(database: DatabaseSync): void {
+  if (metaGet(database, "imported") === "1") return;
+  const json = readJsonFile();
+  rotateJsonBackups();
+  writeSnapshot(json, database);
+  metaSet(database, "schema_version", "1");
+  metaSet(database, "imported", "1");
+  metaSet(database, "imported_at", new Date().toISOString());
+  metaSet(database, "imported_from", existsSync(jsonPath()) ? jsonPath() : "empty");
+  console.log(`[grokbot2] persistence is sqlite (${sqlitePath()}); state.json is frozen`);
+}
 
-/** True when the newest backup is missing or older than the interval. */
-function backupIsStale(): boolean {
-  try {
-    return Date.now() - statSync(backupPath(1)).mtimeMs > ROTATE_EVERY_MS;
-  } catch {
-    return true;                                  // no backup yet — take one
-  }
+/** Stamp missing seq so a reload does not have to invent numbers the replica already accepted. */
+function withSeq(entries: unknown[]): unknown[] {
+  let prev = 0;
+  return entries.map((raw) => {
+    if (!raw || typeof raw !== "object") return raw;
+    const e = raw as { seq?: number };
+    const seq = typeof e.seq === "number" && e.seq > prev ? e.seq : prev + 1;
+    prev = seq;
+    return { ...e, seq };
+  });
 }
 
 /**
- * Shift the ring: .9→.10, .8→.9, … .1→.2, then copy the CURRENT state to .1.
+ * UPSERT every row, then prune keys that left the snapshot. P3 rewrote every table with
+ * DELETE+INSERT; two processes sharing the file cannot do that — a runtime INSERT would
+ * vanish the next time the BFF saved. Empty keep-lists still mean the snapshot has zero of
+ * that kind, so those tables are cleared on purpose (`deleteAgents`).
  *
- * Copy rather than rename, because `state.json` has to stay in place for the write that follows.
- * Never throws: a backup that fails must not stop the save it was protecting.
+ * Keep-sets go through a TEMP table rather than `NOT IN (?,?,…)`. SQLite binds C-strings,
+ * so a `\0` separator would truncate, and a 500-row transcript would blow the variable cap.
  */
-function rotateBackups(): void {
-  if (!existsSync(FILE) || !backupIsStale()) return;
+function prune(database: DatabaseSync, table: string, column: string, keep: string[]): void {
+  if (keep.length === 0) {
+    database.exec(`DELETE FROM ${table}`);
+    return;
+  }
+  const tmp = `_keep_${table}`;
+  database.exec(`DROP TABLE IF EXISTS ${tmp}`);
+  database.exec(`CREATE TEMP TABLE ${tmp} (k TEXT PRIMARY KEY)`);
+  const ins = database.prepare(`INSERT OR IGNORE INTO ${tmp} (k) VALUES (?)`);
+  for (const k of keep) ins.run(k);
+  database.exec(`DELETE FROM ${table} WHERE ${column} NOT IN (SELECT k FROM ${tmp})`);
+  database.exec(`DROP TABLE ${tmp}`);
+}
+
+function pruneComposite(
+  database: DatabaseSync,
+  table: string,
+  colA: string,
+  colB: string,
+  keep: Array<[string, string]>,
+): void {
+  if (keep.length === 0) {
+    database.exec(`DELETE FROM ${table}`);
+    return;
+  }
+  const tmp = `_keep_${table}`;
+  database.exec(`DROP TABLE IF EXISTS ${tmp}`);
+  database.exec(`CREATE TEMP TABLE ${tmp} (a TEXT NOT NULL, b TEXT NOT NULL, PRIMARY KEY (a, b))`);
+  const ins = database.prepare(`INSERT OR IGNORE INTO ${tmp} (a, b) VALUES (?, ?)`);
+  for (const [a, b] of keep) ins.run(a, b);
+  database.exec(
+    `DELETE FROM ${table} WHERE NOT EXISTS (SELECT 1 FROM ${tmp} k WHERE k.a = ${table}.${colA} AND k.b = ${table}.${colB})`,
+  );
+  database.exec(`DROP TABLE ${tmp}`);
+}
+
+function writeSnapshot(s: PersistedState, database = getDb()): void {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const entryKeep: Array<[string, string]> = [];
+    const agentIds: string[] = [];
+    const insAgent = database.prepare(
+      `INSERT INTO agents (id, name, created_at_ms, unread, hidden, body) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name=excluded.name, created_at_ms=excluded.created_at_ms,
+         unread=excluded.unread, hidden=excluded.hidden, body=excluded.body`,
+    );
+    for (const raw of s.agents ?? []) {
+      const a = raw as { id?: string; name?: string; createdAtMs?: number; unread?: boolean; hidden?: boolean };
+      if (!a?.id) continue;
+      insAgent.run(a.id, a.name ?? "", a.createdAtMs ?? 0, a.unread ? 1 : 0, a.hidden ? 1 : 0, JSON.stringify(raw));
+      agentIds.push(a.id);
+    }
+
+    const insEntry = database.prepare(
+      `INSERT INTO entries (agent_id, id, seq, timestamp_ms, kind, body) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(agent_id, id) DO UPDATE SET seq=excluded.seq, timestamp_ms=excluded.timestamp_ms,
+         kind=excluded.kind, body=excluded.body`,
+    );
+    for (const [agentId, list] of Object.entries(s.transcripts ?? {})) {
+      for (const raw of withSeq(Array.isArray(list) ? list : [])) {
+        const e = raw as { id?: string; seq?: number; timestampMs?: number; kind?: string };
+        if (!e?.id) continue;
+        insEntry.run(agentId, e.id, e.seq ?? 0, e.timestampMs ?? 0, e.kind ?? "", JSON.stringify(raw));
+        entryKeep.push([agentId, e.id]);
+      }
+    }
+
+    const insParked = database.prepare(
+      `INSERT INTO parked (kind, key, agent_id, body) VALUES (?, ?, ?, ?)
+       ON CONFLICT(kind, key) DO UPDATE SET agent_id=excluded.agent_id, body=excluded.body`,
+    );
+    const parkedKeep: Array<[string, string]> = [];
+    for (const raw of s.parked ?? []) {
+      const p = raw as { kind?: string; key?: string; agentId?: string };
+      if (!p?.kind || !p.key) continue;
+      insParked.run(p.kind, p.key, p.agentId ?? "", JSON.stringify(raw));
+      parkedKeep.push([p.kind, p.key]);
+    }
+
+    const insAuto = database.prepare(
+      `INSERT INTO automations (id, agent_id, body) VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET agent_id=excluded.agent_id, body=excluded.body`,
+    );
+    const autoKeep: string[] = [];
+    for (const raw of s.automations ?? []) {
+      const a = raw as { id?: string; agentId?: string };
+      if (!a?.id) continue;
+      insAuto.run(a.id, a.agentId ?? "", JSON.stringify(raw));
+      autoKeep.push(a.id);
+    }
+
+    const insAccept = database.prepare(
+      `INSERT INTO acceptance (client_nonce, body) VALUES (?, ?)
+       ON CONFLICT(client_nonce) DO UPDATE SET body=excluded.body`,
+    );
+    const acceptKeep: string[] = [];
+    for (const raw of s.acceptance ?? []) {
+      const r = raw as { clientNonce?: string };
+      if (!r?.clientNonce) continue;
+      insAccept.run(r.clientNonce, JSON.stringify(raw));
+      acceptKeep.push(r.clientNonce);
+    }
+
+    const insTodos = database.prepare(
+      `INSERT INTO todos (agent_id, body) VALUES (?, ?)
+       ON CONFLICT(agent_id) DO UPDATE SET body=excluded.body`,
+    );
+    const todoKeep: string[] = [];
+    for (const [agentId, list] of Object.entries(s.todos ?? {})) {
+      insTodos.run(agentId, JSON.stringify(list));
+      todoKeep.push(agentId);
+    }
+
+    const insHand = database.prepare(
+      `INSERT INTO handoffs (agent_id, body) VALUES (?, ?)
+       ON CONFLICT(agent_id) DO UPDATE SET body=excluded.body`,
+    );
+    const handKeep: string[] = [];
+    // Snapshot shape is `[agentId, handoff][]` — see forever-box.handoffEntries.
+    for (const row of s.handoffs ?? []) {
+      if (Array.isArray(row) && typeof row[0] === "string") {
+        insHand.run(row[0], JSON.stringify(row[1] ?? {}));
+        handKeep.push(row[0]);
+      }
+    }
+
+    const insComp = database.prepare(
+      `INSERT INTO compaction (agent_id, body) VALUES (?, ?)
+       ON CONFLICT(agent_id) DO UPDATE SET body=excluded.body`,
+    );
+    const compKeep: string[] = [];
+    for (const [agentId, body] of Object.entries(s.compaction ?? {})) {
+      insComp.run(agentId, JSON.stringify(body));
+      compKeep.push(agentId);
+    }
+
+    if (s.hostSettings && typeof s.hostSettings === "object") {
+      database.prepare(
+        `INSERT INTO host_settings (id, body) VALUES (1, ?)
+         ON CONFLICT(id) DO UPDATE SET body=excluded.body`,
+      ).run(JSON.stringify(s.hostSettings));
+    }
+
+    const insAtt = database.prepare(
+      `INSERT INTO attachments_meta (path, mime, width, height, bytes, file_name) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET mime=excluded.mime, width=excluded.width, height=excluded.height,
+         bytes=excluded.bytes, file_name=excluded.file_name`,
+    );
+    const attKeep: string[] = [];
+    for (const a of attachmentCatalogRef()) {
+      if (!a.path) continue;
+      insAtt.run(a.path, a.mime ?? null, a.width ?? null, a.height ?? null, a.bytes ?? null, a.fileName ?? null);
+      attKeep.push(a.path);
+    }
+
+    prune(database, "agents", "id", agentIds);
+    prune(database, "automations", "id", autoKeep);
+    prune(database, "acceptance", "client_nonce", acceptKeep);
+    prune(database, "todos", "agent_id", todoKeep);
+    prune(database, "handoffs", "agent_id", handKeep);
+    prune(database, "compaction", "agent_id", compKeep);
+    prune(database, "attachments_meta", "path", attKeep);
+    pruneComposite(database, "entries", "agent_id", "id", entryKeep);
+    pruneComposite(database, "parked", "kind", "key", parkedKeep);
+
+    metaSet(database, "seq", JSON.stringify(s.seq ?? {}));
+    database.exec("COMMIT");
+  } catch (e) {
+    try { database.exec("ROLLBACK"); } catch { /* no tx */ }
+    throw e;
+  }
+}
+
+function loadFromDb(database: DatabaseSync): PersistedState {
+  const agents = database.prepare("SELECT body FROM agents").all().map((r) => JSON.parse(String(r.body)));
+  const transcripts: Record<string, unknown[]> = {};
+  for (const r of database.prepare("SELECT agent_id, body FROM entries ORDER BY agent_id, seq, id").all()) {
+    const id = String(r.agent_id);
+    (transcripts[id] ??= []).push(JSON.parse(String(r.body)));
+  }
+  const parked = database.prepare("SELECT body FROM parked").all().map((r) => JSON.parse(String(r.body)));
+  const automations = database.prepare("SELECT body FROM automations").all().map((r) => JSON.parse(String(r.body)));
+  const acceptance = database.prepare("SELECT body FROM acceptance").all().map((r) => JSON.parse(String(r.body)));
+  const todos: Record<string, unknown[]> = {};
+  for (const r of database.prepare("SELECT agent_id, body FROM todos").all()) {
+    todos[String(r.agent_id)] = JSON.parse(String(r.body));
+  }
+  const handoffs: unknown[] = database.prepare("SELECT agent_id, body FROM handoffs").all()
+    .map((r) => [String(r.agent_id), JSON.parse(String(r.body))]);
+  const compaction: Record<string, unknown> = {};
+  for (const r of database.prepare("SELECT agent_id, body FROM compaction").all()) {
+    compaction[String(r.agent_id)] = JSON.parse(String(r.body));
+  }
+  const settingsRow = database.prepare("SELECT body FROM host_settings WHERE id = 1").get() as { body?: string } | undefined;
+  const seqRaw = metaGet(database, "seq");
+  return {
+    agents,
+    transcripts,
+    parked,
+    automations,
+    acceptance,
+    todos,
+    handoffs,
+    compaction,
+    hostSettings: settingsRow?.body ? JSON.parse(settingsRow.body) as Record<string, unknown> : undefined,
+    seq: seqRaw ? JSON.parse(seqRaw) as PersistedState["seq"] : undefined,
+  };
+}
+
+export function loadState(): PersistedState {
+  try {
+    return loadFromDb(getDb());
+  } catch (e) {
+    console.warn("[grokbot2] sqlite load failed, falling back to JSON:", (e as Error).message);
+    return readJsonFile();
+  }
+}
+
+const KEEP_BACKUPS = 10;
+const ROTATE_EVERY_MS = Number(process.env.GROKBOT2_BACKUP_EVERY_MS ?? 10 * 60_000);
+
+function backupPath(n: number, file: string): string {
+  return `${file}.${n}.bak`;
+}
+
+function backupIsStale(file: string): boolean {
+  try {
+    return Date.now() - statSync(backupPath(1, file)).mtimeMs > ROTATE_EVERY_MS;
+  } catch {
+    return true;
+  }
+}
+
+function rotateRing(file: string): void {
+  if (!existsSync(file) || !backupIsStale(file)) return;
   try {
     for (let n = KEEP_BACKUPS - 1; n >= 1; n--) {
-      if (existsSync(backupPath(n))) renameSync(backupPath(n), backupPath(n + 1));
+      if (existsSync(backupPath(n, file))) renameSync(backupPath(n, file), backupPath(n + 1, file));
     }
-    copyFileSync(FILE, backupPath(1));
+    copyFileSync(file, backupPath(1, file));
   } catch (e) {
     console.warn("[grokbot2] backup rotation failed:", (e as Error).message);
   }
 }
 
+/** Last JSON rotation — called once at migrate, then the ring is left alone. */
+function rotateJsonBackups(): void {
+  rotateRing(jsonPath());
+}
+
+function rotateSqliteBackups(database: DatabaseSync): void {
+  const file = sqlitePath();
+  if (!backupIsStale(file) && existsSync(backupPath(1, file))) return;
+  try {
+    database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } catch { /* checkpoint is best-effort; the copy below still helps */ }
+  rotateRing(file);
+}
+
 let pending: NodeJS.Timeout | null = null;
 let latest: (() => PersistedState) | null = null;
+let jsonWrites = 0;
 
-/** Debounced atomic save (write temp + rename) so a crash can't truncate state.json. */
+export function jsonWriteCount(): number { return jsonWrites; }
+
 export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): void {
   latest = snapshot;
   if (pending) return;
@@ -109,27 +482,42 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
     pending = null;
     const take = latest;
     if (!take) return;
-    try {
-      mkdirSync(dirname(FILE), { recursive: true });
-      rotateBackups();
-      const tmp = FILE + ".tmp";
-      writeFileSync(tmp, JSON.stringify(take(), null, 1));
-      renameSync(tmp, FILE);
-    } catch (e) {
-      console.warn("[grokbot2] save failed:", (e as Error).message);
-    }
+    persistNow(take);
   }, delayMs);
 }
 
-/** Flush immediately (used on shutdown). */
 export function saveNow(snapshot: () => PersistedState): void {
+  persistNow(snapshot);
+}
+
+function persistNow(snapshot: () => PersistedState): void {
   try {
-    mkdirSync(dirname(FILE), { recursive: true });
-    rotateBackups();
-    const tmp = FILE + ".tmp";
-    writeFileSync(tmp, JSON.stringify(snapshot(), null, 1));
-    renameSync(tmp, FILE);
+    const database = getDb();
+    rotateSqliteBackups(database);
+    writeSnapshot(snapshot(), database);
   } catch (e) {
-    console.warn("[grokbot2] final save failed:", (e as Error).message);
+    console.warn("[grokbot2] save failed:", (e as Error).message);
   }
 }
+
+export function persistenceInfo(): { sqlite: string; json: string; imported: boolean } {
+  try {
+    const database = getDb();
+    return { sqlite: sqlitePath(), json: jsonPath(), imported: metaGet(database, "imported") === "1" };
+  } catch {
+    return { sqlite: sqlitePath(), json: jsonPath(), imported: false };
+  }
+}
+
+/** Test seam: close the connection so the next call re-reads env paths. */
+export function _resetForTest(): void {
+  try { db?.close(); } catch { /* already closed */ }
+  db = null;
+  dbFile = "";
+  pending = null;
+  latest = null;
+  jsonWrites = 0;
+}
+
+/** Kept so a mistaken `writeFileSync(state.json)` in a test is visible. */
+export function _noteJsonWrite(): void { jsonWrites += 1; }

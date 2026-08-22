@@ -43,6 +43,18 @@ runtime from flags (`${cloudAgentsEnabled ? … : …}`), so it is a *template*,
 
 Everything is in `docs/extracted/subagent-prompts.{json,md}`.
 
+> **Nguồn trích KHÔNG phải app đã cài.** Nó là `Desktop/grokbot-fe-current/dist/host/host-main.cjs`
+> (24,7 MB, **chưa minify**). Bundle trong `resources/app` là bản **đã minify** 11,8 MB: grep nó cho
+> `buildSandBaseSystemPrompt`, `_SUBAGENT_CONFIG`, `_TOOL_IDENTIFIERS` đều ra **0** — tên đã bị đổi hết.
+>
+> Trỏ extractor vào bản đã cài từng **ghi đè 279.656 byte (49 prompt / 6 config / 7 allowlist) bằng
+> 927 byte rỗng**, exit 0, không một cảnh báo. Đã phục hồi từ git và `extract-prompts.mjs` giờ từ chối
+> ghi khi không trích được gì (exit 2) hoặc khi kết quả ít hơn bản đang có (exit 3, cần `--force`).
+>
+> Hệ quả cho việc đọc tài liệu: một tên như `PAST_CONVERSATION_EXPLORER_SUBAGENT_CONFIG` **có** trong
+> bản đọc được nhưng **không** có trong app đã cài (ở đó chỉ còn `pastConversationExplorer`). Đừng
+> kết luận "app không có tính năng này" chỉ vì grep bundle đã minify không ra.
+
 **What still does not ship**: the agent *loop* — model choice per turn, when to stop, how tool
 results re-enter context. The prompt is the instruction set; the server still runs the machine.
 
@@ -203,6 +215,18 @@ Danh sách model có thật lấy từ `GET /v1/models` (18 model) — trang `do
 **Đính chính (đo lại):** không phải "tắt Claude" nói chung — `claude-sonnet-5`, `claude-opus-4-5` và
 `claude-haiku-4-5` đều trả `"OK"` bình thường. Chỉ **riêng `claude-opus-5`** bị chặn, nên đây là
 vấn đề **entitlement theo từng model** (subscription không bao gồm opus-5), không phải cả kênh Claude.
+
+**Đo lại 19/08 — khóa này đã mở.** `claude-opus-5` giờ trả bình thường: `POST /v1/claude` → 200,
+`success:true`, `result:"OK"`, ~4 s (nhanh hơn gemini-3.7-flash trong cùng lần đo). Probe TOOL_CALL lúc
+khởi động: `honoursToolCalls: true`, và `web_search` chạy thật end-to-end. Nên bảng trên đã cũ;
+đừng dựa vào nó để loại opus-5.
+
+**Nhưng ảnh thì thất thường (đo 19/08).** Route Claude đưa ảnh cho Claude Code CLI dưới dạng **file tạm
+trên host pool**, nên opus-5 có lúc trả về `TOOL_CALL: Read({"file_path":"/tmp/oc-img-…"})` — một tool
+ta không có, đường dẫn không thuộc máy này. Ở tầng pool thuần (không system prompt) opus-5 thấy ảnh
+8/8; qua backend với system prompt thật thì 3/5. `chat.ts` thêm một chương “Ảnh đính kèm” cho lượt
+có ảnh — sau đó kiểu hỏng “đi tìm file” mất hẳn (0/5), còn lại chỉ là “chưa thấy ảnh”. Đo lại bằng
+`scripts/measure-vision-rate.mjs`. gemini-3.7-flash không bị kiểu này.
 Stdout của CLI *chính là* câu lỗi, và bridge trả nó về như một kết quả thành công:
 
 ```

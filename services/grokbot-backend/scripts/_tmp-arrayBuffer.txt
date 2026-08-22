@@ -1,0 +1,1 @@
+or url ${a}`);let[d,f]=await(0,Wvn.to)(u.arrayBuffer());if(d)throw new Error(`Could not load Buffer from ${a}`);let p=lgr(f);return this.fromBuffer(p,l)}static fromBitmap(a){let l;if(a.data instanceof Buffer&&(l=Buffer.from(a.data)),(a.data

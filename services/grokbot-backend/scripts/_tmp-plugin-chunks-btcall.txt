@@ -1,0 +1,1 @@
+function bt(n,e,s=[]){const a=new Map;for(const o of s)a.set(o.pluginId,o);const l=[],d=new Map;for(const o of n){const r=es(o,e),i=r==null?void 0:a.get(r.id);if(r==null||o.pluginId!==r.id&&!o.isTeamS

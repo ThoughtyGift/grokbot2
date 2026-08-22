@@ -10,7 +10,7 @@ backend + your Claude pool (`admin.halcion.vn`). User-facing quickstart in [READ
 
 | Concern | Folder | What |
 |---------|--------|------|
-| **FE** (frontend) | `apps/grokbot-desktop/` | the **stock Grok Bot Electron app** + launch config (no source to build) |
+| **FE** (frontend) | `apps/grokbot-desktop/` + patched `Grok Bot.exe` | production UI. Fallback: `apps/grokbot-web/` |
 | **BE** (backend) | `services/grokbot-backend/` | glue server: auth + bootstrap RPC + box gateway + chat bridge |
 | **API** (contract) | `packages/grokbot-proto/`, `packages/pool-client/` | protobuf encoder/responses + Claude-pool HTTP client |
 | infra | `infra/` | Windows launcher + systemd unit for a future VPS box |
@@ -23,14 +23,19 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 | | |
 |---|---|
 | `pnpm install` | install workspace |
-| `pnpm backend` | run backend on `localhost:8788` |
+| `pnpm backend` | four processes: computer `:8790` + runtime `:8789` + ops `:8791` + BFF `:8788` |
+| `pnpm dev:app` | F2 launcher: that stack + patched `Grok Bot.exe` on CDP `:9222` |
+| `pnpm web` | fallback Vite UI on `localhost:5173` (proxies `/v1`) |
+| `pnpm phase:gate` | current phase from `docs/parity-runs/phase-current.json`. From **F3**, CDP `:9222` is required (RED if missing). `--phase F3` measures without moving the pointer. |
 | `pnpm typecheck` / `pnpm build` | turbo across workspace |
-| `infra\scripts\run.ps1` | launch backend + the app (Windows) |
+| `infra\scripts\run-web.ps1` | Vite FE only — does not spawn `Grok Bot.exe` |
 
 ## Where to change things
 
 - Add/adjust a **bootstrap RPC** response → `packages/grokbot-proto/src/bootstrap.ts`
 - Add a **gateway method** → `services/grokbot-backend/src/gateway.ts` (the `methods` map)
+- Add/adjust a **native `/v1` route** → `services/grokbot-backend/src/native.ts`
+- **Independent UI** → `apps/grokbot-web/`
 - **Chat** behavior / transcript shape → `services/grokbot-backend/src/chat.ts`
 - Point the **brain** elsewhere → `services/grokbot-backend/src/config.ts` (+ `pool-key.txt`)
 

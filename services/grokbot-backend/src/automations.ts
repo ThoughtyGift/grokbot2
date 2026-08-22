@@ -466,6 +466,21 @@ export function runAgentAutomationNow(a: { id?: string; agentId?: string; automa
   return {};
 }
 
+/** Fire one row by id — ops POSTs here; CRUD/history stay on this process. */
+export function fireById(automationId: string, trigger: AutomationRun["trigger"] = "schedule", context?: string): boolean {
+  const rec = all().find((x) => x.id === automationId);
+  if (!rec) return false;
+  fire(rec, trigger, context);
+  return true;
+}
+
+/** Enabled routines with a prompt — ops matches cron without reading sqlite. */
+export function routinesForOps(): Array<{ id: string; agentId: string; trigger: string; prompt: string }> {
+  return all()
+    .filter((r) => r.isEnabled && r.prompt.trim())
+    .map((r) => ({ id: r.id, agentId: r.agentId, trigger: r.trigger, prompt: r.prompt }));
+}
+
 // ── scheduler ─────────────────────────────────────────────────────────────────
 
 /**
@@ -488,8 +503,35 @@ export function tick(now = new Date()): void {
   }
 }
 
+/** Peek due ids without firing. Does not consume firedAtMinute — tick() does that. */
+export function dueIds(now = new Date()): string[] {
+  const minute = minuteOf(now);
+  const ids: string[] = [];
+  for (const rec of all()) {
+    if (!rec.isEnabled || !rec.prompt.trim()) continue;
+    if (firedAtMinute.get(rec.id) === minute) continue;
+    const sched = parseCron(rec.trigger);
+    if (!sched || !matches(sched, now)) continue;
+    ids.push(rec.id);
+  }
+  return ids;
+}
+
 /** 10s, not 60s: cron only needs minute resolution, but a finished run should stop spinning promptly. */
 export function startScheduler(): void {
   setInterval(() => tick(), 10_000).unref?.();
   console.log("[grokbot2] routine scheduler started (10s tick)");
+}
+
+export async function opsHealth(): Promise<string> {
+  const base = (process.env.GROKBOT2_OPS_URL ?? "").replace(/\/$/, "");
+  if (!base) return "in-process (GROKBOT2_OPS_URL unset)";
+  try {
+    const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1500) });
+    const body = r.ok ? await r.json() as { role?: string } : null;
+    if (!r.ok) return `HTTP ${r.status} ${base}`;
+    return body?.role === "ops" ? `up ${base}` : `up ${base} (role=${body?.role ?? "?"})`;
+  } catch (e) {
+    return `DOWN ${base} (${(e as Error).message})`;
+  }
 }

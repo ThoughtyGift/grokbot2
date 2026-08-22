@@ -1,0 +1,12 @@
+{
+  "phase": "F7",
+  "lastGatePass": false,
+  "lastMeasured": {
+    "phase": "F7",
+    "pass": false,
+    "at": "2026-08-22T09:54:21.386Z"
+  },
+  "at": "2026-08-22T09:54:21.386Z",
+  "note": "pointer for pnpm phase:gate / phase:advance. Advance only when the gate is green.",
+  "guard": "FE-goc programme (ROADMAP.md). P0-P6 shipped and are reused; P7 stopped; P8 deleted. Gate B becomes MANDATORY from F2 — do not advance past F1 without the patched client on CDP 9222."
+}

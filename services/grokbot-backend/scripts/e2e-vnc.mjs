@@ -12,6 +12,7 @@
  *   node scripts/e2e-vnc.mjs
  */
 import { writeFileSync } from "node:fs";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const CDP = process.env.GROKBOT2_CDP ?? "http://127.0.0.1:9222";
 const BACKEND = process.env.GROKBOT2_BACKEND ?? "http://localhost:8788";
@@ -59,7 +60,7 @@ const evaluate = (send, expression) =>
  * the viewer — which is what this test was always meant to prove.
  */
 const gw = async (method, body) => (await fetch(`${BACKEND}/gw/api/${method}`, {
-  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(body),
 })).json();
 
 const { agent } = await gw("createAgent", { name: "VncProbe" });

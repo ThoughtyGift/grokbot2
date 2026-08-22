@@ -1,0 +1,26 @@
+{
+  "phase": "P1",
+  "pass": true,
+  "next": "P2",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "extract-contract.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-ordered-sequence.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "P2"
+}

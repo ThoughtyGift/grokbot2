@@ -1,0 +1,38 @@
+{
+  "at": "2026-08-20T07:33:21.903Z",
+  "model": "gemini-3.7-flash",
+  "runs": 5,
+  "prompt": "Chao ban. Tra loi dung mot cau ngan.",
+  "poolMs": [
+    3845,
+    3324,
+    3376,
+    3895,
+    4484
+  ],
+  "runtimeMs": [
+    2866,
+    3338,
+    2876,
+    4439,
+    3544
+  ],
+  "chatMs": [
+    5143,
+    7684,
+    4113,
+    3597,
+    4087
+  ],
+  "p50": {
+    "pool": 3845,
+    "runtime": 3338,
+    "chat": 4113
+  },
+  "ratio": {
+    "runtimeOverPool": 0.868,
+    "chatOverPool": 1.07
+  },
+  "pass": true,
+  "note": "pass line is runtime/pool with identical payload (S5 hop). chat wait includes the ported prompt."
+}

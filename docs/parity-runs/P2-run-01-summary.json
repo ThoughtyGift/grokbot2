@@ -1,0 +1,60 @@
+{
+  "plan": "P2",
+  "run": 1,
+  "backendCommit": "2cb55e9",
+  "regression": true,
+  "gocAvailable": false,
+  "gates": [
+    {
+      "plan": "P0",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P1",
+      "gate": "A",
+      "script": "extract-contract.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "B",
+      "script": "e2e-avatar.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P2",
+      "gate": "C",
+      "script": "parity-gate.mjs",
+      "status": "skipped",
+      "detail": "the original app is not running on :9333"
+    },
+    {
+      "plan": "P3",
+      "gate": "A",
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "plan": "P3",
+      "gate": "C",
+      "script": "parity-gate.mjs",
+      "status": "skipped",
+      "detail": "the original app is not running on :9333"
+    }
+  ],
+  "stoppedAt": null,
+  "pass": true
+}

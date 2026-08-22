@@ -1,49 +1,144 @@
-﻿# Launch grokbot-backend + the stock Grok Bot app pointed at it (Windows).
+﻿# F2 launcher: four-process stack + patched Grok Bot.exe on CDP :9222.
+#
+#   pnpm dev:app
+#   infra\scripts\run.ps1
+#
+# Does not spawn the Vite FE. That is `pnpm web` / run-web.ps1 (fallback only).
 $ErrorActionPreference = 'Stop'
-$repo = Split-Path (Split-Path $PSScriptRoot)          # repo root
+$repo = Split-Path (Split-Path $PSScriptRoot)
 $backend = Join-Path $repo 'services\grokbot-backend'
 $appExe = "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe"
-$port = 8788
+$bff = 8788
 
-Write-Host '=== Grok Bot 2 ===' -ForegroundColor Cyan
+Write-Host '=== grokbot2  pnpm dev:app ===' -ForegroundColor Cyan
 
-# CRITICAL: this env var makes the Electron exe run as Node (no GUI) — must be unset.
+# CRITICAL: leftover ELECTRON_RUN_AS_NODE makes the exe parse as Node and exit with no GUI.
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 
-# stop old app + free port
-Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'Grok Bot*' } | ForEach-Object { try { $_.Kill() } catch {} }
-$c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-if ($c) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force } catch {} } }
-Start-Sleep -Milliseconds 700
+function Test-HttpOk([string]$Url) {
+  try {
+    $r = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
+    return $r.StatusCode -eq 200
+  } catch { return $false }
+}
 
-# key check
+function Get-ListenPids([int]$Port) {
+  @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique)
+}
+
+# -- patch gate ----------------------------------------------------------------
+# Unpatched install would boot vendor asar (no cOt) while looking fine. Fail closed.
+$verify = & node (Join-Path $repo 'infra\scripts\patch-client.mjs') --verify
+if ($LASTEXITCODE -ne 0) {
+  Write-Host 'Client is not patched (or the patch drifted). Do not launch the vendor bundle.' -ForegroundColor Red
+  Write-Host '  node infra/scripts/patch-client.mjs --apply'
+  Write-Host '  then: pnpm dev:app'
+  exit 2
+}
+
+# -- e2e zombie ports 8792-8817 ------------------------------------------------
+# Leftover spawned BFFs make e2e-handoff / e2e-cron look red. Never touch 8788-8791.
+$killed = @()
+foreach ($p in 8792..8817) {
+  foreach ($listenPid in (Get-ListenPids $p)) {
+    if (-not $listenPid) { continue }
+    $proc = Get-Process -Id $listenPid -ErrorAction SilentlyContinue
+    if ($proc -and $proc.ProcessName -match '^(node|tsx)$') {
+      try {
+        Stop-Process -Id $listenPid -Force -ErrorAction Stop
+        $killed += "${p}:$listenPid"
+      } catch { }
+    }
+  }
+}
+if ($killed.Count) {
+  Write-Host ("Cleared leftover test listeners: " + ($killed -join ', ')) -ForegroundColor Yellow
+}
+
+# -- stack ---------------------------------------------------------------------
 $keyFile = Join-Path $backend 'pool-key.txt'
 if ((Test-Path $keyFile) -and -not ((Get-Content $keyFile -Raw).Trim().StartsWith('PASTE_'))) {
-  Write-Host 'Pool key: FOUND (chat → Claude pool).' -ForegroundColor Green
+  Write-Host 'Pool key: FOUND.' -ForegroundColor Green
 } else {
   Write-Host "Pool key: NOT SET. Put a hal_xxx key in $keyFile" -ForegroundColor Yellow
 }
 
-# start backend (new window, live logs)
-Write-Host "Starting backend on :$port ..."
-Start-Process powershell -ArgumentList @('-NoExit', '-Command', "Set-Location `"$backend`"; pnpm dev")
-Start-Sleep -Seconds 3
+if (Test-HttpOk "http://127.0.0.1:$bff/health") {
+  Write-Host "Backend already up on :$bff (reusing computer/runtime/ops if they are)." -ForegroundColor Green
+} else {
+  Write-Host 'Starting pnpm backend (computer :8790, runtime :8789, ops :8791, BFF :8788) ...'
+  # cmd start: Start-Process powershell has been silent about not creating a process.
+  $cmd = "cd /d `"$repo`" && pnpm backend"
+  cmd /c start "grokbot2-backend" cmd /k $cmd
+  $up = $false
+  for ($i = 0; $i -lt 40; $i++) {
+    Start-Sleep -Seconds 1
+    if (Test-HttpOk "http://127.0.0.1:$bff/health") { $up = $true; break }
+  }
+  if (-not $up) {
+    Write-Host "BFF did not answer http://127.0.0.1:$bff/health in 40s. Check the grokbot2-backend window." -ForegroundColor Red
+    exit 1
+  }
+  Write-Host 'BFF is up.' -ForegroundColor Green
+}
 
-# box check — the computer pane stays empty without a noVNC page URL (see .env / .env.example)
+foreach ($pair in @(
+  @{ n = 'runtime'; u = 'http://127.0.0.1:8789/health' },
+  @{ n = 'computer'; u = 'http://127.0.0.1:8790/health' },
+  @{ n = 'ops'; u = 'http://127.0.0.1:8791/health' }
+)) {
+  if (Test-HttpOk $pair.u) { Write-Host ("  {0,-8} up" -f $pair.n) }
+  else { Write-Host ("  {0,-8} not answering yet (app can still chat; pane/cron may lag)" -f $pair.n) -ForegroundColor Yellow }
+}
+
 $envFile = Join-Path $repo '.env'
 if ((Test-Path $envFile) -and ((Get-Content $envFile -Raw) -match '(?m)^\s*GROKBOT2_VNC_URL\s*=\s*\S')) {
   Write-Host 'Box VNC: configured (.env).' -ForegroundColor Green
 } else {
-  Write-Host 'Box VNC: NOT SET. The computer pane will report the box as off.' -ForegroundColor Yellow
-  Write-Host '  Run infra/vps/grok-box-up.sh on the host and put the printed URL in .env as GROKBOT2_VNC_URL.'
+  Write-Host 'Box VNC: NOT SET. Computer pane reports off until GROKBOT2_VNC_URL is set.' -ForegroundColor Yellow
 }
 
-# launch app pointed at backend
-$env:CURSOR_API_BASE_URL = "http://localhost:$port"
-$env:SAND_BACKEND_URL = "http://localhost:$port"
+# -- app -----------------------------------------------------------------------
+if (-not (Test-Path $appExe)) {
+  Write-Host "App not found: $appExe" -ForegroundColor Red
+  exit 1
+}
+
+if (Test-HttpOk 'http://127.0.0.1:9222/json/version') {
+  Write-Host 'Grok Bot already on CDP :9222 - leaving it. Close it and re-run to relaunch with a fresh env.' -ForegroundColor Green
+  exit 0
+}
+
+Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'Grok Bot*' } | ForEach-Object {
+  try { $_.Kill() } catch {}
+}
+Start-Sleep -Milliseconds 400
+
+$env:CURSOR_API_BASE_URL = "http://localhost:$bff"
+$env:SAND_BACKEND_URL = "http://localhost:$bff"
 # Without this the app treats a localhost API base as dev mode and sends login to https://localhost:4443.
 $env:CURSOR_WEBSITE_URL = 'https://cursor.com'
-if (-not (Test-Path $appExe)) { Write-Host "App not found: $appExe" -ForegroundColor Red; exit 1 }
-Write-Host 'Launching Grok Bot. Type in the composer to chat via your Claude pool.' -ForegroundColor Cyan
-# CDP stays open so scripts/e2e-*.mjs can drive and inspect the real app (incl. the VNC webview).
-& $appExe --remote-debugging-port=9222
+# ROADMAP F6 / risk R1. The app's own kill switch, not a hack: main.cjs decides with
+#   hzn(t) { return t.envDisabled ? "disabled-by-env" : t.isLabBuild ? ... }
+# and `envDisabled` is `process.env.SAND_DISABLE_UPDATES === "1"`, checked FIRST, so it wins over
+# every other branch. An update would overwrite resources/app and silently drop the patch set —
+# the app would keep working and quietly stop being ours. Pin the version instead; re-apply
+# deliberately with `node infra/scripts/patch-client.mjs --apply` after reviewing a new release.
+$env:SAND_DISABLE_UPDATES = '1'
+Write-Host 'Launching patched Grok Bot.exe  (CDP :9222, API :8788)' -ForegroundColor Cyan
+$app = Start-Process -FilePath $appExe -ArgumentList '--remote-debugging-port=9222' -PassThru
+if (-not $app) {
+  Write-Host 'Start-Process returned no process. Retry from a console that is not running as Node.' -ForegroundColor Red
+  exit 1
+}
+$cdpUp = $false
+for ($i = 0; $i -lt 20; $i++) {
+  Start-Sleep -Seconds 1
+  if (Test-HttpOk 'http://127.0.0.1:9222/json/version') { $cdpUp = $true; break }
+}
+if (-not $cdpUp) {
+  Write-Host "Grok Bot pid $($app.Id) started but CDP :9222 did not answer. Unset ELECTRON_RUN_AS_NODE and retry." -ForegroundColor Red
+  exit 1
+}
+Write-Host "Grok Bot pid $($app.Id) - CDP :9222 up. Chat in the app window." -ForegroundColor Green

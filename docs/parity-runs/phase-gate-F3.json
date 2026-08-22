@@ -1,0 +1,46 @@
+{
+  "phase": "F3",
+  "pass": true,
+  "next": "F4",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "parity-report.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "verify-client-patch.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-ordered-sequence.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-standing-permission.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-abort-swallows-tool.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-pool-failure.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-app-full.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "F4"
+}

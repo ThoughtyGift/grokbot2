@@ -1,0 +1,21 @@
+{
+  "phase": "F1",
+  "pass": true,
+  "next": "F2",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "parity-report.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "verify-client-patch.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "F2"
+}

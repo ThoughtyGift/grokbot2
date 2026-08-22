@@ -25,11 +25,28 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { gwHeaders } from "./gw-auth.mjs";
+import { PUSHED_CHANNELS, NO_DATA_CHANNELS, SHARED_ROOM_COMMANDS, buildCommands } from "@grokbot2/cursor-acl";
+/** Enumerating the table only touches `ports` inside the handlers it returns. */
+const ACL_PORT_STUB = new Proxy({}, { get: () => new Proxy(() => {}, { get: () => () => {}, apply: () => ({}) }) });
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..", "..");
 const CONTRACT = join(REPO, "docs", "extracted", "box-host-contract.json");
-const GATEWAY_TS = join(REPO, "services", "grokbot-backend", "src", "gateway.ts");
+/**
+ * Where the Cursor dialect is written down.
+ *
+ * The command table and the SSE channel names moved into `@grokbot2/cursor-acl` in Phase 2, and
+ * `gateway.ts` is now only the adapter that supplies its ports. Both are read: the source of
+ * truth is "everything that speaks the dialect", so a name reappearing in the service would be
+ * caught rather than silently un-checked.
+ */
+const DIALECT_SRC = [
+  join(REPO, "packages", "cursor-acl", "src", "commands.ts"),
+  join(REPO, "packages", "cursor-acl", "src", "sse.ts"),
+  join(REPO, "packages", "cursor-acl", "src", "http.ts"),
+  join(REPO, "services", "grokbot-backend", "src", "gateway.ts"),
+];
+const dialectSource = () => DIALECT_SRC.filter(existsSync).map((f) => readFileSync(f, "utf8")).join("\n");
 const RUNS = join(REPO, "docs", "parity-runs");
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
@@ -221,9 +238,15 @@ if (want("auth")) {
 
 // ── gateway commands ──────────────────────────────────────────────────────────
 if (want("commands")) {
-  const gw = readFileSync(GATEWAY_TS, "utf8");
-  // The `methods` table: two-space-indented `name: (` entries.
-  const implemented = new Set([...gw.matchAll(/^ {2}([A-Za-z][\w]*):\s*\(/gm)].map((m) => m[1]));
+  // Read the BUILT table, not a regex over its source.
+  //
+  // The regex was `/^\s+([A-Za-z][\w]*):\s*\(/gm` — `name: (args) =>`. It never matched
+  // `ensureForeverBox: async (a) => {`, because `async` sits between the colon and the paren, so
+  // the check reported a command "we do not handle" that has been handled all along. Third time
+  // this exact bug class showed up (parity-report read 0/120 off gateway.ts; the channels check
+  // missed four pushes behind helpers), hence: ask the code, never its text.
+  const implemented = new Set(Object.keys(buildCommands(ACL_PORT_STUB)));
+  const refusals = new Set(SHARED_ROOM_COMMANDS);
   const skipped = new Set(contract.intentionallySkipped);
   const missing = contract.gatewayCommands
     .map((c) => c.name)
@@ -231,18 +254,28 @@ if (want("commands")) {
 
   record("commands", "every command is implemented or deliberately skipped", [], missing,
     missing.length ? `${missing.length} command(s) the client can send and we do not handle` : undefined);
-  // A skipped command must be a DECISION, so it has to appear in the contract's skip list rather
-  // than merely be absent from the table.
+
+  // A declined command must DECLINE, out loud. Being absent from the table is not a decision the
+  // client can see: the router falls through to `{}` with HTTP 200, which is indistinguishable
+  // from "worked, nothing to report". ROADMAP F5 moved shared rooms from absent to `{ok:false,
+  // reason}`, so what this asserts now is that the refusal is explicit — not that the command is
+  // missing.
   for (const n of skipped) {
-    record("commands", `skipped on purpose: ${n}`, false, implemented.has(n),
-      "shared rooms need a real relay — a room nobody can join is worse than no room");
+    record("commands", `declines out loud, not by silence: ${n}`, true, implemented.has(n) && refusals.has(n),
+      "shared rooms need a real relay — a room nobody can join is worse than no room, but the client must be TOLD");
   }
 }
 
 // ── event channels ────────────────────────────────────────────────────────────
 if (want("channels")) {
-  const gw = readFileSync(GATEWAY_TS, "utf8");
-  const broadcasts = [...new Set([...gw.matchAll(/broadcast\(\s*"([^"]+)"/g)].map((m) => m[1]))].sort();
+  // Read the hub's OWN declared list, not a regex over its source.
+  //
+  // The regex used to be `/broadcast\(\s*"([^"]+)"/`, which found only literal `broadcast("x")`
+  // calls. The moment F4 added channels pushed through `broadcastIfChanged(...)` and a `push(...)`
+  // helper in the command table, those four became invisible here and the check quietly passed on
+  // a shorter list. Same failure as parity-report reading 0/120 off `gateway.ts`: the instrument
+  // measured the source text instead of the code.
+  const broadcasts = [...PUSHED_CHANNELS].sort();
   record("channels", "backend broadcasts at least one channel", true, broadcasts.length > 0);
   for (const ch of broadcasts) {
     const ok = contract.eventChannels.includes(ch);
@@ -291,8 +324,20 @@ const out = {
 };
 
 mkdirSync(RUNS, { recursive: true });
-const file = join(RUNS, `${PLAN}-gateA-run-${String(RUN).padStart(2, "0")}.json`);
-writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
+const payload = `${JSON.stringify(out, null, 2)}\n`;
+const preferred = join(RUNS, `${PLAN}-gateA-run-${String(RUN).padStart(2, "0")}.json`);
+let file = preferred;
+try {
+  writeFileSync(file, payload);
+} catch {
+  file = join(RUNS, `${PLAN}-gateA-run-${Date.now()}.json`);
+  try {
+    writeFileSync(file, payload);
+  } catch (err) {
+    console.error(`warn: could not write gate artifact (${err.message})`);
+    file = null;
+  }
+}
 
 for (const [family, s] of Object.entries(byFamily)) {
   const mark = s.failed === 0 ? "PASS" : "FAIL";
@@ -307,5 +352,5 @@ if (failed.length) {
     if (c.note) console.log(`      ${c.note}`);
   }
 }
-console.log(`\nwrote ${file}`);
+if (file) console.log(`\nwrote ${file}`);
 process.exit(failed.length === 0 ? 0 : 1);

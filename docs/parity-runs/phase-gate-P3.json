@@ -1,0 +1,26 @@
+{
+  "phase": "P3",
+  "pass": true,
+  "next": "P4",
+  "backendUp": true,
+  "localApp": false,
+  "results": [
+    {
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "verify-sqlite.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "local-e2e",
+      "status": "skipped",
+      "detail": "CDP 9222 down — Gate B skipped WITH A REASON"
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "P4"
+}

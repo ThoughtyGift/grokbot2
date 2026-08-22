@@ -753,6 +753,14 @@
     {
       "no": 32,
       "name": "SIMULATED_MSG_REASON_PROJECT_KICKOFF"
+    },
+    {
+      "no": 33,
+      "name": "SIMULATED_MSG_REASON_MARKDOWN_PROMPT_BUTTON"
+    },
+    {
+      "no": 34,
+      "name": "SIMULATED_MSG_REASON_USER_QUICK_ACTION"
     }
   ],
   "agent.v1.SmartModeClassifierDecision": [
@@ -3683,6 +3691,10 @@
     {
       "no": 2,
       "name": "SOURCE_GLASS"
+    },
+    {
+      "no": 3,
+      "name": "SOURCE_SAND"
     }
   ],
   "aiserver.v1.ReportAgentFeedbackRequest.Variant": [

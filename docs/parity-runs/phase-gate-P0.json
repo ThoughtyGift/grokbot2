@@ -1,0 +1,36 @@
+{
+  "phase": "P0",
+  "pass": true,
+  "next": "P1",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "parity-report.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "contract-test.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "extract-contract.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-run.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-ui.mjs",
+      "status": "pass",
+      "exitCode": 0
+    }
+  ],
+  "advanced": true,
+  "phaseNow": "P1"
+}

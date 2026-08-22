@@ -1,6 +1,11 @@
 /** End-to-end check of the model-driven tool loop: ask → model requests a tool → approve → answer. */
+// P0 made `/gw/*` require the gateway ticket, and this script predates it: every call came
+// back 401 and the failure surfaced as `Cannot read properties of undefined`, several steps
+// later, on a destructure of the error body. `gwHeaders()` returns `{}` when there is no
+// token file, so this still works against a backend started with auth off.
+import { gwHeaders } from "./gw-auth.mjs";
 const BASE = process.env.GROKBOT2_BASE ?? "http://localhost:8788";
-const post = (m, b) => fetch(`${BASE}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b ?? {}) }).then((r) => r.json());
+const post = (m, b) => fetch(`${BASE}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b ?? {}) }).then((r) => r.json());
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const dump = async (agentId, label) => {

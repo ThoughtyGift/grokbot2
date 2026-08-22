@@ -6,7 +6,8 @@ no per-token API cost, full control.
 
 > ⚠️ **Personal / research use.** Grok Bot is a rebranded Cursor (Anysphere) desktop agent.
 > This project emulates the backend contract its client speaks so you can self-host the
-> brain. Do not redistribute or impersonate Cursor infrastructure. See [docs/legal.md](docs/legal.md).
+> brain. The **patched stock app is the production UI** ([ROADMAP.md](ROADMAP.md) F0–F7;
+> `apps/grokbot-web` is fallback). Do not redistribute or impersonate Cursor infrastructure. See [docs/legal.md](docs/legal.md).
 
 ## What it does
 
@@ -39,17 +40,22 @@ docs/                      architecture, protocol reference, spike findings
 pnpm install
 # put your hal_xxx pool key here (gitignored):
 echo "hal_xxxxxxxx" > services/grokbot-backend/pool-key.txt
-pnpm backend                      # starts http://localhost:8788
+pnpm backend                      # computer :8790 + runtime :8789 + ops :8791 + BFF :8788
 ```
 
-Then launch the app pointed at the backend (Windows):
+Then launch the **patched stock app** (production UI):
 
 ```powershell
-infra/scripts/run.ps1
+pnpm dev:app                  # 4-process stack + Grok Bot.exe on CDP :9222
 ```
 
-Type in the composer → the message goes to `sendPrompt` → your Claude pool → the reply
-renders in the Grok Bot chat.
+If the client is not patched, that command exits 2 and prints `node infra/scripts/patch-client.mjs --apply`.
+
+Fallback UI (debug only, not feature-parity):
+
+```powershell
+pnpm web                      # http://localhost:5173  (/v1 only)
+```
 
 ## License
 

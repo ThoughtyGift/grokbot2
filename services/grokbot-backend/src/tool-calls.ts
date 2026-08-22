@@ -12,6 +12,7 @@
  * it can be tested in milliseconds instead of by watching an app.
  *
  * Tests: src/tool-calls.test.ts — the first automated tests in this repo.
+ * Runtime has an identical copy at services/grokbot-runtime/src/tool-calls.ts for `/internal/turns`.
  */
 
 /** One request the model made. `raw` is kept so the caller can strip it from the visible bubble. */

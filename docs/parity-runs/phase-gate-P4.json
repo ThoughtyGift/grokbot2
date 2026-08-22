@@ -1,0 +1,19 @@
+{
+  "phase": "P4",
+  "pass": true,
+  "next": "P5",
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    { "script": "verify-runtime.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "measure-p4-latency.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "e2e-abort-swallows-tool.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "e2e-pool-failure.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "e2e-runtime-down.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "e2e-ordered-sequence.mjs", "status": "pass", "exitCode": 0 },
+    { "script": "e2e-app-full.mjs", "status": "pass", "exitCode": 0 }
+  ],
+  "advanced": true,
+  "phaseNow": "P5",
+  "note": "Assembled from a green verify+p50+abort run, then pool-failure/runtime-down/ordered-sequence after killing stale :8799, then e2e-app-full exit 0 with KNOWN_OPEN (presence + deleted-bot). p50 runtime/pool=0.868 (docs/parity-runs/P4-latency.json)."
+}

@@ -27,6 +27,22 @@ export interface SubagentType {
   label: string;
 }
 
+/**
+ * The model every subagent runs on.
+ *
+ * Was hardcoded `"gemini-2.5-flash"`. Measured against this install's pool 2026-08-21:
+ *
+ *   gemini-3.7-flash   aborted after 45s      (the config default — equally dead here)
+ *   gemini-2.5-flash   502 after 38s          (Cloudflare's gateway-timeout page)
+ *   claude-opus-5      ok in 6.6s             (what config.model actually is)
+ *
+ * So every subagent failed on every pool call while the main turn worked, and the failure read as
+ * "pool bad response (502)" — which looks like an outage and is not one. Defaulting to
+ * `config.model` means a subagent uses whatever model this install has proven it can reach;
+ * `GROKBOT2_SUBAGENT_MODEL` still overrides it for anyone who wants a cheaper one.
+ */
+const SUBAGENT_MODEL = process.env.GROKBOT2_SUBAGENT_MODEL ?? config.model;
+
 export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   /**
    * The original pins `claude-4.5-sonnet` here (BROWSER_USE_SUBAGENT_CONFIG, AGENT_ONLY).
@@ -47,16 +63,46 @@ export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   browserUse: {
     allow: ["browser_"],
     label: "duyệt web",
-    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
+    model: SUBAGENT_MODEL,
     prompt:
       "Enter BROWSER USE mode. Use the provided browser tools to interact with web pages.\n\n" +
       "Important: Every browser tool call automatically returns a screenshot of the current " +
       "page state. You do NOT need to use the browser_take_screenshot tool explicitly - it " +
       "would be redundant since you already receive screenshots after each action.",
   },
+  /**
+   * The stock host offers `pastConversationExplorer` (gated by
+   * `includePastConversationExplorerSubagent` in host-main.cjs). Its own description is explicit
+   * about when to reach for it: "MUST USE for any question about agent behavior, failures,
+   * patterns, or user work history. Trigger immediately when user asks: 'what have you been
+   * failing at', 'what are your problems'".
+   *
+   * The host's version reads an `_index.json` on the box, filtering `status="FINISHED"` and
+   * `source="team"` — a structure this install does not have. So the capability is the same and
+   * the data source is ours: `search_conversations` over the transcripts we already store.
+   */
+  pastConversationExplorer: {
+    model: SUBAGENT_MODEL,
+    allow: ["search_conversations"],
+    label: "tra hội thoại cũ",
+    prompt:
+      "You investigate this assistant's own history across past conversations with the user.\n\n" +
+      "Use search_conversations to find evidence. It searches every OTHER bot's transcript — " +
+      "messages, replies and tool calls — and returns the bot name, a timestamp, an entry id " +
+      "and a snippet around each match.\n\n" +
+      "Guidelines:\n" +
+      "- Search several phrasings before concluding nothing exists: the user's words and the " +
+      "words in the transcript rarely match exactly.\n" +
+      "- Report what the transcripts SAY, with the bot name and date. Never generalise beyond " +
+      "the snippets you actually retrieved.\n" +
+      "- If the search comes back empty, say so plainly. An invented pattern is worse than " +
+      "\"nothing in the history covers that\".\n" +
+      "- Answer as a regular message, no emojis.",
+  },
+
   // EXPLORE_SUBAGENT_PROMPT, trimmed of its Cursor/codebase framing — ours reads the box.
   explore: {
-    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
+    model: SUBAGENT_MODEL,
     allow: ["read_file_v2", "list_dir_v2", "glob_file_search", "ripgrep_raw_search"],
     label: "tìm trong box",
     prompt:
@@ -71,7 +117,7 @@ export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   },
   // SHELL_SUBAGENT_PROMPT, verbatim.
   shell: {
-    model: process.env.GROKBOT2_SUBAGENT_MODEL ?? "gemini-2.5-flash",
+    model: SUBAGENT_MODEL,
     allow: ["run_terminal_command_v2"],
     label: "chạy lệnh",
     prompt:
@@ -104,6 +150,32 @@ const TOOL_CALL = /TOOL_CALL:\s*([A-Za-z_][\w-]*)\s*\((.*?)\)\s*$/s;
  * The loop is the same TOOL_CALL convention the main turn uses, because the pool has no native
  * tool calling — the difference is the restricted tool list and the borrowed system prompt.
  */
+/**
+ * Clean a subagent's final answer before it becomes a tool result the user reads.
+ *
+ * Measured 2026-08-21: `pastConversationExplorer` returned
+ *
+ *     TOOL_CALL: search_conversations({"query": "…"})
+ *     Human: Kết quả search_conversations:
+ *     2 kết quả cho "…"
+ *
+ * The model wrote the tool line AND its own "Human:" continuation in one completion. `TOOL_CALL`
+ * did not match that shape, so the loop took the whole thing for a report and handed the user the
+ * protocol — the same defect class as an aborted turn leaving a raw TOOL_CALL bubble.
+ *
+ * Cut at the first machine marker and keep what precedes it. When nothing readable precedes it,
+ * say the run produced no report rather than printing the transcript: an empty answer that names
+ * itself beats a confusing one that looks like output.
+ */
+function asReport(text: string): string {
+  const cut = text.search(/(^|\n)\s*(TOOL_CALL:|Human:|Assistant:)/);
+  const spoken = (cut >= 0 ? text.slice(0, cut) : text).trim();
+  if (spoken) return spoken;
+  // Nothing before the marker: surface the tool output the model was quoting, if any, else say so.
+  const quoted = text.replace(/^[\s\S]*?(Human:|Assistant:)\s*/, "").trim();
+  return quoted || "(subagent không đưa ra báo cáo — chỉ phát ra dòng giao thức)";
+}
+
 export async function runSubagent(
   typeName: string,
   task: string,
@@ -144,7 +216,7 @@ export async function runSubagent(
     if (!text) return `(subagent không trả lời — model "${opts.model}" trả rỗng cho prompt của kiểu "${typeName}")`;
 
     const m = TOOL_CALL.exec(text);
-    if (!m) return text;                       // no tool wanted → this is the report
+    if (!m) return asReport(text);             // no tool wanted → this is the report
 
     const [, name = "", arg = ""] = m;
     if (!allowed.includes(name.toLowerCase())) {

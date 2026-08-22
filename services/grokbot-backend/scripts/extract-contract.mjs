@@ -24,7 +24,7 @@
  *   node scripts/extract-contract.mjs --check         # verify only, exit 1 on drift
  *   node scripts/extract-contract.mjs --asar <path>
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,10 +38,41 @@ const COMMANDS = join(REPO, "docs", "extracted", "gateway-commands.json");
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
 const CHECK_ONLY = process.argv.includes("--check");
-const ASAR = arg("--asar", join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot", "resources", "app.asar"));
 
 class ExtractionError extends Error {}
 const fail = (msg) => { throw new ExtractionError(msg); };
+
+/** Packed asar only — never unpacked dirs or host-main.cjs (those lack the channel anchors). */
+const isAsarFile = (p) => {
+  try {
+    return existsSync(p) && statSync(p).isFile();
+  } catch {
+    return false;
+  }
+};
+
+/** Installers sometimes unpack; a gitignored copy may live beside the repo. First file hit wins. */
+const resolveAsar = () => {
+  const explicit = arg("--asar", "");
+  if (explicit) return explicit;
+  const local = process.env.LOCALAPPDATA ?? "";
+  const desktop = dirname(REPO);
+  const candidates = [
+    process.env.GROKBOT2_ASAR,
+    join(REPO, "Grok Bot", "resources", "app.asar"),
+    join(desktop, "Grok Bot", "resources", "app.asar"),
+    join(local, "Programs", "Grok Bot", "resources", "app.asar"),
+    join(local, "Programs", "Grok Bot", "resources", "app.asar.disabled-by-grokbot2"),
+  ].filter(Boolean);
+  const hit = candidates.find(isAsarFile);
+  if (!hit) {
+    fail(`app.asar not found. Tried:\n  ${candidates.join("\n  ")}\nPass --asar <path> or GROKBOT2_ASAR.`);
+  }
+  return hit;
+};
+
+const ASAR = resolveAsar();
+console.log(`asar       ${ASAR}`);
 
 // ── load ──────────────────────────────────────────────────────────────────────
 if (!existsSync(ASAR)) fail(`app.asar not found at ${ASAR} — pass --asar <path>`);

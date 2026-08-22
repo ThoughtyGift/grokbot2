@@ -2,7 +2,7 @@
   "plan": "P3",
   "run": 1,
   "gate": "A",
-  "backendCommit": "d213abd",
+  "backendCommit": "2cb55e9",
   "appVersion": "0.20.0",
   "base": "http://localhost:8788",
   "summary": {

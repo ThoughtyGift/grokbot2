@@ -8,19 +8,20 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { handleAuth } from "./auth.js";
-import { handleGateway, hostHealth } from "./gateway.js";
-import { bootstrapResponses, connectStreamEnd } from "@grokbot2/proto";
-import { saveNow } from "./store.js";
-import { chatSnapshot } from "./chat.js";
-import { startScheduler } from "./automations.js";
-import { reportBoxConfig } from "./forever-box.js";
+import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
+import { saveNow, persistenceInfo } from "./store.js";
+import { runtimeHealth } from "./brain.js";
+import { chatSnapshot } from "./chat/state.js";
+import { startScheduler, opsHealth, tick, dueIds, routinesForOps, fireById, fireListeners } from "./automations.js";
+import { reportBoxConfig, computerHealth } from "./forever-box.js";
 import { browserProbe, isBrowserConfigured } from "./browser.js";
 import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
-import { recordUnknown, notFoundBody, saveCoverageNow, recordRpc } from "./observe.js";
+import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
 import { reportModelToolSupport } from "./model-probe.js";
+import { handleNative } from "./native.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -72,34 +73,61 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return res.end(JSON.stringify(hostHealth()));
   }
 
+  // ── ops internal (loopback — this server binds 127.0.0.1, not via /gw) ──
+  if (url.startsWith("/internal/ops/")) {
+    const json = (value: unknown, code = 200) => {
+      res.writeHead(code, { "content-type": "application/json" });
+      res.end(JSON.stringify(value));
+    };
+    try {
+      const bodyJ = body.length ? JSON.parse(body.toString("utf8")) as Record<string, unknown> : {};
+      const nowOf = () => {
+        if (bodyJ.now == null) return new Date();
+        const d = new Date(bodyJ.now as string | number);
+        if (Number.isNaN(d.getTime())) throw new Error("bad now");
+        return d;
+      };
+      if (url.startsWith("/internal/ops/routines") && (req.method === "GET" || req.method === "POST")) {
+        return json({ routines: routinesForOps() });
+      }
+      if (url.startsWith("/internal/ops/due") && req.method === "POST") {
+        return json({ ids: dueIds(nowOf()) });
+      }
+      if (url.startsWith("/internal/ops/tick") && req.method === "POST") {
+        tick(nowOf());
+        return json({ ok: true });
+      }
+      if (url.startsWith("/internal/ops/fire-listeners") && req.method === "POST") {
+        const n = fireListeners(String(bodyJ.platform ?? ""), String(bodyJ.context ?? ""));
+        return json({ ok: true, fired: n });
+      }
+      if (url.startsWith("/internal/ops/fire") && req.method === "POST") {
+        const trigger = bodyJ.trigger === "event" || bodyJ.trigger === "manual" ? bodyJ.trigger : "schedule";
+        const ok = fireById(String(bodyJ.automationId ?? ""), trigger, typeof bodyJ.context === "string" ? bodyJ.context : undefined);
+        return json({ ok }, ok ? 200 : 404);
+      }
+      return json({ error: "not found" }, 404);
+    } catch (e) {
+      res.writeHead(400, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ error: e instanceof Error ? e.message : "bad json" }));
+    }
+  }
+
+  // ── native API (S13; OpenAPI docs/api/grokbot2-v0.yaml) — beside /gw, not through it ──
+  if (await handleNative(url, body, res, req.headers, req.method ?? "?")) return;
+
   // ── box gateway (JSON + SSE + chat) ──
   if (handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?")) return;
 
   // ── ConnectRPC bootstrap (protobuf) ──
-  const rpc = url.match(/\/([a-z0-9_.]+\.v\d+\.[A-Za-z]+)\/([A-Za-z]+)/i);
+  //
+  // Framing and payloads are the ACL's business; this shell only carries bytes. The content type
+  // is passed through because it decides the framing — a `connect+` stream has to be answered as
+  // one, and the response echoes the request's own type.
+  const rpc = handleBootstrapRpc(url, ct);
   if (rpc) {
-    const method = rpc[2];
-    // The blind spot that has cost two rounds of guessing on P0-5.
-    //
-    // Everything about which GATEWAY methods the app calls is recorded (observe.ts), but the
-    // ConnectRPC bootstrap surface had no instrumentation at all — so "does the app re-fetch
-    // EnsureSandBox?" was unanswerable, and the question was attacked twice by restarting the app
-    // and hoping. It is answerable: count the calls.
-    recordRpc(method);
-    const isStream = ct.includes("connect+") || ct.includes("grpc");
-    const isJson = ct.includes("json");
-    const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;
-    const payload = build ? build() : undefined;
-    if (isStream) {
-      res.writeHead(200, { "content-type": ct });
-      return res.end(connectStreamEnd(payload));
-    }
-    if (isJson) {
-      res.writeHead(200, { "content-type": "application/json" });
-      return res.end("{}");
-    }
-    res.writeHead(200, { "content-type": "application/proto" });
-    return res.end(payload ?? Buffer.alloc(0));
+    res.writeHead(rpc.status, { "content-type": rpc.contentType });
+    return res.end(rpc.body);
   }
 
   // Nothing matched: not auth, not the gateway, not a ConnectRPC method. Recorded for the same
@@ -123,7 +151,12 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 }
 
 server.listen(config.port, "127.0.0.1", () => {
-  startScheduler();
+  if (config.opsUrl) {
+    logSafe(`[grokbot2] ops process ${config.opsUrl} owns scheduler + public webhooks (in-process cron off)`);
+    void opsHealth().then((s) => logSafe(`[grokbot2] ops: ${s}`));
+  } else {
+    startScheduler();
+  }
   // Mint the gateway ticket BEFORE anything can serve EnsureSandBox, so the descriptor and the
   // check are guaranteed to carry the same value.
   ensureGatewayToken();
@@ -131,6 +164,10 @@ server.listen(config.port, "127.0.0.1", () => {
   // Every startup line goes through logSafe: these carry the pool URL, the box URL, the VNC URL
   // and the CDP endpoint, and any of them can hold a credential in its query string.
   logSafe(`[grokbot2] backend on http://localhost:${config.port}`);
+  const persist = persistenceInfo();
+  logSafe(`[grokbot2] persistence: sqlite ${persist.sqlite}${persist.imported ? " (state.json frozen)" : ""}`);
+  void runtimeHealth().then((s) => logSafe(`[grokbot2] runtime: ${s}`));
+  void computerHealth().then((s) => logSafe(`[grokbot2] computer: ${s}`));
   logSafe(`[grokbot2] brain: ${config.poolUrl} (model=${config.model})`);
   reportBoxConfig((msg) => logSafe(`[grokbot2] ${msg}`));
   reportMcpConfig((msg) => logSafe(`[grokbot2] ${msg}`));
@@ -145,5 +182,6 @@ server.listen(config.port, "127.0.0.1", () => {
   // P5-5: a model that will not speak the TOOL_CALL convention removes every tool the bot has, and
   // says so only by being unhelpful. Cached per model, so `tsx watch` does not re-buy the answer.
   void reportModelToolSupport((msg) => logSafe(`[grokbot2] ${msg}`));
-  logSafe(`[grokbot2] launch the app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
+  logSafe(`[grokbot2] native API http://localhost:${config.port}/v1/health  (FE: pnpm web)`);
+  logSafe(`[grokbot2] launch the stock app with CURSOR_API_BASE_URL=http://localhost:${config.port}`);
 });

@@ -6,9 +6,27 @@
  * descriptors (see docs/protocol-reference.md). Gate values:
  *   SandAccessState.GRANTED = 1, SandAccessBlockReason.NONE = 1, SandTrialClaimStatus.NONE = 1.
  */
-import { message, pbStr, pbVar, pbBool } from "./encode.js";
+import { message, pbStr, pbVar, pbBool, pbMsg } from "./encode.js";
 
 export const SPIKE_AUTH_ID = "auth0|grokbot2-user";
+
+/**
+ * Gate RPCs the stock app hits before the workspace (protocol-reference.md + plugins overlay).
+ * `WatchSandBoxMigration` is listed by the client and has no builder here — empty proto 200.
+ * F0 baseline `bootstrap.have` is how many of these have an explicit body in `bootstrapResponses`.
+ */
+export const BOOTSTRAP_GATE_METHODS = [
+  "GetSandAccessStatus",
+  "GetMe",
+  "GetUserPrivacyMode",
+  "GetSandUsageStatus",
+  "GetSandTrialClaimStatus",
+  "EnsureSandBox",
+  "EnsureSandBoxWindow",
+  "WatchSandBoxMigration",
+  "ListMarketplacePlugins",
+  "GetEffectiveUserPlugins",
+] as const;
 
 /** Map of RPC method name -> bare protobuf response body. */
 export const bootstrapResponses: Record<string, () => Buffer> = {
@@ -40,6 +58,17 @@ export const bootstrapResponses: Record<string, () => Buffer> = {
   // Override these URLs in production to point at the real VPS box.
   EnsureSandBox: () => ensureSandBox(),
   EnsureSandBoxWindow: () => ensureSandBox(),
+
+  // Plugins overlay. Empty proto used to decode as plugins:[] → Marketplace "isn't available".
+  // These are local stubs (not Cursor.com). yPa drops a Plugin with no mcp_servers and no skills.
+  ListMarketplacePlugins: () => listMarketplacePlugins(),
+  GetEffectiveUserPlugins: () => getEffectiveUserPlugins(),
+};
+
+/** Connect `application/json` bodies — proto JSON names (camelCase, enums as names, int64 as string). */
+export const bootstrapJsonResponses: Record<string, () => string> = {
+  ListMarketplacePlugins: () => listMarketplacePluginsJson(),
+  GetEffectiveUserPlugins: () => getEffectiveUserPluginsJson(),
 };
 
 /**
@@ -72,4 +101,88 @@ export function ensureSandBox(base = "http://localhost:8788"): Buffer {
     // fork base empty makes the whole vncProxy block invalid, so default it to the same box.
     pbStr(12, process.env.GROKBOT2_FORK_VNC_URL ?? new URL(vncUrl).origin), // fork_vnc_base_url
   );
+}
+
+/** Keep each Plugin message under 127 bytes so every length prefix is a 1-byte varint. */
+const LOCAL_PLUGINS = [
+  {
+    id: 1,
+    name: "memory",
+    displayName: "Grokbot2 Memory",
+    description: "Local MCP test plugin.",
+    mcp: { name: "memory", description: "From .mcp.json" },
+  },
+  {
+    id: 2,
+    name: "skill",
+    displayName: "Grokbot2 Skill",
+    description: "Local skill test plugin.",
+    skill: { name: "local-skill", description: "Yours Private row" },
+  },
+] as const;
+
+function mcpDescriptor(name: string, description: string): Buffer {
+  return message(pbStr(1, name), pbStr(2, description));
+}
+
+function skillDescriptor(name: string, description: string): Buffer {
+  return message(pbStr(1, name), pbStr(2, description));
+}
+
+/** aiserver.v1.Plugin — only fields the overlay's yPa() reads. No large int64 timestamps. */
+function plugin(p: (typeof LOCAL_PLUGINS)[number]): Buffer {
+  return message(
+    pbVar(1, p.id),
+    pbStr(2, p.name),
+    pbStr(3, p.displayName),
+    pbStr(4, p.description),
+    pbVar(6, 3),
+    pbBool(12, true),
+    pbStr(24, "https://local.test"),
+    pbStr(27, "local.test"),
+    "skill" in p && p.skill ? pbMsg(28, skillDescriptor(p.skill.name, p.skill.description)) : null,
+    "mcp" in p && p.mcp ? pbMsg(32, mcpDescriptor(p.mcp.name, p.mcp.description)) : null,
+    pbVar(41, 1),
+  );
+}
+
+function pluginJson(p: (typeof LOCAL_PLUGINS)[number]): Record<string, unknown> {
+  return {
+    id: String(p.id),
+    name: p.name,
+    displayName: p.displayName,
+    description: p.description,
+    status: "PLUGIN_STATUS_APPROVED",
+    isPublished: true,
+    gitUrl: "https://local.test",
+    fullRef: "local.test",
+    ...("skill" in p && p.skill ? { skills: [{ name: p.skill.name, description: p.skill.description }] } : {}),
+    ...("mcp" in p && p.mcp ? { mcpServers: [{ name: p.mcp.name, description: p.mcp.description }] } : {}),
+    lifecycleState: "PLUGIN_LIFECYCLE_STATE_PUBLIC_LISTED",
+  };
+}
+
+/** aiserver.v1.ListMarketplacePluginsResponse: plugins (1) repeated, has_more (3). */
+export function listMarketplacePlugins(): Buffer {
+  return message(...LOCAL_PLUGINS.map((p) => pbMsg(1, plugin(p))), pbBool(3, false));
+}
+
+export function listMarketplacePluginsJson(): string {
+  return JSON.stringify({ plugins: LOCAL_PLUGINS.map(pluginJson), hasMore: false });
+}
+
+/**
+ * aiserver.v1.GetEffectiveUserPluginsResponse.
+ *
+ * Plugin 1 is marked installed+enabled so Yours → Installed has a row to inspect. Plugin 2 stays
+ * catalog-only so Marketplace still has an Add button.
+ */
+export function getEffectiveUserPlugins(): Buffer {
+  return message(pbMsg(1, message(pbMsg(1, plugin(LOCAL_PLUGINS[0])), pbBool(4, true))));
+}
+
+export function getEffectiveUserPluginsJson(): string {
+  return JSON.stringify({
+    plugins: [{ plugin: pluginJson(LOCAL_PLUGINS[0]), isEnabled: true }],
+  });
 }

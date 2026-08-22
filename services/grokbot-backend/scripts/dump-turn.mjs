@@ -19,7 +19,11 @@ await writeFile(join(root, "notes.txt"), "alpha\nbravo\nMAGIC_TOKEN_9137\ndelta\
 const procs = [];
 const killTree = (p) =>
   new Promise((r) => {
-    if (!p.pid) return r();
+        // Never taskkill a pid whose child has already exited: with `shell: true` the pid is the
+    // SHELL's, a shell that dies early (a backend losing the port to EADDRINUSE, say) frees it,
+    // and Windows hands the number to whatever starts next. A killTree at the end of the script
+    // then kills a stranger — twice in one session that stranger was the BFF on :8788.
+    if (!p.pid || p.exitCode !== null || p.killed) return r();
     if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }).on("close", r);
     else { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } r(); }
   });

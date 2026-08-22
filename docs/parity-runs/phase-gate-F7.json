@@ -1,0 +1,40 @@
+{
+  "phase": "F7",
+  "pass": false,
+  "next": null,
+  "backendUp": true,
+  "localApp": true,
+  "results": [
+    {
+      "script": "parity-report.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "verify-client-patch.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-avatar.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-reaction.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "e2e-app-full.mjs",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "script": "soak-day.mjs",
+      "status": "fail",
+      "exitCode": 1
+    }
+  ],
+  "advanced": false
+}

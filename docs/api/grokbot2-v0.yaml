@@ -1,0 +1,665 @@
+openapi: 3.1.0
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# grokbot2 native API — v0 (served at `/v1/*` by the BFF since Phase 7)
+#
+# The stock client speaks the Cursor dialect, and `@grokbot2/cursor-acl` is what translates it
+# (ROADMAP §4). This document is the other side: what `apps/grokbot-web` calls. The ACL stays
+# beside these routes until Phase 8 (`GROKBOT2_CURSOR_ACL=0`).
+#
+# v0 covers health, agents, send, transcript, events. Phase 7 also serves a thin loopback
+# session (`GET /v1/session`), read-only computer status, local-tool permission resolve, image
+# attachments, and `ask_question` widgets (`POST /v1/agents/{id}/widgets`). Remaining surfaces
+# (memory, routines, channels, MCP, handoff) stay reserved at the bottom.
+#
+# Two rules this API keeps that the Cursor dialect does not:
+#
+#   - One name per operation. The dialect has five spellings for reading a transcript
+#     (`getAgentTranscriptTail`, `openAgentTail`, `getAgentTranscript`, `getAgentTranscriptPage`,
+#     `getAgentThread`) and the ACL answers all of them with the tail; here there is one.
+#   - Failure is a status code, not `{ok: false, reason}` in a 200. The dialect cannot do that —
+#     the client treats a non-200 as the box being unreachable — so the ACL keeps answering 200
+#     with a reason, and only this side gets to be strict.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+info:
+  title: grokbot2 native API
+  version: 0.1.0
+  summary: Native contract for the grokbot2 services, independent of the Cursor client dialect.
+  description: |
+    Served by `services/grokbot-backend` at `/v1/*` (see ADR-P7-1). The stock surface `/gw/*`
+    remains until Phase 8. Native FE: `apps/grokbot-web`. ROADMAP.md §5.7.
+  license:
+    name: Personal / research use only — see docs/legal.md
+
+servers:
+  - url: http://localhost:8788
+    description: Local backend. The native routes will sit alongside `/gw/*` while both exist.
+
+tags:
+  - name: health
+    description: Liveness and whether a turn is in flight.
+  - name: agents
+    description: S2 directory — the bots themselves.
+  - name: conversation
+    description: S3 conversation — transcript entries and the ordered log.
+  - name: runtime
+    description: S4 runtime — starting and interrupting a turn.
+  - name: events
+    description: The push stream. Named after the in-process domain events, not the client's channels.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Is the backend up, and is it busy?
+      security: []   # a health check behind the credential that broke cannot diagnose the break
+      responses:
+        "200":
+          description: Always, if the process is answering at all.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /v1/agents:
+    get:
+      tags: [agents]
+      operationId: listAgents
+      summary: The roster, as the sidebar shows it.
+      parameters:
+        - name: q
+          in: query
+          description: Substring match over name and transcript text. Omit for everything.
+          schema: { type: string }
+        - name: includeHidden
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Every visible agent. An empty roster is `[]`, never `null`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Agent" }
+    post:
+      tags: [agents]
+      operationId: createAgent
+      summary: Create a bot.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Defaults to "Claude" when absent or blank.
+                description: { type: string }
+      responses:
+        "201":
+          description: Created. The transcript is empty and is returned so the caller need not read it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent, transcript]
+                properties:
+                  agent: { $ref: "#/components/schemas/Agent" }
+                  transcript: { $ref: "#/components/schemas/TranscriptPage" }
+
+  /v1/agents/{agentId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [agents]
+      operationId: getAgent
+      summary: One roster row.
+      responses:
+        "200":
+          description: The agent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [agents]
+      operationId: updateAgent
+      summary: Rename, re-describe, or change per-agent flags.
+      description: |
+        A rename appends an `event` entry to the transcript (`name-changed`), because the
+        conversation is where the history of a bot lives.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 1 }
+                description: { type: string }
+                unread: { type: boolean }
+                hidden: { type: boolean }
+                notificationsEnabled: { type: boolean }
+                notifyOnUpdates: { type: boolean }
+      responses:
+        "200":
+          description: The updated agent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [agents]
+      operationId: deleteAgent
+      summary: Delete a bot, its transcript and anything running for it.
+      description: Aborts an in-flight turn and closes the agent's browser tab. Idempotent.
+      responses:
+        "204": { description: Gone, or was never there. }
+
+  /v1/agents/{agentId}/transcript:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [conversation]
+      operationId: getTranscript
+      summary: A page of the conversation, newest last.
+      description: |
+        Paging walks BACKWARDS from the newest entry: pass the `seq` of the oldest entry you
+        already hold as `beforeSeq` to get the page before it. `seq` is assigned by S3 and is
+        contiguous per agent starting at 1 — the client replicates an ordered log, and a gap
+        parks every later event as foreign (see docs/parity.md §2ac).
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+        - name: beforeSeq
+          in: query
+          description: Return entries with a lower `seq` than this. Omit for the tail.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: The page. Unknown agents get an empty page rather than a 404, so a client that races a delete does not have to special-case it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscriptPage" }
+
+  /v1/agents/{agentId}/turns:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      tags: [runtime]
+      operationId: sendPrompt
+      summary: Send a message and start a turn.
+      description: |
+        Returns as soon as the user's entry is on the log; the assistant's reply streams over
+        `/v1/events`. `clientNonce` makes the call idempotent — resending the same nonce returns
+        the original acceptance instead of duplicating the message, which is what makes a retry
+        after a dropped connection safe.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                clientNonce:
+                  type: string
+                  description: Caller-generated. Strongly recommended; without it a retry duplicates.
+                attachments:
+                  type: array
+                  items:
+                    type: object
+                    required: [path]
+                    properties:
+                      path:
+                        type: string
+                        description: A staged attachment path from S8 media.
+                      name: { type: string }
+      responses:
+        "202":
+          description: Accepted; the turn is running.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TurnAccepted" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: A turn is already running for this agent and was not interrupted first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/agents/{agentId}/turns/current:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    delete:
+      tags: [runtime]
+      operationId: interruptTurn
+      summary: Stop the running turn.
+      description: |
+        The partial reply stays on the log, marked as interrupted — discarding it would lose work
+        the user watched arrive. Answers 204 whether or not anything was running.
+      responses:
+        "204": { description: Nothing is running for this agent any more. }
+
+  /v1/events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Server-sent events for everything that changes.
+      description: |
+        One stream for the whole workspace, not one per agent. Event names are the in-process
+        domain events verbatim (`transcript.append`, `agent.upserted`, `computer.status`,
+        `automations.changed`), because a transport that renames them is a transport that can
+        disagree with the publisher — which is exactly how the Cursor channel names went wrong
+        six times (docs/parity.md §2w).
+
+        On connect the server sends `agent.upserted` with the full roster, so a reconnect
+        re-anchors without replaying anything.
+      responses:
+        "200":
+          description: The stream. Stays open; a comment line is sent every 5s as a keepalive.
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /v1/session:
+    get:
+      tags: [health]
+      operationId: getSession
+      summary: Local login — the BFF session token (loopback).
+      security: []
+      responses:
+        "200":
+          description: Bearer to send on every other `/v1` call.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, tokenType]
+                properties:
+                  token: { type: string }
+                  tokenType: { type: string, const: bearer }
+                  auth: { type: string }
+
+  /v1/agents/{agentId}/computer:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [agents]
+      operationId: getComputer
+      summary: Read-only forever-box status (VNC URL for the iframe).
+      responses:
+        "200":
+          description: `state` is running when `vncUrl` is set.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agentId, state]
+                properties:
+                  agentId: { type: string }
+                  state: { type: string, enum: [running, off] }
+                  vncUrl: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/agents/{agentId}/permissions:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      tags: [runtime]
+      operationId: resolvePermission
+      summary: Allow or deny a pending local-tool permission card.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, approved]
+              properties:
+                requestId: { type: string }
+                approved: { type: boolean }
+      responses:
+        "204": { description: Applied to the pending card. }
+        "404": { description: Agent or requestId is not pending. }
+
+  /v1/agents/{agentId}/widgets:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      tags: [runtime]
+      operationId: respondToWidget
+      summary: Answer an `ask_question` card (one option, or a custom string).
+      description: |
+        Parks the turn until this call. `entryId` is the widget's own `id` from the transcript.
+        `value` is the option's `value` if present, otherwise its `label`. A 409 means that
+        card was already answered. The answer is echoed as a user `message` and the parked
+        turn resumes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                entryId: { type: string, description: Widget entry id. Omit to answer the newest unanswered card. }
+                value: { type: string, minLength: 1 }
+      responses:
+        "204": { description: Recorded; the turn continues. }
+        "400":
+          description: Missing value.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { description: Agent or widget entry is not pending. }
+        "409":
+          description: That widget was already answered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/attachments:
+    post:
+      tags: [conversation]
+      operationId: uploadAttachment
+      summary: Stage an image. Returns a path to send on the next turn.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bytesBase64]
+              properties:
+                filename: { type: string }
+                bytesBase64:
+                  type: string
+                  description: Raw base64, or a data URL. Must decode as PNG/JPEG/GIF/WebP.
+      responses:
+        "201":
+          description: Staged. Put `path` into `POST /v1/agents/{id}/turns` attachments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [path, href]
+                properties:
+                  path: { type: string }
+                  fileName: { type: string }
+                  href: { type: string, description: "GET this to fetch the bytes (loopback, no bearer)." }
+                  mime: { type: string }
+                  width: { type: integer }
+                  height: { type: integer }
+        "400":
+          description: Not an image, or missing bytes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [conversation]
+      operationId: getAttachment
+      summary: Image bytes for a staged path. Loopback; no bearer, so `<img src>` works.
+      security: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The image.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        The local session token. Minted at startup by the backend, not a cloud credential — see
+        docs/architecture-decisions.md (ADR-P0-5).
+
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^agent-[0-9]+$" }
+
+  responses:
+    NotFound:
+      description: No such agent.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, description: Human-readable. Machine branching is on the status code. }
+
+    Health:
+      type: object
+      required: [ok, pid, isBusy, startedAt]
+      properties:
+        ok: { type: boolean }
+        pid: { type: integer }
+        isBusy:
+          type: boolean
+          description: True while any agent is mid-turn.
+        activeAgentId:
+          type: [string, "null"]
+          description: One of the running agents, or null. Not a queue position.
+        startedAt: { type: integer, description: Process start, epoch ms. }
+        lastBusyAtMs: { type: integer, description: 0 if it has never been busy. }
+
+    Agent:
+      type: object
+      required: [id, name, createdAtMs, unread, hidden]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        createdAtMs: { type: integer }
+        updatedAtMs: { type: integer, description: Timestamp of the newest transcript entry, else createdAtMs. }
+        unread: { type: boolean }
+        hidden: { type: boolean }
+        avatarVersion:
+          type: [string, "null"]
+          description: Cache pin. Bytes are fetched separately, never inlined in a roster row.
+        notificationsEnabled: { type: boolean }
+        notifyOnUpdates: { type: boolean }
+        presence: { $ref: "#/components/schemas/Presence" }
+        lastEntry:
+          description: Preview line for the sidebar. Null for an empty conversation.
+          oneOf:
+            - { $ref: "#/components/schemas/LastEntry" }
+            - { type: "null" }
+
+    Presence:
+      type: object
+      description: Live, never persisted — everything here is false again after a restart.
+      required: [isRunning]
+      properties:
+        isRunning: { type: boolean }
+        isComposingMessage: { type: boolean }
+        isRetrying: { type: boolean }
+        currentActivity:
+          oneOf:
+            - type: object
+              required: [kind]
+              properties:
+                kind: { const: thinking }
+            - type: object
+              required: [kind, tool]
+              properties:
+                kind: { const: tool }
+                tool: { type: string }
+                detail: { type: string }
+            - type: "null"
+
+    LastEntry:
+      oneOf:
+        - type: object
+          required: [kind, text]
+          properties:
+            kind: { const: text }
+            text: { type: string }
+        - type: object
+          required: [kind, count]
+          properties:
+            kind: { const: attachment }
+            count: { type: integer }
+        - type: object
+          required: [kind, url]
+          properties:
+            kind: { const: link }
+            url: { type: string, format: uri }
+
+    TranscriptPage:
+      type: object
+      required: [entries, hasMore]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/Entry" }
+        hasMore:
+          type: boolean
+          description: True when older entries exist before `entries[0].seq`.
+
+    Entry:
+      description: |
+        One line of the conversation. `seq` is the log position and `id` is the identity — a
+        streaming entry keeps its `id` and is re-sent as it grows, which is how a client tells an
+        update from an append.
+      type: object
+      required: [id, seq, kind, timestampMs]
+      properties:
+        id: { type: string }
+        seq: { type: integer, minimum: 1 }
+        timestampMs: { type: integer }
+        kind:
+          type: string
+          enum: [message, agent-message, tool-call, event, widget]
+        reactions:
+          type: array
+          items:
+            type: object
+            required: [emoji, by]
+            properties:
+              emoji: { type: string }
+              by: { type: string, description: Author id, or "me" for the local user. }
+        isStreaming:
+          type: boolean
+          description: Present and true only while more of this entry is coming.
+        attachment:
+          type: object
+          required: [path, href]
+          properties:
+            path: { type: string, description: Staged virtual path. }
+            name: { type: string }
+            href: { type: string, description: GET /v1/attachments?path=… }
+      oneOf:
+        - title: user message
+          type: object
+          properties:
+            kind: { const: message }
+            role: { const: user }
+            content: { type: string }
+            clientNonce: { type: string }
+        - title: agent message
+          type: object
+          properties:
+            kind: { const: agent-message }
+            author:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: string }
+                name: { type: string }
+            content: { type: string }
+        - title: tool call
+          type: object
+          properties:
+            kind: { const: tool-call }
+            toolCallId: { type: string }
+            requestId: { type: string, description: Present when this call is waiting on Allow/Deny. POST /permissions with this id. }
+            needsApproval: { type: boolean }
+            name: { type: string }
+            rawArgs: { type: string, description: JSON as the model emitted it, unparsed on purpose. }
+            summary: { type: string }
+            status: { type: string, enum: [pending, running, done, failed] }
+            result: { type: string }
+        - title: event
+          type: object
+          properties:
+            kind: { const: event }
+            event:
+              type: object
+              required: [type]
+              properties:
+                type: { type: string, enum: [name-changed, automation-changed] }
+        - title: ask_question widget
+          type: object
+          properties:
+            kind: { const: widget }
+            content: { type: string, description: Same as widget.prompt. }
+            respondedValue:
+              type: string
+              description: Present after the user answered. Buttons should disable.
+            widget:
+              type: object
+              required: [prompt, options]
+              properties:
+                prompt: { type: string }
+                helpText: { type: string }
+                allowCustom: { type: boolean }
+                options:
+                  type: array
+                  maxItems: 6
+                  items:
+                    type: object
+                    required: [label]
+                    properties:
+                      label: { type: string }
+                      value: { type: string }
+                      description: { type: string }
+                      style: { type: string, enum: [default, primary, danger] }
+
+    TurnAccepted:
+      type: object
+      required: [entryId, seq, status]
+      properties:
+        entryId: { type: string, description: The user's own entry, already on the log. }
+        seq: { type: integer }
+        status:
+          type: string
+          enum: [accepted, duplicate]
+          description: '`duplicate` means this `clientNonce` was already accepted; the ids are the original''s.'
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# Reserved for the services not yet extracted. Listed so v0.x additions do not collide, and so
+# a reader can see what is deliberately missing rather than guessing.
+#
+#   S1  identity     /v1/session          — GET served in P7 (token only; not a full identity service)
+#   S6  computer     /v1/agents/{agentId}/computer  — GET served in P7 (status/VNC; no begin/end)
+#   S8  media        /v1/attachments      — GET/POST images served in P7 (non-image files later)
+#   S9  memory       /v1/agents/{agentId}/memory
+#   S10 automations  /v1/routines
+#   S11 connectors   /v1/channels  ·  /webhooks/{platform}
+#   S12 extensions   /v1/mcp  ·  /v1/skills
+# ─────────────────────────────────────────────────────────────────────────────────────────────

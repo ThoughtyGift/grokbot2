@@ -16,13 +16,28 @@ import { join } from "node:path";
 // file rather than minting its own (auth-gate reuses a saved token), so sending it is correct
 // and keeps these tests going through the real auth path instead of switching it off.
 import { gwHeaders } from "./gw-auth.mjs";
+import { killPort } from "./kill-port.mjs";
 
 const PORT = 18881;
+
+/**
+ * Sweep the port on every exit path.
+ *
+ * `killTree` here kills the SHELL's pid, which leaks the node grandchild whenever the shell
+ * has already gone — one sweep left ten backends listening on 8794-8807, and the next run
+ * failed with "port already in use". An exit hook covers the paths killTree does not: a
+ * thrown assertion, a timeout, Ctrl-C. Killing by port cannot reach :8788.
+ */
+process.on("exit", () => { try { killPort(PORT); } catch { /* nothing to clean */ } });
 const root = await mkdtemp(join(tmpdir(), "grokbot-ask-"));
 const procs = [];
 const killTree = (p) =>
   new Promise((r) => {
-    if (!p.pid) return r();
+        // Never taskkill a pid whose child has already exited: with `shell: true` the pid is the
+    // SHELL's, a shell that dies early (a backend losing the port to EADDRINUSE, say) frees it,
+    // and Windows hands the number to whatever starts next. A killTree at the end of the script
+    // then kills a stranger — twice in one session that stranger was the BFF on :8788.
+    if (!p.pid || p.exitCode !== null || p.killed) return r();
     if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }).on("close", r);
     else { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } r(); }
   });

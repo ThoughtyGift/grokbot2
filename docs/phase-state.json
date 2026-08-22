@@ -1,0 +1,17 @@
+{
+  "currentPhase": "F7",
+  "notes": "FE-goc programme (ROADMAP.md). F0-F6 ALL DONE, each with a green gate (2026-08-21). F7 is the only phase left and it is NOT code: daily use of the patched client for >=5 days. Its other condition — rebuild the patch from the repo on a clean machine — is ALREADY MET: a full undo -> vendor boots from app.asar -> apply -> verify 6/6 -> boot from resources/app -> Gate B 15/16 cycle was run on the real install. That cycle found a real bug: --apply copied resources/app before renaming app.asar, so an EBUSY on the rename (Windows releases the mmap seconds after the process dies) left BOTH trees and the app booted vendor with an inert patch beside it. Fixed three ways: pre-flight tasklist refusal, copy-to-app.new then rename-with-retry then swap, and rollback of the asar if the swap fails. Soak is now measured, not remembered: pnpm soak / pnpm soak:status write docs/parity-runs/soak-log.json, and a day counts ONLY if the patch verifies AND the gateway served >=50 calls since the previous recorded day. Day 1 recorded 2026-08-21.",
+  "lastRun": {
+    "phase": "F7",
+    "pass": false,
+    "advanced": false,
+    "at": "2026-08-22T09:54:21.387Z"
+  },
+  "notion": {
+    "databaseUrl": "https://app.notion.com/p/97dea0b94336447c8d74275c0f02f7d3",
+    "dataSourceId": "5432479c-7933-4555-aacb-f62105757e0a",
+    "phase0TaskUrl": "https://app.notion.com/p/3c1d3a397b078151b1c9cbed78e5f470",
+    "phase1TaskUrl": "https://app.notion.com/p/3c1d3a397b07819488d0ee6d420206cd"
+  },
+  "pointerFile": "docs/parity-runs/phase-current.json"
+}

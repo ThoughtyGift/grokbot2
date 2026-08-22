@@ -1,0 +1,507 @@
+/**
+ * S13 native HTTP — `/v1/*` as specified in `docs/api/grokbot2-v0.yaml`.
+ *
+ * Calls directory / conversation / runtime directly. Does not import the Cursor adapter, does
+ * not speak protobuf, and does not name Cursor commands. `/gw/*` stays up beside this until P8.
+ */
+import type { IncomingHttpHeaders } from "node:http";
+import type { ServerResponse } from "node:http";
+import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
+import { hostSettingsRef, inflight } from "./chat/state.js";
+import {
+  agentById,
+  avatarRejection,
+  clearAgentAvatar,
+  createAgent,
+  deleteAgents,
+  getAgentAvatar,
+  listAgents,
+  listAllAgents,
+  searchAgents,
+  setAgentAvatarBytes,
+  setAgentHiddenFromSidebar,
+  setAgentNotificationsEnabled,
+  setAgentNotifyOnUpdates,
+  setAgentUnread,
+  updateAgent,
+} from "./directory/index.js";
+import { latestEntry, promptAcceptanceStatus, reactToMessage, transcriptTail } from "./conversation/index.js";
+import type { Entry } from "./conversation/types.js";
+import { subscribe, type DomainEvent } from "./events.js";
+import { foreverBoxStatus } from "./forever-box.js";
+import { interruptAgentRun, isAgentRunning, resolveLocalToolPermission, respondToWidget, sendPrompt } from "./runtime/turn.js";
+import { attachmentHref, toNativeAgent, toNativeEntry, toNativeTranscriptPage } from "./native-map.js";
+import { readAttachmentImage, stageImage } from "./attachments.js";
+
+const STARTED_AT = Date.now();
+let lastBusyAtMs = 0;
+
+const AGENT_ID = /^agent-\d+$/;
+const CORS_ORIGINS = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]);
+
+const sseClients = new Set<ServerResponse>();
+
+const sseFrame = (res: ServerResponse, event: string, data: unknown): void => {
+  try {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  } catch { /* client gone */ }
+};
+
+subscribe((e: DomainEvent) => {
+  if (inflight.size > 0) lastBusyAtMs = Date.now();
+  for (const res of sseClients) {
+    if (e.type === "agent.upserted") {
+      const agent = e.agentId ? agentById(e.agentId) : undefined;
+      sseFrame(res, e.type, agent ? { agentId: e.agentId, agent: toNativeAgent(agent) } : { agents: listAllAgents().map(toNativeAgent) });
+    } else {
+      sseFrame(res, e.type, { agentId: e.agentId });
+    }
+  }
+});
+
+setInterval(() => {
+  for (const res of sseClients) {
+    try { res.write(": ping\n\n"); } catch { /* gone */ }
+  }
+}, 5000);
+
+function corsHeaders(origin: string | undefined): Record<string, string> {
+  const allow = origin && CORS_ORIGINS.has(origin) ? origin : "http://localhost:5173";
+  return {
+    "access-control-allow-origin": allow,
+    "access-control-allow-headers": "authorization, content-type",
+    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "access-control-allow-credentials": "true",
+    vary: "origin",
+  };
+}
+
+function json(res: ServerResponse, value: unknown, status: number, origin: string | undefined): true {
+  res.writeHead(status, { "content-type": "application/json", ...corsHeaders(origin) });
+  res.end(JSON.stringify(value));
+  return true;
+}
+
+function empty(res: ServerResponse, status: number, origin: string | undefined): true {
+  res.writeHead(status, corsHeaders(origin));
+  res.end();
+  return true;
+}
+
+function originOf(headers: IncomingHttpHeaders): string | undefined {
+  const raw = headers.origin ?? headers.Origin;
+  return typeof raw === "string" ? raw : undefined;
+}
+
+function parseJson(body: Buffer): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  if (!body.length) return { ok: true, value: {} };
+  try {
+    const value = JSON.parse(body.toString("utf8")) as unknown;
+    if (value && typeof value === "object" && !Array.isArray(value)) return { ok: true, value: value as Record<string, unknown> };
+    return { ok: false, error: "body must be a JSON object" };
+  } catch {
+    return { ok: false, error: "bad json" };
+  }
+}
+
+function nativeHealth(): Record<string, unknown> {
+  const running = [...inflight.keys()];
+  if (running.length > 0) lastBusyAtMs = Date.now();
+  return {
+    ok: true,
+    pid: process.pid,
+    isBusy: running.length > 0,
+    activeAgentId: running[0] ?? null,
+    startedAt: STARTED_AT,
+    lastBusyAtMs,
+  };
+}
+
+function exists(agentId: string): boolean {
+  return Boolean(agentById(agentId));
+}
+
+function seqOf(agentId: string, entryId: string): number {
+  const hit = transcriptTail({ agentId, limit: 1000 }).entries.find((e) => e.id === entryId);
+  return hit?.seq ?? latestEntry(agentId)?.seq ?? 1;
+}
+
+function isNativePath(pathname: string): boolean {
+  return (
+    pathname === "/v1/health"
+    || pathname === "/v1/session"
+    || pathname === "/v1/events"
+    || pathname === "/v1/agents"
+    || pathname.startsWith("/v1/agents/")
+    || pathname === "/v1/host/sidebar"
+    || pathname === "/v1/attachments"
+  );
+}
+
+/**
+ * Returns true when this request is a native `/v1` route (including OPTIONS preflight).
+ */
+export async function handleNative(
+  url: string,
+  body: Buffer,
+  res: ServerResponse,
+  headers: IncomingHttpHeaders,
+  method: string,
+): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url, "http://127.0.0.1");
+  } catch {
+    return false;
+  }
+  const pathname = parsed.pathname;
+  const origin = originOf(headers);
+  const verb = method.toUpperCase();
+
+  if (verb === "OPTIONS" && pathname.startsWith("/v1/")) {
+    return empty(res, 204, origin);
+  }
+  if (!isNativePath(pathname)) return false;
+
+  const publicRoute = pathname === "/v1/health" || pathname === "/v1/session"
+    || (pathname === "/v1/attachments" && verb === "GET");
+  if (!publicRoute) {
+    const verdict = checkAuth(url, headers as Record<string, unknown>);
+    noteAuth(url, verdict);
+    if (!verdict.allow) return json(res, { error: verdict.message ?? "unauthorized" }, 401, origin);
+  }
+
+  if (pathname === "/v1/health" && verb === "GET") {
+    return json(res, nativeHealth(), 200, origin);
+  }
+
+  if (pathname === "/v1/session" && verb === "GET") {
+    const token = ensureGatewayToken();
+    return json(res, { token, tokenType: "bearer", auth: authMode() }, 200, origin);
+  }
+
+  if (pathname === "/v1/attachments" && verb === "GET") {
+    const path = parsed.searchParams.get("path") ?? "";
+    if (!path.startsWith("/workspace/attachments/")) return json(res, { error: "not found" }, 404, origin);
+    const hit = readAttachmentImage({ path });
+    if (!hit) return json(res, { error: "not found" }, 404, origin);
+    const comma = hit.dataUrl.indexOf(",");
+    const mime = /^data:([^;]+)/.exec(hit.dataUrl)?.[1] ?? "application/octet-stream";
+    const bytes = Buffer.from(hit.dataUrl.slice(comma + 1), "base64");
+    res.writeHead(200, {
+      "content-type": mime,
+      "cache-control": "private, max-age=3600",
+      ...corsHeaders(origin),
+    });
+    res.end(bytes);
+    return true;
+  }
+
+  if (pathname === "/v1/attachments" && verb === "POST") {
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const raw = typeof parsedBody.value.bytesBase64 === "string" ? parsedBody.value.bytesBase64
+      : typeof parsedBody.value.dataUrl === "string" ? parsedBody.value.dataUrl
+      : "";
+    if (!raw) return json(res, { error: "bytesBase64 is required" }, 400, origin);
+    const filename = typeof parsedBody.value.filename === "string" ? parsedBody.value.filename
+      : typeof parsedBody.value.fileName === "string" ? parsedBody.value.fileName
+      : "upload.png";
+    const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    if (Buffer.byteLength(dataUrl) > 12 * 1024 * 1024) return json(res, { error: "attachment too large" }, 413, origin);
+    const path = stageImage(dataUrl, filename);
+    if (!path) return json(res, { error: "not an image" }, 400, origin);
+    const sized = readAttachmentImage({ path });
+    return json(res, {
+      path,
+      fileName: filename,
+      href: attachmentHref(path),
+      mime: sized ? (/^data:([^;]+)/.exec(sized.dataUrl)?.[1] ?? "image/png") : "image/png",
+      width: sized?.width ?? 0,
+      height: sized?.height ?? 0,
+    }, 201, origin);
+  }
+
+  if (pathname === "/v1/events" && verb === "GET") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      ...corsHeaders(origin),
+    });
+    res.write(": connected\n\n");
+    sseFrame(res, "agent.upserted", { agents: listAllAgents().map(toNativeAgent) });
+    sseClients.add(res);
+    res.on("close", () => { sseClients.delete(res); });
+    return true;
+  }
+
+  /**
+   * Nhóm sidebar — dữ liệu vốn đã có, chỉ chưa lộ ra.
+   *
+   * App gốc lấy nó qua `window.desktop.getHostSidebarSections()`, tức một bridge IPC mà web
+   * không với tới. Nhưng chính dữ liệu đó nằm trong host settings (`sidebarSections`), nên
+   * `/v1` chỉ cần đọc lại: không thêm nguồn, không thêm state, không bịa nhóm nào.
+   *
+   * Shape giữ nguyên như app gốc dùng: `[{id, name, agentIds}]`, và `__agents__` là mục
+   * catch-all ("Unassigned") cho bot chưa thuộc nhóm nào.
+   */
+  if (pathname === "/v1/host/sidebar" && verb === "GET") {
+    const raw = (hostSettingsRef() as { sidebarSections?: unknown }).sidebarSections;
+    const sections = Array.isArray(raw)
+      ? raw.filter((s): s is { id: string; name: string; agentIds: string[] } =>
+          s != null && typeof s === "object"
+          && typeof (s as { id?: unknown }).id === "string"
+          && typeof (s as { name?: unknown }).name === "string")
+        .map((s) => ({ id: s.id, name: s.name, agentIds: Array.isArray(s.agentIds) ? s.agentIds.filter((x) => typeof x === "string") : [] }))
+      : [];
+    return json(res, { sections }, 200, origin);
+  }
+
+  if (pathname === "/v1/agents" && verb === "GET") {
+    const q = parsed.searchParams.get("q") ?? "";
+    const includeHidden = parsed.searchParams.get("includeHidden") === "true" || parsed.searchParams.get("includeHidden") === "1";
+    const listed = q
+      ? searchAgents({ q, includeHidden })
+      : (includeHidden ? listAllAgents() : listAgents());
+    return json(res, listed.map(toNativeAgent), 200, origin);
+  }
+
+  if (pathname === "/v1/agents" && verb === "POST") {
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const name = typeof parsedBody.value.name === "string" ? parsedBody.value.name : undefined;
+    const description = typeof parsedBody.value.description === "string" ? parsedBody.value.description : undefined;
+    const rec = createAgent({ name, description });
+    const page = transcriptTail({ agentId: rec.id, limit: 200 });
+    return json(res, {
+      agent: toNativeAgent(agentById(rec.id) ?? rec),
+      transcript: toNativeTranscriptPage(page.entries, page.hasMore),
+    }, 201, origin);
+  }
+
+  const rest = pathname.slice("/v1/agents/".length);
+  const slash = rest.indexOf("/");
+  const agentId = slash === -1 ? rest : rest.slice(0, slash);
+  const tail = slash === -1 ? "" : rest.slice(slash + 1);
+  if (!AGENT_ID.test(agentId)) return json(res, { error: "not found" }, 404, origin);
+
+  if (tail === "" && verb === "GET") {
+    const rec = agentById(agentId);
+    if (!rec) return json(res, { error: "not found" }, 404, origin);
+    return json(res, toNativeAgent(rec), 200, origin);
+  }
+
+  if (tail === "" && verb === "PATCH") {
+    const rec = agentById(agentId);
+    if (!rec) return json(res, { error: "not found" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const b = parsedBody.value;
+    if (typeof b.name === "string" || typeof b.description === "string") {
+      updateAgent({
+        id: agentId,
+        ...(typeof b.name === "string" ? { name: b.name } : {}),
+        ...(typeof b.description === "string" ? { description: b.description } : {}),
+      });
+    }
+    if (typeof b.unread === "boolean") setAgentUnread({ id: agentId, unread: b.unread });
+    if (typeof b.hidden === "boolean") setAgentHiddenFromSidebar({ id: agentId, hidden: b.hidden });
+    if (typeof b.notificationsEnabled === "boolean") setAgentNotificationsEnabled({ id: agentId, enabled: b.notificationsEnabled });
+    if (typeof b.notifyOnUpdates === "boolean") setAgentNotifyOnUpdates({ id: agentId, enabled: b.notifyOnUpdates });
+    const updated = agentById(agentId);
+    if (!updated) return json(res, { error: "not found" }, 404, origin);
+    return json(res, toNativeAgent(updated), 200, origin);
+  }
+
+  if (tail === "" && verb === "DELETE") {
+    deleteAgents({ id: agentId });
+    return empty(res, 204, origin);
+  }
+
+  /**
+   * Avatar. Ba route, cùng một chỗ lưu với `/gw/avatars/<id>` mà client hãng đọc — nên ảnh đặt ở
+   * FE này hiện luôn trong app gốc và ngược lại. Đặt ở `/v1` vì trước đây avatar chỉ có đường
+   * `/gw` (`setAgentAvatarBytes`), tức FE của mình không có cách nào đổi ảnh.
+   */
+  if (tail === "avatar" && verb === "GET") {
+    if (!agentById(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const { avatarDataUrl, avatarVersion } = getAgentAvatar({ id: agentId });
+    const m = /^data:([a-z0-9.+/-]+);base64,(.*)$/i.exec(avatarDataUrl ?? "");
+    if (!avatarVersion || !m) return json(res, { error: "agent has no avatar" }, 404, origin);
+
+    const etag = `"${avatarVersion}"`;
+    const asked = parsed.searchParams.get("v");
+    // `?v=` là bản ghim: ghim sai phải 404 chứ không được lặng lẽ trả ảnh mới.
+    if (asked != null && asked !== avatarVersion) return json(res, { error: "no such avatar version" }, 404, origin);
+    const caching = asked != null
+      ? { "cache-control": "private, max-age=31536000, immutable", etag }
+      : { "cache-control": "no-store", etag };
+    if (String(headers["if-none-match"] ?? "") === etag) {
+      res.writeHead(304, { ...caching, ...corsHeaders(origin) });
+      res.end();
+      return true;
+    }
+    const body = Buffer.from(m[2], "base64");
+    res.writeHead(200, {
+      "content-type": m[1],
+      "content-length": String(body.length),
+      /*
+       * Ba header cứng, giống hệt `/gw/avatars/<id>`: ảnh này là byte người dùng nạp lên, nên
+       * dù `content-type` nói là ảnh thì vẫn phải chặn đường nó được render như một tài liệu.
+       * Bỏ một trong ba ở đây mà `/gw` vẫn có nghĩa là chỉ FE của mình bị hở.
+       */
+      "content-disposition": "attachment",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+      ...caching,
+      ...corsHeaders(origin),
+    });
+    res.end(body);
+    return true;
+  }
+
+  if (tail === "avatar" && verb === "PUT") {
+    if (!agentById(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const raw = parsedBody.value.dataUrl ?? parsedBody.value.pngBase64;
+    if (typeof raw !== "string" || !raw) return json(res, { error: "cần dataUrl hoặc pngBase64" }, 400, origin);
+    const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    const bad = avatarRejection(dataUrl);
+    // Ảnh quá to là 413, không phải 400 — FE phân biệt được để báo "ảnh quá lớn".
+    if (bad) return json(res, { error: bad }, /quá \d+$/.test(bad) ? 413 : 400, origin);
+    const rec = setAgentAvatarBytes({ id: agentId, pngBase64: dataUrl });
+    if (!rec) return json(res, { error: "avatar bị từ chối" }, 400, origin);
+    return json(res, toNativeAgent(rec), 200, origin);
+  }
+
+  if (tail === "avatar" && verb === "DELETE") {
+    if (!clearAgentAvatar({ id: agentId })) return json(res, { error: "not found" }, 404, origin);
+    return empty(res, 204, origin);
+  }
+
+  /**
+   * Reaction trên một entry: `POST /v1/agents/:id/entries/:entryId/reactions` với `{ emoji }`.
+   *
+   * BE đã có reaction từ lâu qua lệnh `reactToMessage` của hãng (một trong 120 lệnh `/gw`), và
+   * `/v1/.../transcript` đã trả `reactions` — thiếu đúng một thứ: đường để FE của mình *đặt* được.
+   * Vì vậy đây là route mỏng, không phải tính năng mới: cùng một hàm domain, cùng ngữ nghĩa
+   * **toggle** (bấm lại chính emoji đó là bỏ), nên đường `/v1` và app gốc không thể lệch nhau.
+   */
+  if (tail.startsWith("entries/") && tail.endsWith("/reactions") && verb === "POST") {
+    if (!exists(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const entryId = decodeURIComponent(tail.slice("entries/".length, -"/reactions".length));
+    if (!entryId) return json(res, { error: "missing entry id" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const emoji = parsedBody.value.emoji;
+    if (typeof emoji !== "string" || !emoji.trim()) return json(res, { error: "cần emoji" }, 400, origin);
+    /*
+     * Chặn độ dài ở biên. Một reaction là một grapheme; không có cap thì trường này là chỗ nhét
+     * chuỗi tuỳ ý vào transcript, và transcript thì đi vào cả prompt của model.
+     */
+    if ([...emoji].length > 8) return json(res, { error: "emoji quá dài" }, 400, origin);
+
+    reactToMessage({ agentId, entryId, emoji });
+
+    /*
+     * Trả về entry sau khi đổi, không phải `{}`. `reactToMessage` là lệnh của hãng nên nó trả `{}`
+     * theo contract của hãng — nhưng ở `/v1` mình tự đặt luật, và một client vừa toggle cần biết
+     * kết quả là "đã thêm" hay "đã bỏ" mà không phải tải lại cả transcript để đoán.
+     */
+    const page = transcriptTail({ agentId, limit: 400 });
+    const hit = page.entries.find((e) => e.id === entryId);
+    if (!hit) return json(res, { error: "not found" }, 404, origin);
+    return json(res, toNativeEntry(hit), 200, origin);
+  }
+
+  if (tail === "transcript" && verb === "GET") {
+    const limit = Number(parsed.searchParams.get("limit") ?? 200);
+    const beforeRaw = parsed.searchParams.get("beforeSeq");
+    const beforeSeq = beforeRaw ? Number(beforeRaw) : undefined;
+    const page = transcriptTail({
+      agentId,
+      limit: Number.isFinite(limit) ? limit : 200,
+      ...(beforeSeq && Number.isFinite(beforeSeq) ? { beforeSeq } : {}),
+    });
+    return json(res, toNativeTranscriptPage(page.entries, page.hasMore), 200, origin);
+  }
+
+  if (tail === "turns" && verb === "POST") {
+    if (!exists(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const content = typeof parsedBody.value.content === "string" ? parsedBody.value.content : "";
+    const attachments = Array.isArray(parsedBody.value.attachments)
+      ? (parsedBody.value.attachments as { path?: string; name?: string }[])
+      : undefined;
+    if (!("content" in parsedBody.value) && !(attachments?.some((a) => a.path))) {
+      return json(res, { error: "content is required" }, 400, origin);
+    }
+    const clientNonce = typeof parsedBody.value.clientNonce === "string" ? parsedBody.value.clientNonce : undefined;
+    if (clientNonce) {
+      const prior = promptAcceptanceStatus({ clientNonce });
+      if (prior.outcome === "found" && prior.record) {
+        const entryId = prior.record.echoEntryId ?? "";
+        return json(res, { entryId, seq: seqOf(agentId, entryId), status: "duplicate" }, 202, origin);
+      }
+    }
+    if (isAgentRunning(agentId)) return json(res, { error: "turn already running" }, 409, origin);
+    const accepted = sendPrompt({ agentId, content, clientNonce, attachments, askWriteTools: true });
+    return json(res, { entryId: accepted.entryId, seq: seqOf(agentId, accepted.entryId), status: "accepted" }, 202, origin);
+  }
+
+  if (tail === "turns/current" && verb === "DELETE") {
+    interruptAgentRun({ agentId });
+    return empty(res, 204, origin);
+  }
+
+  if (tail === "computer" && verb === "GET") {
+    if (!exists(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const status = await foreverBoxStatus({ agentId });
+    return json(res, status, 200, origin);
+  }
+
+  if (tail === "permissions" && verb === "POST") {
+    if (!exists(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const requestId = typeof parsedBody.value.requestId === "string" ? parsedBody.value.requestId : "";
+    if (!requestId) return json(res, { error: "requestId is required" }, 400, origin);
+    const approved = parsedBody.value.approved === true;
+    const result = resolveLocalToolPermission({ agentId, requestId, approved });
+    if (!result.resolved) return json(res, { error: "not found" }, 404, origin);
+    return empty(res, 204, origin);
+  }
+
+  if (tail === "widgets" && verb === "POST") {
+    if (!exists(agentId)) return json(res, { error: "not found" }, 404, origin);
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    const entryId = typeof parsedBody.value.entryId === "string" ? parsedBody.value.entryId : "";
+    const value = typeof parsedBody.value.value === "string" ? parsedBody.value.value
+      : typeof parsedBody.value.answer === "string" ? parsedBody.value.answer
+      : "";
+    if (!value.trim()) return json(res, { error: "value is required" }, 400, origin);
+    const isWidget = (e: Entry): boolean => e.kind === "send-message" && e.message.type === "widget";
+    const page = transcriptTail({ agentId, limit: 1000 });
+    const target = entryId
+      ? page.entries.find((e) => e.id === entryId && isWidget(e))
+      : [...page.entries].reverse().find((e) => isWidget(e) && e.kind === "send-message" && e.respondedValue == null && e.widgetDismissed !== true);
+    if (!target || target.kind !== "send-message" || target.message.type !== "widget") {
+      return json(res, { error: "not found" }, 404, origin);
+    }
+    if (target.respondedValue != null || target.widgetDismissed === true) {
+      return json(res, { error: "already answered" }, 409, origin);
+    }
+    const found = respondToWidget({ agentId, entryId: target.id, value: value.trim() });
+    if (!found) return json(res, { error: "not found" }, 404, origin);
+    return empty(res, 204, origin);
+  }
+
+  return json(res, { error: "not found" }, 404, origin);
+}

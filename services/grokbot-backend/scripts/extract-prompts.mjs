@@ -15,8 +15,16 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const [, , hostPath, outDir = "docs/extracted"] = process.argv;
+const FORCE = process.argv.includes("--force");
 if (!hostPath) {
-  console.error("usage: node scripts/extract-prompts.mjs <host-main.cjs> [outDir]");
+  console.error("usage: node scripts/extract-prompts.mjs <host-main.cjs> [outDir] [--force]");
+  console.error("");
+  console.error("Point it at a bundle whose IDENTIFIERS SURVIVE — e.g.");
+  console.error("  C:/Users/admin/Desktop/grokbot-fe-current/dist/host/host-main.cjs   (24.7 MB, readable)");
+  console.error("NOT the installed app:");
+  console.error("  %LOCALAPPDATA%/Programs/Grok Bot/resources/app/dist/host/host-main.cjs   (11.8 MB, MINIFIED)");
+  console.error("The installed bundle is minified, so every name this script matches on is gone and it");
+  console.error("extracts nothing. That is how a real 279 KB extraction was once overwritten with 927 bytes.");
   process.exit(1);
 }
 const src = readFileSync(hostPath, "utf8");
@@ -187,7 +195,45 @@ const payload = {
   allowlists,
   browserTools,
 };
-writeFileSync(join(outDir, "subagent-prompts.json"), JSON.stringify(payload, null, 2));
+/**
+ * Refuse to write an extraction that found nothing, and refuse to shrink a good one.
+ *
+ * This script once ran against the INSTALLED bundle, which is minified: every identifier it keys
+ * on (`*_SUBAGENT_CONFIG`, `*_SUBAGENT_PROMPT`, `*_TOOL_IDENTIFIERS`, `buildSandBaseSystemPrompt`)
+ * is renamed away there, so all matchers returned zero. It exited 0 and replaced a 279,656-byte
+ * extraction — 49 prompts, 6 configs, 7 allowlists — with 927 bytes of empty arrays. Nothing in the
+ * output said anything had gone wrong; the loss was found days later by an audit.
+ *
+ * An extractor that can silently destroy its own previous output is worse than no extractor.
+ */
+const jsonPath = join(outDir, "subagent-prompts.json");
+const found = prompts.length + configs.length + allowlists.length;
+
+if (found === 0) {
+  const minified = !/buildSandBaseSystemPrompt|_SUBAGENT_CONFIG|_TOOL_IDENTIFIERS/.test(src);
+  console.error(`nothing extracted from ${hostPath} (${(src.length / 1e6).toFixed(1)} MB)`);
+  console.error(minified
+    ? "  This bundle has no readable identifiers — it is the MINIFIED installed build." +
+      "\n  Use the readable one: Desktop/grokbot-fe-current/dist/host/host-main.cjs"
+    : "  Identifiers are present but no pattern matched — the bundle's shape changed; fix the matchers.");
+  console.error("  Nothing was written. The previous extraction is untouched.");
+  process.exit(2);
+}
+
+let prevCount = 0;
+try {
+  const prev = JSON.parse(readFileSync(jsonPath, "utf8"));
+  prevCount = (prev.prompts?.length ?? 0) + (prev.configs?.length ?? 0) + (prev.allowlists?.length ?? 0);
+} catch { /* first run */ }
+
+if (prevCount > found && !FORCE) {
+  console.error(`refusing to shrink the extraction: ${prevCount} entries on disk, ${found} found now.`);
+  console.error(`  Usually this means the wrong bundle was passed. Re-run with --force if the loss is intended.`);
+  console.error("  Nothing was written.");
+  process.exit(3);
+}
+
+writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
 
 const md = [
   "# Prompts that ship in the box host",

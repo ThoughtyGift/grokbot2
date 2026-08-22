@@ -1,0 +1,237 @@
+{
+  "shell": {
+    "w": 1920,
+    "h": 1040,
+    "x": 0,
+    "y": 0,
+    "bg": "rgb(7, 7, 7)",
+    "color": "rgb(252, 252, 252)",
+    "font": "16px/400",
+    "radius": "0px",
+    "pad": "0px",
+    "gap": "normal",
+    "border": ""
+  },
+  "chat": {
+    "w": 1163,
+    "h": 1040,
+    "x": 400,
+    "y": 0,
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(252, 252, 252)",
+    "font": "16px/400",
+    "radius": "0px",
+    "pad": "0px",
+    "gap": "normal",
+    "border": ""
+  },
+  "sidebarWidth": 399,
+  "rowCount": 6,
+  "row": {
+    "w": 375,
+    "h": 54,
+    "x": 12,
+    "y": 130,
+    "bg": "rgba(119, 119, 119, 0.32)",
+    "color": "rgb(252, 252, 252)",
+    "font": "16px/400",
+    "radius": "10px",
+    "pad": "8px",
+    "gap": "8px",
+    "border": "0px none rgb(255, 255, 255)"
+  },
+  "rowParts": [
+    {
+      "tag": "span",
+      "w": 36,
+      "h": 36,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": ""
+    },
+    {
+      "tag": "span",
+      "w": 36,
+      "h": 36,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": ""
+    },
+    {
+      "tag": "span",
+      "w": 36,
+      "h": 36,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": ""
+    },
+    {
+      "tag": "svg",
+      "w": 36,
+      "h": 36,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": ""
+    },
+    {
+      "tag": "use",
+      "w": 66,
+      "h": 66,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": ""
+    },
+    {
+      "tag": "span",
+      "w": 299,
+      "h": 38,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": "Marketing Lead\nFile đây, b"
+    },
+    {
+      "tag": "span",
+      "w": 299,
+      "h": 20,
+      "fs": "16px",
+      "fw": "400",
+      "color": "rgb(252, 252, 252)",
+      "txt": "Marketing Lead"
+    },
+    {
+      "tag": "span",
+      "w": 99,
+      "h": 20,
+      "fs": "14px",
+      "fw": "500",
+      "color": "rgb(252, 252, 252)",
+      "txt": "Marketing Lead"
+    }
+  ],
+  "sectionHeaders": [
+    {
+      "txt": "Phòng marketing",
+      "fs": "12px",
+      "fw": "400",
+      "color": "rgba(252, 252, 252, 0.6)",
+      "tt": "none",
+      "ls": "normal"
+    },
+    {
+      "txt": "Marketing Lead",
+      "fs": "14px",
+      "fw": "500",
+      "color": "rgb(252, 252, 252)",
+      "tt": "none",
+      "ls": "normal"
+    },
+    {
+      "txt": "Content Studio",
+      "fs": "14px",
+      "fw": "500",
+      "color": "rgb(252, 252, 252)",
+      "tt": "none",
+      "ls": "normal"
+    },
+    {
+      "txt": "Performance Ads",
+      "fs": "14px",
+      "fw": "500",
+      "color": "rgb(252, 252, 252)",
+      "tt": "none",
+      "ls": "normal"
+    },
+    {
+      "txt": "Video Studio",
+      "fs": "14px",
+      "fw": "500",
+      "color": "rgb(252, 252, 252)",
+      "tt": "none",
+      "ls": "normal"
+    },
+    {
+      "txt": "10:34 AM",
+      "fs": "12px",
+      "fw": "400",
+      "color": "rgba(252, 252, 252, 0.4)",
+      "tt": "none",
+      "ls": "normal"
+    }
+  ],
+  "bubbles": [
+    {
+      "w": 1101,
+      "x": 446,
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "0px",
+      "pad": "0px",
+      "fs": "16px",
+      "lh": "normal"
+    },
+    {
+      "w": 640,
+      "x": 446,
+      "bg": "rgb(38, 38, 38)",
+      "radius": "18px 18px 18px 6px",
+      "pad": "8px 12px",
+      "fs": "14px",
+      "lh": "20px"
+    },
+    {
+      "w": 616,
+      "x": 458,
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "0px",
+      "pad": "0px",
+      "fs": "14px",
+      "lh": "20px"
+    },
+    {
+      "w": 76,
+      "x": 1092,
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "0px",
+      "pad": "0px",
+      "fs": "14px",
+      "lh": "20px"
+    },
+    {
+      "w": 24,
+      "x": 1092,
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "pad": "0px",
+      "fs": "13.3333px",
+      "lh": "normal"
+    },
+    {
+      "w": 24,
+      "x": 1118,
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "8px",
+      "pad": "0px",
+      "fs": "13.3333px",
+      "lh": "normal"
+    }
+  ],
+  "composer": {
+    "w": 1041,
+    "h": 20,
+    "x": 461,
+    "y": 991,
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(252, 252, 252)",
+    "font": "14px/400",
+    "radius": "0px",
+    "pad": "0px",
+    "gap": "normal",
+    "border": ""
+  },
+  "rightPanelX": 1563
+}

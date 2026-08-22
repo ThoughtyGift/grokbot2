@@ -6,10 +6,11 @@
  * alone — "it works" and "it works in under a second" are different claims.
  */
 import { chromium } from "playwright-core";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const GW = "http://127.0.0.1:8788";
 const gw = (m, b = {}) =>
-  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.connectOverCDP("http://127.0.0.1:9222", { timeout: 8000 });

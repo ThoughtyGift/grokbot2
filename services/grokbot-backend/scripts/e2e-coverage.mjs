@@ -8,6 +8,7 @@
  * ({name:{args:"…",reply:"…"}}), so the list stays true to the shipped frontend.
  */
 import { readFileSync, existsSync } from "node:fs";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
 const BASE = arg("--base", "http://localhost:8788");
@@ -29,7 +30,7 @@ if (existsSync(BUNDLE)) {
 
 const post = async (m, body) => {
   const r = await fetch(`${BASE}/gw/api/${m}`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}),
+    method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(body ?? {}),
   });
   return r.json().catch(() => null);
 };
@@ -54,7 +55,7 @@ for (const d of declared) {
 
 // The backend's own map is the source of truth for "handled"; a void-reply method that
 // answers {} is correct, not a stub. Unhandled methods silently fall through to {}.
-const cov = await fetch(`${BASE}/gw/__coverage`).then((r) => r.json()).catch(() => null);
+const cov = await fetch(`${BASE}/gw/__coverage`, { headers: gwHeaders() }).then((r) => r.json()).catch(() => null);
 const handled = new Set(cov?.implemented ?? []);
 for (const r of rows) {
   if (r.status === "SKIP") { r.status = handled.has(r.name) ? "HANDLED (not probed)" : "MISSING"; continue; }

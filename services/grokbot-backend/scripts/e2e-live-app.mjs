@@ -7,13 +7,14 @@
  * same as the app drawing it.
  */
 import { chromium } from "playwright-core";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const CDP = process.env.CDP ?? "http://127.0.0.1:9222";
 const GW = process.env.GW ?? "http://127.0.0.1:8788";
 const MSG = process.env.MSG ?? "Kể mình nghe 2 câu về biển Nha Trang.";
 
 const gw = (m, b = {}) =>
-  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;

@@ -8,13 +8,29 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gwHeaders } from "./gw-auth.mjs";
+import { killPort } from "./kill-port.mjs";
 
 const PORT = 18771;
+
+/**
+ * Sweep the port on every exit path.
+ *
+ * `killTree` here kills the SHELL's pid, which leaks the node grandchild whenever the shell
+ * has already gone — one sweep left ten backends listening on 8794-8807, and the next run
+ * failed with "port already in use". An exit hook covers the paths killTree does not: a
+ * thrown assertion, a timeout, Ctrl-C. Killing by port cannot reach :8788.
+ */
+process.on("exit", () => { try { killPort(PORT); } catch { /* nothing to clean */ } });
 const root = await mkdtemp(join(tmpdir(), "grokbot-prompt-"));
 const procs = [];
 const killTree = (p) =>
   new Promise((r) => {
-    if (!p.pid) return r();
+        // Never taskkill a pid whose child has already exited: with `shell: true` the pid is the
+    // SHELL's, a shell that dies early (a backend losing the port to EADDRINUSE, say) frees it,
+    // and Windows hands the number to whatever starts next. A killTree at the end of the script
+    // then kills a stranger — twice in one session that stranger was the BFF on :8788.
+    if (!p.pid || p.exitCode !== null || p.killed) return r();
     if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }).on("close", r);
     else { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } r(); }
   });
@@ -38,7 +54,7 @@ for (let i = 0; i < 60; i += 1) {
 }
 
 const gw = (m, b = {}) =>
-  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  fetch(`http://127.0.0.1:${PORT}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) }).then((r) => r.json());
 
 await gw("setHostSettings", { userTimeZone: "Asia/Ho_Chi_Minh" });
 const agent = (await gw("createAgent", { name: "TierProbe" })).agent;

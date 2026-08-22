@@ -1,0 +1,14 @@
+{
+  "days": [
+    {
+      "date": "2026-08-21",
+      "at": "2026-08-21T20:04:37.959Z",
+      "patchOk": true,
+      "callsTotal": 975,
+      "callsDelta": 975,
+      "agents": 7,
+      "counts": true
+    }
+  ],
+  "note": "A day counts only when the patch verifies AND the gateway served ≥ 50 calls since the previous recorded day. ROADMAP F7 needs 5."
+}

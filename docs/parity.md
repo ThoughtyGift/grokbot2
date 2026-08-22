@@ -1003,7 +1003,9 @@ Nothing to fix in this backend. What would change the experience is upstream (a 
 forwards tokens as they arrive); what we can do meanwhile is make the wait legible, which the
 "Thinking" indicator now does since §2w.
 
-## 3. Tool coverage: 24 of 54
+## 3. Tool coverage: 28 of 54
+
+Measured by `scripts/tool-coverage.mjs` / `tool-registry.mts` (F0). Floor: [`parity-runs/fe-goc-baseline.json`](parity-runs/fe-goc-baseline.json). Older headings said “24 of 54”; that was the same live map before aliases were counted the way the product uses them.
 
 Measured by `scripts/tool-coverage.mjs`, which reads the **live** tool map (so a tool that
 fails to register counts as missing — that is how the browser tools silently vanished once) and
@@ -1244,3 +1246,82 @@ while the installed app runs `index-DNC736IO.js` — a different build. Re-extra
 byte-identical in the running build, so both hold. The `Messaged X` chip logic is identical too
 (`pm` / `m_n` / the grouping predicate all still read `fromAgent`/`toAgent`), so the missing chip
 is still unexplained and is NOT a stale-bundle artifact.
+
+## 2af. "Always allow" was answered, stored, and then ignored
+
+The card in the screenshots — *"Allow Grok Bot and all Bots to run commands on your local
+computer?"* with **Always allow / Allow once / Never** — is the original client's own component;
+its text lives in the signed bundle's message catalog (`svTEGM`). Nothing about it is ours, and
+the wording cannot be changed.
+
+What was ours: the client persists the answer through `setHostSettings` as `localToolPermission`,
+exactly as its subtitle promises ("It can always be changed in Settings"). Read off the live
+backend, that value was already `"always"` — the button had been pressed — and every later shell
+request still raised the card. We stored the setting and never consulted it. From the user's
+side the app was forgetting an answer it had explicitly promised to remember.
+
+`injectTool` now reads it: `always` runs without a card, `never` refuses **visibly** (a denied
+card plus a tool result saying so, because a tool that does nothing and says nothing is
+indistinguishable from a broken one), anything else keeps the card.
+
+`scripts/e2e-standing-permission.mjs` exercises all three and restores the user's own setting
+afterwards — 6/6.
+
+Worth remembering for the next card of this kind: the value was sitting in `getHostSettings` the
+whole time. The gateway's own `/gw/__coverage` and `getHostSettings` are the cheapest place to
+look when the app "keeps asking" something, and they were not checked for hours.
+
+---
+
+## 2ag. Phase 2 through the real UI: 13/16, and none of the three reds is the ACL
+
+The Phase 2 gate is HTTP only (`contract-test --only routes,auth,channels` plus `e2e-avatar`), so
+after moving the command table and the SSE hub into `@grokbot2/cursor-acl` it said GREEN without a
+single pixel having been looked at. `e2e-app-full.mjs` — the one check that drives the app — was
+run twice against the local build and scored **13/16 both times**, identically, so nothing here is
+flaky. One of the three was a bug in the check rather than in the product; with that corrected the
+score is **14/16**.
+
+The parts that matter for the phase pass: the app reaches the workspace, the composer is live, a
+bot created through the gateway appears in the sidebar in **282 ms** without a reload, its
+conversation opens, a typed message gets a rendered reply, a tool runs against the box, and the
+turn ends in prose. That is the §5.2 exit row ("app gốc vẫn vào workspace") measured rather than
+asserted.
+
+The three reds were then checked against what the backend actually put on the wire, by holding
+`/gw/events` open through a whole run (`scripts/watch-presence.mjs`). The push side is complete:
+
+```
+agents-list n=16                                         ← stream opens
+agent-upserted agent-379 isRunning=false                 ← created
+agents-list n=17
+agent-upserted agent-379 isRunning=true  activity=thinking
+agent-upserted agent-379 isRunning=true  composing=true
+agent-upserted agent-379 isRunning=true  activity={"kind":"tool","tool":"Read"}
+agent-upserted agent-379 isRunning=false                 ← turn over
+agents-list n=16                                         ← deleted
+```
+
+Twelve enveloped presence frames with the real transitions, and the list shrinking on delete. So:
+
+- **presence animates during the turn** — 1 distinct hash of 28 screenshots of the left 320×620
+  strip. The frames were delivered *and* carried `isRunning`/`currentActivity`, so this is the
+  measurement, not the push: the window is in the background while the script drives it, and a
+  backgrounded Electron window can hand back the same composited frame every time. Sampling
+  motion by screenshot needs a foreground window to mean anything.
+- **that answer is visible on screen** — a false negative in the test. It matches
+  `answer.slice(8, 34)` against `innerText`, and the answer was ``Thư mục `.` có 24 mục…`` — those
+  characters are backticks, which the renderer turns into a code span and drops from the text. The
+  neighbouring check ("the reply RENDERS in the transcript") passed on the same screen. Fixed by
+  comparing with markdown punctuation stripped from both sides.
+`e2e-app-full.mjs` is in the phase gate from **P2** (archived programme) and from **F2** (live FE-gốc programme) when CDP :9222 is up. From **F3** a missing app is gate **RED**, not a skip. The two entries below are on
+its own `KNOWN_OPEN` list — so the gate goes red when something else on screen breaks, rather than
+staying red for ever over two recorded gaps and being ignored. A known gap that starts passing is
+reported loudly, so the list has to shrink when the product improves.
+
+- **deleted bot leaves the sidebar** — the only real product gap, and **pre-existing**: a delete
+  has no per-agent event to carry it, so all that goes out is the wholesale `{agents: […]}` list.
+  The two notes in `sse.ts` disagree about whether the client acts on that list at all (its
+  `agents` handler is described as "replace wholesale" when unenveloped, and elsewhere as having
+  no `{agents}` branch), and settling that needs the bundle, not another guess. Left open on
+  purpose rather than patched by inventing a `removed` event the reducer may not have.

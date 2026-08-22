@@ -1,0 +1,22 @@
+{
+  "at": "2026-08-20T09:28:24.241Z",
+  "model": "gemini-3.7-flash",
+  "runs": 5,
+  "prompt": "Chao ban. Tra loi dung mot cau ngan.",
+  "routines": 10,
+  "chatMs": [
+    5168,
+    3596,
+    5126,
+    4615,
+    5642
+  ],
+  "p50": {
+    "chat": 5126,
+    "p4Chat": 4113
+  },
+  "limit": 5347,
+  "ratioVsP4": 1.246,
+  "pass": true,
+  "note": "pass line is chat p50 ≤ P4 chat p50 * 1.3 (4113 * 1.3 = 5347 ms). 10 enabled routines that do not match this minute."
+}

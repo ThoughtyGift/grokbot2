@@ -1,0 +1,20 @@
+{
+  "gateway": {
+    "have": 120,
+    "of": 120
+  },
+  "tools": {
+    "have": 28,
+    "of": 54
+  },
+  "sse": {
+    "have": 10,
+    "of": 16
+  },
+  "bootstrap": {
+    "have": 9,
+    "of": 10
+  },
+  "at": "2026-08-20T19:23:12.064Z",
+  "note": "FE-gốc roadmap floor. parity-report exits non-zero below these."
+}

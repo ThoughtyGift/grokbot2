@@ -7,10 +7,11 @@
  * whose chat they are in, and refuses to measure anything if it cannot identify it.
  */
 import { chromium } from "playwright-core";
+import { gwHeaders } from "./gw-auth.mjs";
 
 const GW = "http://127.0.0.1:8788";
 const gw = (m, b = {}) =>
-  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) })
+  fetch(`${GW}/gw/api/${m}`, { method: "POST", headers: { "content-type": "application/json", ...gwHeaders() }, body: JSON.stringify(b) })
     .then((r) => r.json()).catch((e) => ({ __error: String(e) }));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const step = (n, label, ok, detail = "") =>
@@ -19,12 +20,12 @@ const step = (n, label, ok, detail = "") =>
 console.log("=== stages ===");
 
 // 1. backend
-const health = await fetch(`${GW}/gw/health`).then((r) => r.json()).catch(() => null);
+const health = await fetch(`${GW}/gw/health`, { headers: gwHeaders() }).then((r) => r.json()).catch(() => null);
 step(1, "backend answers", Boolean(health?.ok));
 if (!health?.ok) process.exit(1);
 
 // 2. the app's event stream
-const cov = await fetch(`${GW}/gw/__coverage`).then((r) => r.json()).catch(() => null);
+const cov = await fetch(`${GW}/gw/__coverage`, { headers: gwHeaders() }).then((r) => r.json()).catch(() => null);
 step(2, "app is on the event stream", (cov?.sse?.connected ?? 0) > 0,
   `opened=${cov?.sse?.opened} closed=${cov?.sse?.closed} connected=${cov?.sse?.connected}`);
 

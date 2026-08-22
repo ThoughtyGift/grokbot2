@@ -1,0 +1,44 @@
+{
+  "phase": 0,
+  "recordedAt": "2026-08-19",
+  "appVersion": "0.20.0",
+  "backendCommitAtGateA": "2cb55e9",
+  "gateway": { "implemented": 111, "catalog": 120, "intentionallySkippedRooms": 9 },
+  "toolsLiveMap": { "have": 28, "missing": 26, "oursNotInCatalog": 31, "catalog": 54 },
+  "parityReportToolsField": { "note": "stale hardcoded 9/54 — do not use" },
+  "sse": {
+    "broadcastOk": ["transcript", "agents", "agent-upserted", "forever-box"],
+    "broadcastWrongName": ["agents-automation"],
+    "notPushed": ["async-tasks", "automations", "box-disk-pressure", "computer-action", "host-settings", "mcp-servers", "outline", "sharing", "subagents", "teach-recording", "tray", "workflows"]
+  },
+  "runtimeReadsAsar": false,
+  "protoHotPath": ["services/grokbot-backend/src/index.ts"],
+  "strict404": true,
+  "authEnforce": true,
+  "docker": false,
+  "installAppAsarPresent": false,
+  "repoGitignoredAsarPresent": true,
+  "gateA": {
+    "file": "docs/parity-runs/strangler-baseline-gateA-run-01.json",
+    "pass": false,
+    "routes": "16/16",
+    "auth": "6/6",
+    "commands": "10/10",
+    "channels": "7/9"
+  },
+  "regressionE2e": {
+    "command": "node services/grokbot-backend/scripts/e2e-run.mjs --regression --no-goc",
+    "pass": false,
+    "stoppedAt": "P1 Gate A extract-contract.mjs default asar path"
+  },
+  "phase0Complete": true,
+  "closedAt": "2026-08-19T11:06:12.815Z",
+  "closedBy": {
+    "gate": "docs/parity-runs/phase-gate-P0.json",
+    "channels": "9/9",
+    "regression": "PASS (Gate C skipped with --no-goc; original was on :9333 but e2e-run was told not to use it)",
+    "localUiE2e": "e2e-ui probe PASS on CDP 9222 (title Grok Bot 2 — LOCAL)",
+    "asarResolvedTo": "C:\\Users\\admin\\Desktop\\Grok Bot\\resources\\app.asar",
+    "automationsChannel": "broadcast(\"automations\")"
+  }
+}

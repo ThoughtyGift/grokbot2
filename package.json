@@ -13,7 +13,20 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "backend": "pnpm --filter @grokbot2/backend dev"
+    "backend": "pnpm --filter @grokbot2/computer --filter @grokbot2/runtime --filter @grokbot2/ops --filter @grokbot2/backend --parallel dev",
+    "dev:app": "powershell -ExecutionPolicy Bypass -File infra/scripts/run.ps1",
+    "web": "pnpm --filter @grokbot2/web dev",
+    "runtime": "pnpm --filter @grokbot2/runtime dev",
+    "computer": "pnpm --filter @grokbot2/computer dev",
+    "ops": "pnpm --filter @grokbot2/ops dev",
+    "phase:gate": "node services/grokbot-backend/scripts/phase-gate.mjs",
+    "phase:advance": "node services/grokbot-backend/scripts/phase-gate.mjs --advance",
+    "test:avatar": "node services/grokbot-backend/scripts/e2e-avatar.mjs",
+    "test:avatar-ui": "node services/grokbot-backend/scripts/e2e-avatar-ui.mjs",
+    "test:reaction": "node services/grokbot-backend/scripts/e2e-reaction.mjs",
+    "e2e:history": "node services/grokbot-backend/scripts/run-history.mjs",
+    "soak": "node services/grokbot-backend/scripts/soak-day.mjs",
+    "soak:status": "node services/grokbot-backend/scripts/soak-day.mjs --status"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

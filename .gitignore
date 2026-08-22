@@ -45,3 +45,12 @@ box-token.txt
 
 # the stock Grok Bot app, kept locally for prompt extraction — never committed
 Grok Bot/
+
+# ROADMAP DoD #5 / risk R5 — a patched client must never leave this machine.
+# Observation is not enforcement: the tree was clean, but nothing stopped an `git add -f`-free
+# accident either. These make it explicit rather than lucky.
+*.asar
+*.asar.disabled-by-grokbot2
+*.asar.unpacked/
+resources/app/
+grokbot-fe-extracted/
