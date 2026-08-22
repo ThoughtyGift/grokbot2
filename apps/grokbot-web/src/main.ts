@@ -47,6 +47,13 @@ const state = {
    * con, `Back to details` pop ra, ra/vào 240ms.
    */
   panePage: "details" as "details" | "settings",
+  /**
+   * Nội dung ô nhập.
+   *
+   * Phải nằm trong state vì nút gửi CHỈ hiện khi có chữ — đọc từ ảnh app gốc: ô trống thì bên phải
+   * chỉ có mic. Không giữ ở state thì không biết khi nào cho nút hiện.
+   */
+  draft: "",
 };
 
 /**
@@ -195,8 +202,13 @@ function renderEntry(e: NativeEntry): HTMLElement {
   if (e.kind === "widget") return renderWidget(e);
   if (e.kind === "tool-call") {
     const card = el(`<article class="tool-card ${e.status ?? ""} ${e.needsApproval && e.status === "pending" ? "pending" : ""}">
-      <header><strong>${escapeHtml(e.name ?? "tool")}</strong><span>${escapeHtml(e.status ?? "")}</span></header>
-      <pre>${escapeHtml(e.summary || e.result || "")}</pre>
+      <header>
+        <strong>${escapeHtml(e.name ?? "tool")}</strong>
+        ${e.status === "running"
+          ? `<span class="run-dots" aria-label="đang chạy"><i></i><i></i><i></i></span>`
+          : `<span class="tag">${escapeHtml(e.status ?? "")}</span>`}
+      </header>
+      ${(e.summary || e.result) ? `<pre>${escapeHtml(e.summary || e.result || "")}</pre>` : ""}
     </article>`);
     if (e.status === "pending" && e.requestId) {
       const hint = el(`<p class="ask">Công cụ này có thể ghi lên máy. Cho phép một lần?</p>`);
@@ -221,6 +233,16 @@ function renderEntry(e: NativeEntry): HTMLElement {
    * cùng một người vào `sand-author-run`, đặt tên một lần ở đầu và avatar một lần ở máng bên
    * trái. Xem `renderRuns()`.
    */
+  /*
+   * Lúc bot đang nghĩ hoặc đang gọi tool, app gốc hiện BA CHẤM và KHÔNG có bubble quanh chúng —
+   * đọc từ ảnh chụp app đang chạy. Bản trước của tôi là một bubble xám kèm con trỏ khối `▍`, tức
+   * vẽ ra một bubble rỗng rồi nhấp nháy trong đó: sai cả hình lẫn ý (bubble rỗng ngụ ý "đã có tin",
+   * ba chấm ngụ ý "đang tới").
+   */
+  if (streaming && !(e.content ?? "").trim()) {
+    const dots = el(`<div class="thinking" role="status" aria-label="đang trả lời"><i></i><i></i><i></i></div>`);
+    return dots;
+  }
   const bubble = el(`<div class="bubble ${cls}${streaming}"></div>`);
   const wrap = (node: HTMLElement): HTMLElement => node;
   if (e.attachment?.href) {
@@ -367,8 +389,29 @@ function openRun(e: NativeEntry, mine: boolean, opensBlock: boolean): HTMLElemen
   return run;
 }
 
+/**
+ * Vạch thời gian giữa các tin — app gốc hiện "Today 4:47 AM" giữa hai tin cách nhau.
+ *
+ * Ngưỡng 30 phút chọn theo hành vi quan sát được, không phải đo: app gốc không hiện vạch giữa hai
+ * tin liền nhau trong một lượt trò chuyện, nhưng có hiện khi quay lại sau một lúc. Khi mở lại app
+ * bằng launcher F2 thì đo `x-ray` để chốt ngưỡng thật.
+ */
+const GAP_MS = 30 * 60 * 1000;
+
+function stampFor(ms: number): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return `Hôm nay ${time}`;
+  const yest = new Date(now.getTime() - 86_400_000);
+  if (d.toDateString() === yest.toDateString()) return `Hôm qua ${time}`;
+  return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
+}
+
 function renderRuns(entries: NativeEntry[]): HTMLElement[] {
   const out: HTMLElement[] = [];
+  let lastStampAt = 0;
   let run: HTMLElement | null = null;
   let runKey = "";
   /**
@@ -381,6 +424,11 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
   let lastSpeaker = "";
 
   for (const e of entries) {
+    if (e.timestampMs && (lastStampAt === 0 || e.timestampMs - lastStampAt > GAP_MS)) {
+      out.push(el(`<div class="day-sep"><span>${escapeHtml(stampFor(e.timestampMs))}</span></div>`));
+      run = null; runKey = "";   // vạch cắt lượt: tin sau nó mở lượt mới, có nhãn tên
+    }
+    if (e.timestampMs) lastStampAt = e.timestampMs;
     const isMsg = e.kind === "message" || e.kind === "agent-message";
     if (!isMsg) {
       run = null; runKey = "";
@@ -851,10 +899,12 @@ function paint(): void {
       <form class="composer">
         <div class="pending" hidden></div>
         <label class="attach" title="gửi ảnh">+<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ${selected ? "" : "disabled"} /></label>
-        <textarea name="q" rows="1" aria-label="Prompt" placeholder="Hỏi bất cứ điều gì, hoặc kéo tệp vào." ${selected ? "" : "disabled"}></textarea>
-        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Đọc để nhập" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
-        <button type="submit" class="send" title="gửi" ${selected && !state.busy && !selected?.presence.isRunning ? "" : "disabled"}>↑</button>
-        <button type="button" class="stop" data-act="stop" title="dừng" ${selected?.presence.isRunning ? "" : "disabled"}>■</button>
+        <textarea name="q" rows="1" aria-label="Prompt" placeholder="Hỏi bất cứ điều gì, hoặc kéo tệp vào." ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
+        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
+        ${state.draft.trim() && !selected?.presence.isRunning
+          ? `<button type="submit" class="send" title="gửi" ${selected && !state.busy ? "" : "disabled"}>↑</button>` : ""}
+        ${selected?.presence.isRunning
+          ? `<button type="button" class="stop" data-act="stop" title="dừng">■</button>` : ""}
       </form>
     </section>
     <div class="grip grip-pane" role="separator" aria-orientation="vertical" aria-label="Resize details" tabindex="0"></div>
@@ -1060,6 +1110,31 @@ function paint(): void {
     await refreshRoster();
   };
 
+  /*
+   * Chỉ vẽ lại khi việc "ô nhập có chữ hay không" ĐỔI, không vẽ theo từng ký tự.
+   *
+   * Nút gửi hiện/ẩn theo trạng thái đó, nên phải theo dõi; nhưng gọi `paint()` mỗi lần gõ là dựng
+   * lại cả cây DOM 60 lần một giây và mất luôn con trỏ. So trạng thái rỗng/không-rỗng thì mỗi lượt
+   * gõ chỉ vẽ lại tối đa một lần.
+   */
+  const draftBox = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
+  if (draftBox) {
+    draftBox.oninput = () => {
+      const had = state.draft.trim().length > 0;
+      state.draft = draftBox.value;
+      if (had !== (state.draft.trim().length > 0)) {
+        const at = draftBox.selectionStart;
+        paint();
+        const next = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
+        if (next) { next.focus(); next.setSelectionRange(at, at); }
+      }
+    };
+    if (state.draft) {
+      draftBox.focus();
+      draftBox.setSelectionRange(state.draft.length, state.draft.length);
+    }
+  }
+
   root.querySelector<HTMLButtonElement>("[data-act=back]")?.addEventListener("click", () => {
     state.panePage = "details";
     paint();
@@ -1083,7 +1158,8 @@ function paint(): void {
     await refreshRoster();
   };
   // Hai chỗ mở bộ chọn ảnh: nút "ảnh" và chính cái avatar trên header.
-  root.querySelector<HTMLButtonElement>("[data-act=pane]")!.onclick = () => {
+  const paneBtn = root.querySelector<HTMLButtonElement>("[data-act=pane]");
+  if (paneBtn) paneBtn.onclick = () => {
     state.paneOpen = !state.paneOpen;
     saveUi();
     paint();
@@ -1093,7 +1169,14 @@ function paint(): void {
   root.querySelectorAll<HTMLButtonElement>('[data-act=avatar]').forEach((btn) => {
     btn.onclick = () => { if (selected) openAvatarPicker(selected); };
   });
-  root.querySelector<HTMLButtonElement>("[data-act=stop]")!.onclick = async () => {
+  /*
+   * Lần thứ BA cùng một lỗi trong dự án này, nên ghi lại cho rõ: hễ một nút chỉ xuất hiện trong một
+   * số trạng thái thì `!` trên nó là một lời khai sai, và `paint()` ném lỗi ở lần vẽ đầu — người
+   * dùng thấy "Không kết nối được BFF" trong khi backend hoàn toàn bình thường. Nút dừng vừa được
+   * cho ẩn khi bot không chạy, nên nó vào đúng nhóm đó.
+   */
+  const stopBtn = root.querySelector<HTMLButtonElement>("[data-act=stop]");
+  if (stopBtn) stopBtn.onclick = async () => {
     if (!state.selected) return;
     try {
       await api.interruptTurn(state.selected);
@@ -1135,13 +1218,15 @@ function paint(): void {
     }
     paint();
   };
-  root.querySelector("form")!.onsubmit = async (ev) => {
+  const composerForm = root.querySelector("form");
+  if (composerForm) composerForm.onsubmit = async (ev) => {
     ev.preventDefault();
     const box = root.querySelector("textarea")!;
     const content = box.value.trim();
     const attachments = state.pending.map((p) => ({ path: p.path, name: p.name }));
     if ((!content && !attachments.length) || !state.selected) return;
     box.value = "";
+    state.draft = "";
     state.pending = [];
     state.busy = true;
     state.error = "";

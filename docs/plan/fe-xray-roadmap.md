@@ -342,6 +342,32 @@ kích hoạt viết lại.
 > đúng: **chụp trạng thái trước khi vẽ**, vì sau khi vẽ thì không còn gì để đọc, bằng cách nào cũng
 > không.
 
+### X4.5 — mapping icon và animation gọi tool (từ ảnh chụp app đang chạy, 2026-08-23)
+
+App đang chạy **không mở cổng gỡ lỗi** (`:9222` im) nên lượt này đo từ ảnh chụp, không đo bằng
+`x-ray`. Ghi rõ để sau này biết con số nào đã được máy đo và con số nào chỉ đọc từ ảnh.
+
+| | app gốc | trước đây bên mình | đã sửa |
+|---|---|---|---|
+| bot đang nghĩ / gọi tool | **ba chấm**, không có bubble | bubble xám kèm con trỏ khối `▍` | ba chấm |
+| mic | hình tròn **trắng**, là nút mặc định bên phải | tròn trong suốt, đứng cạnh nút gửi | tròn trắng |
+| nút gửi | **chỉ hiện khi ô nhập có chữ** | luôn hiện, màu xanh, cạnh mic | chỉ hiện khi có chữ |
+| nút dừng | chỉ khi đang chạy | luôn hiện (mờ) | chỉ khi đang chạy |
+| vạch thời gian | có (`Today 4:47 AM`) | **không có** | có |
+| thẻ tool đang chạy | — (chưa thấy trong ảnh) | chữ `running` đứng im | ba chấm, cùng ngôn ngữ với lúc đang nghĩ |
+
+Bubble rỗng kèm con trỏ nhấp nháy **sai cả hình lẫn ý**: một bubble ngụ ý "đã có tin rồi", ba chấm
+ngụ ý "đang tới". Và một cái nhãn chữ `running` đứng im không nói được là việc còn chạy hay đã treo.
+
+Nhịp ba chấm (1,4s, ba chấm lệch pha 0,16s) và ngưỡng vạch thời gian (30 phút) là **giá trị tạm** —
+chưa đo được. Mở app bằng launcher F2 rồi `pnpm ui:xray` để chốt.
+
+> **Lần thứ ba cùng một lỗi**, nên ghi thành luật: hễ một nút chỉ xuất hiện ở một số trạng thái thì
+> `!` trên nó là lời khai sai. Cho nút dừng ẩn khi bot không chạy làm `paint()` ném
+> `TypeError: Cannot set properties of null` ngay lần vẽ đầu, và người dùng thấy **"Không kết nối
+> được BFF :8788"** trong khi backend hoàn toàn bình thường — một thông báo lỗi trỏ sai hoàn toàn
+> chỗ hỏng.
+
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 
 - [ ] X5.1 Routines · X5.2 tìm bot thật · X5.4 plugins · X5.5 khay subagent
