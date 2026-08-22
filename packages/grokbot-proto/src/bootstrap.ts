@@ -98,7 +98,7 @@ export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
 
 /**
  * Box descriptor. Field numbers and the URL shapes match a real box (see
- * docs/box-architecture.md): one pod exposing noVNC, an exec daemon and the gateway.
+ * docs/architecture/box-architecture.md): one pod exposing noVNC, an exec daemon and the gateway.
  *
  * `vnc_url` must be a full noVNC URL — `vnc.html` plus a `path` that reaches websockify —
  * because the app opens it as given. Point GROKBOT2_VNC_URL at a self-hosted box

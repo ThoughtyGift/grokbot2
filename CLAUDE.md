@@ -50,5 +50,5 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 ## Reverse-engineering context
 
 The Grok Bot client is Cursor's `sand` build (v0.20.0). Findings + protocol are captured in
-[docs/spike-findings.md](docs/spike-findings.md) and [docs/protocol-reference.md](docs/protocol-reference.md).
+[docs/reverse/spike-findings.md](docs/reverse/spike-findings.md) and [docs/protocol-reference.md](docs/protocol-reference.md).
 The decompiled bundle (reference only, not in this repo) lives under the session scratchpad.

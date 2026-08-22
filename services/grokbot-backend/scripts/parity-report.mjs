@@ -189,7 +189,7 @@ for (const [label, state] of Object.entries({
   "past-conversation search": "DONE 2026-08-21: `search_conversations` tool + `pastConversationExplorer` subagent type. Never was a contract gap — the host offers it as a subagent_type, with no gateway command and no channel. (The old entry named PAST_CONVERSATION_EXPLORER, a string that exists nowhere in the app.)",
   skills: "skillsCatalog answers [] — CONTRACT-CORRECT: the decl is {args:none, reply:array} and the client itself maps [] to null. Not a gap; having a skills feature at all is a product choice",
   "agent memory UI": "NOT A GAP (measured 2026-08-21): getAgentMemories/deleteAgentMemory/clearAgentMemories appear 0 times in the whole renderer — the screen does not exist in this build. They live only in the HOST's 120-command table",
-  "live transcript updates": "late, not lost — the client replicates an ordered log and needs events (docs/transcript-replica.md)",
+  "live transcript updates": "late, not lost — the client replicates an ordered log and needs events (docs/architecture/transcript-replica.md)",
 })) console.log(`  ${label.padEnd(26)} ${state}`);
 
 const now = {

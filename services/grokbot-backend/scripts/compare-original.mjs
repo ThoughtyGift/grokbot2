@@ -5,7 +5,7 @@
  * `.data/profile-real`, ours from the gateway — so the comparison is data against data rather than a
  * screenshot against an impression.
  *
- * Emits `docs/parity-thuky.md`: the surface table first (what the original renders that we never
+ * Emits `docs/history/parity-thuky.md`: the surface table first (what the original renders that we never
  * emit), then every turn side by side.
  */
 import fs from "node:fs";
@@ -109,7 +109,7 @@ for (const [i, t] of mine.entries()) {
   L.push("");
 }
 
-const dest = "c:/Users/admin/Desktop/grokbot2/docs/parity-thuky.md";
+const dest = "c:/Users/admin/Desktop/grokbot2/docs/history/parity-thuky.md";
 fs.writeFileSync(dest, L.join("\n"));
 console.log(`-> ${dest}  (${L.length} dong)`);
 console.log(`\nbe mat CHI BAN GOC co: ${allKinds.filter((k) => (origSurfaces[k] ?? 0) && !(mySurfaces[k] ?? 0)).join(", ") || "khong con"}`);

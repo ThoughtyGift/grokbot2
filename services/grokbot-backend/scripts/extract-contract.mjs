@@ -4,7 +4,7 @@
  * The app ships an implementation of the very server this backend emulates: `app.asar` contains
  * the host's router, its path constants, its auth branches and its 404 text. So the protocol half
  * of "match the original" is a porting job against a reference, not guesswork — which is the whole
- * premise of docs/execution-roadmap.md.
+ * premise of docs/history/execution-roadmap.md.
  *
  * Three rules, each learned from a way this could quietly go wrong:
  *

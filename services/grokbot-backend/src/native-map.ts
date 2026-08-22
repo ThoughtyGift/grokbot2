@@ -6,13 +6,34 @@
  * not a flattened agent-message.
  */
 import type { AgentRecord, Entry, LastEntry, RosterRow } from "./conversation/types.js";
-import { textOf } from "./conversation/seq.js";
 
-export type NativeAttachment = {
-  path: string;
-  name: string;
-  href: string;
-};
+/**
+ * Kiểu của `/v1` đến từ `@grokbot2/api-contract` — **một** định nghĩa cho cả FE và BE.
+ *
+ * Trước đây chúng được khai ở đây, và FE tự khai lại một tập con đoán được: hai bản đã lệch ở
+ * `presence` (4 trường vs 2), `notificationsEnabled`, `notifyOnUpdates`, `role`, `rawArgs`, và
+ * `lastEntry` (union 3 nhánh vs một hình dạng). Tên `Native*` giữ nguyên để phần còn lại của
+ * backend không phải sửa theo.
+ */
+/*
+ * Chỉ re-export ba kiểu mà backend THẬT SỰ dùng lại. `Attachment`, `Widget`, `WidgetOption` từng
+ * được re-export ở đây và knip báo ngay là không ai import — re-export cho đủ bộ là tạo code chết.
+ * Ai cần chúng thì import thẳng `@grokbot2/api-contract`; đó là lý do package đó tồn tại.
+ */
+export type {
+  Entry as NativeEntry,
+  Agent as NativeAgent,
+  TranscriptPage as NativeTranscriptPage,
+} from "@grokbot2/api-contract";
+
+import type {
+  Agent as NativeAgent,
+  Entry as NativeEntry,
+  Attachment as NativeAttachment,
+  TranscriptPage as NativeTranscriptPage,
+} from "@grokbot2/api-contract";
+
+import { textOf } from "./conversation/seq.js";
 
 export const attachmentHref = (path: string): string =>
   `/v1/attachments?path=${encodeURIComponent(path)}`;
@@ -20,70 +41,6 @@ export const attachmentHref = (path: string): string =>
 function nativeAttachment(url: string, name: string): NativeAttachment {
   return { path: url, name, href: attachmentHref(url) };
 }
-
-export type NativeWidgetOption = {
-  label: string;
-  value?: string;
-  description?: string;
-  style?: "default" | "primary" | "danger";
-};
-
-export type NativeWidget = {
-  prompt: string;
-  helpText?: string;
-  options: NativeWidgetOption[];
-  allowCustom?: boolean;
-};
-
-export type NativeEntry = {
-  id: string;
-  seq: number;
-  timestampMs: number;
-  kind: "message" | "agent-message" | "tool-call" | "event" | "widget";
-  reactions?: { emoji: string; by: string }[];
-  isStreaming?: boolean;
-  role?: "user";
-  content?: string;
-  clientNonce?: string;
-  author?: { id: string; name: string };
-  attachment?: NativeAttachment;
-  toolCallId?: string;
-  requestId?: string;
-  needsApproval?: boolean;
-  name?: string;
-  rawArgs?: string;
-  summary?: string;
-  status?: "pending" | "running" | "done" | "failed";
-  result?: string;
-  event?: { type: string; [k: string]: unknown };
-  widget?: NativeWidget;
-  respondedValue?: string;
-};
-
-export type NativeAgent = {
-  id: string;
-  name: string;
-  description: string;
-  createdAtMs: number;
-  updatedAtMs: number;
-  unread: boolean;
-  hidden: boolean;
-  avatarVersion: string | null;
-  notificationsEnabled: boolean;
-  notifyOnUpdates: boolean;
-  presence: {
-    isRunning: boolean;
-    isComposingMessage: boolean;
-    isRetrying: boolean;
-    currentActivity: AgentRecord["currentActivity"];
-  };
-  lastEntry: LastEntry | null;
-};
-
-export type NativeTranscriptPage = {
-  entries: NativeEntry[];
-  hasMore: boolean;
-};
 
 const seqOf = (e: Entry): number => (typeof e.seq === "number" && e.seq >= 1 ? e.seq : 1);
 

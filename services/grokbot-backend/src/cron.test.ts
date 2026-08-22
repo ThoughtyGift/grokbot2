@@ -1,7 +1,7 @@
 /**
  * The cron reader behind routines (`parseCron` · `matches` · `describe`).
  *
- * Named in docs/execution-roadmap.md as one of the pure functions worth testing first, and it earns
+ * Named in docs/history/execution-roadmap.md as one of the pure functions worth testing first, and it earns
  * the place: every bug it can have is a routine that fires at the wrong time or never fires, and
  * neither shows up as an error. A schedule that silently never matches looks exactly like a user
  * who forgot to enable it.

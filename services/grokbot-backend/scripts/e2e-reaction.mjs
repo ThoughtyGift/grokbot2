@@ -158,6 +158,12 @@ try {
   }
 } catch (e) {
   fail++;
+  /*
+   * Đẩy vào `results` chứ không chỉ tăng biến đếm.
+   * Bản đầu chỉ `fail++`, nên một lượt chết giữa chừng được nhật ký ghi là "xanh 9/9" trong khi
+   * console in "9 pass, 1 fail" — đúng loại nhật ký nói dối mà nó sinh ra để chống.
+   */
+  results.push({ name: "bài chạy dở dang", pass: false, detail: e instanceof Error ? e.message : String(e) });
   console.log(`  FAIL bài chạy dở dang — ${e instanceof Error ? e.message : e}`);
 } finally {
   if (browser) await browser.close().catch(() => {});

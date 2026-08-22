@@ -1,7 +1,7 @@
 /**
  * The first automated tests in this repo.
  *
- * docs/execution-roadmap.md flags coverage at 0% against an 80% standard, and names the pure
+ * docs/history/execution-roadmap.md flags coverage at 0% against an 80% standard, and names the pure
  * functions worth testing first. This is one of them, and it is the right one to start with: every
  * bug it can have is silent. A parser that stops at the wrong `)` does not throw, it runs a
  * truncated command; a scheduler that batches too eagerly does not throw, it reads a file before

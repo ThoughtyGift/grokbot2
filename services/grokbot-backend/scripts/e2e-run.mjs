@@ -1,7 +1,7 @@
 /**
  * The orchestrator — run a plan's gates in order and stop at the first red one.
  *
- * The loop in docs/execution-roadmap.md §2 is only followed if it is cheaper to run than to skip.
+ * The loop in docs/history/execution-roadmap.md §2 is only followed if it is cheaper to run than to skip.
  * Four scripts with four different invocations is not; one command is.
  *
  *   node scripts/e2e-run.mjs --plan P2

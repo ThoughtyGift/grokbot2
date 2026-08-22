@@ -2,7 +2,7 @@
  * The text handling every tool argument and every fetched page passes through.
  *
  * `unquote` and `renderTree` (tools.ts), `htmlToMarkdown` (web.ts), `redact` (redact.ts), and the
- * three prompt tiers (prompt.ts). All named in docs/execution-roadmap.md, all pure, and all with
+ * three prompt tiers (prompt.ts). All named in docs/history/execution-roadmap.md, all pure, and all with
  * the same failure mode: they do not throw, they hand the model something subtly wrong. A quote
  * left on a path becomes ENOENT; a tree that hides an unexplored branch becomes "the directory is
  * empty"; a prompt whose volatile part drifts forward destroys caching for everything behind it.

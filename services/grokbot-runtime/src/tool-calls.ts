@@ -1,7 +1,7 @@
 /**
  * Parsing and scheduling MORE THAN ONE tool call per turn.
  *
- * This is the architectural gap in docs/execution-roadmap.md §10 (P5), and the biggest one left
+ * This is the architectural gap in docs/history/execution-roadmap.md §10 (P5), and the biggest one left
  * against the original: it dispatches several tools at once, we chain one per turn up to eight, so
  * the same three-step job costs three full round trips to the pool instead of one.
  *

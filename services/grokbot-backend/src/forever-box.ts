@@ -16,7 +16,7 @@
  * sinks and SSE publish (seq stays on the BFF). URL unset = in-process maps (e2e that spawn one
  * BFF). URL set but down = `{ agentId, state: "off" }` — pane off, never a 500 on sendPrompt.
  *
- * See docs/box-architecture.md for the real descriptor this mirrors.
+ * See docs/architecture/box-architecture.md for the real descriptor this mirrors.
  */
 import { redact } from "./redact.js";
 import { publish } from "./events.js";

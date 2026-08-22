@@ -23,7 +23,7 @@ const BACKEND = join(REPO, "services", "grokbot-backend");
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : d; };
 const ADVANCE = process.argv.includes("--advance");
 /**
- * P0–P8 are the archived "FE native" programme (docs/ROADMAP-native-fe.archived.md). P0–P6 shipped;
+ * P0–P8 are the archived "FE native" programme (docs/history/ROADMAP-native-fe.archived.md). P0–P6 shipped;
  * P7 stopped where it stood; P8 was deleted when the programme pivoted on 2026-08-20.
  *
  * F0–F7 are the live programme: grokbot2 serving the PATCHED STOCK CLIENT (ROADMAP.md). They come
@@ -31,7 +31,7 @@ const ADVANCE = process.argv.includes("--advance");
  * pointer left on an old P-phase still resolves.
  */
 const ORDER = ["P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "F0", "F1", "F2", "F3", "F4", "F5", "F6", "F7"];
-const HUMAN = join(REPO, "docs", "phase-state.json");
+const HUMAN = join(REPO, "docs", "state", "phase-state.json");
 
 const loadState = () => {
   try { return JSON.parse(readFileSync(STATE, "utf8")); } catch { return { phase: "P0" }; }

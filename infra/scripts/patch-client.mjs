@@ -29,7 +29,7 @@ import { PATCHES } from "../patches/index.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
-const STATE_FILE = join(REPO, "docs", "client-patch-state.json");
+const STATE_FILE = join(REPO, "docs", "state", "client-patch-state.json");
 
 const APP_DIR = process.env.GROKBOT2_CLIENT_DIR
   ?? join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot");
@@ -170,7 +170,7 @@ if (mode === "--verify") {
   else ok("fuses still permit the resources/app fallback");
 
   const st = readState();
-  if (!st) console.log("  note  no docs/client-patch-state.json — this install was patched by hand, not by --apply");
+  if (!st) console.log("  note  no docs/state/client-patch-state.json — this install was patched by hand, not by --apply");
   else if (st.clientVersion && st.clientVersion !== clientVersion(APP_UNPACKED)) fail(`client version drifted: recorded ${st.clientVersion}, on disk ${clientVersion(APP_UNPACKED)} — app updated, re-run --apply`);
 
   console.log(fails === 0 ? "\nOK — patch set is live and intact." : `\n${fails} problem(s).`);

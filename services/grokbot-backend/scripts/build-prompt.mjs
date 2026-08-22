@@ -1,6 +1,6 @@
 /**
  * Build our system prompt from the original's, which ships in the box host bundle
- * (see docs/agent-brain.md — it is NOT server-side only, that was the earlier mistake).
+ * (see docs/reverse/agent-brain.md — it is NOT server-side only, that was the earlier mistake).
  *
  *   node scripts/build-prompt.mjs [docs/extracted/subagent-prompts.json] [src/prompt-base.ts]
  *

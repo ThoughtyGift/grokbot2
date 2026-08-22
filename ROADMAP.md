@@ -1,9 +1,9 @@
 # ROADMAP — grokbot2 phục vụ FE gốc đã patch (`Grok Bot.exe`)
 
 **Ngày:** 2026-08-20
-**Pointer:** **F2** (launcher verified 2026-08-21; F3 implemented 2026-08-21, **not** `--advance`d) — [`docs/phase-state.json`](docs/phase-state.json) / [`docs/parity-runs/phase-current.json`](docs/parity-runs/phase-current.json).
+**Pointer:** **F2** (launcher verified 2026-08-21; F3 implemented 2026-08-21, **not** `--advance`d) — [`docs/state/phase-state.json`](docs/state/phase-state.json) / [`docs/parity-runs/phase-current.json`](docs/parity-runs/phase-current.json).
 **Trạng thái:** **ĐỔI HƯỚNG 2026-08-20.** Mục tiêu không còn là "FE native riêng rồi cắt ACL". Mục tiêu mới: **FE gốc đã patch là UI production**, grokbot2 là backend duy nhất nó nói chuyện.
-**Roadmap hướng cũ:** [docs/ROADMAP-native-fe.archived.md](docs/ROADMAP-native-fe.archived.md) — archive, không xoá, vì P0–P6 là nền dùng lại nguyên vẹn.
+**Roadmap hướng cũ:** [docs/history/ROADMAP-native-fe.archived.md](docs/history/ROADMAP-native-fe.archived.md) — archive, không xoá, vì P0–P6 là nền dùng lại nguyên vẹn.
 **Phạm vi:** hai bề mặt — **Grok Bot gốc** (Electron Anysphere `sand` v0.20.0, bản cài local đã patch) và **grokbot2** (backend self-host).
 **Mục tiêu:** UI của hãng chạy hoàn toàn trên hạ tầng của mình; patch client **tái tạo được từ repo**; e2e đi qua app thật.
 **Không nằm trong mục tiêu:** **phân phối** client đã sửa cho bất kỳ ai; giả danh sản phẩm Cursor/Anysphere/xAI. Xem [docs/legal.md](docs/legal.md).
@@ -244,9 +244,9 @@ Giả định **1 software engineer**. Cột tuần đã gộp buffer 20%.
 - [x] Assert ngưỡng: tụt dưới baseline → **exit code ≠ 0** (đã thử giả lập tụt, exit 1).
 - [x] `docs/parity-runs/fe-goc-baseline.json` — gateway 111/120, tools 28/54, SSE 5/16, bootstrap 9/10.
 - [x] Đo thêm SSE channel + bootstrap RPC vào baseline (hiện `PUSHED_CHANNELS` + `BOOTSTRAP_GATE_METHODS`; `WatchSandBoxMigration` chưa có body).
-- [x] Cập nhật `docs/architecture-decisions.md`: ADR-F0-1 đổi hướng + ACL là lõi vĩnh viễn.
-- [x] Sửa comment/ADR nào nói "ACL sẽ gỡ ở Phase 8" (ADR-P7-1 cutover, ADR-P0-4, `cursor-acl` header, dual-run, coupling-inventory). Archive `docs/ROADMAP-native-fe.archived.md` giữ nguyên.
-- [x] Dọn 3 con số cũ trong `docs/roadmap.md` (24), `docs/migration-baseline.md` (28/9), `docs/parity.md` — trỏ hết về baseline mới.
+- [x] Cập nhật `docs/architecture/architecture-decisions.md`: ADR-F0-1 đổi hướng + ACL là lõi vĩnh viễn.
+- [x] Sửa comment/ADR nào nói "ACL sẽ gỡ ở Phase 8" (ADR-P7-1 cutover, ADR-P0-4, `cursor-acl` header, dual-run, coupling-inventory). Archive `docs/history/ROADMAP-native-fe.archived.md` giữ nguyên.
+- [x] Dọn 3 con số cũ trong `docs/roadmap.md` (24), `docs/history/migration-baseline.md` (28/9), `docs/parity.md` — trỏ hết về baseline mới.
 
 **Dependencies:** không.
 **Risks:** con số parity thật có thể xấu hơn khi đo cả SSE + protobuf field, không chỉ tên lệnh → đó là thông tin cần biết, không phải lý do hoãn.
@@ -266,8 +266,8 @@ Hiện trạng: `resources/app/` **đang có patch active** (patch `cOt` fix dri
 - [x] `--dry-run` extract + patch + `node --check` **không chạm** `resources/app` — pipeline test được mà không cược bản đang dùng hằng ngày.
 - [x] Occurrence assert: giả lập lệch (`expected: 2` vs thực tế 1) → **exit 1**, in tên patch, không ghi file.
 - [x] Giữ `package.json` verbatim (`name: "sand"`) — `--verify` assert điều này.
-- [x] `docs/client-patch-state.json` ghi version + sha `app.asar` gốc (do `--apply` viết).
-- [x] **Chạy `--apply` thật trên install** rồi boot app. Đã chạy hai lần: lần đầu 2026-08-20, và lần rebuild sạch 2026-08-21 (`docs/client-patch-state.json` → `appliedAt 2026-08-21T02:13:26Z`). Boot xác nhận renderer từ `resources/app`.
+- [x] `docs/state/client-patch-state.json` ghi version + sha `app.asar` gốc (do `--apply` viết).
+- [x] **Chạy `--apply` thật trên install** rồi boot app. Đã chạy hai lần: lần đầu 2026-08-20, và lần rebuild sạch 2026-08-21 (`docs/state/client-patch-state.json` → `appliedAt 2026-08-21T02:13:26Z`). Boot xác nhận renderer từ `resources/app`.
 - [x] Kiểm `--undo` trên install thật — đã chạy trong chu trình rebuild: `resources/` về đúng layout bản cài mới và **app hãng boot được** từ `app.asar`. Đường lùi là thật.
 
 **Đã chứng minh (2026-08-20):** `--dry-run` extract từ `app.asar` hãng → patch → file dựng lại **byte-identical** với file đang chạy. `--verify` trên install thật (cùng ngày, sau khi nhét `cOt` vào `infra/patches/`): **OK** — `win-drive-path` 1× marker, `package.json` `name: "sand"`, fuse vẫn cho `resources/app`.
@@ -713,7 +713,7 @@ T1     T2   T3   T4        T5 ─── T8        T8   T9 ── T10 ── T12
 ## 8. Việc không làm (cố ý)
 
 - Không xoá `apps/grokbot-web` — là đường lùi cho R2, và là bề mặt debug không vướng pháp lý.
-- Không xoá `docs/ROADMAP-native-fe.archived.md`.
+- Không xoá `docs/history/ROADMAP-native-fe.archived.md`.
 - Không đuổi feature parity cho FE native nữa.
 - Không sửa patch bằng tay ngoài pipeline F1.
 - Không đóng tool cho đủ 54 — chỉ đóng cái UI thật sự dùng.

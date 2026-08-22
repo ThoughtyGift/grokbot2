@@ -32,40 +32,7 @@ const CDP = arg("--cdp", "http://127.0.0.1:9222");
 const SIZES = arg("--sizes", "1920x1040,1440x900,1181x760")
   .split(",").map((s) => { const [w, h] = s.split("x").map(Number); return { width: w, height: h }; });
 
-/**
- * Bảng anchor. Mỗi dòng: tên vùng, cách tìm bên app, cách tìm bên mình, và những thuộc tính đáng so.
- *
- * `props` chọn có chủ ý: `x`/`w` cho khối bố cục, `bg`/`radius`/`pad`/`font` cho thứ nhìn thấy.
- * KHÔNG so chiều cao khối cuộn — nó phụ thuộc số tin nhắn, không phải thiết kế, so nó chỉ tạo nhiễu.
- */
-const ANCHORS = [
-  { name: "shell",        app: "body",                        web: "body",           props: ["bg", "color"] },
-  { name: "sidebar",      app: ".sand-agents-sidebar",        web: ".sidebar",       props: ["x", "w"] },
-  /*
-   * So RÒNG hàng với hàng, không so container.
-   * `.sand-agents-list__rows` (236) là vùng đã trừ lề; `.roster` của mình (260) là vùng chưa trừ.
-   * So hai cái đó là so quả táo với quả cam — báo lệch 24px trong khi hàng hai bên bằng nhau.
-   */
-  { name: "row bot",      app: ".sand-agent-item",            web: ".roster .bot",   props: ["w", "h", "radius"] },
-  { name: "cột chat",     app: ".sand-chat",                  web: ".chat",          props: ["x", "w"] },
-  { name: "transcript",   app: '[role="log"]',                web: ".transcript",    props: ["w"] },
-  /*
-   * Bỏ `w` khỏi bubble: bề rộng phụ thuộc ĐỘ DÀI TIN NHẮN, không phải thiết kế. Giữ nó thì mỗi
-   * lần hai bên mở hai hội thoại khác nhau là một dòng đỏ giả.
-   *
-   * Bên user, `[data-role="user"]` chỉ là lớp bọc (nền trong suốt, bo 0) — phần tử có kiểu nằm
-   * bên trong. Neo vào lớp bọc thì đo ra "app không có nền bubble", sai hoàn toàn.
-   */
-  /* Hai vai có cấu trúc KHÁC nhau: bên bot, `.sand-message` chính là phần tử mang `data-role`
-     (nên là `.`, không phải dấu cách); bên mình nó nằm sâu bên trong. */
-  { name: "bubble bot",   app: '[data-role="assistant"].sand-message', web: ".bubble.agent", props: ["bg", "radius", "pad", "font"] },
-  { name: "bubble tôi",   app: '[data-role="user"] .sand-message',      web: ".bubble.user",  props: ["bg", "radius", "pad", "font"] },
-  { name: "hover action", app: ".sand-message-hover-actions", web: ".msg-actions",   props: ["h"] },
-  { name: "nút hover",    app: ".sand-message-hover-actions__button", web: ".msg-actions .act", props: ["w", "h", "radius"] },
-  { name: "composer",     app: ".sand-chat-input-dock",       web: ".composer",      props: ["x", "w", "h"] },
-  { name: "panel phải",   app: ".sand-info-pane",             web: ".computer",      props: ["x", "w"] },
-  { name: "khung màn hình", app: ".sand-computer-preview",    web: ".screen",        props: ["w"] },
-];
+import { ANCHORS } from "./ui-anchors.mjs";
 
 /** Chạy trong trang. Trả `{ [tên vùng]: { prop: value } }`, hoặc `null` khi không có phần tử. */
 const READ = (specs) => {

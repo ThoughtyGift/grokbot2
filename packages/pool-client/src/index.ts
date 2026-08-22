@@ -45,7 +45,7 @@ export interface PoolResult {
  * system prompt ("your first word must be BANANA"): gemini and grok say BANANA, every Claude model
  * ignores it and introduces itself as a generic "neutral API assistant" — it never received our
  * 31k-char tool protocol. That is the whole reason Claude models reported having no tools, and it is
- * why the earlier explanation in docs/agent-brain.md ("Claude ships its own agent identity that
+ * why the earlier explanation in docs/reverse/agent-brain.md ("Claude ships its own agent identity that
  * overrides our tool table") was wrong: nothing was overridden, because nothing arrived.
  *
  * Measured 17/08, three sequential attempts per cell, real 31,302-char prompt, "does the reply emit
