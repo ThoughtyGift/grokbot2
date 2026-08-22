@@ -294,8 +294,8 @@ export function currentPeriodUsage(u?: { used: number; limit: number; cycleStart
  * instead of showing none. `git_url` is a marker, not a fetch target — the catalog comes from
  * ListMarketplacePlugins on this same server.
  */
-export function listMarketplaces(): Buffer {
-  const m = message(
+function marketplaceRow(): Buffer {
+  return message(
     pbVar(1, 1),
     pbStr(2, "grokbot2-local"),
     pbStr(3, "Grokbot2 (self-hosted)"),
@@ -303,7 +303,10 @@ export function listMarketplaces(): Buffer {
     pbStr(5, process.env.GROKBOT2_MARKETPLACE_URL ?? "https://local.test"),
     pbVar(10, 0),
   );
-  return message(pbMsg(1, m));
+}
+
+export function listMarketplaces(): Buffer {
+  return message(pbMsg(1, marketplaceRow()));
 }
 
 /**
@@ -382,7 +385,18 @@ export function getEffectiveUserPlugins(installedIds?: number[], catalog: readon
   const rows = installedIds
     ? catalog.filter((p) => installedIds.includes(p.id))
     : [LOCAL_PLUGINS[0]];
-  return message(...rows.map((p) => pbMsg(1, message(pbMsg(1, plugin(p)), pbBool(4, true)))));
+  // ALWAYS emit field 2 `marketplaces`, even with no installs.
+  //
+  // The response declares two repeated fields (1 plugins, 2 marketplaces) and only field 1 was ever
+  // sent. That was harmless while a stub row was hardcoded, but once an account can legitimately
+  // have zero installs the message became ZERO BYTES — and the app's "Yours" tab then crashed with
+  // `Cannot read properties of undefined (reading 'length')`, closing the panel. Measured 2026-08-23
+  // via CDP. A never-empty body is also simply the more complete answer: the tab groups plugins by
+  // marketplace, so it needs the marketplace even when the plugin list is empty.
+  return message(
+    ...rows.map((p) => pbMsg(1, message(pbMsg(1, plugin(p)), pbBool(4, true)))),
+    pbMsg(2, marketplaceRow()),
+  );
 }
 
 export function getEffectiveUserPluginsJson(installedIds?: number[], catalog: readonly PluginEntry[] = LOCAL_PLUGINS): string {
