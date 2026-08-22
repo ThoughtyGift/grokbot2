@@ -54,6 +54,8 @@ export interface DirectoryPort {
   searchAgents: Call;
   kickstartAgent: Call;
   agentById(id: string): { id: string } | undefined;
+  /** The owner of an agent, ignoring the caller's scope — the SSE hub routes an event to it. */
+  ownerOf(id: string): string | undefined;
   /** Ordered envelope for a single-agent roster event — the client discards events without one. */
   nextRosterOrdered(): unknown;
 }
@@ -185,6 +187,16 @@ export interface ObservePort {
 }
 
 export interface AclPorts {
+  /**
+   * The caller's owner id for the current request (multi-tenant Phase 3). The SSE hub reads it at
+   * `/gw/events` open to tag the connection, and as a fallback owner for roster-wide events.
+   */
+  currentOwner(): string;
+  /**
+   * Run `fn` as `owner` (multi-tenant Phase 3). The SSE hub uses it so a background event's push is
+   * built and routed for the agent's owner, not the caller's — `listAgents()` etc. then scope right.
+   */
+  runAsOwner<T>(owner: string, fn: () => T): T;
   identity: IdentityPort;
   directory: DirectoryPort;
   conversation: ConversationPort;

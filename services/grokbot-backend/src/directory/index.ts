@@ -78,6 +78,15 @@ export const agentById = (id: string): AgentRecord | undefined => {
   return a && ownedByCaller(a) ? summarise(a) : undefined;
 };
 
+/**
+ * The owner of an agent, IGNORING the caller's scope — for the SSE hub (Phase 3), which routes each
+ * event to its agent's owner and runs outside any request. Undefined if the agent does not exist.
+ */
+export const ownerOf = (id: string): string | undefined => {
+  const a = agents.get(id);
+  return a ? (a.agentOwnerAuthId ?? AUTH_ID) : undefined;
+};
+
 export const listAgents = (): RosterRow[] =>
   [...agents.values()].filter((a) => !a.hidden && ownedByCaller(a)).map(summarise);
 export const countAgents = (): number => listAgents().length;

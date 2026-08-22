@@ -65,14 +65,21 @@ export const NO_DATA_CHANNELS = [
 ] as const satisfies readonly WireChannel[];
 
 export interface SseHub {
-  broadcast(channel: WireChannel, payload: unknown): void;
+  /** `targetOwner` routes to one tenant's connections (multi-tenant Phase 3); omitted = every client
+   *  (global channels only — host-settings, mcp-servers). Never omit it for per-agent data. */
+  broadcast(channel: WireChannel, payload: unknown, targetOwner?: string): void;
   attach(res: ServerResponse, open: unknown): void;
   drop(): number;
   stats(): { opened: number; closed: number; lastOpenedMs: number; lastOpen?: unknown; connected: number };
 }
 
 export function createSseHub(ports: AclPorts): SseHub {
-  const clients = new Set<ServerResponse>();
+  /**
+   * Each open stream carries its owner (multi-tenant Phase 3), captured from the token at
+   * `/gw/events` open. A per-agent event is written only to its owner's connections; one tenant
+   * never sees another's transcript, roster or presence. Global channels pass no owner and reach all.
+   */
+  const clients = new Map<ServerResponse, string>();
   /**
    * How many times the client has opened the stream, and when it last did.
    *
@@ -94,12 +101,20 @@ export function createSseHub(ports: AclPorts): SseHub {
    * No `channel`, no delivery — and no error either. Correcting the envelope INSIDE the
    * payload three times changed nothing, because none of it ever got past that first check.
    */
-  const broadcast = (channel: WireChannel, payload: unknown): void => {
+  const broadcast = (channel: WireChannel, payload: unknown, targetOwner?: string): void => {
     const line = `data: ${JSON.stringify({ channel, payload })}\n\n`;
-    for (const r of clients) {
+    for (const [r, owner] of clients) {
+      // Phase 3: a targeted event reaches only its owner's streams; an untargeted one (global
+      // channel) reaches all. This is the single choke that prevents cross-tenant leakage.
+      if (targetOwner !== undefined && owner !== targetOwner) continue;
       try { r.write(line); } catch { /* client gone */ }
     }
   };
+
+  /** The owner an event belongs to: its agent's owner, or (for a roster-wide event with no agent id)
+   *  the caller's own owner — valid because publish() is synchronous within the request scope. */
+  const ownerFor = (agentId?: string): string =>
+    (agentId ? ports.directory.ownerOf(agentId) : undefined) ?? ports.currentOwner();
 
   /**
    * Broadcast only when the payload actually differs from the last one sent for this key.
@@ -112,12 +127,12 @@ export function createSseHub(ports: AclPorts): SseHub {
    * Keyed by channel+agent so two agents streaming at once do not cancel each other's dedup.
    */
   const lastSent = new Map<string, string>();
-  const broadcastIfChanged = (channel: WireChannel, key: string, payload: unknown): void => {
+  const broadcastIfChanged = (channel: WireChannel, key: string, payload: unknown, targetOwner?: string): void => {
     const k = `${channel}:${key}`;
     const json = JSON.stringify(payload);
     if (lastSent.get(k) === json) return;
     lastSent.set(k, json);
-    broadcast(channel, payload);
+    broadcast(channel, payload, targetOwner);
   };
 
   // ── transcript.append → channel `transcript` ────────────────────────────────
@@ -139,11 +154,14 @@ export function createSseHub(ports: AclPorts): SseHub {
   // generalising that measured fix to transcripts was the mistake.
   const announced = new Map<string, number>();
   const onTranscriptAppend = (agentId: string): void => {
-    const last = ports.conversation.latestEntry(agentId);
-    if (!last) { broadcast("transcript", { agentId }); return; }
-    const type = announced.get(agentId) === last.seq ? "updated" : "appended";
-    announced.set(agentId, last.seq);
-    broadcast("transcript", { agentId, event: { type, entry: last } });
+    const owner = ownerFor(agentId);
+    ports.runAsOwner(owner, () => {
+      const last = ports.conversation.latestEntry(agentId);
+      if (!last) { broadcast("transcript", { agentId }, owner); return; }
+      const type = announced.get(agentId) === last.seq ? "updated" : "appended";
+      announced.set(agentId, last.seq);
+      broadcast("transcript", { agentId, event: { type, entry: last } }, owner);
+    });
   };
 
   // ── agent.upserted → channels `agent-upserted` + `agents` ───────────────────
@@ -159,11 +177,14 @@ export function createSseHub(ports: AclPorts): SseHub {
   // `agent-upserted` carries one changed agent; `agents` carries the whole list. Both are
   // forwarded to the renderer as `{kind, event: payload}`.
   const onAgentUpserted = (agentId?: string): void => {
-    const agent = agentId ? ports.directory.agentById(agentId) : undefined;
-    if (agent) {
-      broadcast("agent-upserted", { ordered: ports.directory.nextRosterOrdered(), agent, activeAgentId: agent.id });
-    }
-    broadcast("agents", { agents: ports.directory.listAgents() });
+    const owner = ownerFor(agentId);
+    ports.runAsOwner(owner, () => {
+      const agent = agentId ? ports.directory.agentById(agentId) : undefined;
+      if (agent) {
+        broadcast("agent-upserted", { ordered: ports.directory.nextRosterOrdered(), agent, activeAgentId: agent.id }, owner);
+      }
+      broadcast("agents", { agents: ports.directory.listAgents() }, owner);
+    });
   };
 
   // ── computer.status → channel `forever-box` ─────────────────────────────────
@@ -176,7 +197,8 @@ export function createSseHub(ports: AclPorts): SseHub {
   const onComputerStatus = (agentId: string): void => {
     // Status is async when S6 lives in the computer process. Broadcasting the Promise itself
     // would JSON as `{}` and the pane would file it under no agentId.
-    void Promise.resolve(ports.computer.status({ id: agentId })).then((st) => broadcast("forever-box", st));
+    const owner = ownerFor(agentId);
+    void Promise.resolve(ports.computer.status({ id: agentId })).then((st) => broadcast("forever-box", st, owner));
   };
 
   // ── automations.changed → channel `automations` ─────────────────────────────
@@ -185,7 +207,8 @@ export function createSseHub(ports: AclPorts): SseHub {
   // the coordinator only forwards wire names and remaps family `agents-automation` → channel
   // `automations`. Sending the family name is dropped silently — same trap as `roster`.
   const onAutomationsChanged = (agentId: string): void => {
-    broadcast("automations", { agentId, automations: ports.automations.forAgentClientShape({ id: agentId }) });
+    const owner = ownerFor(agentId);
+    ports.runAsOwner(owner, () => broadcast("automations", { agentId, automations: ports.automations.forAgentClientShape({ id: agentId }) }, owner));
   };
 
   // ── transcript.append → channels `subagents` + `outline` ───────────────────
@@ -215,11 +238,13 @@ export function createSseHub(ports: AclPorts): SseHub {
   // precisely what a DOM probe showed before this was corrected.
   const onDerivedFromTranscript = (agentId: string): void => {
     if (!agentId) return;
-    broadcastIfChanged("subagents", agentId, { parentAgentId: agentId, subagents: ports.runtime.getSubagents({ id: agentId }) });
+    const owner = ownerFor(agentId);
+    ports.runAsOwner(owner, () => {
+    broadcastIfChanged("subagents", agentId, { parentAgentId: agentId, subagents: ports.runtime.getSubagents({ id: agentId }) }, owner);
     // The tray the user can actually see. `getSubagents` feeds a store the conversation screen
     // does not render; this is the `sand-async-task` list, and it was empty because the backend
     // answered `[]` — not because the channel was missing.
-    broadcastIfChanged("async-tasks", agentId, { parentAgentId: agentId, tasks: ports.runtime.getAsyncTasks({ id: agentId }) });
+    broadcastIfChanged("async-tasks", agentId, { parentAgentId: agentId, tasks: ports.runtime.getAsyncTasks({ id: agentId }) }, owner);
     // `{type:"snapshot", items}` — the outline reducer is a switch on `type` that FALLS THROUGH
     // TO `return e`:
     //   (prev, e) => { switch (e.type) { case "snapshot": return e.items
@@ -233,6 +258,7 @@ export function createSseHub(ports: AclPorts): SseHub {
       agentId,
       type: "snapshot",
       items: ports.conversation.getConversationOutline({ id: agentId }),
+    }, owner);
     });
   };
 
@@ -249,7 +275,7 @@ export function createSseHub(ports: AclPorts): SseHub {
   });
 
   setInterval(() => {
-    for (const r of clients) {
+    for (const r of clients.keys()) {
       try { r.write(": ping\n\n"); } catch { /* client gone */ }
     }
   }, 5000);
@@ -261,7 +287,10 @@ export function createSseHub(ports: AclPorts): SseHub {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
       res.write(": connected\n\n");
       res.write('event: ready\ndata: {"kind":"ready"}\n\n');
-      clients.add(res);
+      // Phase 3: tag this stream with the caller's owner (from the token, via the runWithOwner scope
+      // index.ts set around this whole /gw request). Every targeted push below routes on it.
+      const owner = ports.currentOwner();
+      clients.set(res, owner);
       stats.opened += 1; stats.lastOpenedMs = Date.now();
       ports.observe.recordSseOpen();   // persisted, so a tsx restart does not erase the reconnect history
       // A full roster snapshot the moment the stream opens, so a reconnect re-anchors instead
@@ -274,7 +303,7 @@ export function createSseHub(ports: AclPorts): SseHub {
     },
     drop() {
       const n = clients.size;
-      for (const r of [...clients]) { try { r.end(); } catch { /* already gone */ } }
+      for (const r of [...clients.keys()]) { try { r.end(); } catch { /* already gone */ } }
       return n;
     },
     stats: () => ({ ...stats, connected: clients.size }),

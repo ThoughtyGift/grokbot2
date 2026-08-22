@@ -25,7 +25,9 @@ import {
   kickstartAgent,
   nextRosterOrdered,
   agentById,
+  ownerOf,
 } from "./directory/index.js";
+import { currentOwner, runWithOwner } from "./request-context.js";
 import {
   transcriptTail,
   reactToMessage,
@@ -75,6 +77,8 @@ import { handleGitHubEvent } from "./github-events.js";
 import { config } from "./config.js";
 
 const ports: AclPorts = {
+  currentOwner,
+  runAsOwner: runWithOwner,
   identity: {
     getHostSettings: hostSettings,
     patchHostSettings,
@@ -98,6 +102,7 @@ const ports: AclPorts = {
     searchAgents,
     kickstartAgent,
     agentById,
+    ownerOf,
     nextRosterOrdered,
   },
   conversation: {
