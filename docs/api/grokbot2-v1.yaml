@@ -797,6 +797,21 @@ components:
           type: string
         value:
           type: string
+    UiPrefs:
+      type: object
+      properties:
+        sidebarWidth:
+          minimum: 88
+          maximum: 400
+          type: integer
+        sidebarCollapsed:
+          type: boolean
+        paneWidth:
+          minimum: 280
+          maximum: 480
+          type: integer
+        paneOpen:
+          type: boolean
 paths:
   /v1/health:
     get:
@@ -1628,6 +1643,87 @@ paths:
                           type: array
                           items:
                             type: string
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/host/settings:
+    get:
+      summary: Bố cục của chính người đang đăng nhập
+      tags:
+        - host
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ui
+                properties:
+                  ui:
+                    type: object
+                    properties:
+                      sidebarWidth:
+                        minimum: 88
+                        maximum: 400
+                        type: integer
+                      sidebarCollapsed:
+                        type: boolean
+                      paneWidth:
+                        minimum: 280
+                        maximum: 480
+                        type: integer
+                      paneOpen:
+                        type: boolean
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+    patch:
+      summary: Ghi bố cục, kẹp theo ngưỡng đo được ở app gốc
+      tags:
+        - host
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UiPrefs"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ui
+                properties:
+                  ui:
+                    type: object
+                    properties:
+                      sidebarWidth:
+                        minimum: 88
+                        maximum: 400
+                        type: integer
+                      sidebarCollapsed:
+                        type: boolean
+                      paneWidth:
+                        minimum: 280
+                        maximum: 480
+                        type: integer
+                      paneOpen:
+                        type: boolean
         "401":
           description: thiếu hoặc sai bearer
           content:

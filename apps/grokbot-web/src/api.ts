@@ -14,11 +14,12 @@ import type {
   ComputerStatus,
   Entry as NativeEntry,
   SidebarSection,
+  UiPrefs,
   Widget as NativeWidget,
   WidgetOption as NativeWidgetOption,
 } from "@grokbot2/api-contract";
 
-export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection };
+export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection , UiPrefs };
 
 // Persisted so a reload keeps the account signed in (multi-tenant Phase 4). The token is a signed
 // user JWT from /v1/login; every /v1 call carries it, and the backend derives the owner from it.
@@ -108,6 +109,13 @@ export const interruptTurn = (id: string) =>
   fetch(`/v1/agents/${id}/turns/current`, { method: "DELETE", headers: headers() }).then(parse);
 export const getComputer = (id: string) =>
   fetch(`/v1/agents/${id}/computer`, { headers: headers() }).then((r) => parse<ComputerStatus>(r));
+/** Bố cục của chính tài khoản đang đăng nhập (X5.3). Backend kẹp theo ngưỡng đo được ở app gốc. */
+export const hostSettings = () =>
+  fetch("/v1/host/settings", { headers: headers() }).then((r) => parse<{ ui: UiPrefs }>(r));
+export const patchHostSettings = (ui: UiPrefs) =>
+  fetch("/v1/host/settings", { method: "PATCH", headers: headers(), body: JSON.stringify(ui) })
+    .then((r) => parse<{ ui: UiPrefs }>(r));
+
 export const sidebarSections = () =>
   fetch("/v1/host/sidebar", { headers: headers() }).then((r) => parse<{ sections: SidebarSection[] }>(r));
 export const resolvePermission = (id: string, requestId: string, approved: boolean) =>

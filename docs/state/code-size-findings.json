@@ -1,13 +1,12 @@
 {
   "files": 3,
   "functions": 16,
-  "at": "2026-08-22T15:59:14.452Z",
+  "at": "2026-08-22T16:24:22.423Z",
   "keys": [
     "apps/grokbot-web/src/avatar.ts:animateAvatar|fn",
     "apps/grokbot-web/src/main.ts:openAvatarPicker|fn",
     "apps/grokbot-web/src/main.ts:paint|fn",
     "apps/grokbot-web/src/main.ts:renderEntry|fn",
-    "apps/grokbot-web/src/main.ts|file",
     "packages/cursor-acl/src/commands.ts:buildCommands|fn",
     "packages/cursor-acl/src/http.ts:createGatewayRouter|fn",
     "packages/cursor-acl/src/sse.ts:createSseHub|fn",
@@ -15,11 +14,9 @@
     "services/grokbot-backend/src/mcp.ts:start|fn",
     "services/grokbot-backend/src/native-map.ts:toNativeEntry|fn",
     "services/grokbot-backend/src/native.ts:handleNative|fn",
-    "services/grokbot-backend/src/runtime/tools.ts|file",
     "services/grokbot-backend/src/runtime/turn.ts:injectTool|fn",
     "services/grokbot-backend/src/runtime/turn.ts:runTurn|fn",
     "services/grokbot-backend/src/runtime/turn.ts:sendPrompt|fn",
-    "services/grokbot-backend/src/runtime/turn.ts|file",
     "services/grokbot-backend/src/store.ts:writeSnapshot|fn",
     "services/grokbot-backend/src/subagents.ts:runSubagent|fn"
   ]

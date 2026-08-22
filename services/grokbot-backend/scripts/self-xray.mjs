@@ -51,7 +51,12 @@ console.log("── self-xray ──\n");
   let n = null, kinds = "", keys = [];
   try {
     const j = JSON.parse(r.stdout.slice(r.stdout.indexOf("{")));
-    const files = (j.files ?? []).length;
+    /*
+     * File không ai import nằm trong TỪNG issue dưới cờ `files`, không nằm ở một khoá cấp cao.
+     * Bản trước đọc `j.files` — khoá đó không tồn tại, nên mục này luôn báo "0 file không ai import"
+     * kể cả khi knip đang liệt kê 114 file. Một phép đo luôn ra 0 thì tệ hơn không có phép đo.
+     */
+    const files = (j.issues ?? []).reduce((n, i) => n + (i.files?.length ?? 0), 0);
     const issues = (j.issues ?? []).reduce((acc, i) => {
       for (const k of ["exports", "types", "dependencies", "unlisted", "unresolved"]) {
         acc[k] = (acc[k] ?? 0) + (i[k]?.length ?? 0);
@@ -131,7 +136,7 @@ console.log("── self-xray ──\n");
     big = j.files.length;
     long = j.functions.length;
     keys2 = [
-      ...j.files.map((f) => `${f.file ?? f.path ?? f}|file`),
+      ...(j.issues ?? []).flatMap((i) => (i.files ?? []).map((f) => `${f.name ?? f}|file`)),
       ...j.functions.map((f) => `${f.file ?? f.path}:${f.name}|fn`),
     ].sort();
   } catch { /* để null, báo đỏ bên dưới */ }

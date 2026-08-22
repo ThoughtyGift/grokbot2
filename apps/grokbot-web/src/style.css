@@ -650,3 +650,49 @@ img.avatar { object-fit: cover; }
 .identity .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity .chev { color: var(--fg-3); font-size: 13px; }
 .identity.empty { color: var(--fg-3); font-weight: 500; cursor: default; }
+
+/* ── X2: thanh chia và chế độ rail ───────────────────────────────────────────
+ *
+ * Thanh chia là lớp PHỦ, không phải một cột của grid — vì ở app gốc nó nằm vắt qua ranh giới:
+ * thanh sidebar 12px ở x=81 với sidebar rộng 88 (81 = 88 − 7), thanh panel 10px ở x=1440 với panel
+ * rộng 480 trên khổ 1920 (1440 = 1920 − 480 − 10 + 10). Làm thành cột thì phải sửa cả grid và mọi
+ * số đo x sẽ lệch 12px.
+ */
+.shell { position: relative; }
+.grip {
+  position: absolute; top: 0; bottom: 0; z-index: 2;
+  cursor: col-resize; touch-action: none;
+  background: none; border: 0;
+}
+.grip::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  background: var(--line); transform: translateX(-0.5px);
+  transition: background-color 120ms ease;
+}
+.grip:hover::after, .grip:focus-visible::after { background: var(--accent, #4f8cff); width: 2px; }
+.grip:focus-visible { outline: none; }
+.grip-sidebar { width: 12px; left: calc(var(--sidebar-w) - 7px); }
+.grip-pane { width: 10px; right: calc(var(--panel-w) - 10px); }
+.shell.no-pane .grip-pane { display: none; }
+
+/* Không có transition trong lúc kéo: vẽ mượt 60fps mà cột lại đang "đuổi theo" 200ms thì tay và
+ * hình lệch nhau. Có transition khi SNAP (gập/mở), vì lúc đó nó là chuyển trạng thái. */
+.shell { transition: grid-template-columns 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+body.dragging .shell { transition: none; }
+body.dragging { cursor: col-resize; user-select: none; }
+
+/* ── rail 88px: đo được ở app gốc, item 54×54 ────────────────────────────── */
+.sidebar.rail .side-head { justify-content: center; padding: 0; }
+.sidebar.rail .search-btn, .sidebar.rail .search,
+.sidebar.rail .group, .sidebar.rail .bot .name,
+.sidebar.rail .bot .preview, .sidebar.rail .bot .when,
+.sidebar.rail .foot-row .lbl { display: none; }
+.sidebar.rail .roster { padding: 0; }
+.sidebar.rail .bot {
+  display: grid; place-items: center;
+  width: 54px; height: 54px; margin: 4px auto; padding: 0;
+}
+.sidebar.rail .bot .avatar { width: 36px; height: 36px; }
+.sidebar.rail .bot .dot { position: absolute; right: 8px; top: 8px; }
+.sidebar.rail .foot-row { justify-content: center; padding: 0; }
+.sidebar.rail .account-menu { left: 8px; width: 200px; right: auto; }

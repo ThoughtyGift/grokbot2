@@ -36,6 +36,11 @@ const state = {
    * năng, không phải hai.
    */
   collapsed: new Set<string>(),
+  /**
+   * Bố cục người dùng tự chỉnh, lấy từ `/v1/host/settings` (theo từng tài khoản, kẹp ở backend
+   * theo ngưỡng đo được ở app gốc). Mặc định là số đang dùng trước khi có route này.
+   */
+  ui: { sidebarWidth: 261, sidebarCollapsed: false, paneWidth: 357 },
 };
 
 /**
@@ -579,10 +584,100 @@ function screenPane(c: ComputerStatus | null): string {
   return `<div class="off">Chưa cấu hình màn hình.<br><small>Gán <code>GROKBOT2_VNC_URL</code> rồi khởi động lại service computer.</small></div>`;
 }
 
+/* ── X2: kéo đổi bề rộng, có NGƯỠNG SNAP ─────────────────────────────────────
+ *
+ * Đo được ở app gốc (`x-ray --drag`), và nó phủ định cách dựng thông thường:
+ *
+ *   dx=+10 … +120   rows=63   ← kéo mà KHÔNG có gì xảy ra: vùng chết
+ *   dx=+240         rows=302  ← nhảy một nhịp
+ *   dx=+400         rows=375  ← kẹp
+ *
+ * Nên rail KHÔNG giãn dần thành panel. Dựng bằng `minSize` của một thư viện panel sẽ ra hành vi
+ * giãn dần — sai. Ở đây: đang rail thì phải kéo qua SNAP_IN mới mở; đang mở thì kéo xuống dưới
+ * SNAP_OUT là gập về rail. Panel phải cũng vậy, và kéo dưới mức tối thiểu thì nó ĐÓNG hẳn — cũng
+ * là hành vi đo được, không phải tôi tự nghĩ.
+ */
+const RAIL_W = 88;          // rail của app gốc: 88px
+const SIDEBAR_MIN = 200;    // dưới mức này thì gập về rail thay vì co tiếp
+const SIDEBAR_MAX = 400;
+const SNAP_IN = 200;        // đang rail: phải kéo tới đây mới mở (vùng chết ~200px)
+const PANE_MIN = 280;
+const PANE_MAX = 480;
+
+const applyWidths = (): void => {
+  const s = document.documentElement.style;
+  s.setProperty("--sidebar-w", `${state.ui.sidebarCollapsed ? RAIL_W : state.ui.sidebarWidth}px`);
+  s.setProperty("--panel-w", `${state.ui.paneWidth}px`);
+};
+
+/** Ghi bố cục lên backend, gộp nhịp: kéo chuột sinh hàng trăm sự kiện, đừng biến thành hàng trăm PATCH. */
+let saveTimer: number | undefined;
+const saveUi = (): void => {
+  clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    void api.patchHostSettings({
+      sidebarWidth: state.ui.sidebarWidth,
+      sidebarCollapsed: state.ui.sidebarCollapsed,
+      paneWidth: state.ui.paneWidth,
+      paneOpen: state.paneOpen,
+    }).catch(() => { /* bố cục mất khi mở lại thì chịu; không chặn app vì chuyện đó */ });
+  }, 400);
+};
+
+/**
+ * Nối một thanh chia.
+ *
+ * Dùng pointer capture: kéo ra ngoài cửa sổ rồi nhả thì vẫn nhận được `pointerup`. Không dùng
+ * `paint()` trong lúc kéo — vẽ lại cả cây DOM 60 lần/giây thì tay và hình lệch nhau; chỉ đổi biến
+ * CSS, và `paint()` một lần khi nhả.
+ */
+function wireHandle(node: HTMLElement, kind: "sidebar" | "pane"): void {
+  node.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    node.setPointerCapture(ev.pointerId);
+    document.body.classList.add("dragging");
+    const startX = ev.clientX;
+    const from = kind === "sidebar"
+      ? (state.ui.sidebarCollapsed ? RAIL_W : state.ui.sidebarWidth)
+      : state.ui.paneWidth;
+
+    const move = (e: PointerEvent) => {
+      const dx = e.clientX - startX;
+      if (kind === "sidebar") {
+        if (state.ui.sidebarCollapsed) {
+          // vùng chết: chưa qua SNAP_IN thì không đổi gì cả
+          if (dx < SNAP_IN) return;
+          state.ui.sidebarCollapsed = false;
+          state.ui.sidebarWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, RAIL_W + dx));
+        } else {
+          const w = from + dx;
+          if (w < SIDEBAR_MIN) { state.ui.sidebarCollapsed = true; }
+          else { state.ui.sidebarCollapsed = false; state.ui.sidebarWidth = Math.min(SIDEBAR_MAX, w); }
+        }
+      } else {
+        // panel phải nằm bên phải nên kéo sang trái là RỘNG thêm
+        const w = from - dx;
+        if (w < PANE_MIN - 40) { state.paneOpen = false; }
+        else { state.paneOpen = true; state.ui.paneWidth = Math.min(PANE_MAX, Math.max(PANE_MIN, w)); }
+      }
+      applyWidths();
+    };
+    const up = () => {
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerup", up);
+      document.body.classList.remove("dragging");
+      saveUi();
+      paint();   // một lần, khi đã nhả: rail/panel đóng đổi cả cấu trúc DOM
+    };
+    node.addEventListener("pointermove", move);
+    node.addEventListener("pointerup", up);
+  });
+}
+
 function paint(): void {
   const selected = state.agents.find((a) => a.id === state.selected);
   root.replaceChildren(el(`<div class="shell${state.paneOpen ? "" : " no-pane"}">
-    <aside class="sidebar">
+    <aside class="sidebar${state.ui.sidebarCollapsed ? " rail" : ""}">
       <div class="side-head">
         <button type="button" class="new-icon" data-act="new" aria-label="New" title="bot mới">+</button>
       </div>
@@ -611,6 +706,7 @@ function paint(): void {
         </button>
       </div>
     </aside>
+    <div class="grip grip-sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
     <section class="chat">
       <div class="chat-head">
         ${selected ? `<button type="button" class="avatar-btn" data-act="avatar" title="đổi ảnh">${avatarOf(selected)}</button>` : ""}
@@ -634,6 +730,7 @@ function paint(): void {
         <button type="button" class="stop" data-act="stop" title="dừng" ${selected?.presence.isRunning ? "" : "disabled"}>■</button>
       </form>
     </section>
+    <div class="grip grip-pane" role="separator" aria-orientation="vertical" aria-label="Resize details" tabindex="0"></div>
     <aside class="computer">
       <div class="head"><span>Màn hình</span><span class="state">${state.computer?.state === "running" ? "live" : "off"}</span></div>
       <div class="screen">${screenPane(state.computer)}</div>
@@ -737,6 +834,14 @@ function paint(): void {
    * và `hidden` chỉ tồn tại KHI menu tài khoản đang mở. Bản đầu của tôi vẫn `!` và `paint()` ném
    * lỗi ngay lần vẽ đầu — nút không còn thì phép khẳng định không-null là lời khai sai.
    */
+  applyWidths();
+  const grip = (sel: string, kind: "sidebar" | "pane") => {
+    const n = root.querySelector<HTMLElement>(sel);
+    if (n) wireHandle(n, kind);
+  };
+  grip(".grip-sidebar", "sidebar");
+  grip(".grip-pane", "pane");
+
   root.querySelector<HTMLButtonElement>("[data-act=search]")?.addEventListener("click", () => {
     state.searchOpen = true; paint();
   });
@@ -805,6 +910,7 @@ function paint(): void {
   // Hai chỗ mở bộ chọn ảnh: nút "ảnh" và chính cái avatar trên header.
   root.querySelector<HTMLButtonElement>("[data-act=pane]")!.onclick = () => {
     state.paneOpen = !state.paneOpen;
+    saveUi();
     paint();
   };
   const mic = root.querySelector<HTMLButtonElement>("[data-act=mic]");
@@ -949,6 +1055,18 @@ async function loadComputer(): Promise<void> {
 /** The app itself, once a session exists (multi-tenant Phase 4b). */
 async function bootApp(): Promise<void> {
   root.textContent = "đang tải…";
+  /*
+   * Nạp bố cục TRƯỚC lần vẽ đầu, không sau: nạp sau thì người dùng thấy sidebar nhảy từ mặc định
+   * sang bề rộng của mình — một cú giật ở mỗi lần mở app.
+   */
+  try {
+    const { ui } = await api.hostSettings();
+    if (typeof ui.sidebarWidth === "number") state.ui.sidebarWidth = ui.sidebarWidth;
+    if (typeof ui.paneWidth === "number") state.ui.paneWidth = ui.paneWidth;
+    if (typeof ui.sidebarCollapsed === "boolean") state.ui.sidebarCollapsed = ui.sidebarCollapsed;
+    if (typeof ui.paneOpen === "boolean") state.paneOpen = ui.paneOpen;
+    applyWidths();
+  } catch { /* chưa có bố cục đã lưu, hoặc backend cũ: dùng mặc định */ }
   await refreshRoster();
   await loadTranscript();
   await loadComputer();

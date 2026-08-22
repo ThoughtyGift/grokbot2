@@ -31,8 +31,24 @@ const NAMED = [
   "Author", "Attachment", "Reaction", "LastEntry", "Activity", "Presence", "TranscriptEvent",
   "Widget", "WidgetOption",
   "CreateAgentBody", "PatchAgentBody", "TurnBody", "AvatarBody", "ReactionBody",
-  "PermissionBody", "WidgetReplyBody",
+  "PermissionBody", "WidgetReplyBody", "UiPrefs",
 ];
+
+/*
+ * Danh sách trên viết tay, nên nó phải TỰ KIỂM.
+ *
+ * Quên thêm tên vào đây không gây lỗi: schema chỉ bị nhúng thẳng vào từng route, spec vẫn sinh ra,
+ * và không ai biết. Đúng thế đã xảy ra với `UiPrefs`. Nên quét các export của hợp đồng: cái nào
+ * trông như schema TypeBox mà không có trong danh sách thì báo ngay.
+ */
+const looksLikeSchema = (v) => v != null && typeof v === "object" && !Array.isArray(v)
+  && (typeof v.type === "string" || Array.isArray(v.anyOf) || Array.isArray(v.allOf));
+const missing = Object.keys(C).filter((k) => looksLikeSchema(C[k]) && !NAMED.includes(k));
+if (missing.length) {
+  console.error(`! schema có export nhưng thiếu trong NAMED: ${missing.join(", ")}`);
+  console.error("  thêm vào NAMED, nếu không nó bị nhúng thẳng vào từng route thay vì thành $ref");
+  process.exitCode = 1;
+}
 
 /** TypeBox đánh dấu bằng Symbol, nên `JSON.stringify` cho ra đúng JSON Schema thuần. */
 const plain = (schema) => JSON.parse(JSON.stringify(schema));

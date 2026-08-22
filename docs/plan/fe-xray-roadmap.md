@@ -236,9 +236,31 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 
 ### X2 — hai trạng thái + kéo được (cần `react-resizable-panels` nếu đổi stack)
 
-- [ ] X2.1 Sidebar rail 88px, item 54×54 — nút gập
-- [ ] X2.2 Kéo đổi rộng cả hai panel, `width` chuyển **240ms**
-- [ ] X2.3 Nhớ kích thước qua lần mở sau (cần **B3** `/v1/host/settings`)
+- [x] **X2.1** Rail **88px**, hàng bot **54×54** — đo lại trên web đúng 54px. Gập bằng chính thanh
+  chia (kéo xuống dưới 200px), không thêm nút: app gốc cũng không có nút gập riêng.
+- [x] **X2.2** Kéo đổi bề rộng cả hai panel, **có ngưỡng snap** đúng vùng chết đo được — không phải
+  `minSize`. Thanh chia là lớp **phủ** chứ không phải một cột của grid, vì ở app gốc nó vắt qua ranh
+  giới (thanh 12px ở x=81 với sidebar rộng 88 → `left: calc(var(--sidebar-w) - 7px)`).
+- [x] **X2.3** Nhớ bố cục qua lần mở sau, qua `/v1/host/settings` (X5.3 bên dưới). Nạp **trước** lần
+  vẽ đầu, không sau — nạp sau thì mỗi lần mở app sidebar nhảy một cú từ mặc định sang bề rộng của mình.
+
+`pnpm measure:resize` — **10/10**, mỗi ca dựng trạng thái trước bằng PATCH rồi tải lại:
+
+| Ca | Kết quả |
+|---|---|
+| đang mở, kéo +50 | 300 → 350, đi theo tay |
+| kéo +300 | kẹp **400** |
+| kéo −150 (xuống dưới 200) | **gập về rail 88**, không co tiếp |
+| đang rail, kéo +120 | **không đổi gì** — vùng chết |
+| đang rail, kéo +260 | **snap sang mở** (348) |
+| rail | hàng bot **54×54** |
+| panel, kéo sang trái 60 | 400 → 460 (kéo trái là rộng thêm) |
+| panel, kéo phải 300 | **đóng hẳn**, không kẹp |
+| mở lại | nhớ đúng 350 / 430 |
+
+> Bản đầu của bài đo này dùng delta cố định từ trạng thái đang có. Khi bố cục đã được nhớ thì trạng
+> thái đầu không còn là 261 nữa, nên ba ca "rail" không bao giờ chạy tới — **bài kiểm vẫn xanh mà
+> không kiểm gì cả**. Nên mỗi ca giờ PATCH dựng trạng thái rồi tải lại trang.
 
 ### X3 — stack điều hướng panel phải
 
@@ -255,7 +277,16 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 
 ### X5 — route `/v1` còn thiếu (nhóm B của kế hoạch cũ)
 
-- [ ] X5.1 Routines · X5.2 tìm bot thật · X5.3 host settings · X5.4 plugins · X5.5 khay subagent
+- [ ] X5.1 Routines · X5.2 tìm bot thật · X5.4 plugins · X5.5 khay subagent
+- [x] **X5.3** `/v1/host/settings` — GET + PATCH, **theo từng tài khoản**. Bảng `host_settings` đã có
+  sẵn nên không đổi schema: bố cục nằm dưới `uiByOwner[ownerId]` trong cùng blob JSON. Những khoá
+  khác trong đó là cài đặt của *cái máy* (múi giờ, quyền tool, MCP) và đúng là dùng chung; bề rộng
+  sidebar thì không — hai tài khoản cùng backend sẽ ghi đè bố cục của nhau.
+
+  Kẹp ở **backend**, không chỉ ở FE (sidebar 88–400, panel 280–480 — ngưỡng đo được ở app gốc): một
+  client hỏng ghi `sidebarWidth: 5000` thì lần mở sau app không dùng được mà người dùng không hiểu
+  vì sao. `pnpm test:host-settings` — **10/10**, gồm hai ca chứng minh hai tài khoản không thấy bố
+  cục của nhau và host không bị ghi đè.
 
 ### X6 — cần thiết kế mới
 

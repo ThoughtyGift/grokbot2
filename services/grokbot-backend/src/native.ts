@@ -9,8 +9,9 @@ import type { ServerResponse } from "node:http";
 import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
 import { registerUser, loginUser } from "./web-auth.js";
 import { setPlan, getUser, accessVerdict } from "./billing.js";
-import { currentOwner } from "./request-context.js";
+import { currentOwner, runWithOwner } from "./request-context.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
+import { uiPrefs, patchUiPrefs } from "./host-settings.js";
 import {
   agentById,
   avatarRejection,
@@ -20,6 +21,7 @@ import {
   getAgentAvatar,
   listAgents,
   listAllAgents,
+  ownerOf,
   searchAgents,
   setAgentAvatarBytes,
   setAgentHiddenFromSidebar,
@@ -45,7 +47,16 @@ const CORS_ORIGINS = new Set([
   "http://127.0.0.1:5173",
 ]);
 
-const sseClients = new Set<ServerResponse>();
+/**
+ * Native SSE clients, each tagged with its owner (multi-tenant Phase 3, second surface).
+ *
+ * `packages/cursor-acl/src/sse.ts` is the /gw stream; THIS is the independent /v1 stream grokbot-web
+ * uses, and it broadcast every event to every client — one tenant's `agent.upserted` (with the whole
+ * agent object) reached another's browser. Measured 2026-08-22: user B's stream carried user A's bot.
+ * Now each connection carries the owner captured at open, and an event only goes to that owner's
+ * streams.
+ */
+const sseClients = new Map<ServerResponse, string>();
 
 const sseFrame = (res: ServerResponse, event: string, data: unknown): void => {
   try {
@@ -55,18 +66,25 @@ const sseFrame = (res: ServerResponse, event: string, data: unknown): void => {
 
 subscribe((e: DomainEvent) => {
   if (inflight.size > 0) lastBusyAtMs = Date.now();
-  for (const res of sseClients) {
-    if (e.type === "agent.upserted") {
-      const agent = e.agentId ? agentById(e.agentId) : undefined;
-      sseFrame(res, e.type, agent ? { agentId: e.agentId, agent: toNativeAgent(agent) } : { agents: listAllAgents().map(toNativeAgent) });
-    } else {
-      sseFrame(res, e.type, { agentId: e.agentId });
-    }
+  // Route per owner. The subscriber runs detached from any request, so the event's owner is the
+  // AGENT's owner (ownerOf), never currentOwner(); a roster-wide event (no agentId) goes to all.
+  const eventOwner = e.agentId ? ownerOf(e.agentId) : undefined;
+  for (const [res, owner] of sseClients) {
+    if (eventOwner !== undefined && eventOwner !== owner) continue;   // another tenant's event
+    // Build the payload AS that owner so agentById/listAllAgents scope to them.
+    runWithOwner(owner, () => {
+      if (e.type === "agent.upserted") {
+        const agent = e.agentId ? agentById(e.agentId) : undefined;
+        sseFrame(res, e.type, agent ? { agentId: e.agentId, agent: toNativeAgent(agent) } : { agents: listAllAgents().map(toNativeAgent) });
+      } else {
+        sseFrame(res, e.type, { agentId: e.agentId });
+      }
+    });
   }
 });
 
 setInterval(() => {
-  for (const res of sseClients) {
+  for (const res of sseClients.keys()) {
     try { res.write(": ping\n\n"); } catch { /* gone */ }
   }
 }, 5000);
@@ -145,6 +163,7 @@ function isNativePath(pathname: string): boolean {
     || pathname === "/v1/agents"
     || pathname.startsWith("/v1/agents/")
     || pathname === "/v1/host/sidebar"
+    || pathname === "/v1/host/settings"
     || pathname === "/v1/attachments"
   );
 }
@@ -299,7 +318,9 @@ export async function handleNative(
     });
     res.write(": connected\n\n");
     sseFrame(res, "agent.upserted", { agents: listAllAgents().map(toNativeAgent) });
-    sseClients.add(res);
+    // Tag the stream with the caller's owner (from the runWithOwner scope index.ts sets around this
+    // request) so later events route only to this tenant.
+    sseClients.set(res, currentOwner());
     res.on("close", () => { sseClients.delete(res); });
     return true;
   }
@@ -314,6 +335,21 @@ export async function handleNative(
    * Shape giữ nguyên như app gốc dùng: `[{id, name, agentIds}]`, và `__agents__` là mục
    * catch-all ("Unassigned") cho bot chưa thuộc nhóm nào.
    */
+  /*
+   * Bố cục của chính người đang đăng nhập (X2.3 / X5.3).
+   *
+   * `currentOwner()` chứ không phải một khoá dùng chung: hai tài khoản trên cùng backend phải có
+   * bố cục riêng, nếu không người vào sau kéo sidebar là người trước mất bố cục mà không hiểu vì sao.
+   */
+  if (pathname === "/v1/host/settings" && verb === "GET") {
+    return json(res, { ui: uiPrefs(currentOwner()) }, 200, origin);
+  }
+  if (pathname === "/v1/host/settings" && verb === "PATCH") {
+    const parsed = parseJson(body);
+    if (!parsed.ok) return json(res, { error: parsed.error }, 400, origin);
+    return json(res, { ui: patchUiPrefs(currentOwner(), parsed.value) }, 200, origin);
+  }
+
   if (pathname === "/v1/host/sidebar" && verb === "GET") {
     const raw = (hostSettingsRef() as { sidebarSections?: unknown }).sidebarSections;
     const sections = Array.isArray(raw)

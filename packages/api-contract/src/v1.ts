@@ -265,6 +265,22 @@ export type WidgetReplyBody = Static<typeof WidgetReplyBody>;
  * ở đây thì OpenAPI thiếu route đó và **không ai biết**. Ở cạnh nhau thì lúc sửa schema là lúc nhìn
  * thấy bảng này.
  */
+/**
+ * Bố cục người dùng tự chỉnh — bề rộng sidebar, panel phải, và trạng thái gập.
+ *
+ * Giới hạn ở đây KHÔNG phải số chọn bừa: chúng là ngưỡng đo được trên app gốc bằng
+ * `x-ray --drag` (sidebar: hàng bot 63–375px; panel phải: 280–480px, và kéo quá mức tối thiểu thì
+ * panel đóng hẳn chứ không kẹp lại). Kẹp ở backend chứ không chỉ ở FE: một client hỏng ghi
+ * `sidebarWidth: 5000` xuống thì lần mở sau app không dùng được, mà người dùng không hiểu vì sao.
+ */
+export const UiPrefs = Type.Object({
+  sidebarWidth: Type.Optional(Type.Integer({ minimum: 88, maximum: 400 })),
+  sidebarCollapsed: Type.Optional(Type.Boolean()),
+  paneWidth: Type.Optional(Type.Integer({ minimum: 280, maximum: 480 })),
+  paneOpen: Type.Optional(Type.Boolean()),
+});
+export type UiPrefs = Static<typeof UiPrefs>;
+
 export const ROUTES = [
   { method: "get", path: "/v1/health", res: Type.Object({ ok: Type.Boolean(), isBusy: Type.Boolean() }), auth: false, summary: "Sống hay không" },
   { method: "get", path: "/v1/session", res: Session, auth: false, summary: "Lấy token cho FE" },
@@ -283,6 +299,8 @@ export const ROUTES = [
   { method: "post", path: "/v1/agents/{id}/permissions", req: PermissionBody, summary: "Cho phép / từ chối một tool call" },
   { method: "post", path: "/v1/agents/{id}/widgets", req: WidgetReplyBody, summary: "Trả lời một widget" },
   { method: "get", path: "/v1/host/sidebar", res: Type.Object({ sections: Type.Array(SidebarSection) }), summary: "Nhóm sidebar" },
+  { method: "get", path: "/v1/host/settings", res: Type.Object({ ui: UiPrefs }), summary: "Bố cục của chính người đang đăng nhập" },
+  { method: "patch", path: "/v1/host/settings", req: UiPrefs, res: Type.Object({ ui: UiPrefs }), summary: "Ghi bố cục, kẹp theo ngưỡng đo được ở app gốc" },
   { method: "get", path: "/v1/events", summary: "SSE: agent.upserted · transcript.append · computer.status" },
   { method: "post", path: "/v1/attachments", summary: "Nạp ảnh/tệp, trả path + href" },
 ] as const;

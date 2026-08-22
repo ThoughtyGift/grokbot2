@@ -20,6 +20,7 @@ const settings: Record<string, unknown> = {
   userTimeZone: "UTC",
   sidebarSections: [],
   hasSeenOnboarding: true,
+  uiByOwner: {},   // bố cục theo từng chủ sở hữu — xem `patchUiPrefs` ở cuối file
   ...(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults
 };
 
@@ -34,4 +35,56 @@ export function patchHostSettings(patch: unknown): Record<string, unknown> {
   }
   scheduleSave(() => ({ ...chatSnapshot(), hostSettings: settings }));
   return settings;
+}
+
+/**
+ * Bố cục UI, tách theo từng chủ sở hữu.
+ *
+ * Vì sao không để thẳng vào `settings` như các khoá khác: những khoá kia là cài đặt của **cái máy**
+ * (múi giờ, quyền tool, danh sách MCP) và đúng là dùng chung. Bề rộng sidebar thì không — hai tài
+ * khoản cùng dùng một backend sẽ ghi đè bố cục của nhau. Nên nó nằm dưới `uiByOwner[ownerId]`,
+ * trong cùng blob JSON đã có, khỏi phải đổi bảng.
+ */
+const UI_LIMITS = {
+  sidebarWidth: [88, 400],
+  paneWidth: [280, 480],
+} as const;
+
+const clampInt = (v: unknown, [lo, hi]: readonly [number, number]): number | undefined => {
+  const n = typeof v === "number" ? Math.round(v) : Number.NaN;
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : undefined;
+};
+
+export function uiPrefs(ownerId: string): Record<string, unknown> {
+  const all = settings.uiByOwner;
+  const mine = all && typeof all === "object" ? (all as Record<string, unknown>)[ownerId] : undefined;
+  return mine && typeof mine === "object" ? { ...(mine as Record<string, unknown>) } : {};
+}
+
+/**
+ * Kẹp ở đây, không chỉ ở FE.
+ *
+ * Ngưỡng là số đo được trên app gốc (`x-ray --drag`): sidebar 88–400, panel phải 280–480. Một
+ * client hỏng ghi `sidebarWidth: 5000` thì lần mở sau app không dùng được và người dùng không hiểu
+ * vì sao — kẹp thì họ chỉ thấy nó dừng ở mép, đúng như app gốc.
+ */
+export function patchUiPrefs(ownerId: string, patch: unknown): Record<string, unknown> {
+  if (!patch || typeof patch !== "object") return uiPrefs(ownerId);
+  const next = uiPrefs(ownerId);
+  const p = patch as Record<string, unknown>;
+  for (const key of ["sidebarWidth", "paneWidth"] as const) {
+    if (key in p) {
+      const v = clampInt(p[key], UI_LIMITS[key]);
+      if (v !== undefined) next[key] = v;
+    }
+  }
+  for (const key of ["sidebarCollapsed", "paneOpen"] as const) {
+    if (typeof p[key] === "boolean") next[key] = p[key];
+  }
+  const all = (settings.uiByOwner && typeof settings.uiByOwner === "object"
+    ? { ...(settings.uiByOwner as Record<string, unknown>) } : {});
+  all[ownerId] = next;
+  settings.uiByOwner = all;
+  scheduleSave(() => ({ ...chatSnapshot(), hostSettings: settings }));
+  return next;
 }

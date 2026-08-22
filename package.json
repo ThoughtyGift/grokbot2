@@ -33,7 +33,9 @@
     "ui:diff": "node services/grokbot-backend/scripts/ui-diff.mjs",
     "ui:shots": "node services/grokbot-backend/scripts/ui-shots.mjs --open",
     "soak": "node services/grokbot-backend/scripts/soak-day.mjs",
-    "soak:status": "node services/grokbot-backend/scripts/soak-day.mjs --status"
+    "soak:status": "node services/grokbot-backend/scripts/soak-day.mjs --status",
+    "test:host-settings": "node services/grokbot-backend/scripts/e2e-host-settings.mjs",
+    "measure:resize": "node services/grokbot-backend/scripts/measure-web-resize.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

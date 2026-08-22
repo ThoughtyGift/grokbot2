@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "infra/patches/*.mjs",
+        "infra/scripts/*.mjs"
+      ],
+      "project": [
+        "infra/**/*.mjs"
+      ]
+    },
+    "apps/*": {
+      "entry": [
+        "src/main.ts",
+        "src/*.test.ts"
+      ]
+    },
+    "packages/*": {
+      "entry": [
+        "src/index.ts"
+      ]
+    },
+    "services/*": {
+      "entry": [
+        "src/index.ts",
+        "src/**/*.test.ts",
+        "scripts/*.mjs",
+        "scripts/*.mts",
+        "scripts/*.cjs"
+      ]
+    }
+  },
+  "ignore": [
+    "**/dist/**",
+    "**/_tmp-*"
+  ],
+  "ignoreBinaries": [
+    "netstat",
+    "taskkill",
+    "tasklist",
+    "powershell",
+    "wmic"
+  ]
+}
