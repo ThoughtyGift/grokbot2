@@ -86,6 +86,27 @@ Thanh chia Details còn đặt tâm **lệch một hằng số 5px** so với co
 nhưng nó là lý do bản đầu của phép dò làm app trôi 5px mỗi lượt chạy — và một FE clone nhắm thẳng
 vào toạ độ con trỏ sẽ trôi đúng như vậy.
 
+**Gập nhóm — đo được (X0.1).** Sidebar của chủ máy để ở rail nên phép dò tự mở tạm rồi trả về rail
+(x=87, đúng cũ). Cấu trúc thật:
+
+```
+sand-agents-sections            362x458   ← khối chứa tất cả nhóm
+  sand-agents-section           362x320   ← một nhóm
+    sand-agents-section__header 362x30    ← BUTTON, có aria-expanded
+    sand-agents-section__reveal 362x290   ← phần co/giãn
+      sand-agents-section__rows 362x290
+        sand-agent-item         362x54
+```
+
+Ba điều dùng được ngay:
+
+- Đầu nhóm là **`button` có `aria-expanded`**, cao **30px** — không phải `div` trang trí. Số đếm nằm
+  **trong nhãn của chính nút đó** (`"BOT HTML1"` = tên + số), nên X1.2 không cần thêm phần tử mới.
+- Gập là `height` trên `__reveal` (290 → 0), **200ms**, kèm `opacity` 120ms và `transform` 200ms.
+  Nhóm gập lại còn đúng 30px = chiều cao đầu nhóm.
+- Sidebar mở ra thì hàng bot rộng **362px** và cao **54px** — khớp con số 375 (giới hạn trên) đo được
+  ở phần kéo thanh chia.
+
 **Menu trên tin nhắn — đọc được nội dung thật:**
 
 | Mở bằng | Hộp | Mục |
@@ -189,7 +210,7 @@ Mỗi mục là một vòng **ĐO → SO → LÀM → NGHIỆM**, và mục nào
 
 ### X0 — dựng thước cho phần chưa đo (làm trước mọi thứ)
 
-- [ ] X0.1 Thêm `sand-agents-section__header` vào danh sách an toàn của `x-ray`, chạy `--probe-clicks` → lấy chuyển động **gập nhóm**
+- [x] **X0.1** `x-ray --groups` tự mở sidebar khỏi rail, bấm đầu nhóm, đo `height` 200ms trên `__reveal`, rồi trả sidebar về rail
 - [x] **X0.2** `x-ray --menu` tự mở: More = 200×74 gồm `Start a thread` · `Copy`; Add reaction = 246×44 gồm 6 emoji + `More emoji`. Không cần chủ máy bấm
 - [ ] X0.3 Chủ máy gửi một tin → `x-ray` bắt `transitionend` → lấy **animation lúc gửi** (cố ý không tự động: script tự gửi là ghi vào hội thoại thật)
 - [x] **X0.4** `x-ray --drag` tự kéo và tự trả về: sidebar 63–375px **có vùng chết ~200px rồi snap**, Details 280–480px và **đóng hẳn nếu kéo quá mức tối thiểu**

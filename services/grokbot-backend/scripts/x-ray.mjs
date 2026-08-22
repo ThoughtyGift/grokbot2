@@ -30,6 +30,7 @@ const CDP = process.env.GROKBOT2_CDP ?? "http://127.0.0.1:9222";
 const PROBE = process.argv.includes("--probe-clicks");
 const DRAG = process.argv.includes("--drag");
 const MENU = process.argv.includes("--menu");
+const GROUPS = process.argv.includes("--groups");
 
 /** Chỉ những control này được bấm. Cố ý hẹp. */
 const SAFE = /^(close details|open details|show details|hide details|collapse|expand|bot settings|settings|back|view bot settings|open computer|plugins|grok local)/i;
@@ -452,6 +453,85 @@ if (MENU) {
     row.closed = left.length === 0;
     if (left.length) console.log(`      ! Escape chưa đóng hết: ${left.slice(0, 4).join(", ")}`);
   }
+}
+
+// ── gập nhóm trong sidebar ───────────────────────────────────────────────────
+/*
+ * Đầu nhóm chỉ tồn tại khi sidebar đang MỞ. Chủ máy để nó ở chế độ rail, nên phép dò phải tự mở,
+ * đo, rồi trả về rail — cùng cách nhắm-có-bù-sai-số như phần kéo thanh chia, vì đây cũng là app thật.
+ */
+report.groups = null;
+if (GROUPS) {
+  console.log("");
+  console.log("── gập nhóm trong sidebar ──");
+  const handle = "sand-sidebar-resize-handle";
+  const x0 = await page.evaluate(CENTER_OF, handle);
+  const railed = (await page.evaluate(WIDTHS, ["sand-agents-list__rows"]))["sand-agents-list__rows"] < 120;
+  if (railed) {
+    // vượt vùng chết ~200px thì nó snap sang mở
+    await page.mouse.move(x0, 520);
+    await page.mouse.down();
+    await page.mouse.move(x0 + 300, 520, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+    console.log(`  (sidebar đang ở rail — đã mở tạm để đo, sẽ trả về)`);
+  }
+
+  const heads = await page.evaluate(() => [...document.querySelectorAll("*")].flatMap((el) => {
+    const cls = typeof el.className === "string" ? el.className : "";
+    const name = cls.split(" ").find((c) => /^sand-agents-(section|group)[a-z_-]*$/.test(c));
+    if (!name) return [];
+    const r = el.getBoundingClientRect();
+    if (r.width < 20) return [];
+    return [{
+      block: name, tag: el.tagName.toLowerCase(),
+      label: el.getAttribute("aria-label") || el.textContent?.trim()?.slice(0, 30) || "",
+      box: `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}`,
+      expanded: el.getAttribute("aria-expanded"),
+    }];
+  }));
+  console.log(`  tìm thấy ${heads.length} phần tử nhóm:`);
+  for (const h of heads.slice(0, 8)) console.log(`      ${h.box.padEnd(20)} ${h.tag.padEnd(6)} ${h.block.padEnd(30)} aria-expanded=${h.expanded} "${h.label}"`);
+
+  const clickable = heads.find((h) => h.expanded !== null) ?? heads.find((h) => h.tag === "button");
+  const rows = [];
+  if (!clickable) console.log("  không có phần tử nhóm nào bấm được — có thể bản này không cho gập");
+  else {
+    const before = await page.evaluate(SIGNATURE);
+    await page.evaluate(LISTEN);
+    const loc = page.locator(`.${clickable.block}`).first();
+    await loc.click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    const events = await page.evaluate(COLLECT);
+    const after = await page.evaluate(SIGNATURE);
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .filter((k) => before[k] !== after[k]).map((k) => ({ block: k, from: before[k] ?? "(không có)", to: after[k] ?? "(không có)" }));
+    rows.push({ opener: clickable.block, changed, motion: fold(events) });
+    console.log(`  bấm "${clickable.label || clickable.block}" → ${changed.length} khối đổi`);
+    for (const c of changed.slice(0, 5)) console.log(`      ${c.block.padEnd(30)} ${c.from}  →  ${c.to}`);
+    if (rows[0].motion.length) console.log(`      chuyển động: ${rows[0].motion.slice(0, 5).join(" · ")}`);
+    await loc.click({ timeout: 3000 }).catch(() => {});   // gập lại như cũ
+    await page.waitForTimeout(600);
+  }
+
+  let back = await page.evaluate(CENTER_OF, handle);
+  if (railed) {
+    let aim = x0;
+    for (let i = 0; i < 8 && Math.abs(back - x0) > 2; i++) {
+      await page.mouse.move(back, 520);
+      await page.mouse.down();
+      await page.mouse.move(aim, 520, { steps: 20 });
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+      const now = await page.evaluate(CENTER_OF, handle);
+      const nextAim = aim - (now - x0);
+      if (now === back && nextAim === aim) break;
+      back = now; aim = nextAim;
+    }
+  }
+  const ok = Math.abs(back - x0) <= 2;
+  report.groups = { heads, probes: rows, restoredTo: back, x0, ok };
+  console.log(`  sidebar về x=${back} (cũ ${x0}) ${ok ? "" : "— LỆCH, cần kéo tay lại"}`);
 }
 
 mkdirSync(dirname(OUT), { recursive: true });

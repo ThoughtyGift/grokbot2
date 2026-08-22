@@ -1,5 +1,5 @@
 {
-  "at": "2026-08-22T15:30:20.332Z",
+  "at": "2026-08-22T15:42:12.947Z",
   "viewport": "1920x1040",
   "controls": [
     {
@@ -571,100 +571,202 @@
     ]
   },
   "transitions": [],
-  "drags": [
-    {
-      "handle": "sand-sidebar-resize-handle",
-      "panel": "sand-agents-list__rows",
-      "alsoChanges": [
-        "sand-agents-sidebar",
-        "sand-agents-list",
-        "sand-tkmjcv",
-        "sand-chat",
-        "sand-chat-stage",
-        "sand-virtual-transcript"
-      ],
-      "w0": 63,
-      "range": [
-        63,
-        375
-      ],
-      "followsCursor": true,
-      "committedOnRelease": true,
-      "motion": [
-        "sand-18re5ia-B 130ms×9",
-        "font-size 200ms×6",
-        "height 200ms×6",
-        "width 200ms×6",
-        "sand-18re5ia-B 200ms×6",
-        "background-color 120ms×3",
-        "grid-template-columns 200ms×3"
-      ],
-      "restoredTo": 87,
-      "x0": 87,
-      "ok": true
-    },
-    {
-      "handle": "sand-info-pane__resize-handle",
-      "panel": "sand-info-pane",
-      "alsoChanges": [
-        "sand-chat",
-        "sand-chat-stage",
-        "sand-virtual-transcript",
-        "sand-info-pane__inner",
-        "sand-info-pane__nav-root",
-        "sand-info-pane__section-content",
-        "sand-yfqnmn"
-      ],
-      "w0": 480,
-      "range": [
-        280,
-        480
-      ],
-      "followsCursor": true,
-      "committedOnRelease": true,
-      "motion": [
-        "background-color 120ms×3"
-      ],
-      "restoredTo": 1445,
-      "x0": 1445,
-      "ok": true
-    }
-  ],
-  "menus": [
-    {
-      "opener": "More message actions",
-      "box": "788,862 200x74",
-      "items": [
-        "Start a thread",
-        "Copy"
-      ],
-      "motion": [
-        "background-color 120ms×3",
-        "opacity 150ms×3",
-        "opacity 100ms×3",
-        "transform 100ms×3"
-      ],
-      "closed": true
-    },
-    {
-      "opener": "Add reaction",
-      "box": "736,862 246x44",
-      "items": [
-        "React with 👍",
-        "React with 👎",
-        "React with ❤️",
-        "React with 😂",
-        "React with 🎉",
-        "React with 😮",
-        "More emoji"
-      ],
-      "motion": [
-        "background-color 120ms×9",
-        "background-color 0ms×3",
-        "opacity 100ms×3",
-        "transform 100ms×3"
-      ],
-      "closed": true
-    }
-  ]
+  "drags": [],
+  "menus": [],
+  "groups": {
+    "heads": [
+      {
+        "block": "sand-agents-sections",
+        "tag": "div",
+        "label": "Phòng marketingMarketing Lead8",
+        "box": "12,96 362x458",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section",
+        "tag": "div",
+        "label": "Phòng marketingMarketing Lead8",
+        "box": "12,96 362x320",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__header",
+        "tag": "button",
+        "label": "Phòng marketing",
+        "box": "12,96 362x30",
+        "expanded": "true"
+      },
+      {
+        "block": "sand-agents-section__reveal",
+        "tag": "div",
+        "label": "Marketing Lead8:02 AMContent S",
+        "box": "12,126 362x290",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__rows",
+        "tag": "div",
+        "label": "Marketing Lead8:02 AMContent S",
+        "box": "12,126 362x290",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section",
+        "tag": "div",
+        "label": "BOT HTML1Trợ lý xinh đẹpHi bạn",
+        "box": "12,426 362x30",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__header",
+        "tag": "button",
+        "label": "BOT HTML1",
+        "box": "12,426 362x30",
+        "expanded": "false"
+      },
+      {
+        "block": "sand-agents-section__reveal",
+        "tag": "div",
+        "label": "Trợ lý xinh đẹpHi bạn! Có gì c",
+        "box": "12,455 362x0",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__rows",
+        "tag": "div",
+        "label": "Trợ lý xinh đẹpHi bạn! Có gì c",
+        "box": "12,455 362x58",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section",
+        "tag": "div",
+        "label": "UnassignedClaude7:19 PMCó kết ",
+        "box": "12,466 362x88",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__header",
+        "tag": "button",
+        "label": "Unassigned",
+        "box": "12,466 362x30",
+        "expanded": "true"
+      },
+      {
+        "block": "sand-agents-section__reveal",
+        "tag": "div",
+        "label": "Claude7:19 PMCó kết quả rồi, v",
+        "box": "12,496 362x58",
+        "expanded": null
+      },
+      {
+        "block": "sand-agents-section__rows",
+        "tag": "div",
+        "label": "Claude7:19 PMCó kết quả rồi, v",
+        "box": "12,496 362x58",
+        "expanded": null
+      }
+    ],
+    "probes": [
+      {
+        "opener": "sand-agents-section__header",
+        "changed": [
+          {
+            "block": "sand-agents-sections",
+            "from": "12,96 362x458",
+            "to": "12,96 362x168"
+          },
+          {
+            "block": "sand-agents-section",
+            "from": "12,96 362x320",
+            "to": "12,96 362x30"
+          },
+          {
+            "block": "sand-agents-section__reveal",
+            "from": "12,126 362x290",
+            "to": "12,206 362x58"
+          },
+          {
+            "block": "sand-agents-section__rows",
+            "from": "12,126 362x290",
+            "to": "12,125 362x290"
+          },
+          {
+            "block": "sand-agent-item",
+            "from": "12,130 362x54",
+            "to": "12,129 362x54"
+          },
+          {
+            "block": "sand-agent-item__avatar",
+            "from": "20,139 36x36",
+            "to": "20,138 36x36"
+          },
+          {
+            "block": "sand-agent-item__avatar-disc",
+            "from": "20,139 36x36",
+            "to": "20,138 36x36"
+          },
+          {
+            "block": "sand-grok-bot-mark",
+            "from": "20,139 36x36",
+            "to": "20,138 36x36"
+          },
+          {
+            "block": "sand-agent-item__body",
+            "from": "64,138 302x38",
+            "to": "64,137 302x38"
+          },
+          {
+            "block": "sand-agent-item__title",
+            "from": "64,138 302x20",
+            "to": "64,137 302x20"
+          },
+          {
+            "block": "sand-agent-item__name",
+            "from": "64,138 99x20",
+            "to": "64,137 99x20"
+          },
+          {
+            "block": "sand-agent-item__time",
+            "from": "322,140 44x16",
+            "to": "322,139 44x16"
+          },
+          {
+            "block": "sand-agent-item__preview-row",
+            "from": "64,158 302x18",
+            "to": "64,157 302x18"
+          },
+          {
+            "block": "sand-agent-item__preview",
+            "from": "64,158 302x18",
+            "to": "64,157 302x18"
+          },
+          {
+            "block": "sand-agent-item__draft-label",
+            "from": "64,216 32x17",
+            "to": "64,215 32x17"
+          },
+          {
+            "block": "sand-agent-item__trailing",
+            "from": "302,362 72x54",
+            "to": "302,361 72x54"
+          },
+          {
+            "block": "sand-kit-status-dot",
+            "from": "358,385 8x8",
+            "to": "358,384 8x8"
+          }
+        ],
+        "motion": [
+          "opacity 120ms×3",
+          "height 200ms×3",
+          "opacity 200ms×3",
+          "transform 200ms×3"
+        ]
+      }
+    ],
+    "restoredTo": 87,
+    "x0": 87,
+    "ok": true
+  }
 }
