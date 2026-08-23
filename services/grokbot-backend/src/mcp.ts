@@ -118,6 +118,45 @@ function rpc(s: Live, method: string, params?: unknown): Promise<any> {
  */
 const isDirectExecutable = (command: string): boolean => /\.(exe|com)$/i.test(command.trim());
 
+/**
+ * The environment an MCP server is allowed to see.
+ *
+ * The spawn used to pass `{...process.env, ...spec.env}`, so every server inherited THIS BACKEND'S
+ * whole environment. Harmless while everything belongs to one person on one machine; a full
+ * compromise the moment the backend runs on a shared host, because a server only has to read its own
+ * `process.env` to walk off with `CLAUDE_POOL_KEY` (the pool), `GROKBOT2_JWT_SECRET` (mint a token
+ * for any account), `GROKBOT2_BILLING_WEBHOOK_SECRET` (grant itself a plan) or the gateway ticket.
+ * No exploit needed — just a `console.log`.
+ *
+ * So the child gets an ALLOWLIST: what a process needs to start and find its runtime, plus whatever
+ * the server's own config declares in `env`. Notably absent is NODE_OPTIONS, which can inject code
+ * into a Node child.
+ *
+ * `GROKBOT2_MCP_ENV_PASSTHROUGH=1` restores the old behaviour for a server that genuinely needs
+ * something else — a deliberate, per-install decision rather than a silent default.
+ */
+const ENV_ALLOWLIST = [
+  // Finding and running the executable
+  "PATH", "Path", "PATHEXT", "COMSPEC", "ComSpec", "SystemRoot", "windir", "SystemDrive",
+  // Where a process may write and read its own state
+  "TEMP", "TMP", "TMPDIR", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "XDG_CACHE_HOME",
+  // Program locations npx/node resolve against on Windows
+  "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "CommonProgramFiles",
+  // Harmless identity/locale a CLI may branch on
+  "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "USERNAME", "COMPUTERNAME", "LANG", "LC_ALL", "TZ",
+] as const;
+
+export function childEnv(specEnv?: Record<string, string>): NodeJS.ProcessEnv {
+  if (process.env.GROKBOT2_MCP_ENV_PASSTHROUGH === "1") return { ...process.env, ...(specEnv ?? {}) };
+  const out: NodeJS.ProcessEnv = {};
+  for (const k of ENV_ALLOWLIST) {
+    const v = process.env[k];
+    if (v !== undefined) out[k] = v;
+  }
+  // The server's OWN declared env last: this is the one place a secret is meant to reach it.
+  return { ...out, ...(specEnv ?? {}) };
+}
+
 /** Start a server for `owner` and complete the MCP handshake, or throw with a usable reason. */
 async function start(name: string, owner: string): Promise<Live> {
   const key = `${owner}::${name}`;
@@ -129,7 +168,7 @@ async function start(name: string, owner: string): Promise<Live> {
 
   const proc = spawn(spec.command, spec.args ?? [], {
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, ...(spec.env ?? {}) },
+    env: childEnv(spec.env),
     ...(spec.cwd ? { cwd: spec.cwd } : {}),
     // `shell` ONLY for shims, never for a real executable — it re-parses the arguments.
     //
