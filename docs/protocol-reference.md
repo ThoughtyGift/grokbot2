@@ -73,3 +73,60 @@ Transcript entry shapes:
 { "kind": "agent-message", "entryId": "e2", "agentId": "agent-1", "agentOwnerAuthId": "...",
   "authorName": "Claude", "text": "...", "images": [], "timestampMs": 0 }
 ```
+
+## Plugins / Marketplace
+
+`aiserver.v1.Plugin` (field numbers verbatim from `electron-main/main.cjs` descriptors). The client
+converts a wire Plugin into its view model in `o8s` → `r8s`, and **drops any plugin with no
+`mcp_servers` and no `skills`** — an entry with neither never appears.
+
+| # | Field | What the client does with it |
+|---|-------|------------------------------|
+| 1 | `id` | install/uninstall key |
+| 2 | `name` | overridden by `mcp_servers[0].name` in the view model |
+| 3 | `display_name` | row title |
+| 4 | `description` | row subtitle |
+| 10 | `logo_url` | row icon — see the constraint below |
+| 11 | `primary_color` | unused by the marketplace rows |
+| 24 / 27 | `git_url` / `full_ref` | shown as provenance; `git_url`'s host also feeds an icon-domain map |
+| 28 / 32 | `skills` / `mcp_servers` | `{name, description}` each; also decide whether the row survives |
+| 38 | `variables` | `google.protobuf.Struct` holding **JSON Schema** — becomes the setup form |
+| 41 | `lifecycle_state` | 1 = public listed |
+
+**`logo_url` is https-only.** The MAIN process fetches it (`resolvePluginLogo`), caps the response at
+512 KB, and returns null for any other scheme — `data:` URIs and `http://127.0.0.1` do not render.
+A URL is only fetched if it arrived on a plugin, and the result is cached per URL.
+
+Without `logo_url` the client falls back to a **built-in brand set** resolved from the plugin name
+(noise words `plugin|mcp|server|connector|official` are stripped first): `slack buildkite gitlab
+github linear notion sentry stripe huggingface upstash playwright atlassian jira confluence todoist
+dock google gmail`. Anything else gets a coloured letter tile, so `logo_url` is only worth sending
+for names outside that set.
+
+### The credential form
+
+A non-empty `variables` is what makes **Add** open a setup form instead of installing immediately
+(`Wl(entry, install)` = `fields.length > 0 && !hasTeamConfiguredVariables`). The Struct is read as
+JSON Schema:
+
+```jsonc
+{ "properties": { "LARK_APP_ID": { "type": "string", "title": "App ID", "description": "hint under the box" } },
+  "required": ["LARK_APP_ID"] }
+```
+
+- `title` → label (falls back to a humanised key), `description` → hint, `default` → prefilled value.
+- A field is masked when `format:"password"`, `writeOnly:true`, **or the key matches
+  `/TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL/`** — the regex wins, so a key like `GMAIL_CREDENTIALS_PATH`
+  is masked even though it is a path.
+- `required` is enforced client-side before the install RPC is sent.
+
+What the person typed comes back as a Struct:
+
+| RPC | Request fields |
+|-----|----------------|
+| `InstallUserPlugin` | 1 `plugin_id` · 4 `pinned_git_ref` · **5 `variables`** |
+| `UpdateUserPluginInstall` | 1 `plugin_id` · 3 `is_enabled` · 5 `pinned_git_ref` · **6 `variables`** |
+| `UninstallUserPlugin` | 1 `plugin_id` → response `{1 success}` |
+
+`aiserver.v1.Marketplace`: 1 id · 2 name · 3 display_name · 4 description · 5 git_url · 6 git_ref ·
+9 logo_url · 10 created_at.
