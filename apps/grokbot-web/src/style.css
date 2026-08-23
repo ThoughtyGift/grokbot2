@@ -283,6 +283,29 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .plugin-main .desc { font-size: var(--fs-meta); color: var(--fg-2); }
 .plugin-row .btn.primary { background: var(--accent); color: #fff; }
+
+/* ── trả lời có tham chiếu (X6.3) ────────────────────────────────────────────
+   Chip trên composer + khối trích trong bubble. Kiểu dáng chưa có số đo phía sau (app chưa đo
+   được UX trả lời của họ) — chỉ dùng token chung. */
+.reply-chip {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 10px; border-radius: var(--r-row);
+  background: var(--surface-2); border-left: 2px solid var(--accent);
+  font-size: var(--fs-meta); color: var(--fg-2);
+}
+.reply-chip .rc-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reply-chip .rc-body strong { color: var(--fg-1); font-weight: 600; }
+.bubble .quote {
+  display: block; width: 100%; margin-bottom: 6px; padding: 4px 8px; text-align: left;
+  border: 0; border-left: 2px solid var(--accent); border-radius: 4px;
+  background: rgba(252, 252, 252, 0.06); cursor: pointer;
+}
+.bubble .quote .q-author { display: block; font-size: 11px; line-height: 14px; color: var(--fg-2); font-weight: 600; }
+.bubble .quote .q-text {
+  display: block; font-size: var(--fs-meta); line-height: 16px; color: var(--fg-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 560px;
+}
+.bubble .quote:hover { background: rgba(252, 252, 252, 0.1); }
 /* Ba chấm "đang tới" — app gốc dùng chúng, KHÔNG dùng bubble rỗng kèm con trỏ.
    Thời lượng chưa đo được (app đang chạy không mở cổng gỡ lỗi), nên đây là giá trị tạm và được ghi
    rõ là tạm: 1,4s một vòng, ba chấm lệch pha 0,16s. Khi mở lại app bằng launcher F2 thì đo `x-ray`

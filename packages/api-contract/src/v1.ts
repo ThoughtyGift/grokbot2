@@ -167,6 +167,15 @@ export const Entry = Type.Object({
   event: Type.Optional(TranscriptEvent),
   widget: Type.Optional(Widget),
   respondedValue: Type.Optional(Type.String()),
+  /**
+   * Tin này TRẢ LỜI tin nào (X6.3). Mang kèm tên + trích đoạn để FE vẽ khối trích dẫn mà không
+   * phải tra ngược — tin gốc có thể đã rơi khỏi cửa sổ 150 entry của transcript.
+   */
+  replyTo: Type.Optional(Type.Object({
+    entryId: Type.String(),
+    author: Type.String(),
+    excerpt: Type.String(),
+  })),
 });
 
 export const TranscriptPage = Type.Object({
@@ -214,6 +223,8 @@ export const TurnBody = Type.Object({
     path: Type.String(),
     name: Type.Optional(Type.String()),
   }))),
+  /** Id entry được trả lời (X6.3) — backend tự tra tên + trích đoạn, FE không gửi kèm. */
+  replyToEntryId: Type.Optional(Type.String()),
 });
 
 export const AvatarBody = Type.Object({

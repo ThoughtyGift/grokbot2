@@ -67,6 +67,7 @@ export function toNativeEntry(e: Entry): NativeEntry {
         ...(e.clientNonce ? { clientNonce: e.clientNonce } : {}),
         ...(e.isStreaming ? { isStreaming: true } : {}),
         ...(att ? { attachment: att } : {}),
+        ...(e.replyTo ? { replyTo: e.replyTo } : {}),
       };
     }
     return {

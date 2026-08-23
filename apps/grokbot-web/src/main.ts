@@ -30,6 +30,8 @@ const state = {
   /** Panel Plugins (X5.4). `plugins: null` = chưa tải lần nào — phân biệt với marketplace rỗng. */
   pluginsOpen: false,
   plugins: null as Plugin[] | null,
+  /** X6.3: đang trả lời entry nào — chip trên composer, gửi kèm `replyToEntryId`. */
+  replyTo: null as { entryId: string; author: string; excerpt: string } | null,
   /** Ô Search: app gốc để nó là NÚT, bấm mới thành ô nhập — nên trạng thái này là của họ, không phải của tôi. */
   searchOpen: false,
   /**
@@ -258,6 +260,23 @@ function renderEntry(e: NativeEntry): HTMLElement {
   }
   const bubble = el(`<div class="bubble ${cls}${streaming}"></div>`);
   const wrap = (node: HTMLElement): HTMLElement => node;
+  if (e.replyTo) {
+    /*
+     * Khối trích dẫn của tin trả lời (X6.3) — dữ liệu từ backend (`replyTo` trên entry), không
+     * phải chữ chèn vào nội dung. Bấm là cuộn tới tin gốc nếu nó còn trong cửa sổ 150 entry.
+     */
+    const rt = e.replyTo;
+    const q = el(`<button type="button" class="quote" title="tới tin gốc">
+      <span class="q-author">${escapeHtml(rt.author)}</span>
+      <span class="q-text">${escapeHtml(rt.excerpt)}</span>
+    </button>`);
+    q.onclick = (ev) => {
+      ev.stopPropagation();
+      const target = root.querySelector(`[data-entry="${CSS.escape(rt.entryId)}"]`);
+      if (target) { target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    };
+    bubble.append(q);
+  }
   if (e.attachment?.href) {
     /**
      * Ảnh thì render `<img>`; mọi thứ khác là THẺ FILE.
@@ -355,7 +374,7 @@ function wireMoreMenu(bar: HTMLElement, e: NativeEntry): void {
       paint();
     }
   };
-  const threadItem = el(`<button type="button" role="menuitem" disabled title="Luồng con chưa dựng: replyTo/threadId chưa có ở hợp đồng lẫn backend">Tạo luồng</button>`);
+  const threadItem = el(`<button type="button" role="menuitem" disabled title="Luồng con chưa dựng: trả lời có tham chiếu đã có (X6.3), nhưng luồng là một transcript phụ — UX của app chưa đo được">Tạo luồng</button>`);
   more.append(copyItem, threadItem);
   bar.querySelector<HTMLButtonElement>(".more")!.onclick = (ev) => {
     ev.stopPropagation();
@@ -418,19 +437,17 @@ function messageActions(e: NativeEntry): HTMLElement {
   wireMoreMenu(bar, e);
 
   /*
-   * Trả lời = TRÍCH DẪN vào ô nhập, không phải luồng con.
+   * Trả lời có THAM CHIẾU THẬT (X6.3) — thay bản trích-dẫn-vào-draft của X6.1.
    *
-   * Không có `replyTo` ở backend thì một nút "trả lời" chỉ gắn cờ ở FE là thứ model không bao giờ
-   * thấy — tức trang trí. Đưa trích dẫn vào chính nội dung tin thì model đọc được, và không phải
-   * bịa ra một mô hình dữ liệu mà backend chưa honour được. Đây KHÔNG phải luồng con, và tài liệu
-   * nói rõ như vậy.
+   * `replyToEntryId` giờ có ở hợp đồng và runtime đưa tham chiếu vào prompt, nên nút này gắn
+   * trạng thái trả lời thay vì chèn chữ: chip hiện trên composer, gửi là backend tự tra tên +
+   * trích đoạn và model thấy `[trả lời tin của X: "…"]`. Vẫn KHÔNG phải luồng con — luồng con
+   * là một transcript phụ, và UX của nó bên app chưa đo được.
    */
   bar.querySelector<HTMLButtonElement>(".reply")!.onclick = (ev) => {
     ev.stopPropagation();
-    const quoted = (e.content ?? "").trim().split("\n").slice(0, 3).join(" ").slice(0, 160);
-    if (!quoted) return;
-    const head = `> ${who}: ${quoted}${(e.content ?? "").length > 160 ? "…" : ""}`;
-    state.draft = state.draft.trim() ? `${head}\n\n${state.draft}` : `${head}\n\n`;
+    const excerpt = (e.content ?? "").trim().split("\n").slice(0, 3).join(" ").slice(0, 160);
+    state.replyTo = { entryId: e.id, author: who, excerpt: excerpt || (e.attachment?.name ?? "") };
     paint();
     const box = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
     if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
@@ -1066,6 +1083,11 @@ function paint(): void {
       ${state.error ? `<div class="err">${escapeHtml(state.error)}</div>` : ""}
       <div class="transcript"></div>
       <form class="composer">
+        ${state.replyTo ? `<div class="reply-chip">
+          <span class="rc-ico">↩</span>
+          <span class="rc-body">Trả lời <strong>${escapeHtml(state.replyTo.author)}</strong>: ${escapeHtml(state.replyTo.excerpt)}</span>
+          <button type="button" class="icon-btn" data-act="reply-cancel" aria-label="Huỷ trả lời">×</button>
+        </div>` : ""}
         <div class="pending" hidden></div>
         <label class="attach" title="gửi tệp">+<input type="file" ${selected ? "" : "disabled"} /></label>
         <textarea name="q" rows="1" aria-label="Prompt" placeholder="${selected ? `Nhắn ${escapeHtml(selected.name)}` : "chọn một bot"}" ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
@@ -1290,6 +1312,9 @@ function paint(): void {
   });
   root.querySelector<HTMLButtonElement>("[data-act=plugins-close]")?.addEventListener("click", () => {
     state.pluginsOpen = false; paint();
+  });
+  root.querySelector<HTMLButtonElement>("[data-act=reply-cancel]")?.addEventListener("click", () => {
+    state.replyTo = null; paint();
   });
   root.querySelectorAll<HTMLButtonElement>("[data-act=plugin-toggle]").forEach((b) => {
     b.onclick = async () => {
@@ -1548,14 +1573,16 @@ function paint(): void {
     const content = box.value.trim();
     const attachments = state.pending.map((p) => ({ path: p.path, name: p.name }));
     if ((!content && !attachments.length) || !state.selected) return;
+    const replyToEntryId = state.replyTo?.entryId;
     box.value = "";
     state.draft = "";
     state.pending = [];
+    state.replyTo = null;
     state.busy = true;
     state.error = "";
     paint();
     try {
-      await api.sendTurn(state.selected, content, crypto.randomUUID(), attachments);
+      await api.sendTurn(state.selected, content, crypto.randomUUID(), attachments, replyToEntryId);
       markRunning(true);
       await loadTranscript();
     } catch (e) {

@@ -106,11 +106,11 @@ export const renameAgent = (id: string, name: string) => patchAgent(id, { name }
 export const hideAgent = (id: string, hidden: boolean) => patchAgent(id, { hidden });
 export const getTranscript = (id: string) =>
   fetch(`/v1/agents/${id}/transcript`, { headers: headers() }).then((r) => parse<{ entries: NativeEntry[] }>(r));
-export const sendTurn = (id: string, content: string, clientNonce: string, attachments?: { path: string; name?: string }[]) =>
+export const sendTurn = (id: string, content: string, clientNonce: string, attachments?: { path: string; name?: string }[], replyToEntryId?: string) =>
   fetch(`/v1/agents/${id}/turns`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ content, clientNonce, ...(attachments?.length ? { attachments } : {}) }),
+    body: JSON.stringify({ content, clientNonce, ...(attachments?.length ? { attachments } : {}), ...(replyToEntryId ? { replyToEntryId } : {}) }),
   }).then((r) => parse<{ entryId: string; seq: number; status: string }>(r));
 
 export const uploadImage = (filename: string, bytesBase64: string) =>

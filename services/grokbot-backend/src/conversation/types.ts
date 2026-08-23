@@ -26,7 +26,7 @@ export type TranscriptEvent =
   | { type: "automation-changed"; action: "created" | "updated" | "deleted"; automationId: string; automationName: string };
 
 export type Entry =
-  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg })
+  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })
   | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string })
   | (Base & { kind: "event"; event: TranscriptEvent });
@@ -71,6 +71,8 @@ export interface SendArgs {
   fromAgent?: { id: string; name: string };
   /** Native FE: write tools ask even if the stock app stored localToolPermission=always. */
   askWriteTools?: boolean;
+  /** X6.3: entry được trả lời. Backend tra tên + trích đoạn từ transcript, caller chỉ gửi id. */
+  replyToEntryId?: string;
 }
 
 export interface SubagentRow {

@@ -297,6 +297,19 @@ components:
               type: boolean
         respondedValue:
           type: string
+        replyTo:
+          type: object
+          required:
+            - entryId
+            - author
+            - excerpt
+          properties:
+            entryId:
+              type: string
+            author:
+              type: string
+            excerpt:
+              type: string
     TranscriptPage:
       type: object
       required:
@@ -472,6 +485,19 @@ components:
                     type: boolean
               respondedValue:
                 type: string
+              replyTo:
+                type: object
+                required:
+                  - entryId
+                  - author
+                  - excerpt
+                properties:
+                  entryId:
+                    type: string
+                  author:
+                    type: string
+                  excerpt:
+                    type: string
         hasMore:
           type: boolean
     ComputerStatus:
@@ -762,6 +788,8 @@ components:
                 type: string
               name:
                 type: string
+        replyToEntryId:
+          type: string
     AvatarBody:
       type: object
       properties:
@@ -1356,6 +1384,19 @@ paths:
                                   type: boolean
                             respondedValue:
                               type: string
+                            replyTo:
+                              type: object
+                              required:
+                                - entryId
+                                - author
+                                - excerpt
+                              properties:
+                                entryId:
+                                  type: string
+                                author:
+                                  type: string
+                                excerpt:
+                                  type: string
                       hasMore:
                         type: boolean
         "401":

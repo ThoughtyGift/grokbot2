@@ -683,7 +683,8 @@ export async function handleNative(
       }
     }
     if (isAgentRunning(agentId)) return json(res, { error: "turn already running" }, 409, origin);
-    const accepted = sendPrompt({ agentId, content, clientNonce, attachments, askWriteTools: true });
+    const replyToEntryId = typeof parsedBody.value.replyToEntryId === "string" ? parsedBody.value.replyToEntryId : undefined;
+    const accepted = sendPrompt({ agentId, content, clientNonce, attachments, askWriteTools: true, replyToEntryId });
     // Multi-tenant Phase 2: sendPrompt rejects an agent the caller does not own.
     if ("rejected" in accepted) return json(res, { error: "agent not found" }, 404, origin);
     return json(res, { entryId: accepted.entryId, seq: seqOf(agentId, accepted.entryId), status: "accepted" }, 202, origin);

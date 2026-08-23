@@ -609,9 +609,19 @@ Kéo thả / panel đo lại nguyên bài: `measure:resize` **10/10**, `measure:
 **Còn thiếu, và vì sao chưa làm** (đây là danh sách tính năng, không phải danh sách quên):
 
 - ~~Plugins~~ — **đã xong**, xem X5.4 ở trên (2026-08-23, cùng ngày với mục này).
-- **Tạo luồng** — cần `replyToEntryId` trong `TurnBody`/`Entry` + runtime đưa tin trích vào prompt,
-  VÀ đo UX thread thật của app (muốn đo phải tạo thread trong hội thoại thật của chủ máy — cùng lý
-  do X0.3 vẫn mở). Menu đang để mờ kèm lý do, đúng X6.2.
+- **Tạo luồng** — nửa dữ liệu ĐÃ XONG ở **X6.3** (cùng ngày, xem dưới); nửa còn lại là UX luồng
+  con của app (một transcript phụ) — muốn đo phải tạo thread trong hội thoại thật của chủ máy,
+  cùng ranh giới với X0.3. Menu vẫn mờ, tooltip đã cập nhật cho đúng hiện trạng.
+
+**X6.3 — trả lời có THAM CHIẾU THẬT (2026-08-23).** Thay bản trích-dẫn-vào-draft của X6.1:
+`TurnBody.replyToEntryId` + `Entry.replyTo {entryId, author, excerpt}` vào hợp đồng; backend tra
+tên + trích đoạn (FE chỉ gửi id — tin gốc có thể đã rơi khỏi cửa sổ 150 entry của FE, backend là
+nơi duy nhất còn giữ); runtime đưa `[trả lời tin của X: "…"]` vào history nên model THẤY tham
+chiếu — không có dòng đó thì `replyTo` chỉ là trang trí, đúng cái bẫy X6.1 đã gọi tên. Id không
+tra được thì bỏ qua thay vì từ chối turn. FE: bấm ↩ hiện chip trên composer (huỷ được), gửi xong
+chip tự xoá, bubble vẽ khối trích bấm-cuộn-tới-tin-gốc. Nghiệm trên stack thật: trả lời tin
+"Mochi dị ứng sữa bò" bằng câu hỏi mơ hồ *"con vật đó KHÔNG được uống gì?"* → model đáp *"Sữa
+bò"* — tức tham chiếu đã tới prompt thật. Kiểu dáng chip/khối trích chưa có số đo phía sau.
 - ~~Đính kèm file KHÔNG phải ảnh~~ — **đã xong (X8, 2026-08-23)**: `/v1/attachments` rơi về
   `stageFile` khi bytes không phải ảnh; tệp TEXT của LƯỢT HIỆN TẠI đưa **nội dung** (trần 32KB)
   vào history — trước đó model chỉ thấy tên tệp và bịa nội dung từ cái tên. Vòng restore lúc boot

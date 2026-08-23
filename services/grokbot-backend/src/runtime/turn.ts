@@ -566,7 +566,24 @@ export function sendPrompt(args: SendArgs) {
   const text = args.content ?? args.prompt ?? args.text ?? args.richText?.text ?? "";
   const t = tail(agentId);
 
-  const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}) };
+  /*
+   * X6.3 — trả lời có tham chiếu THẬT. Caller chỉ gửi id; tên và trích đoạn tra ở đây vì backend
+   * là nơi duy nhất còn giữ entry gốc (FE chỉ thấy cửa sổ 150 entry). Id không tra được thì bỏ
+   * qua thay vì từ chối cả turn: một tin trả lời mất tham chiếu vẫn đáng gửi hơn là mất luôn.
+   */
+  let replyTo: { entryId: string; author: string; excerpt: string } | undefined;
+  if (args.replyToEntryId) {
+    const target = t.find((e) => e.id === args.replyToEntryId);
+    if (target) {
+      const author = target.kind === "send-message" ? target.author.name
+        : target.kind === "message" && target.role === "user" ? "người dùng"
+        : target.kind === "message" ? (target.fromAgent?.name ?? "bot") : "bot";
+      const excerpt = (textOf(target) || attachmentNameOf(target)).slice(0, 160);
+      replyTo = { entryId: target.id, author, excerpt };
+    }
+  }
+
+  const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   t.push(userEntry);
 
   // Show what the user attached, instead of only the text they typed alongside it.
@@ -645,6 +662,10 @@ export function sendPrompt(args: SendArgs) {
         const inline = url ? stagedTextPreview(url) : null;
         if (inline) body += `${NEWLINE}Nội dung tệp:${NEWLINE}${inline.text}${inline.truncated ? `${NEWLINE}[…đã cắt: tệp dài hơn 32KB]` : ""}`;
       }
+      // Tin trả lời mang theo tham chiếu cho model — không có dòng này thì `replyTo` chỉ là
+      // trang trí ở FE, đúng cái bẫy X6.1 đã gọi tên.
+      const rt = e.kind === "message" ? e.replyTo : undefined;
+      if (rt) body = `[trả lời tin của ${rt.author}: "${rt.excerpt}"] ${body}`;
       return {
         role: e.kind === "message" && e.role === "user" ? "user" : "assistant",
         content: from ? `[tin nhắn từ bot ${from.name}] ${body}` : body,
