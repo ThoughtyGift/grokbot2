@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bootstrapResponses } from "./bootstrap.js";
 import { message, pbStr, pbVar, pbMsg } from "./encode.js";
-import { readString, readVarint, readMessages } from "./decode.js";
+import { readString, readStrings, readVarint, readMessages } from "./decode.js";
 import type { OAuthPort, PendingState, StoredToken } from "./oauth.js";
 
 const SERVER = "https://mcp.example.test/mcp";
@@ -203,4 +203,39 @@ test("no auth_url is invented — the client builds it with its own PKCE verifie
 test("an empty request asks about every configured server", () => {
   const ctx = { user: null, body: message(), mcpServers: [{ name: "a", url: SERVER, status: "needsAuth" }, { name: "b", url: "https://x.test/mcp", status: "connected" }] };
   assert.equal(readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1).length, 2);
+});
+
+// ── GetAvailableMcpServers: where the pane actually reads "signed in" ─────────
+
+test("a remote server with a stored sign-in reports user_has_access_token", () => {
+  const r = bootstrapResponses.GetAvailableMcpServers({
+    user: null,
+    mcpServers: [{ name: "zernio", url: SERVER, hasToken: true, pluginId: 20 }],
+  } as never);
+  const row = readMessages(r, 1)[0];
+  assert.equal(readString(row, 2), "zernio");
+  assert.equal(readVarint(row, 9), 20, "plugin_id ties the connector to its plugin row");
+  assert.equal(readVarint(row, 11), 1, "user_has_access_token — the field the pane reads");
+  const acct = readMessages(row, 17)[0];
+  assert.equal(readString(acct, 1), "default");
+  assert.equal(readVarint(acct, 3), 1, "per-account hasToken");
+});
+
+test("without a sign-in it reports false, rather than leaving the field out", () => {
+  const r = bootstrapResponses.GetAvailableMcpServers({
+    user: null, mcpServers: [{ name: "zernio", url: SERVER, hasToken: false }],
+  } as never);
+  const row = readMessages(r, 1)[0];
+  assert.equal(readVarint(row, 11), 0);
+  assert.equal(readVarint(readMessages(row, 17)[0], 3), 0);
+});
+
+test("a stdio server still comes through unchanged", () => {
+  const r = bootstrapResponses.GetAvailableMcpServers({
+    user: null, mcpServers: [{ name: "memory", command: "npx", args: ["-y", "pkg"] }],
+  } as never);
+  const row = readMessages(r, 1)[0];
+  assert.equal(readString(row, 5), "stdio");
+  assert.equal(readString(row, 6), "npx");
+  assert.deepEqual(readStrings(row, 7), ["-y", "pkg"]);
 });

@@ -110,6 +110,8 @@ export interface RpcCtx {
     status?: string;
     /** Whether a sign-in is stored for it, so the pane can tell "needs auth" from "signed in". */
     hasToken?: boolean;
+    /** The catalog row that installed it, for McpServerInfo.plugin_id. */
+    pluginId?: number;
   }[];
   /**
    * The plugin catalog, loaded by the backend (file or URL — see services/.../plugin-catalog.ts).
@@ -531,7 +533,9 @@ export function listMarketplaces(): Buffer {
  * shape distinguishes. NOTHING from `env` is emitted: those hold live tokens, and this response
  * crosses to the renderer.
  */
-export function availableMcpServers(servers?: { name: string; command?: string; args?: string[]; url?: string }[]): Buffer {
+export function availableMcpServers(
+  servers?: { name: string; command?: string; args?: string[]; url?: string; hasToken?: boolean; pluginId?: number }[],
+): Buffer {
   if (!servers?.length) return message();
   const rows = servers.map((s, i) =>
     pbMsg(1, message(
@@ -543,11 +547,22 @@ export function availableMcpServers(servers?: { name: string; command?: string; 
       ...(s.command ? [pbStr(6, s.command)] : []),
       ...(s.args ?? []).map((a) => pbStr(7, a)),
       ...(s.url ? [pbStr(8, s.url)] : []),
+      // plugin_id (9) ties the server back to the row that installed it, so the pane can put a
+      // connector under its plugin instead of listing it loose.
+      ...(s.pluginId ? [pbVar(9, s.pluginId)] : []),
       pbBool(10, false),
+      // user_has_access_token (11) is how the ACCOUNT surface says "signed in", and it was the
+      // missing piece: the Plugins pane reads a connector's sign-in state from here, not from the
+      // box list this backend was carefully filling in. Never having sent it is why a remote row
+      // read "Not reported by backend" — the client's own words for a status it was never given.
+      pbBool(11, Boolean(s.hasToken)),
       pbBool(12, false),
       pbBool(13, false),
       pbBool(14, false),
       pbStr(15, s.name),
+      // accounts (17) — McpAccountInfo{1 account_key, 2 server_identifier, 3 user_has_access_token}.
+      // One account per server here; the shape exists so one server can be signed into twice.
+      pbMsg(17, message(pbStr(1, "default"), pbStr(2, s.name), pbBool(3, Boolean(s.hasToken)))),
     )),
   );
   return message(...rows);

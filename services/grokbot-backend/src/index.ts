@@ -162,6 +162,8 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
           // http row with no status at all is drawn as an error over a connector merely awaiting auth.
           status: mcpServerStatus(name, ownerFromAuth(req.headers.authorization)).status,
           hasToken: url ? oauthAccessToken(url, ownerFromAuth(req.headers.authorization)) != null : false,
+          // Which catalog row installed this server, so the pane can file the connector under it.
+          pluginId: pluginCatalog().find((p) => p.mcp?.name === name)?.id,
         };
       }),
     catalog: pluginCatalog(),
