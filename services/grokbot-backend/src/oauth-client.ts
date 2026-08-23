@@ -23,7 +23,7 @@
  * the next one has it. The client polls, so this settles on its own.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { oauthPortFor, rememberRedirect, lastRedirect, type PendingState } from "./mcp-oauth.js";
+import { oauthPortFor, rememberRedirect, lastRedirect, oauthAccessToken, type PendingState } from "./mcp-oauth.js";
 
 /** Long enough that a person can finish signing in; short enough that a stale URL is not reused. */
 const AUTH_URL_TTL_MS = 10 * 60_000;
@@ -267,6 +267,9 @@ export async function completeAuthorization(stateId: string, code: string, owner
  * registration cannot finish in time and it gets an empty auth_url.
  */
 export function warmAuthUrl(serverUrl: string, owner: string): void {
+  // Already signed in: warming would mint a fresh verifier nobody will ever redeem, and every
+  // status read would leave another one behind until the sweep collected it.
+  if (oauthAccessToken(serverUrl, owner)) return;
   const redirectUri = lastRedirect(owner);
   if (redirectUri) authUrlFor(serverUrl, redirectUri, owner);
 }
