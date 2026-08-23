@@ -28,6 +28,10 @@ const DEFAULT_OWNER = DEFAULT_USER.authId;
 
 const TOOLS = [{ name: "echo_it", description: "echoes", inputSchema: { type: "object" } }];
 
+/** What the fixture last received as tools/call arguments — how the substitution is checked. */
+let seenArgs: unknown = null;
+const lastArgs = () => seenArgs;
+
 /** The JSON-RPC half both fixtures share — only the delivery differs. */
 function answer(msg: any): unknown | null {
   if (msg.method === "initialize") {
@@ -35,6 +39,7 @@ function answer(msg: any): unknown | null {
   }
   if (msg.method === "tools/list") return { jsonrpc: "2.0", id: msg.id, result: { tools: TOOLS } };
   if (msg.method === "tools/call") {
+    seenArgs = msg.params?.arguments ?? null;
     return { jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `called ${msg.params?.name}` }] } };
   }
   return null;   // a notification
@@ -229,4 +234,39 @@ test("after a sign-in is stored, the same server connects with NOTHING in the se
   } finally {
     clearOAuth(DEFAULT_OWNER);
   }
+});
+
+// ── credentials in tool arguments ─────────────────────────────────────────────
+
+test("a ${SECRET} in tool_args is substituted, so the transcript never holds the value", async () => {
+  const { saveSecrets } = await import("./secrets.js");
+  saveSecrets(DEFAULT_OWNER, { BLUESKY_APP_PASSWORD: "abcd-efgh-ijkl-mnop" });
+  const out = await mcp.callMcpTool(JSON.stringify({
+    server: "modern",
+    tool_name: "echo_it",
+    tool_args: { identifier: "me.bsky.social", password: "${BLUESKY_APP_PASSWORD}" },
+  }));
+  assert.match(out, /called echo_it/, "the call went through");
+  assert.deepEqual(lastArgs(), { identifier: "me.bsky.social", password: "abcd-efgh-ijkl-mnop" },
+    "the server received the real value");
+  saveSecrets(DEFAULT_OWNER, { BLUESKY_APP_PASSWORD: "" });
+});
+
+test("nesting is handled, because real connect calls put credentials one level down", async () => {
+  const { saveSecrets } = await import("./secrets.js");
+  saveSecrets(DEFAULT_OWNER, { META_TOKEN: "meta-123" });
+  await mcp.callMcpTool(JSON.stringify({
+    server: "modern", tool_name: "echo_it",
+    tool_args: { credentials: { token: "${META_TOKEN}" }, ids: ["${META_TOKEN}", "plain"] },
+  }));
+  assert.deepEqual(lastArgs(), { credentials: { token: "meta-123" }, ids: ["meta-123", "plain"] });
+  saveSecrets(DEFAULT_OWNER, { META_TOKEN: "" });
+});
+
+test("an unknown placeholder is passed through, so the server names the bad field", async () => {
+  await mcp.callMcpTool(JSON.stringify({
+    server: "modern", tool_name: "echo_it", tool_args: { password: "${NOT_SET_ANYWHERE}" },
+  }));
+  assert.deepEqual(lastArgs(), { password: "${NOT_SET_ANYWHERE}" },
+    "blanking it would read as a wrong password instead of a missing one");
 });

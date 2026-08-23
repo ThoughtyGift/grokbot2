@@ -672,6 +672,36 @@ export async function readMcpResource(arg: string, owner: string = currentOwner(
   }
 }
 
+/**
+ * Let a tool argument name a stored credential instead of carrying one.
+ *
+ * Some connectors are joined by handing over a secret rather than by OAuth: Bluesky takes an app
+ * password, WhatsApp takes Meta credentials, Shopify takes an admin token. Those go in as ARGUMENTS
+ * to a tool call — and a tool call's arguments are written into the transcript, stored in SQLite and
+ * rendered in the app. Ask a bot to connect Bluesky and the app password is in the chat log forever.
+ *
+ * So an argument may say `${BLUESKY_APP_PASSWORD}` and the value is substituted here, from the same
+ * per-owner secret store the spawn already reads. What reaches the transcript is the placeholder;
+ * what reaches the server is the credential.
+ *
+ * An unresolved placeholder is left exactly as written rather than blanked: the server then rejects
+ * it and says which field was wrong, where a silently empty field reads as a bad password.
+ *
+ * This does not make a tool call safe in general — a server is free to echo a secret back in its
+ * result, and that result does reach the transcript. It removes the half that is ours to remove.
+ */
+function withSecrets(args: unknown, owner: string): unknown {
+  if (typeof args === "string") {
+    const { headers } = resolveSpecSecrets({ headers: { v: args } }, owner);
+    return headers.v ?? args;          // unresolved: hand the placeholder through untouched
+  }
+  if (Array.isArray(args)) return args.map((a) => withSecrets(a, owner));
+  if (args && typeof args === "object") {
+    return Object.fromEntries(Object.entries(args).map(([k, v]) => [k, withSecrets(v, owner)]));
+  }
+  return args;
+}
+
 /** `call_mcp_tool({server, tool_name, tool_args})`. */
 export async function callMcpTool(arg: string, owner: string = currentOwner()): Promise<string> {
   let spec: any;
@@ -686,7 +716,7 @@ export async function callMcpTool(arg: string, owner: string = currentOwner()): 
     if (s.tools.length && !s.tools.some((t) => t.name === tool)) {
       return `(server "${server}" không có tool "${tool}"; có: ${s.tools.map((t) => t.name).join(", ")})`;
     }
-    const r = await rpc(s, "tools/call", { name: tool, arguments: args });
+    const r = await rpc(s, "tools/call", { name: tool, arguments: withSecrets(args, owner) });
     // MCP returns content blocks; the model only needs the text.
     const text = Array.isArray(r?.content)
       ? r.content.map((c: any) => (typeof c?.text === "string" ? c.text : `[${c?.type ?? "block"}]`)).join("\n")
