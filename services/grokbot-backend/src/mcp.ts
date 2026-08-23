@@ -28,7 +28,15 @@ import { DEFAULT_USER } from "./auth.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const CONFIG = process.env.GROKBOT2_MCP_CONFIG ?? join(repoRoot, ".mcp.json");
-const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+/**
+ * Where this module keeps its files.
+ *
+ * Derived from the module path, so it followed the code and ignored every test-isolation env var —
+ * which is how a test that calls clearOAuth(DEFAULT_USER) deleted a REAL sign-in twice in one day.
+ * `GROKBOT2_DATA_DIR` lets the test runner point all of it somewhere disposable; unset, nothing
+ * changes.
+ */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 
 /**
  * MCP config is PER-USER (multi-tenant Phase 6): one tenant's server tokens (github, slack, …) must

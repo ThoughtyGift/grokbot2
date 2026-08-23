@@ -17,7 +17,8 @@ import { join } from "node:path";
 
 const OWNER = "local|share-test@grok.test";
 const safe = OWNER.replace(/[^a-zA-Z0-9._-]/g, "_");
-const DATA = join(import.meta.dirname, "..", ".data");
+// Same resolution the modules use, so the test looks where they actually write.
+const DATA = process.env.GROKBOT2_DATA_DIR ?? join(import.meta.dirname, "..", ".data");
 const cfgFile = join(DATA, "mcp", `${safe}.json`);
 const installFile = join(DATA, "plugin-installs", `${safe}.json`);
 const secretFile = join(DATA, "secrets", `${safe}.json`);

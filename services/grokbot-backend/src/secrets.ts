@@ -21,7 +21,15 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+/**
+ * Where this module keeps its files.
+ *
+ * Derived from the module path, so it followed the code and ignored every test-isolation env var —
+ * which is how a test that calls clearOAuth(DEFAULT_USER) deleted a REAL sign-in twice in one day.
+ * `GROKBOT2_DATA_DIR` lets the test runner point all of it somewhere disposable; unset, nothing
+ * changes.
+ */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 const secretsPath = (owner: string): string =>

@@ -32,6 +32,10 @@ const child = spawn(
       ...process.env,
       GROKBOT2_SQLITE_FILE: join(dir, "test.sqlite"),
       GROKBOT2_STATE_FILE: join(dir, "test.state.json"),
+      // Several modules put their files beside the code (.data/mcp, .data/secrets, .data/oauth) and
+      // used to ignore the two variables above entirely — which is how a test deleted a REAL OAuth
+      // sign-in. This is the variable they all read now.
+      GROKBOT2_DATA_DIR: join(dir, "data"),
     },
   },
 );
