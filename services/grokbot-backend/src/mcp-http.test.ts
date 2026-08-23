@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { DEFAULT_USER } from "./auth.js";
+import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 
 const DEFAULT_OWNER = DEFAULT_USER.authId;
 
@@ -121,11 +122,13 @@ const listen = (s: Server): Promise<number> =>
 let streamable: Server;
 let legacy: { server: Server; sawSessionOnPost: () => boolean };
 let mcp: typeof import("./mcp.js");
+let streamablePort = 0;
 
 before(async () => {
   streamable = streamableFixture();
   legacy = legacyFixture();
   const sp = await listen(streamable);
+  streamablePort = sp;
   const lp = await listen(legacy.server);
 
   const dir = mkdtempSync(join(tmpdir(), "gb2-mcp-http-"));
@@ -269,4 +272,31 @@ test("an unknown placeholder is passed through, so the server names the bad fiel
   }));
   assert.deepEqual(lastArgs(), { password: "${NOT_SET_ANYWHERE}" },
     "blanking it would read as a wrong password instead of a missing one");
+});
+
+/**
+ * The reported bug: the Instagram row offered no way to sign in again.
+ *
+ * A stored token is what status treats as proof of a sign-in, and that is right until the server
+ * rejects it. With no refresh possible the token is dead, but it stayed on disk, so the row kept
+ * claiming `connected` and the Authenticate button — the only thing that could fix it — never
+ * appeared. Deleting a token the server refused is what puts the button back.
+ */
+test("a refused token that cannot be refreshed is dropped, so Authenticate comes back", async () => {
+  const url = `http://127.0.0.1:${streamablePort}/needsauth`;
+  const port = oauthPortFor(DEFAULT_OWNER);
+  // No refresh_token and an unreachable metadata endpoint: the refresh cannot succeed.
+  port.storeToken(url, "default", { clientId: "c", accessToken: "dead-token" }, Date.now());
+  assert.ok(oauthAccessToken(url, DEFAULT_OWNER), "the token is stored to begin with");
+  assert.notEqual(
+    mcp.mcpServerStatus("wantsOauth", DEFAULT_OWNER).status,
+    "needsAuth",
+    "a stored token masks the refusal — this is the state the user was stuck in, with no button",
+  );
+
+  await mcp.getMcpTools("wantsOauth");                 // 401 again, now with a token held
+  await new Promise((r) => setTimeout(r, 1500));       // the refresh attempt is fire-and-forget
+
+  assert.equal(oauthAccessToken(url, DEFAULT_OWNER), null, "the dead token is gone");
+  assert.equal(mcp.mcpServerStatus("wantsOauth", DEFAULT_OWNER).status, "needsAuth");
 });

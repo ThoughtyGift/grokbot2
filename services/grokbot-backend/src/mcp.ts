@@ -21,8 +21,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
-import { oauthAccessToken, recordRefusal, refusalFor } from "./mcp-oauth.js";
-import { warmAuthUrl } from "./oauth-client.js";
+import { oauthAccessToken, recordRefusal, refusalFor, oauthPortFor } from "./mcp-oauth.js";
+import { warmAuthUrl, refreshAccessToken } from "./oauth-client.js";
 import { currentOwner } from "./request-context.js";
 import { DEFAULT_USER } from "./auth.js";
 
@@ -267,8 +267,10 @@ async function start(name: string, owner: string): Promise<Live> {
     ? httpTransport(name, spec.url, headers, spec.type, deliver, failAll,
         (why) => {
           if (why) authRefused.set(key, why); else authRefused.delete(key);
-          // Also on disk: a restart must not forget that a server wants a sign-in.
-          recordRefusal(name, why, owner);
+          // Also on disk: a restart must not forget that a server wants a sign-in. A refusal on a
+          // server we hold a token for is an expiry first and a sign-out second — see handleRefusal.
+          if (why && spec.url) handleRefusal(name, spec.url, why, owner);
+          else recordRefusal(name, why, owner);
         })
     : stdioTransport(name, spec, resolved, deliver, failAll);
 
@@ -784,9 +786,7 @@ function probeRemote(name: string, url: string, headers: Record<string, string>,
         signal: AbortSignal.timeout(10_000),
       });
       if (res.status === 401) {
-        recordRefusal(name, res.headers.get("www-authenticate") ?? "The server requires authentication (401)", owner);
-        // Start building the sign-in URL now, so it is ready when the button is pressed.
-        warmAuthUrl(url, owner);
+        handleRefusal(name, url, res.headers.get("www-authenticate") ?? "The server requires authentication (401)", owner);
       } else if (res.ok || res.status === 202) {
         recordRefusal(name, null, owner);
       }
@@ -795,6 +795,38 @@ function probeRemote(name: string, url: string, headers: Record<string, string>,
       // cannot help.
     } catch { /* unreachable right now; the next status read tries again after the interval */ }
   })();
+}
+
+/**
+ * A server has refused. Decide whether that is really a dead sign-in before offering one.
+ *
+ * The 401 is only half the story. An access token expires on its own schedule, and the exchange
+ * stored a refresh token precisely so that expiry is not the user's problem — spending it here is
+ * the difference between a connector that stays signed in and one that quietly stops working an
+ * hour later, which is exactly what happened to the Zernio row.
+ *
+ * When the refresh fails the token is DELETED, not kept. Status treats a stored token as proof of
+ * a sign-in, so a token the server has rejected and that cannot be renewed would sit there claiming
+ * `connected` forever and the pane would never show the Authenticate button — the row is broken and
+ * the one action that fixes it stays hidden. Removing it is what makes the button come back.
+ */
+function handleRefusal(name: string, url: string, why: string, owner: string): void {
+  recordRefusal(name, why, owner);
+  if (!oauthAccessToken(url, owner)) { warmAuthUrl(url, owner); return; }
+
+  void refreshAccessToken(url, owner).then((ok) => {
+    if (ok) {
+      recordRefusal(name, null, owner);
+      // The live transport is holding the old header; drop it so the next call reconnects with the
+      // new token instead of spending the refresh and then failing anyway.
+      const k = `${owner}::${name}`;
+      const s = live.get(k);
+      if (s) { try { s.transport.close(); } catch { /* already gone */ } live.delete(k); }
+      return;
+    }
+    oauthPortFor(owner).deleteToken(url, "default");
+    warmAuthUrl(url, owner);
+  });
 }
 
 /**

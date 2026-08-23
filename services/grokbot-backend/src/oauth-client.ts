@@ -273,3 +273,65 @@ export function warmAuthUrl(serverUrl: string, owner: string): void {
   const redirectUri = lastRedirect(owner);
   if (redirectUri) authUrlFor(serverUrl, redirectUri, owner);
 }
+/**
+ * Trade the refresh token for a new access token.
+ *
+ * The sign-in worked and then stopped working, which is worse than never working: the connector
+ * reported connected, served 51 tools, and an hour later every call came back 401 `invalid_token`.
+ * The exchange stored a refresh token from the start and nothing ever used it.
+ *
+ * Returns true when a new access token is in the store. Failure is quiet on purpose — a refresh
+ * token can be revoked or expired too, and the honest outcome then is the 401 the caller already
+ * has, which puts the row back to needsAuth and offers the sign-in again.
+ *
+ * One flight at a time per server: a 401 usually arrives on several calls at once, and refreshing
+ * concurrently can burn a single-use refresh token and lock the account out of its own session.
+ */
+const refreshing = new Map<string, Promise<boolean>>();
+
+export function refreshAccessToken(serverUrl: string, owner: string): Promise<boolean> {
+  const k = `${owner}|${serverUrl}`;
+  const running = refreshing.get(k);
+  if (running) return running;
+  const p = doRefresh(serverUrl, owner).finally(() => refreshing.delete(k));
+  refreshing.set(k, p);
+  return p;
+}
+
+async function doRefresh(serverUrl: string, owner: string): Promise<boolean> {
+  const port = oauthPortFor(owner);
+  const row = port.getTokens([serverUrl], "").find((r) => r.data?.refreshToken);
+  if (!row?.data?.refreshToken) return false;
+
+  try {
+    const d = await discover(serverUrl);
+    const form = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: row.data.refreshToken,
+      client_id: row.data.clientId ?? "",
+    });
+    if (row.data.clientSecret) form.set("client_secret", row.data.clientSecret);
+
+    const res = await fetch(d.tokenEndpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      body: form,
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`token endpoint answered HTTP ${res.status}`);
+    const body = (await res.json()) as Record<string, unknown>;
+    if (!body?.access_token) throw new Error("no access_token in the refresh response");
+
+    port.storeToken(serverUrl, row.accountKey || "default", {
+      ...row.data,
+      accessToken: String(body.access_token),
+      // A server may rotate the refresh token; keeping the old one would fail the next refresh.
+      ...(body.refresh_token ? { refreshToken: String(body.refresh_token) } : {}),
+    }, Date.now());
+    console.log(`[grokbot2] [oauth] refreshed the token for ${serverUrl}`);
+    return true;
+  } catch (e) {
+    console.warn(`[grokbot2] [oauth] refresh failed for ${serverUrl}: ${(e as Error).message} — a new sign-in is needed`);
+    return false;
+  }
+}
