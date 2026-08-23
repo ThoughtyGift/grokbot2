@@ -270,7 +270,12 @@ function renderEntry(e: NativeEntry): HTMLElement {
       img.className = "att";
       img.alt = name;
       img.src = e.attachment.href;
-      bubble.append(img);
+      // App gốc bọc ảnh trong nút `Open image full screen` — ảnh bấm được, không phải trang trí.
+      const view = el(`<button type="button" class="att-open" aria-label="Open image full screen"></button>`);
+      view.append(img);
+      const href = e.attachment.href;
+      view.onclick = (ev) => { ev.stopPropagation(); openLightbox(href, name); };
+      bubble.append(view);
     } else {
       const ext = (name.split(".").pop() ?? "").slice(0, 4).toUpperCase();
       const card = el(`<a class="att-file" href="${escapeHtml(e.attachment.href)}" download target="_blank" rel="noreferrer">
@@ -463,7 +468,16 @@ function openRun(e: NativeEntry, mine: boolean, opensBlock: boolean): HTMLElemen
    * bên mình trước đây là thứ app gốc không có.
    */
   if (opensBlock && !mine) {
-    col.append(el(`<div class="run-author">${escapeHtml(e.author?.name ?? "bot")}</div>`));
+    /*
+     * Nhãn tên là NÚT, không phải chữ trang trí — app gốc: `sand-group-author` mang
+     * `aria-label="Open Claude's chat"`, bấm là mở chat của bot đó. Trong transcript một-bot thì
+     * nó mở lại chính bot đang xem, nhưng hành vi phải giống app chứ không phải giống suy đoán.
+     */
+    const name = e.author?.name ?? "bot";
+    const author = el(`<button type="button" class="run-author" aria-label="Open ${escapeHtml(name)}'s chat">${escapeHtml(name)}</button>`);
+    const authorId = e.author?.id;
+    if (authorId) author.onclick = () => selectBot(authorId);
+    col.append(author);
   }
   run.append(gutter, col);
   run.dataset.entry = e.id;   // id của entry MỞ lượt: đủ để neo, và ổn định khi lượt dài thêm
@@ -550,9 +564,36 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
     }
     node.dataset.entry = e.id;
     markSeen(node, e.id);
-    col.append(node);
+    /*
+     * Giờ theo từng hàng — app gốc: `sand-row-timestamp` 12px màu `rgba(252,252,252,.4)`,
+     * `opacity: 0` mặc định, hiện khi hover hàng, đứng ở mép PHẢI của hàng (đo qua CDP).
+     * Phía hiện của mình: lượt của mình thì bubble đã ở mép phải nên giờ đứng mép trái — app
+     * đặt ở đâu cho lượt của mình chưa đo được, đây là suy đoán có ghi lại.
+     */
+    const erow = el(`<div class="erow"></div>`);
+    erow.append(node);
+    if (e.timestampMs) erow.append(el(`<time class="row-time">${escapeHtml(shortTime(e.timestampMs))}</time>`));
+    col.append(erow);
   }
   return out;
+}
+
+/**
+ * Ảnh mở TOÀN MÀN HÌNH — map nút `Open image full screen` của app gốc. Overlay gắn lên `<body>`
+ * nên sống qua `paint()`; nền mờ `rgba(0,0,0,.5)` là số đo từ chính `ui-dialog-backdrop` của họ.
+ * Esc hoặc bấm bất kỳ đâu để đóng.
+ */
+function openLightbox(href: string, name: string): void {
+  document.getElementById("gb2-lightbox")?.remove();
+  const box = document.createElement("div");
+  box.id = "gb2-lightbox";
+  box.className = "lightbox";
+  box.innerHTML = `<img src="${escapeHtml(href)}" alt="${escapeHtml(name)}">`;
+  const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") close(); };
+  const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+  box.onclick = close;
+  document.addEventListener("keydown", onKey);
+  document.body.append(box);
 }
 
 function escapeHtml(s: string): string {
@@ -1148,7 +1189,8 @@ function paint(): void {
     roster.append(reveal);
     const bay = reveal.firstElementChild!;
     for (const a of rowsFor(g.items)) {
-    const item = el(`<button type="button" class="bot ${a.id === state.selected ? "active" : ""} ${a.hidden ? "dim" : ""}">
+    // App gốc gắn ", Unread activity" vào chính nhãn của hàng (đo: `aria-label="Marketing Lead, Unread activity"`).
+    const item = el(`<button type="button" class="bot ${a.id === state.selected ? "active" : ""} ${a.hidden ? "dim" : ""}"${a.unread ? ` aria-label="${escapeHtml(a.name)}, Unread activity"` : ""}>
       ${avatarOf(a)}
       <span class="name">${escapeHtml(a.name)}</span>
       ${a.presence.isRunning || a.unread
@@ -1156,7 +1198,7 @@ function paint(): void {
         : `<span class="when">${escapeHtml(shortTime(a.updatedAtMs))}</span>`}
       <span class="preview">${whyOf(a.id) === "transcript" ? "khớp trong nội dung · " : ""}${escapeHtml(preview(a))}</span>
     </button>`);
-      item.onclick = () => { state.selected = a.id; void loadTranscript(); void loadComputer(); void loadRoutines().then(paint); paint(); };
+      item.onclick = () => selectBot(a.id);
       bay.append(item);
     }
   }
@@ -1546,6 +1588,25 @@ async function loadRoutines(): Promise<void> {
  * chỉ ghi cờ `dirty`, vòng lặp nạp lại MỘT lần khi xong — mọi thứ tự về đích đều đúng.
  */
 let transcriptBusy = false, transcriptDirty = false;
+/**
+ * Mở chat một bot — dùng chung cho hàng roster VÀ nhãn tên trên lượt (app gốc: nhãn đó là nút
+ * `Open X's chat`). Mở là ĐỌC: app gốc clear cờ unread khi mở chat (`kickstartAgent`), nên đây
+ * cũng PATCH `unread: false` — không thì chấm xanh ở sidebar không bao giờ tắt trên web.
+ */
+function selectBot(id: string): void {
+  const a = state.agents.find((x) => x.id === id);
+  if (!a) return;
+  state.selected = id;
+  if (a.unread) {
+    state.agents = state.agents.map((x) => (x.id === id ? { ...x, unread: false } : x));
+    api.patchAgent(id, { unread: false }).catch(() => { /* mất mạng thì SSE roster sẽ sửa lại */ });
+  }
+  void loadTranscript();
+  void loadComputer();
+  void loadRoutines().then(paint);
+  paint();
+}
+
 async function loadTranscript(): Promise<void> {
   if (!state.selected) { state.entries = []; paint(); return; }
   if (transcriptBusy) { transcriptDirty = true; return; }

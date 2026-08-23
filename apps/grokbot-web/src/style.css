@@ -243,6 +243,16 @@ button:disabled { opacity: 0.4; cursor: default; }
 .bubble.md pre code { background: none; border: 0; padding: 0; color: var(--fg-1); font-size: 13px; }
 .bubble.md a { color: var(--accent); }
 .bubble.md blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--surface-4); color: var(--fg-2); }
+
+/* ── lightbox ảnh (app: nút `Open image full screen` quanh ảnh đính kèm) ─────
+   Nền mờ rgba(0,0,0,.5) đo từ `ui-dialog-backdrop` của app; cỡ ảnh 92vh là giá trị tạm. */
+.att-open { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; line-height: 0; border-radius: 12px; }
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.5); cursor: zoom-out;
+}
+.lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
 /* Ba chấm "đang tới" — app gốc dùng chúng, KHÔNG dùng bubble rỗng kèm con trỏ.
    Thời lượng chưa đo được (app đang chạy không mở cổng gỡ lỗi), nên đây là giá trị tạm và được ghi
    rõ là tạm: 1,4s một vòng, ba chấm lệch pha 0,16s. Khi mở lại app bằng launcher F2 thì đo `x-ray`
@@ -272,11 +282,23 @@ button:disabled { opacity: 0.4; cursor: default; }
 .run-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 /* `inline-block` + `align-self`: nhãn tên của app là nút bó sát chữ (80×16), không phải khối
    trải hết cột — của mình từng rộng 1240, chỉ thấy được khi so ẢNH chứ không phải so số. */
+/* Nhãn tên là NÚT (app: `sand-group-author` mang aria `Open X's chat`) — reset vỏ button,
+   giữ nguyên số đo chữ 12px thụt 6px đã đo trước đó. */
 .run-author {
-  align-self: flex-start; padding-left: 6px;
+  align-self: flex-start; padding: 0 0 0 6px; border: 0; background: none; cursor: pointer;
   font-size: var(--fs-meta); line-height: 16px; color: var(--fg-2);
 }
+.run-author:hover { color: var(--fg-1); }
 .run.mine .run-author { align-self: flex-end; }
+
+/* Một hàng entry: bubble + giờ. Giờ theo hàng — app gốc `sand-row-timestamp` 12px màu
+   `rgba(252,252,252,.4)` (= --fg-3), opacity 0 mặc định, hiện khi hover, đứng mép PHẢI của hàng.
+   Vị trí cho lượt CỦA MÌNH app chưa đo được — để giờ đứng cạnh trái bubble, ghi rõ là suy đoán. */
+.erow { display: flex; align-items: center; gap: 8px; }
+.row-time { flex: none; opacity: 0; transition: opacity 120ms ease; font-size: 12px; line-height: 12px; color: var(--fg-3); }
+.erow:hover .row-time { opacity: 1; }
+.run.theirs .erow .row-time { margin-left: auto; }
+.run.mine .erow .row-time { order: -1; }
 
 /* Lượt của mình: máng bên phải, mọi thứ dồn phải. */
 .run.mine { flex-direction: row-reverse; }

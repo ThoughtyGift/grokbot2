@@ -586,6 +586,32 @@ trống. Ô nhập tự cao theo nội dung (trần 160px = `max-height` sẵn c
 đo). Nghiệm bằng phím thật qua CDP: Shift+Enter xuống dòng + cao 40→60, Enter gửi + co về 40,
 Enter lúc rỗng không làm gì — 3/3.
 
+**X7.2 — quét control app ↔ web (cùng ngày).** So bảng kiểm kê control của `ui-xray` với web, bốn
+control app có mà web thiếu, làm cả bốn và nghiệm trên stack thật:
+
+| control app | web trước đó | đã map |
+|---|---|---|
+| `sand-group-author` = NÚT `Open X's chat` | div trang trí | button, bấm mở chat bot đó (dùng chung `selectBot`) |
+| chấm `Unread activity` (`sand-kit-status-dot` 8px `rgb(16,132,254)`, aria `"X, Unread activity"`) | chấm đã có, đúng màu — nhưng **không bao giờ tắt** | mở chat là PATCH `unread:false` (app clear qua `kickstartAgent`); nghiệm: dựng `unread:true` → chấm hiện + aria đúng chuỗi → bấm → FE lẫn backend về false |
+| `Open image full screen` quanh ảnh đính kèm | ảnh là trang trí | nút mở lightbox, nền `rgba(0,0,0,.5)` = số đo từ `ui-dialog-backdrop` của họ; Esc/bấm để đóng. Nghiệm qua đường upload thật |
+| `sand-row-timestamp` — giờ theo hàng, 12px `rgba(252,252,252,.4)` (= `--fg-3`), opacity 0 → hover, mép phải | không có | `.erow` + `.row-time`; vị trí cho lượt CỦA MÌNH chưa đo được (app đặt mép phải, mình để cạnh trái bubble — suy đoán có ghi) |
+
+Kéo thả / panel đo lại nguyên bài: `measure:resize` **10/10**, `measure:pane` **10/10**,
+`ui-diff` **165/165 (100%)** cả ba khổ sau toàn bộ thay đổi.
+
+**Còn thiếu, và vì sao chưa làm** (đây là danh sách tính năng, không phải danh sách quên):
+
+- **Plugins** — X5.4, phiên khác đang dựng (`src/plugins.ts` chưa vào git), không chạm.
+- **Tạo luồng** — cần `replyToEntryId` trong `TurnBody`/`Entry` + runtime đưa tin trích vào prompt;
+  `runtime/turn.ts` là file phiên khác đang sửa. Menu đang để mờ kèm lý do, đúng X6.2.
+- **Đính kèm file KHÔNG phải ảnh** — `/v1/attachments` từ chối `not an image` ở backend; app gốc đi
+  đường box-upload riêng cho file thường (xem spike-findings về hai đường đính kèm). Cần route mới,
+  là việc backend X8, không phải việc FE.
+- **Bộ emoji trong picker** — của mình là 8 emoji tự chọn; bộ của họ (6 + `More emoji`) vẫn chưa đo
+  được vì toolbar hover của họ không giữ trạng thái qua CDP (ghi từ X6).
+- BFF `:8788` chết giữa phiên đo (ba cổng kia sống) — khởi động lại thì mọi bài xanh; **chưa rõ vì
+  sao chết**, đáng soi ở lượt sau nếu tái diễn.
+
 Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
 có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau
 là đúng**: web đăng nhập tài khoản riêng (`local|…`), app là chủ máy (`auth0|grokbot2-user`) —
