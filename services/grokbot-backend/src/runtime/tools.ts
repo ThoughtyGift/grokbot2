@@ -15,6 +15,8 @@ import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } fro
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
 import { createAgent, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
 import { DEFAULT_USER } from "../auth.js";
+import { catalog } from "../plugin-catalog.js";
+import { installedIds, installPlugin } from "../plugins.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
 /** Late-bound so the catalog does not import the turn loop. */
@@ -652,6 +654,84 @@ TOOLS.task_v2 = async (arg, ctx) => {
  * another. The turn is detached from the request, so ownerOf(agentId) is the identity — not
  * currentOwner(), which would be the default here.
  */
+/**
+ * `setup_plugin` — install a marketplace plugin and hand it its credentials.
+ *
+ * The client's own setup form was the only way to do this, so a bot that had just read an App ID off
+ * a page had nowhere to put it: it could browse, and it could not finish. This is the missing half.
+ *
+ * Two modes, like `get_mcp_tools`: no argument lists the catalog and what each row needs; a plugin
+ * installs it. Credentials go to the owner's secret store, never into the MCP config and never into
+ * the transcript — the reply names the keys it saved, never their values.
+ *
+ * Deliberately bounded. It can only install ids that are ALREADY in this install's catalog, which
+ * the operator controls, so the worst a hijacked turn can do is add a plugin you had vetted. It is
+ * not auto-approved, so it shows the permission card like the other tools that write.
+ *
+ * Required-vs-optional comes from the same schema the app's form uses. Missing a required one does
+ * NOT install: it answers with the names, so the model asks the person instead of installing
+ * something that cannot work.
+ */
+function setupPlugin(arg: string, owner: string): string {
+  const rows = catalog();
+  const needs = (r: (typeof rows)[number]): { key: string; required: boolean }[] =>
+    Object.keys(r.variablesSchema?.properties ?? {}).map((key) => ({
+      key,
+      required: r.variablesSchema?.required?.includes(key) ?? false,
+    }));
+
+  const installed = new Set(installedIds(owner));
+  const describe = (r: (typeof rows)[number]): string => {
+    const n = needs(r);
+    return `- ${r.name} (${r.displayName})${installed.has(r.id) ? " [đã cài]" : ""}` +
+      (n.length ? ` — cần: ${n.map((c) => c.key + (c.required ? "*" : "")).join(", ")}` : " — không cần gì");
+  };
+
+  const raw = arg.trim();
+  let want = "";
+  let values: Record<string, string> = {};
+  if (raw.startsWith("{")) {
+    try {
+      const d = JSON.parse(raw) as { plugin?: unknown; name?: unknown; id?: unknown; values?: unknown };
+      want = String(d.plugin ?? d.name ?? d.id ?? "").trim();
+      if (d.values && typeof d.values === "object") {
+        for (const [k, v] of Object.entries(d.values as Record<string, unknown>)) {
+          if (typeof v === "string") values[k] = v;
+        }
+      }
+    } catch {
+      return 'setup_plugin cần JSON, ví dụ {"plugin":"lark","values":{"LARK_APP_ID":"…","LARK_APP_SECRET":"…"}}';
+    }
+  } else {
+    want = raw.replace(/^["']|["']$/g, "");
+  }
+
+  if (!want) {
+    return "Plugin cài được (dấu * = bắt buộc):\n" + rows.map(describe).join("\n") +
+      '\nCài bằng TOOL_CALL: setup_plugin({"plugin":"<tên>","values":{"KHOÁ":"giá trị"}})';
+  }
+
+  const key = want.toLowerCase();
+  const row = rows.find((r) => String(r.id) === want || r.name.toLowerCase() === key) ??
+    rows.find((r) => r.displayName.toLowerCase() === key);
+  if (!row) return `Không có plugin "${want}". Có: ${rows.map((r) => r.name).join(", ")}.`;
+
+  const missing = needs(row).filter((c) => c.required && !(values[c.key] ?? "").trim());
+  if (missing.length) {
+    return `"${row.displayName}" cần ${missing.map((c) => c.key).join(", ")} trước khi cài được. ` +
+      "Hỏi người dùng giá trị (hoặc lấy từ trang quản trị của họ), rồi gọi lại kèm chúng trong \"values\".";
+  }
+
+  if (!installPlugin(row.id, owner, values)) return `Không cài được "${row.displayName}".`;
+
+  const saved = Object.keys(values).filter((k) => values[k].trim());
+  return `Đã cài ${row.displayName}` +
+    (row.mcp ? ` — MCP server "${row.mcp.name}" sẵn sàng ở lượt sau` : "") +
+    (saved.length ? `. Đã lưu: ${saved.join(", ")} (giá trị không hiện ở đây)` : "") + ".";
+}
+
+TOOLS.setup_plugin = (arg, ctx) => setupPlugin(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
+
 TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 
@@ -848,7 +928,18 @@ const toolProtocolBase = (): string =>
   BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 /** The tool protocol for one owner — the shared part plus that owner's MCP servers. */
-const toolProtocolFor = (owner: string): string => toolProtocolBase() + mcpProtocolFor(owner);
+/**
+ * The plugin paragraph. Unconditional: the catalog is the same for everyone, and a plugin nobody has
+ * installed yet is exactly the case this tool exists for.
+ */
+const PLUGIN_PROTOCOL =
+  "\n\nPLUGINS: TOOL_CALL: setup_plugin() lists what can be installed and which credentials each " +
+  'needs; TOOL_CALL: setup_plugin({"plugin":"lark","values":{"LARK_APP_ID":"…"}}) installs one. ' +
+  "You may look a credential up in the browser when the person is signed in to that console, but " +
+  "never invent one, and never print a credential back into the chat — pass it in `values` and say " +
+  "which keys you saved. If a required value is missing, ask the person for it.";
+
+const toolProtocolFor = (owner: string): string => toolProtocolBase() + PLUGIN_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
