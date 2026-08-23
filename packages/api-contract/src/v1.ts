@@ -344,6 +344,28 @@ export const SearchHit = Type.Object({
 });
 export type SearchHit = Static<typeof SearchHit>;
 
+/**
+ * Một plugin trong marketplace, kèm trạng thái cài CỦA CHÍNH người đang đăng nhập.
+ *
+ * `kind` phân biệt plugin cài MCP server (có side effect: ghi vào MCP config per-owner) với
+ * plugin chỉ là skill. `installed` theo tài khoản — hai tenant thấy hai trạng thái khác nhau.
+ */
+export const Plugin = Type.Object({
+  id: Type.Integer(),
+  name: Type.String(),
+  displayName: Type.String(),
+  description: Type.String(),
+  kind: Type.Union([Type.Literal("mcp"), Type.Literal("skill")]),
+  installed: Type.Boolean(),
+});
+export type Plugin = Static<typeof Plugin>;
+
+/** PATCH tả trạng thái ĐÍCH (`installed`), không tả hành động — gỡ cái chưa cài là no-op. */
+export const PatchPluginBody = Type.Object({
+  installed: Type.Boolean(),
+});
+export type PatchPluginBody = Static<typeof PatchPluginBody>;
+
 /** Một loại subagent có thể chạy — khay subagent đọc danh sách này. */
 export const SubagentKind = Type.Object({
   id: Type.String(),
@@ -377,6 +399,8 @@ export const ROUTES = [
   { method: "delete", path: "/v1/agents/{id}/routines/{routineId}", res: Type.Object({ routines: Type.Array(Routine) }), summary: "Xoá routine" },
   { method: "get", path: "/v1/search", res: Type.Object({ hits: Type.Array(SearchHit) }), summary: "Tìm bot theo tên VÀ nội dung transcript (?q=)" },
   { method: "get", path: "/v1/subagents", res: Type.Object({ kinds: Type.Array(SubagentKind) }), summary: "Các loại subagent có thể chạy" },
+  { method: "get", path: "/v1/plugins", res: Type.Object({ plugins: Type.Array(Plugin) }), summary: "Marketplace + trạng thái cài theo tài khoản" },
+  { method: "patch", path: "/v1/plugins/{id}", req: PatchPluginBody, res: Type.Object({ plugins: Type.Array(Plugin) }), summary: "Cài / gỡ một plugin — ghi MCP config của chính chủ" },
   { method: "get", path: "/v1/host/sidebar", res: Type.Object({ sections: Type.Array(SidebarSection) }), summary: "Nhóm sidebar" },
   { method: "get", path: "/v1/host/settings", res: Type.Object({ ui: UiPrefs }), summary: "Bố cục của chính người đang đăng nhập" },
   { method: "patch", path: "/v1/host/settings", req: UiPrefs, res: Type.Object({ ui: UiPrefs }), summary: "Ghi bố cục, kẹp theo ngưỡng đo được ở app gốc" },

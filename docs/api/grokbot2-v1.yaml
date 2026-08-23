@@ -950,6 +950,39 @@ components:
           type: string
         toolCount:
           type: integer
+    Plugin:
+      type: object
+      required:
+        - id
+        - name
+        - displayName
+        - description
+        - kind
+        - installed
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        kind:
+          anyOf:
+            - const: mcp
+              type: string
+            - const: skill
+              type: string
+        installed:
+          type: boolean
+    PatchPluginBody:
+      type: object
+      required:
+        - installed
+      properties:
+        installed:
+          type: boolean
 paths:
   /v1/health:
     get:
@@ -2213,6 +2246,126 @@ paths:
                           type: integer
         "401":
           description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/plugins:
+    get:
+      summary: Marketplace + trạng thái cài theo tài khoản
+      tags:
+        - plugins
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - plugins
+                properties:
+                  plugins:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - displayName
+                        - description
+                        - kind
+                        - installed
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        displayName:
+                          type: string
+                        description:
+                          type: string
+                        kind:
+                          anyOf:
+                            - const: mcp
+                              type: string
+                            - const: skill
+                              type: string
+                        installed:
+                          type: boolean
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      security:
+        - bearerAuth: []
+  /v1/plugins/{id}:
+    patch:
+      summary: Cài / gỡ một plugin — ghi MCP config của chính chủ
+      tags:
+        - plugins
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchPluginBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - plugins
+                properties:
+                  plugins:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - displayName
+                        - description
+                        - kind
+                        - installed
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        displayName:
+                          type: string
+                        description:
+                          type: string
+                        kind:
+                          anyOf:
+                            - const: mcp
+                              type: string
+                            - const: skill
+                              type: string
+                        installed:
+                          type: boolean
+        "401":
+          description: thiếu hoặc sai bearer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: không có
           content:
             application/json:
               schema:

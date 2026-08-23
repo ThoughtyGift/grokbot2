@@ -39,7 +39,9 @@ import { subscribe, type DomainEvent } from "./events.js";
 import { foreverBoxStatus } from "./forever-box.js";
 import { interruptAgentRun, isAgentRunning, resolveLocalToolPermission, respondToWidget, sendPrompt } from "./runtime/turn.js";
 import { attachmentHref, toNativeAgent, toNativeEntry, toNativeRoutine, toNativeTranscriptPage } from "./native-map.js";
-import { readAttachmentImage, stageImage } from "./attachments.js";
+import { readAttachmentImage, stageImage, stageFile } from "./attachments.js";
+import { catalog } from "./plugin-catalog.js";
+import { installedIds, installPlugin, uninstallPlugin } from "./plugins.js";
 
 const STARTED_AT = Date.now();
 let lastBusyAtMs = 0;
@@ -169,6 +171,8 @@ function isNativePath(pathname: string): boolean {
     || pathname === "/v1/host/settings"
     || pathname === "/v1/search"
     || pathname === "/v1/subagents"
+    || pathname === "/v1/plugins"
+    || pathname.startsWith("/v1/plugins/")
     || pathname === "/v1/attachments"
   );
 }
@@ -301,8 +305,13 @@ export async function handleNative(
       : "upload.png";
     const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
     if (Buffer.byteLength(dataUrl) > 12 * 1024 * 1024) return json(res, { error: "attachment too large" }, 413, origin);
-    const path = stageImage(dataUrl, filename);
-    if (!path) return json(res, { error: "not an image" }, 400, origin);
+    /*
+     * Ảnh đo được kích thước thì đi đường ảnh; mọi thứ khác (PDF, .md, .txt…) là TỆP — X8.
+     * Trước đây route này trả `not an image` cho tệp thường, trong khi app gốc đính kèm được
+     * mọi loại tệp (đường box-upload). `stageFile` đã có sẵn; chỉ route này chưa dùng nó.
+     */
+    const path = stageImage(dataUrl, filename) ?? stageFile(dataUrl, filename);
+    if (!path) return json(res, { error: "empty attachment" }, 400, origin);
     const sized = readAttachmentImage({ path });
     return json(res, {
       path,
@@ -376,6 +385,38 @@ export async function handleNative(
       toolCount: t.allow.length,
     }));
     return json(res, { kinds }, 200, origin);
+  }
+
+  /*
+   * Plugins cho web (X5.4 FE). Nghiệp vụ đã có từ trước — `catalog()` (marketplace) và
+   * `installPlugin`/`uninstallPlugin` (ghi MCP config CỦA CHÍNH CHỦ, per-owner từ Phase 6) —
+   * đây chỉ là route mỏng, đúng vai của native.ts. App gốc đi cùng nghiệp vụ này qua
+   * ListMarketplacePlugins/InstallUserPlugin bên /gw; hai bề mặt, một trạng thái.
+   */
+  const pluginRows = () => {
+    const mine = new Set(installedIds());
+    return catalog().map((p) => ({
+      id: p.id, name: p.name, displayName: p.displayName, description: p.description,
+      kind: p.mcp ? "mcp" as const : "skill" as const,
+      installed: mine.has(p.id),
+    }));
+  };
+  if (pathname === "/v1/plugins" && verb === "GET") {
+    return json(res, { plugins: pluginRows() }, 200, origin);
+  }
+  const mPlugin = /^\/v1\/plugins\/(\d+)$/.exec(pathname);
+  if (mPlugin && verb === "PATCH") {
+    const parsedBody = parseJson(body);
+    if (!parsedBody.ok) return json(res, { error: parsedBody.error }, 400, origin);
+    if (typeof parsedBody.value.installed !== "boolean") return json(res, { error: "installed (boolean) is required" }, 400, origin);
+    const pluginId = Number(mPlugin[1]);
+    if (parsedBody.value.installed) {
+      if (!installPlugin(pluginId)) return json(res, { error: "unknown plugin" }, 404, origin);
+    } else {
+      // Gỡ một plugin chưa cài là no-op, không phải lỗi — PATCH tả trạng thái ĐÍCH, không tả hành động.
+      uninstallPlugin(pluginId);
+    }
+    return json(res, { plugins: pluginRows() }, 200, origin);
   }
 
   if (pathname === "/v1/host/settings" && verb === "GET") {

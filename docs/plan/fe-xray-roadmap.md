@@ -479,8 +479,15 @@ tức phải gửi một tin — đó là X0.3, và tôi cố ý không tự g�
   danh sách đang chạy. Bốn loại: `browserUse`, `pastConversationExplorer`, `explore`, `shell`.
   `toolCount` là số **tiền tố** tool được phép gọi, không phải số tool cụ thể — `allow` khớp theo
   tiền tố (`browser_` phủ cả bộ), nên đếm tool cụ thể sẽ ra một con số sai mà trông đúng.
-- [ ] X5.3 ✅ đã xong ở X2 · **X5.4 plugins — của phiên khác đang làm** (`src/plugins.ts` chưa vào
-  git), tôi không chạm.
+- [x] X5.3 ✅ đã xong ở X2 · **X5.4 plugins — FE đã nối (2026-08-23).** Nghiệp vụ backend do phiên
+  khác dựng đã vào git (`plugins.ts` + `plugin-catalog.ts`: catalog file/URL, cài = ghi MCP server
+  vào config per-owner của Phase 6). Web thêm đúng hai route mỏng — `GET /v1/plugins` (marketplace
+  + trạng thái cài theo tài khoản) và `PATCH /v1/plugins/{id}` (`installed` tả trạng thái ĐÍCH, gỡ
+  cái chưa cài là no-op) — và một modal: danh sách 11 plugin từ registry, nút Cài/Gỡ dùng luôn
+  danh sách backend trả về như bài học X5.1. Nghiệm trên stack thật: Cài "Memory" → nút thành Gỡ,
+  `.data/mcp/local_trinhdung3110….json` có server `memory`, record cài `[1]` riêng khỏi bản cài
+  `[13]` của chủ máy (cách ly per-owner nhìn thấy được); Gỡ → cả hai file về rỗng. Spec giờ
+  **29 route · 32 schema**. Bố cục modal chưa có số đo phía sau (marketplace của app chưa đo được).
 
 **FE (X5.1) đã nối:** panel Details trước đây là một đoạn chữ giới thiệu routine cộng một nút
 *Tạo routine* không nối gì — tức một nút bấm vào không xảy ra chuyện gì, đúng thứ dự án này cấm.
@@ -601,14 +608,20 @@ Kéo thả / panel đo lại nguyên bài: `measure:resize` **10/10**, `measure:
 
 **Còn thiếu, và vì sao chưa làm** (đây là danh sách tính năng, không phải danh sách quên):
 
-- **Plugins** — X5.4, phiên khác đang dựng (`src/plugins.ts` chưa vào git), không chạm.
-- **Tạo luồng** — cần `replyToEntryId` trong `TurnBody`/`Entry` + runtime đưa tin trích vào prompt;
-  `runtime/turn.ts` là file phiên khác đang sửa. Menu đang để mờ kèm lý do, đúng X6.2.
-- **Đính kèm file KHÔNG phải ảnh** — `/v1/attachments` từ chối `not an image` ở backend; app gốc đi
-  đường box-upload riêng cho file thường (xem spike-findings về hai đường đính kèm). Cần route mới,
-  là việc backend X8, không phải việc FE.
-- **Bộ emoji trong picker** — của mình là 8 emoji tự chọn; bộ của họ (6 + `More emoji`) vẫn chưa đo
-  được vì toolbar hover của họ không giữ trạng thái qua CDP (ghi từ X6).
+- ~~Plugins~~ — **đã xong**, xem X5.4 ở trên (2026-08-23, cùng ngày với mục này).
+- **Tạo luồng** — cần `replyToEntryId` trong `TurnBody`/`Entry` + runtime đưa tin trích vào prompt,
+  VÀ đo UX thread thật của app (muốn đo phải tạo thread trong hội thoại thật của chủ máy — cùng lý
+  do X0.3 vẫn mở). Menu đang để mờ kèm lý do, đúng X6.2.
+- ~~Đính kèm file KHÔNG phải ảnh~~ — **đã xong (X8, 2026-08-23)**: `/v1/attachments` rơi về
+  `stageFile` khi bytes không phải ảnh; tệp TEXT của LƯỢT HIỆN TẠI đưa **nội dung** (trần 32KB)
+  vào history — trước đó model chỉ thấy tên tệp và bịa nội dung từ cái tên. Vòng restore lúc boot
+  cũng hết bỏ rơi file không phải ảnh. Nghiệm thật: gửi `.md` chứa "Mochi dị ứng sữa bò" → hỏi →
+  *"Mèo tên Mochi và bị dị ứng sữa bò."* File binary (PDF…) mới chỉ tới mức chip + tải về, nội
+  dung chưa vào prompt.
+- ~~Bộ emoji trong picker~~ — **đã sửa**: ghi chú "chưa đo được" trong code là SAI từ đầu — X0.2
+  đã đo (hộp 246×44: 👍 👎 ❤️ 😂 🎉 😮 + `More emoji`). Có số đo trong tay mà không dùng. Giờ đúng
+  bộ 6 + `More emoji` mở lưới mở rộng (nội dung lưới là lựa chọn của mình, phần đo được là 6 + cấu
+  trúc).
 - BFF `:8788` chết giữa phiên đo (ba cổng kia sống) — khởi động lại thì mọi bài xanh; **chưa rõ vì
   sao chết**, đáng soi ở lượt sau nếu tái diễn.
 

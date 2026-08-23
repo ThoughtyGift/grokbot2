@@ -25,6 +25,7 @@ import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
   isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget,
 } from "../conversation/index.js";
+import { stagedTextPreview } from "../attachments.js";
 import {
   TOOLS, isKnownTool, isParallelSafe, toolProtocolFor, turnHooks, attachmentsOf, readImageAttachment,
 } from "./tools.js";
@@ -634,7 +635,16 @@ export function sendPrompt(args: SendArgs) {
       const from = e.kind === "message" ? e.fromAgent : undefined;
       // An attachment entry has no text; name it so the turn it belongs to still exists in the
       // history. The bytes themselves ride the top-level `image` field, not this line.
-      const body = textOf(e) || attachmentLineOf(e, freshAttIds.has(e.id));
+      let body = textOf(e) || attachmentLineOf(e, freshAttIds.has(e.id));
+      // A TEXT file attached THIS turn carries its content into the history (X8). The name alone
+      // told the model nothing: "tóm tắt tệp này" got an answer invented from the file name.
+      // Images ride the `image` field; older attachments stay name-only — re-inlining them every
+      // turn would balloon the prompt with bytes the model has already seen.
+      if (freshAttIds.has(e.id)) {
+        const url = e.kind === "message" ? (e as { message?: { url?: string } }).message?.url : undefined;
+        const inline = url ? stagedTextPreview(url) : null;
+        if (inline) body += `${NEWLINE}Nội dung tệp:${NEWLINE}${inline.text}${inline.truncated ? `${NEWLINE}[…đã cắt: tệp dài hơn 32KB]` : ""}`;
+      }
       return {
         role: e.kind === "message" && e.role === "user" ? "user" : "assistant",
         content: from ? `[tin nhắn từ bot ${from.name}] ${body}` : body,

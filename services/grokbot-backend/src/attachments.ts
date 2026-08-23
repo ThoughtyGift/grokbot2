@@ -53,9 +53,10 @@ function diskPath(virtual: string): string {
         const bytes = readFileSync(join(DISK, name));
         // Mime comes from the bytes, not from a constant: staging now accepts JPEG/GIF/WebP, and
         // restoring them all as image/png would hand the renderer a data URL it cannot decode.
+        // Non-image files (X8) restore too — skipping them meant a restart between staging and
+        // sending silently lost the attachment while its bytes still sat on disk.
         const size = imageSize(bytes);
-        if (size == null) continue;
-        store.set(virtual, { bytes, ...size });
+        store.set(virtual, size ? { bytes, ...size } : { bytes, mime: "application/octet-stream", width: 0, height: 0 });
         const n = Number(/^(\d+)-/.exec(name)?.[1] ?? 0);
         if (n >= seq) seq = n + 1;
       } catch { /* skip unreadable */ }
@@ -219,6 +220,21 @@ export function stageFile(dataUrl: string, fileName: string, mimeType?: string):
     try { unlinkSync(diskPath(oldest)); } catch { /* already gone */ }
   }
   return path;
+}
+
+/**
+ * Nội dung TEXT của một tệp đã stage — để lượt hiện tại đưa vào history của model.
+ *
+ * Sync có chủ ý: `sendPrompt` dựng history đồng bộ, và tệp của LƯỢT NÀY vừa được stage qua
+ * `/v1/attachments` nên bytes chắc chắn còn trong store; đường box (async) là của tệp bot tự
+ * viết, không phải của tệp người dùng vừa gửi. Trần 32KB: đủ cho tài liệu thường, và một tệp
+ * lớn hơn thì phần đầu + ghi chú bị cắt vẫn hơn là chỉ mỗi cái tên.
+ */
+export function stagedTextPreview(path: string, cap = 32 * 1024): { text: string; truncated: boolean } | null {
+  const hit = store.get(path);
+  if (hit == null) return null;
+  if (!TEXT_EXTENSIONS.has(extensionOf(path)) || looksBinary(hit.bytes.subarray(0, 4096))) return null;
+  return { text: hit.bytes.subarray(0, cap).toString("utf8"), truncated: hit.bytes.length > cap };
 }
 
 export function readAttachmentImage(args: { path?: unknown }): { dataUrl: string; width: number; height: number } | null {

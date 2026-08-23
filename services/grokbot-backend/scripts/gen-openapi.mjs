@@ -33,6 +33,7 @@ const NAMED = [
   "CreateAgentBody", "PatchAgentBody", "TurnBody", "AvatarBody", "ReactionBody",
   "PermissionBody", "WidgetReplyBody", "UiPrefs",
   "Routine", "RoutineRun", "CreateRoutineBody", "PatchRoutineBody", "SearchHit", "SubagentKind",
+  "Plugin", "PatchPluginBody",
 ];
 
 /*

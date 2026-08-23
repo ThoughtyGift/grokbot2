@@ -20,11 +20,12 @@ import type {
   CreateRoutineBody,
   PatchRoutineBody,
   SearchHit,
+  Plugin,
   Widget as NativeWidget,
   WidgetOption as NativeWidgetOption,
 } from "@grokbot2/api-contract";
 
-export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection, UiPrefs, Routine, SearchHit };
+export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection, UiPrefs, Routine, SearchHit, Plugin };
 
 // Persisted so a reload keeps the account signed in (multi-tenant Phase 4). The token is a signed
 // user JWT from /v1/login; every /v1 call carries it, and the backend derives the owner from it.
@@ -92,6 +93,12 @@ export const createAgent = (name: string) =>
 export const deleteAgent = (id: string) => fetch(`/v1/agents/${id}`, { method: "DELETE", headers: headers() }).then(parse);
 // Kiểu lấy từ hợp đồng, không tự khai lại: bản tự khai thiếu `notificationsEnabled` nên trang
 // settings không ghi được toggle Notifications dù backend đã nhận nó từ lâu.
+export const listPlugins = () =>
+  fetch("/v1/plugins", { headers: headers() }).then((r) => parse<{ plugins: Plugin[] }>(r));
+export const patchPlugin = (id: number, installed: boolean) =>
+  fetch(`/v1/plugins/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ installed }) })
+    .then((r) => parse<{ plugins: Plugin[] }>(r));
+
 export const patchAgent = (id: string, body: PatchAgentBody) =>
   fetch(`/v1/agents/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify(body) })
     .then((r) => parse<NativeAgent>(r));

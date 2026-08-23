@@ -2,7 +2,7 @@ import "./style.css";
 import * as api from "./api";
 import type { AnimatedAvatar, BotMood } from "./avatar";
 import { AVATAR_COLORS, AVATAR_EXPRESSIONS, AVATAR_SHAPES, TILE_INK, animateAvatar, botAvatarPng, botAvatarSvg, pickFor } from "./avatar";
-import type { NativeAgent, NativeEntry, ComputerStatus, Routine, SidebarSection } from "./api";
+import type { NativeAgent, NativeEntry, ComputerStatus, Routine, SidebarSection, Plugin } from "./api";
 import { mdToHtml } from "./markdown";
 
 const root = document.querySelector("#app")!;
@@ -27,6 +27,9 @@ const state = {
   paneOpen: true,
   /** Menu tài khoản ở đáy sidebar (app gốc: `Open account menu`). */
   accountOpen: false,
+  /** Panel Plugins (X5.4). `plugins: null` = chưa tải lần nào — phân biệt với marketplace rỗng. */
+  pluginsOpen: false,
+  plugins: null as Plugin[] | null,
   /** Ô Search: app gốc để nó là NÚT, bấm mới thành ô nhập — nên trạng thái này là của họ, không phải của tôi. */
   searchOpen: false,
   /**
@@ -314,11 +317,14 @@ function renderEntry(e: NativeEntry): HTMLElement {
  * (`reactToMessage`, một trong 120 lệnh, đã lưu toggle trên entry từ lâu). Reply và More chưa có
  * contract nào bên mình; vẽ ra hai nút bấm vào không làm gì thì tệ hơn là không vẽ.
  *
- * Bộ emoji dưới đây là **lựa chọn của mình**, không phải bộ của hãng: cú bấm vào picker của họ
- * không lọt (toolbar của họ là một node dùng chung, hover qua CDP không giữ trạng thái), nên bộ
- * của họ chưa đo được. Đây là chỗ duy nhất trong phần này không có số đo phía sau.
+ * Bộ emoji ĐÚNG của hãng, đo ở X0.2 (`x-ray --menu`): hộp `Add reaction` 246×44 gồm sáu emoji
+ * 👍 👎 ❤️ 😂 🎉 😮 cộng một mục `More emoji`. Ghi chú cũ ở đây từng nói "bộ của họ chưa đo được"
+ * — sai: chính X0.2 đã đo rồi mà tôi dùng bộ tự chọn, tức có số đo trong tay mà không dùng.
+ * `More emoji` bên họ mở picker đầy đủ của hệ; bên mình mở lưới mở rộng — nội dung lưới đó là
+ * lựa chọn của mình, phần đo được là sáu emoji đầu và cấu trúc "6 + More".
  */
-const REACTIONS = ["👍", "❤️", "😄", "🎉", "🙏", "👀", "✅", "🚀"];
+const REACTIONS = ["👍", "👎", "❤️", "😂", "🎉", "😮"];
+const MORE_REACTIONS = ["🙏", "👀", "✅", "🚀", "😢", "😡", "🤔", "💯", "🔥", "🥳", "😴", "🤖"];
 
 /** Tên tám hình. Id trong `bloub` là tiếng Pháp; nhãn hiện ra là tiếng Việt. */
 const SHAPE_LABELS: Record<string, string> = {
@@ -397,11 +403,18 @@ function messageActions(e: NativeEntry): HTMLElement {
     <div class="more-menu" hidden role="menu"></div>
   </div>`);
   const menu = bar.querySelector<HTMLElement>(".react-menu")!;
-  for (const emoji of REACTIONS) {
+  const addPick = (host: HTMLElement, emoji: string) => {
     const pick = el(`<button type="button" role="menuitem" aria-label="reaction ${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`);
     pick.onclick = (ev) => { ev.stopPropagation(); menu.hidden = true; void toggleReaction(e.id, emoji); };
-    menu.append(pick);
-  }
+    host.append(pick);
+  };
+  for (const emoji of REACTIONS) addPick(menu, emoji);
+  // `More emoji` — mục thứ bảy đúng như hộp 246×44 của app; bấm mở lưới mở rộng ngay trong menu.
+  const moreEmoji = el(`<button type="button" role="menuitem" class="more-emoji" aria-label="More emoji">＋</button>`);
+  const grid = el(`<div class="react-grid" hidden></div>`);
+  for (const emoji of MORE_REACTIONS) addPick(grid, emoji);
+  moreEmoji.onclick = (ev) => { ev.stopPropagation(); grid.hidden = !grid.hidden; };
+  menu.append(moreEmoji, grid);
   wireMoreMenu(bar, e);
 
   /*
@@ -1019,11 +1032,7 @@ function paint(): void {
         : `<button type="button" class="search-btn" data-act="search" aria-label="Search"><span class="ico">⌕</span><span class="lbl">Search</span></button>`}
       <div class="roster"></div>
       <div class="side-foot">
-        <!-- disabled có chủ ý: X5.4 chưa dựng. Một nút bấm vào không làm gì thì tệ hơn một nút
-             mờ có nói lý do. Không dùng dấu backtick trong comment ở đây: nó đóng luôn
-             template literal của paint(), và lỗi hiện ra là TS1005 ở dòng khác. -->
-        <button type="button" class="foot-row" data-act="plugins" aria-label="Plugins" disabled
-                title="Plugins — chưa dựng (X5.4)">
+        <button type="button" class="foot-row" data-act="plugins" aria-label="Plugins" aria-expanded="${state.pluginsOpen}">
           <span class="ico">⊞</span><span class="lbl">Plugins</span>
         </button>
         ${state.accountOpen ? `<div class="account-menu" role="menu">
@@ -1058,7 +1067,7 @@ function paint(): void {
       <div class="transcript"></div>
       <form class="composer">
         <div class="pending" hidden></div>
-        <label class="attach" title="gửi ảnh">+<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ${selected ? "" : "disabled"} /></label>
+        <label class="attach" title="gửi tệp">+<input type="file" ${selected ? "" : "disabled"} /></label>
         <textarea name="q" rows="1" aria-label="Prompt" placeholder="${selected ? `Nhắn ${escapeHtml(selected.name)}` : "chọn một bot"}" ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
         ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
         ${state.draft.trim() && !selected?.presence.isRunning
@@ -1122,6 +1131,28 @@ function paint(): void {
         </section>
       </div>
     </aside>
+    ${state.pluginsOpen ? `<div class="plugins-modal" role="dialog" aria-label="Plugins">
+      <div class="plugins-card">
+        <div class="plugins-head">
+          <span class="title">Plugins</span>
+          <button type="button" class="icon-btn" data-act="plugins-close" aria-label="Close plugins">×</button>
+        </div>
+        ${state.plugins === null
+          ? `<p class="empty-note">đang tải…</p>`
+          : state.plugins.length
+            ? `<ul class="plugin-list">${state.plugins.map((p) => `
+                <li class="plugin-row">
+                  <div class="plugin-main">
+                    <span class="nm">${escapeHtml(p.displayName)}<span class="kind">${p.kind}</span></span>
+                    <span class="desc">${escapeHtml(p.description)}</span>
+                  </div>
+                  <button type="button" class="btn${p.installed ? "" : " primary"}" data-act="plugin-toggle" data-plugin="${p.id}">
+                    ${p.installed ? "Gỡ" : "Cài"}
+                  </button>
+                </li>`).join("")}</ul>`
+            : `<p class="empty-note">marketplace trống — cấu hình GROKBOT2_PLUGIN_REGISTRY để nạp danh sách</p>`}
+      </div>
+    </div>` : ""}
   </div>`));
 
   const roster = root.querySelector(".roster")!;
@@ -1247,6 +1278,32 @@ function paint(): void {
   root.querySelectorAll<HTMLButtonElement>("[data-act=settings]").forEach((b) => {
     b.onclick = () => { state.paneOpen = true; state.panePage = "settings"; saveUi(); paint(); };
   });
+  root.querySelector<HTMLButtonElement>("[data-act=plugins]")?.addEventListener("click", async () => {
+    state.pluginsOpen = !state.pluginsOpen;
+    paint();
+    // Tải lười, một lần: mở panel mới cần danh sách, và `null` (chưa tải) khác mảng rỗng (trống thật).
+    if (state.pluginsOpen && state.plugins === null) {
+      try { state.plugins = (await api.listPlugins()).plugins; state.error = ""; }
+      catch (e) { state.error = e instanceof Error ? e.message : String(e); }
+      paint();
+    }
+  });
+  root.querySelector<HTMLButtonElement>("[data-act=plugins-close]")?.addEventListener("click", () => {
+    state.pluginsOpen = false; paint();
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-act=plugin-toggle]").forEach((b) => {
+    b.onclick = async () => {
+      const id = Number(b.dataset.plugin);
+      const cur = state.plugins?.find((p) => p.id === id);
+      if (!cur) return;
+      // Dùng LUÔN danh sách backend trả về, không tự lật cờ ở FE — cùng lý do với routine (X5.1):
+      // app gốc và web dùng chung một trạng thái cài, bản sao tự suy sẽ lệch.
+      try { state.plugins = (await api.patchPlugin(id, !cur.installed)).plugins; state.error = ""; }
+      catch (e) { state.error = e instanceof Error ? e.message : String(e); }
+      paint();
+    };
+  });
+
   // `new` có hai chỗ: nút + ở đầu sidebar và mục trong menu tài khoản. Nối cả hai.
   root.querySelectorAll<HTMLButtonElement>("[data-act=new]").forEach((b) => { b.onclick = async () => {
     const name = prompt("Tên bot?", "Claude");

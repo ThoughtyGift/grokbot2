@@ -253,6 +253,36 @@ button:disabled { opacity: 0.4; cursor: default; }
   background: rgba(0, 0, 0, 0.5); cursor: zoom-out;
 }
 .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
+
+/* ── Plugins (X5.4 FE) ───────────────────────────────────────────────────────
+   App gốc mở marketplace như một VIEW; bên web là modal — bố cục này chưa có số đo phía sau
+   (marketplace của app chưa đo được), chỉ có token dùng chung. Nền mờ .5 theo ui-dialog-backdrop. */
+.plugins-modal {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+.plugins-card {
+  width: min(560px, 92vw); max-height: 80vh; overflow: auto;
+  padding: 16px; border-radius: var(--r-card);
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.plugins-head { display: flex; align-items: center; margin-bottom: 12px; }
+.plugins-head .title { flex: 1; font-size: var(--fs-title); font-weight: 600; }
+.plugin-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.plugin-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--r-row); background: var(--surface-2);
+}
+.plugin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plugin-main .nm { font-size: var(--fs-lg); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.plugin-main .kind {
+  font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: var(--r-pill);
+  background: var(--surface-3); color: var(--fg-2); font-weight: 400;
+}
+.plugin-main .desc { font-size: var(--fs-meta); color: var(--fg-2); }
+.plugin-row .btn.primary { background: var(--accent); color: #fff; }
 /* Ba chấm "đang tới" — app gốc dùng chúng, KHÔNG dùng bubble rỗng kèm con trỏ.
    Thời lượng chưa đo được (app đang chạy không mở cổng gỡ lỗi), nên đây là giá trị tạm và được ghi
    rõ là tạm: 1,4s một vòng, ba chấm lệch pha 0,16s. Khi mở lại app bằng launcher F2 thì đo `x-ray`
@@ -379,13 +409,19 @@ button:disabled { opacity: 0.4; cursor: default; }
 .msg-actions .act::before { content: "☺"; }
 .msg-actions .act:hover { background: var(--row-hover); color: var(--fg); }
 
+/* Hộp reaction của app đo được 246×44 (X0.2): 6 emoji + `More emoji` trên MỘT hàng.
+   `flex-wrap` chỉ dành cho lưới mở rộng bên dưới. */
 .react-menu {
   position: absolute; top: 26px; right: 0; z-index: 5;
-  display: flex; gap: 2px; padding: 4px;
+  display: flex; flex-wrap: wrap; gap: 2px; padding: 4px;
+  max-width: 246px;
   border-radius: var(--r-card); background: var(--surface-2);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
   animation: bubble-in var(--t-fast) var(--e-out);
 }
+.react-menu .react-grid { display: flex; flex-wrap: wrap; gap: 2px; width: 100%; }
+.react-menu .react-grid[hidden] { display: none; }
+.react-menu .more-emoji { color: var(--fg-2); font-size: 14px; }
 .react-menu[hidden] { display: none; }
 .react-menu button {
   width: 28px; height: var(--h-control); border-radius: var(--r-ctl); font-size: 16px; line-height: 1;
