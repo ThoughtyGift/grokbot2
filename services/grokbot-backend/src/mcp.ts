@@ -21,7 +21,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
-import { oauthAccessToken } from "./mcp-oauth.js";
+import { oauthAccessToken, recordRefusal, refusalFor } from "./mcp-oauth.js";
 import { currentOwner } from "./request-context.js";
 import { DEFAULT_USER } from "./auth.js";
 
@@ -256,7 +256,11 @@ async function start(name: string, owner: string): Promise<Live> {
 
   s.transport = spec.url
     ? httpTransport(name, spec.url, headers, spec.type, deliver, failAll,
-        (why) => { if (why) authRefused.set(key, why); else authRefused.delete(key); })
+        (why) => {
+          if (why) authRefused.set(key, why); else authRefused.delete(key);
+          // Also on disk: a restart must not forget that a server wants a sign-in.
+          recordRefusal(name, why, owner);
+        })
     : stdioTransport(name, spec, resolved, deliver, failAll);
 
   live.set(key, s);
@@ -731,7 +735,7 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   // Authenticate button. Only ever reported because the SERVER refused, never guessed from a config
   // that merely looks incomplete — an Authenticate button on a server that does not want OAuth would
   // just fail, and a button that fails is worse than no button.
-  const refused = authRefused.get(`${owner}::${name}`);
+  const refused = authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner);
   if (refused) return { status: "needsAuth", detail: refused, toolCount: 0 };
 
   const s = live.get(`${owner}::${name}`);

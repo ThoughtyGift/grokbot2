@@ -168,3 +168,39 @@ test("with no port at all they answer empty, exactly as before they were handled
     assert.equal(r.length, 0, `${m} must not invent an answer without a store`);
   }
 });
+
+// ── CheckHttpMcpStatus: what the pane reads to decide "Authenticate" or "Error" ──
+
+test("CheckHttpMcpStatus turns a needsAuth server into requires_auth, not an error", () => {
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 1), pbVar(1, 2)),
+    mcpServers: [
+      { name: "remote", url: SERVER, status: "needsAuth", hasToken: false },
+      { name: "local", command: "node", status: "connected" },
+    ],
+  };
+  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  assert.equal(rows.length, 1, "a stdio row is not this RPC's business");
+  assert.equal(readVarint(rows[0], 1), 1, "id");
+  assert.equal(readVarint(rows[0], 2), 1, "is_available — waiting on auth is not broken");
+  assert.equal(readVarint(rows[0], 3), 1, "requires_auth — this is what renders Authenticate");
+  assert.equal(readVarint(rows[0], 6), 0, "has_valid_token");
+});
+
+test("a signed-in server reports a valid token and stops asking", () => {
+  const ctx = { user: null, body: message(pbVar(1, 1)), mcpServers: [{ name: "r", url: SERVER, status: "connected", hasToken: true }] };
+  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  assert.equal(readVarint(rows[0], 3), 0, "requires_auth false");
+  assert.equal(readVarint(rows[0], 6), 1, "has_valid_token true");
+});
+
+test("no auth_url is invented — the client builds it with its own PKCE verifier", () => {
+  const ctx = { user: null, body: message(pbVar(1, 1)), mcpServers: [{ name: "r", url: SERVER, status: "needsAuth" }] };
+  assert.equal(readString(readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1)[0], 4), "");
+});
+
+test("an empty request asks about every configured server", () => {
+  const ctx = { user: null, body: message(), mcpServers: [{ name: "a", url: SERVER, status: "needsAuth" }, { name: "b", url: "https://x.test/mcp", status: "connected" }] };
+  assert.equal(readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1).length, 2);
+});

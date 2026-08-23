@@ -10,8 +10,8 @@ import { config } from "./config.js";
 import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";
-import { oauthPortFor } from "./mcp-oauth.js";
-import { mcpServers as mcpServersFor } from "./mcp.js";
+import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
+import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
@@ -154,7 +154,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
     mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))
-      .map(([name, spec]) => ({ name, command: spec.command, args: spec.args, url: (spec as { url?: string }).url })),
+      .map(([name, spec]) => {
+        const url = (spec as { url?: string }).url;
+        return {
+          name, command: spec.command, args: spec.args, url,
+          // For CheckHttpMcpStatus: the pane needs to tell "wants a sign-in" from "broken", and an
+          // http row with no status at all is drawn as an error over a connector merely awaiting auth.
+          status: mcpServerStatus(name, ownerFromAuth(req.headers.authorization)).status,
+          hasToken: url ? oauthAccessToken(url, ownerFromAuth(req.headers.authorization)) != null : false,
+        };
+      }),
     catalog: pluginCatalog(),
   }));
   if (rpc) {

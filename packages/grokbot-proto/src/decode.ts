@@ -91,3 +91,41 @@ export function readStringMap(buf: Buffer, fieldNo: number): Record<string, stri
   }
   return out;
 }
+
+/**
+ * Every value of a repeated varint field.
+ *
+ * Handles both encodings, because a sender may choose either: the field repeated once per value, and
+ * the packed form where one length-delimited run holds them all. Reading only the unpacked spelling
+ * would return nothing for a packed `server_ids` and silently look like "no servers asked for".
+ */
+export function readVarints(buf: Buffer, fieldNo: number): number[] {
+  const out: number[] = [];
+  for (const f of walk(buf)) {
+    if (f.no !== fieldNo) continue;
+    if (f.wire === 0) {
+      let v = 0, shift = 0, i = f.at;
+      for (;;) {
+        const b = buf[i++];
+        v += (b & 0x7f) * 2 ** shift;
+        if ((b & 0x80) === 0 || i >= buf.length) break;
+        shift += 7;
+      }
+      out.push(v);
+    } else if (f.wire === 2) {
+      let i = f.at;
+      const end = f.at + f.len;
+      while (i < end) {
+        let v = 0, shift = 0;
+        for (;;) {
+          const b = buf[i++];
+          v += (b & 0x7f) * 2 ** shift;
+          if ((b & 0x80) === 0 || i >= end) break;
+          shift += 7;
+        }
+        out.push(v);
+      }
+    }
+  }
+  return out;
+}

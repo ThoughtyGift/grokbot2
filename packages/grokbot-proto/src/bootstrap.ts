@@ -8,9 +8,9 @@
  */
 import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
 import { pbStruct, readStringMapField, type StructValue } from "./struct.js";
-import { readString, readStrings, readVarint, readMessages } from "./decode.js";
+import { readString, readStrings, readVarint, readVarints, readMessages } from "./decode.js";
 import {
-  storePendingStateResponse, getPendingStateResponse, completeResponse, storeTokenResponse,
+  storePendingStateResponse, getPendingStateResponse, completeResponse, storeTokenResponse, httpMcpStatusResponse,
   getTokensResponse, validateTokensResponse, refreshLockBeginResponse, type OAuthPort,
 } from "./oauth.js";
 
@@ -44,6 +44,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "DeleteMcpOAuthToken",
   "McpOAuthRefreshLockBegin",
   "McpOAuthRefreshLockRelease",
+  "CheckHttpMcpStatus",
   "UninstallUserPlugin",
   "ListMarketplaces",
   "GetAvailableMcpServers",
@@ -103,7 +104,13 @@ export interface RpcCtx {
    * The MCP servers configured for the caller, from their own config (backend-owned, per-user under
    * multi-tenant Phase 6). Absent ⇒ `GetAvailableMcpServers` answers an empty list, as before.
    */
-  mcpServers?: { name: string; command?: string; args?: string[]; url?: string }[];
+  mcpServers?: {
+    name: string; command?: string; args?: string[]; url?: string;
+    /** How the server is actually doing — `CheckHttpMcpStatus` answers from this, not from a probe. */
+    status?: string;
+    /** Whether a sign-in is stored for it, so the pane can tell "needs auth" from "signed in". */
+    hasToken?: boolean;
+  }[];
   /**
    * The plugin catalog, loaded by the backend (file or URL — see services/.../plugin-catalog.ts).
    * Absent ⇒ the two built-in rows, so a caller that supplies nothing behaves as before.
@@ -176,6 +183,39 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
     return message(pbMsg(1, userPluginInstall(row)));
   },
 
+
+  /**
+   * `CheckHttpMcpStatusRequest`: 1 server_ids (repeated int32) · 2 oauth_redirect_uri · … · 8 account_key
+   * Response: 1 statuses — ServerStatus{1 id · 2 is_available · 3 requires_auth · 4 auth_url · 5 error · 6 has_valid_token}
+   *
+   * This is where the Plugins pane learns whether a REMOTE server wants a sign-in. Answering it
+   * empty — which is what an unhandled RPC does — left the app with no status for an http row, and
+   * it drew "Error" over a connector that was merely waiting to be authorised.
+   *
+   * Answered from what the backend already knows, never from a fresh probe: these builders are
+   * synchronous, and the status the connection attempt recorded is better evidence than a second
+   * request would be. `auth_url` is left empty deliberately — the client runs its own discovery and
+   * builds the authorize URL with its own PKCE verifier, so a URL invented here would be one it
+   * cannot complete.
+   *
+   * `server_ids` index the same list `GetAvailableMcpServers` numbers, 1-based.
+   */
+  CheckHttpMcpStatus: (ctx) => {
+    const all = ctx.mcpServers ?? [];
+    const body = ctx.body ? unframe(ctx.body) : null;
+    const wanted = body ? readVarints(body, 1) : [];
+    const ids = wanted.length ? wanted : all.map((_, i) => i + 1);
+    return httpMcpStatusResponse(ids.flatMap((id) => {
+      const s = all[id - 1];
+      if (!s?.url) return [];          // stdio rows are not this RPC's business
+      return [{
+        id,
+        isAvailable: s.status !== "error",
+        requiresAuth: s.status === "needsAuth",
+        hasValidToken: Boolean(s.hasToken),
+      }];
+    }));
+  },
 
   // ── MCP OAuth ───────────────────────────────────────────────────────────────
   //
