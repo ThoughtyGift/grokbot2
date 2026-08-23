@@ -39,6 +39,14 @@ export interface PluginEntry {
   name: string;
   displayName: string;
   description: string;
+  /**
+   * The service this row connects, when its MCP server fronts several.
+   *
+   * Six rows here install the same Zernio endpoint, so the connector cannot say which service the
+   * person meant. This is what becomes an account row in the Plugins pane, with its own connect
+   * button — see social-connect.ts.
+   */
+  platform?: string;
   /** The MCP server this plugin installs. `command`/`args`/`env` are install spec, never wire data. */
   mcp?: {
     name: string;
@@ -114,6 +122,11 @@ function parse(raw: unknown): PluginEntry[] {
         ? { skill: { ...p.skill, description: p.skill.description ?? "" } }
         : {}),
       ...(typeof p.logoUrl === "string" && /^https:\/\//i.test(p.logoUrl) ? { logoUrl: p.logoUrl } : {}),
+      // Lower-cased and stripped: it becomes an `account_key` on the wire and is matched against
+      // what the connector reports, so "Instagram" and "instagram" must not be two platforms.
+      ...(typeof p.platform === "string" && /^[a-z0-9_]+$/i.test(p.platform)
+        ? { platform: p.platform.toLowerCase() }
+        : {}),
       ...(p.credentials && typeof p.credentials === "object" ? { credentials: p.credentials } : {}),
     }];
   });

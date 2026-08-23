@@ -718,16 +718,41 @@ export async function callMcpTool(arg: string, owner: string = currentOwner()): 
     if (s.tools.length && !s.tools.some((t) => t.name === tool)) {
       return `(server "${server}" không có tool "${tool}"; có: ${s.tools.map((t) => t.name).join(", ")})`;
     }
-    const r = await rpc(s, "tools/call", { name: tool, arguments: withSecrets(args, owner) });
-    // MCP returns content blocks; the model only needs the text.
-    const text = Array.isArray(r?.content)
-      ? r.content.map((c: any) => (typeof c?.text === "string" ? c.text : `[${c?.type ?? "block"}]`)).join("\n")
-      : JSON.stringify(r);
-    const capped = text.length > 6000 ? `${text.slice(0, 6000)}\n… (cắt bớt)` : text;
-    return r?.isError ? `MCP lỗi: ${capped}` : capped;
+    return await invoke(s, tool, args, owner);
   } catch (e) {
     return `MCP lỗi: ${(e as Error).message}`;
   }
+}
+
+/**
+ * Call a tool the server did not advertise.
+ *
+ * `tools/list` is not always the whole surface: Zernio answers `connect_get_connect_url` — the call
+ * that hands somebody a link to connect their Instagram — while leaving it out of the list, and the
+ * guard above turned that into "no such tool". The guard is right for the model, where an unlisted
+ * name is almost always a typo and the list is the useful reply. It is wrong for backend code that
+ * has already used the tool and knows it is there, so that code gets its own door.
+ *
+ * Not a way around the allowlist and not reachable by the model: the caller names the tool in source.
+ */
+export async function callUnlistedTool(
+  server: string, tool: string, args: Record<string, unknown>, owner: string = currentOwner(),
+): Promise<string> {
+  try {
+    return await invoke(await start(server, owner), tool, args, owner);
+  } catch (e) {
+    return `MCP lỗi: ${(e as Error).message}`;
+  }
+}
+
+async function invoke(s: Live, tool: string, args: unknown, owner: string): Promise<string> {
+  const r = await rpc(s, "tools/call", { name: tool, arguments: withSecrets(args, owner) });
+  // MCP returns content blocks; the model only needs the text.
+  const text = Array.isArray(r?.content)
+    ? r.content.map((c: any) => (typeof c?.text === "string" ? c.text : `[${c?.type ?? "block"}]`)).join("\n")
+    : JSON.stringify(r);
+  const capped = text.length > 6000 ? `${text.slice(0, 6000)}\n… (cắt bớt)` : text;
+  return r?.isError ? `MCP lỗi: ${capped}` : capped;
 }
 
 /** Startup line. Names only — never the env or args, which carry tokens. */

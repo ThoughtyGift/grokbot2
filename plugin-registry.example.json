@@ -281,7 +281,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "facebook"
     },
     {
       "id": 22,
@@ -293,7 +294,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "instagram"
     },
     {
       "id": 23,
@@ -305,7 +307,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "tiktok"
     },
     {
       "id": 24,
@@ -317,7 +320,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "youtube"
     },
     {
       "id": 25,
@@ -329,7 +333,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "linkedin"
     },
     {
       "id": 26,
@@ -341,7 +346,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "platform": "x"
     }
   ]
 }

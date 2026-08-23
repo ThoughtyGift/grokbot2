@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bootstrapResponses } from "./bootstrap.js";
+import { bootstrapResponses, availableMcpServers } from "./bootstrap.js";
 import { message, pbStr, pbVar, pbMsg } from "./encode.js";
 import { readString, readStrings, readVarint, readMessages } from "./decode.js";
 import type { OAuthPort, PendingState, StoredToken } from "./oauth.js";
@@ -238,4 +238,127 @@ test("a stdio server still comes through unchanged", () => {
   assert.equal(readString(row, 5), "stdio");
   assert.equal(readString(row, 6), "npx");
   assert.deepEqual(readStrings(row, 7), ["-y", "pkg"]);
+});
+
+// ── Per-platform accounts: one connector, a button for each service behind it ────
+
+test("a connector with platforms sends one account row each, not a single default", () => {
+  const r = availableMcpServers([{
+    name: "zernio", url: SERVER, hasToken: true,
+    accounts: [{ key: "facebook", hasToken: true }, { key: "instagram", hasToken: false }],
+  }]);
+  const accounts = readMessages(readMessages(r, 1)[0], 17);
+  assert.deepEqual(accounts.map((a) => readString(a, 1)), ["facebook", "instagram"]);
+  assert.deepEqual(accounts.map((a) => readVarint(a, 3)), [1, 0], "signed-in flag is per account");
+  assert.equal(readString(accounts[1], 2), "zernio--instagram", "server_identifier stays unique per row");
+});
+
+test("a connector with no platforms is unchanged — still the one default account", () => {
+  const accounts = readMessages(readMessages(availableMcpServers([{ name: "memory", hasToken: false }]), 1)[0], 17);
+  assert.equal(accounts.length, 1);
+  assert.equal(readString(accounts[0], 1), "default");
+});
+
+/**
+ * The reported bug, at the wire: Instagram was installed, the connector was signed in, and the pane
+ * offered nothing to press. Asking about that ONE account has to say it still wants a sign-in even
+ * though the connector as a whole is fine.
+ */
+test("account_key asks about one platform, and an unconnected one still requires auth", () => {
+  const asked: string[] = [];
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 1), pbStr(2, "http://127.0.0.1:1/cb"), pbStr(8, "instagram")),
+    mcpServers: [{
+      name: "zernio", url: SERVER, status: "connected", hasToken: true,
+      accounts: [{ key: "facebook", hasToken: true }, { key: "instagram", hasToken: false }],
+    }],
+    authUrlFor: (_u: string, _r: string, key?: string) => { asked.push(key ?? ""); return "https://instagram.test/authorize"; },
+  };
+  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  assert.equal(readVarint(rows[0], 3), 1, "requires_auth — this is the button that was missing");
+  assert.equal(readVarint(rows[0], 6), 0, "has_valid_token false for THIS account");
+  assert.equal(readString(rows[0], 4), "https://instagram.test/authorize", "and it has somewhere to go");
+  assert.deepEqual(asked, ["instagram"], "the platform is passed through, not dropped");
+});
+
+test("the same connector answers 'already connected' for the platform that is", () => {
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 1), pbStr(2, "http://127.0.0.1:1/cb"), pbStr(8, "facebook")),
+    mcpServers: [{
+      name: "zernio", url: SERVER, status: "connected", hasToken: true,
+      accounts: [{ key: "facebook", hasToken: true }, { key: "instagram", hasToken: false }],
+    }],
+    authUrlFor: () => "https://should-not-be-asked.test",
+  };
+  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  assert.equal(readVarint(rows[0], 3), 0, "requires_auth false");
+  assert.equal(readString(rows[0], 4), "", "no sign-in is offered for an account that has one");
+});
+
+test("without account_key the connector answers for itself, as it always did", () => {
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 1), pbStr(2, "http://127.0.0.1:1/cb")),
+    mcpServers: [{
+      name: "zernio", url: SERVER, status: "needsAuth", hasToken: false,
+      accounts: [{ key: "instagram", hasToken: false }],
+    }],
+    authUrlFor: (_u: string, _r: string, key?: string) => (key === undefined ? "https://zernio.test/signin" : "wrong"),
+  };
+  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  assert.equal(readString(rows[0], 4), "https://zernio.test/signin");
+});
+
+// ── ListSandMcpTools: the status drawn beside each account row ───────────────────
+
+const listTools = (body: Buffer, servers: unknown[]) =>
+  readMessages(bootstrapResponses.ListSandMcpTools({ user: null, body, mcpServers: servers } as never), 1);
+
+/** The client asks by connector name; the per-account split has to come back in the ANSWER. */
+test("one request for the connector answers one row per account", () => {
+  const rows = listTools(
+    message(pbStr(1, "zernio")),
+    [{
+      name: "zernio", url: SERVER, status: "connected",
+      accounts: [{ key: "facebook", hasToken: true }, { key: "instagram", hasToken: false }],
+    }],
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(readString(rows[0], 2), "connected", "a signed-in account inherits the connector's health");
+  assert.equal(readString(rows[0], 4), "facebook", "account_label is the JOIN KEY, not a display name");
+  assert.equal(readString(rows[1], 2), "needsAuth", "an account with no sign-in wants one, however healthy the server is");
+  
+  assert.deepEqual(rows.map((r) => readString(r, 5)), ["zernio", "zernio"], "row_server_identifier groups them");
+  assert.deepEqual(rows.map((r) => readString(r, 1)), ["zernio--facebook", "zernio--instagram"]);
+});
+
+test("asking for one account narrows the answer to it", () => {
+  const rows = listTools(message(pbStr(1, "zernio--instagram")), [{
+    name: "zernio", status: "connected",
+    accounts: [{ key: "facebook", hasToken: true }, { key: "instagram", hasToken: false }],
+  }]);
+  assert.equal(rows.length, 1);
+  assert.equal(readString(rows[0], 1), "zernio--instagram");
+});
+
+test("an identifier with no account is the connector itself", () => {
+  const rows = listTools(message(pbStr(1, "memory")), [{ name: "memory", status: "connected" }]);
+  assert.equal(readString(rows[0], 1), "memory");
+  assert.equal(readString(rows[0], 2), "connected");
+  assert.equal(readString(rows[0], 4), "", "no account label for a plain connector");
+});
+
+test("an unknown server is skipped, not answered with a guess", () => {
+  assert.equal(listTools(message(pbStr(1, "gone--facebook")), [{ name: "zernio" }]).length, 0);
+});
+
+test("a server name containing a colon still resolves", () => {
+  const rows = listTools(
+    message(pbStr(1, "host:8080--facebook")),
+    [{ name: "host:8080", status: "connected", accounts: [{ key: "facebook", hasToken: true }] }],
+  );
+  assert.equal(readString(rows[0], 5), "host:8080");
+  assert.equal(readString(rows[0], 4), "facebook");
 });

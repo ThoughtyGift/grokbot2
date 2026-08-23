@@ -14,6 +14,7 @@ import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";
 import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
+import { socialAccounts, socialConnectUrl } from "./social-connect.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
@@ -163,10 +164,45 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
           void completeAuthorization(stateId, code, owner);
           return { postAuthReturnUrl: "", accountKey: "default" };
         },
+        /**
+         * "Does this account have a working sign-in?" — which is not the same question as "is there
+         * an OAuth token filed under this account key?".
+         *
+         * A platform reached through a connector has no token of its own; the connector's token is
+         * what its calls use, and the sign-in that matters happened at Facebook. The pane asks here
+         * and nowhere else, so answering strictly from the token store left a connected Facebook
+         * account reading "Needs auth" beside a working connector. The answer for those accounts
+         * comes from whether the platform is actually connected.
+         */
+        validate: (targets: { serverUrl: string; accountKey: string }[]) =>
+          port.validate(targets).map((t) => {
+            if (t.hasValidToken) return t;
+            const name = Object.entries(mcpServersFor(owner))
+              .find(([, spec]) => (spec as { url?: string }).url === t.serverUrl)?.[0];
+            const connected = name
+              ? socialAccounts(name, owner)?.find((a) => a.key === t.accountKey)?.hasToken
+              : false;
+            return connected ? { ...t, hasValidToken: true } : t;
+          }),
       };
     })(),
-    authUrlFor: (serverUrl: string, redirectUri: string) =>
-      authUrlFor(serverUrl, redirectUri, ownerFromAuth(req.headers.authorization)),
+    /**
+     * Two kinds of sign-in answer the same button.
+     *
+     * With no account_key the client is asking about the CONNECTOR, and the answer is the server's
+     * own OAuth. With one, it is asking about a single platform behind that connector, and the
+     * answer is that platform's connect URL — the same button, pointed at Instagram instead of at
+     * Zernio, decided by a field the client was already sending and we were already ignoring.
+     */
+    authUrlFor: (serverUrl: string, redirectUri: string, accountKey?: string) => {
+      const owner = ownerFromAuth(req.headers.authorization);
+      if (accountKey && accountKey !== "default") {
+        const name = Object.entries(mcpServersFor(owner))
+          .find(([, spec]) => (spec as { url?: string }).url === serverUrl)?.[0];
+        if (name) return socialConnectUrl(name, accountKey, owner);
+      }
+      return authUrlFor(serverUrl, redirectUri, owner);
+    },
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
     mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))
@@ -180,6 +216,8 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
           hasToken: url ? oauthAccessToken(url, ownerFromAuth(req.headers.authorization)) != null : false,
           // Which catalog row installed this server, so the pane can file the connector under it.
           pluginId: pluginCatalog().find((p) => p.mcp?.name === name)?.id,
+          // One row per installed platform, when this connector fronts several — see social-connect.
+          accounts: socialAccounts(name, ownerFromAuth(req.headers.authorization)),
         };
       }),
     catalog: pluginCatalog(),

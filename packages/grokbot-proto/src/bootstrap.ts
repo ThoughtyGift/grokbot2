@@ -48,6 +48,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "UninstallUserPlugin",
   "ListMarketplaces",
   "GetAvailableMcpServers",
+  "ListSandMcpTools",
 ] as const;
 
 /**
@@ -95,7 +96,7 @@ export interface RpcCtx {
    * is given and listens on `oauth_redirect_uri` for the callback. Returning nothing means the
    * Authenticate button has nowhere to go, which is exactly how it failed silently.
    */
-  authUrlFor?(serverUrl: string, redirectUri: string): string | undefined;
+  authUrlFor?(serverUrl: string, redirectUri: string, accountKey?: string): string | undefined;
   plugins?: {
     installedIds: number[];
     /**
@@ -114,6 +115,15 @@ export interface RpcCtx {
    */
   mcpServers?: {
     name: string; command?: string; args?: string[]; url?: string;
+    /**
+     * The sign-ins this connector holds, one row each in the pane's Accounts section.
+     *
+     * The client has always supported several accounts per server — `McpAccountInfo` and the
+     * `account_key` that rides along with every token RPC exist for exactly that. Sending a single
+     * hard-coded "default" row spent none of it, so a connector that reaches many services through
+     * one endpoint had nothing per service to show and no per service button to press.
+     */
+    accounts?: { key: string; hasToken: boolean }[];
     /** How the server is actually doing — `CheckHttpMcpStatus` answers from this, not from a probe. */
     status?: string;
     /** Whether a sign-in is stored for it, so the pane can tell "needs auth" from "signed in". */
@@ -210,27 +220,79 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
    *
    * `server_ids` index the same list `GetAvailableMcpServers` numbers, 1-based.
    */
+  /**
+   * aiserver.v1.ListSandMcpTools — the per-ACCOUNT status the pane draws beside each row.
+   *
+   * Never answered before, and the pane said so in its own words: an account row read "Not reported
+   * by backend / Error" while the connector behind it was working. The connector's status is not
+   * this RPC's answer — one endpoint can hold several sign-ins, and each row asks about its own.
+   *
+   * Request: `server_identifiers` (1, repeated) — the strings sent as `McpAccountInfo.server_identifier`,
+   * i.e. `name:accountKey`. Response: `servers` (1) of
+   * Server{1 server_identifier, 2 status, 3 tools, 4 account_label, 5 row_server_identifier}, where
+   * `row_server_identifier` is what groups several rows into one connector.
+   */
+  ListSandMcpTools: (ctx) => {
+    const wanted = ctx.body ? readStrings(unframe(ctx.body), 1) : [];
+    const all = ctx.mcpServers ?? [];
+    return message(...wanted.flatMap((identifier) => {
+      const [serverName, accountKey] = splitAccountIdentifier(identifier);
+      const server = all.find((s) => s.name === serverName);
+      if (!server) return [];
+
+      // The client asks by CONNECTOR name and expects the split to come back in the answer: one row
+      // per account, all carrying the same `row_server_identifier`. Answering the question as asked
+      // — one row for "zernio" — left every account row without a status of its own, which the pane
+      // prints as "Not reported by backend".
+      const accounts = accountKey
+        ? (server.accounts ?? []).filter((a) => a.key === accountKey)
+        : server.accounts ?? [];
+      if (!accounts.length) {
+        return [pbMsg(1, message(pbStr(1, identifier), pbStr(2, toolStatus(server.status)), pbStr(5, serverName)))];
+      }
+      return accounts.map((a) => pbMsg(1, message(
+        pbStr(1, accountIdentifier(serverName, a.key)),
+        // An account with no sign-in is `needsAuth` however healthy the connector is; one that has a
+        // sign-in inherits the connector's own state, because that is what its calls will hit.
+        pbStr(2, a.hasToken ? toolStatus(server.status) : "needsAuth"),
+        // `account_label` reads like a display name and is not one: electron-main joins the tools
+        // answer to an account with `o.accountLabel === s.accountKey`. Sending "Facebook" instead of
+        // "facebook" broke that join silently, and the row printed "Not reported by backend".
+        pbStr(4, a.key),
+        pbStr(5, serverName),
+      )));
+    }));
+  },
+
   CheckHttpMcpStatus: (ctx) => {
     const all = ctx.mcpServers ?? [];
     const body = ctx.body ? unframe(ctx.body) : null;
     const wanted = body ? readVarints(body, 1) : [];
     const ids = wanted.length ? wanted : all.map((_, i) => i + 1);
     const redirectUri = body ? readString(body, 2) : "";
+    // account_key (8) is how the client says WHICH sign-in the button belongs to. Ignoring it is
+    // why every account row on a connector could only ever be offered the one server-wide URL.
+    const accountKey = body ? readString(body, 8) : "";
     return httpMcpStatusResponse(ids.flatMap((id) => {
       const s = all[id - 1];
       if (!s?.url) return [];          // stdio rows are not this RPC's business
-      const requiresAuth = s.status === "needsAuth";
+      const account = accountKey ? s.accounts?.find((a) => a.key === accountKey) : undefined;
+      // An account row answers for itself: it wants a sign-in when IT has no token, whatever the
+      // connector as a whole is doing. Without this a signed-in connector reported every one of its
+      // accounts as fine, and the unconnected ones never got a button.
+      const requiresAuth = account ? !account.hasToken : s.status === "needsAuth";
+      const hasToken = account ? account.hasToken : Boolean(s.hasToken);
       // The URL is asked for only when it is needed, and only when the client told us where to send
       // the callback — building one against a redirect it is not listening on cannot complete.
-      const authUrl = requiresAuth && redirectUri && !s.hasToken
-        ? ctx.authUrlFor?.(s.url, redirectUri)
+      const authUrl = requiresAuth && redirectUri && !hasToken
+        ? ctx.authUrlFor?.(s.url, redirectUri, accountKey || undefined)
         : undefined;
       return [{
         id,
         isAvailable: s.status !== "error",
         requiresAuth,
         ...(authUrl ? { authUrl } : {}),
-        hasValidToken: Boolean(s.hasToken),
+        hasValidToken: hasToken,
       }];
     }));
   },
@@ -436,6 +498,14 @@ export interface PluginEntry {
   skill?: { name: string; description: string };
   /** https image for the row's icon. Any other scheme is rejected by the client's own fetcher. */
   logoUrl?: string;
+  /**
+   * The service this row connects, when its MCP server fronts several.
+   *
+   * One Zernio endpoint reaches Facebook, Instagram, TikTok and the rest, so the connector alone
+   * cannot say which of them the person wanted. This is what turns an installed row into an account
+   * row in the pane — and into a button that connects that one service.
+   */
+  platform?: string;
   /** JSON Schema for the credential form. Built by the backend from the spec's `${…}` placeholders. */
   variablesSchema?: { properties: Record<string, Record<string, string>>; required: string[] };
 }
@@ -550,7 +620,10 @@ export function listMarketplaces(): Buffer {
  * crosses to the renderer.
  */
 export function availableMcpServers(
-  servers?: { name: string; command?: string; args?: string[]; url?: string; hasToken?: boolean; pluginId?: number }[],
+  servers?: {
+    name: string; command?: string; args?: string[]; url?: string; hasToken?: boolean; pluginId?: number;
+    accounts?: { key: string; hasToken: boolean }[];
+  }[],
 ): Buffer {
   if (!servers?.length) return message();
   const rows = servers.map((s, i) =>
@@ -577,8 +650,12 @@ export function availableMcpServers(
       pbBool(14, false),
       pbStr(15, s.name),
       // accounts (17) — McpAccountInfo{1 account_key, 2 server_identifier, 3 user_has_access_token}.
-      // One account per server here; the shape exists so one server can be signed into twice.
-      pbMsg(17, message(pbStr(1, "default"), pbStr(2, s.name), pbBool(3, Boolean(s.hasToken)))),
+      // A caller that supplies none still gets the single "default" row: for an ordinary connector
+      // that is the whole truth, and the pane has drawn it that way since this field was added.
+      ...(s.accounts?.length
+        ? s.accounts.map((a) =>
+            pbMsg(17, message(pbStr(1, a.key), pbStr(2, accountIdentifier(s.name, a.key)), pbBool(3, a.hasToken))))
+        : [pbMsg(17, message(pbStr(1, "default"), pbStr(2, s.name), pbBool(3, Boolean(s.hasToken))))]),
     )),
   );
   return message(...rows);
@@ -644,4 +721,38 @@ export function getEffectiveUserPlugins(installedIds?: number[], catalog: readon
 export function getEffectiveUserPluginsJson(installedIds?: number[], catalog: readonly PluginEntry[] = LOCAL_PLUGINS): string {
   const rows = installedIds ? catalog.filter((p) => installedIds.includes(p.id)) : [LOCAL_PLUGINS[0]];
   return JSON.stringify({ plugins: rows.map((p) => ({ plugin: pluginJson(p), isEnabled: true })) });
+}
+
+/**
+ * How the client names one account of a server: `name--accountKey`.
+ *
+ * Not a format worth inventing — it is `BWe` in electron-main, and the whole join depends on
+ * matching it exactly. Sending `name:accountKey` instead looked reasonable and left a connected
+ * account reading "Not reported by backend", because the status lookup silently found nothing.
+ * The default account is the bare name, with no suffix at all.
+ */
+const DEFAULT_ACCOUNT_KEY = "default";
+
+function accountIdentifier(serverName: string, accountKey: string): string {
+  return accountKey === DEFAULT_ACCOUNT_KEY ? serverName : `${serverName}--${accountKey}`;
+}
+
+/** The inverse. An identifier with no `--` is a plain connector, not an account of one. */
+function splitAccountIdentifier(identifier: string): [string, string | null] {
+  const at = identifier.lastIndexOf("--");
+  return at <= 0 ? [identifier, null] : [identifier.slice(0, at), identifier.slice(at + 2)];
+}
+
+/**
+ * The four statuses this RPC's reader understands.
+ *
+ * The client maps anything else to error/"Not reported by backend" — which it did for a signed-in
+ * Facebook account, because the connector was reported as `disconnected`: true of the socket, and
+ * useless as a verdict on an account that has a working sign-in. Idle is not broken, so anything
+ * outside the vocabulary is reported as connected rather than as a failure nobody can act on.
+ */
+function toolStatus(status: string | undefined): string {
+  return status === "needsAuth" || status === "error" || status === "loading" || status === "initializing"
+    ? (status === "initializing" ? "loading" : status)
+    : "connected";
 }
