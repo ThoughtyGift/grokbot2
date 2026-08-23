@@ -170,8 +170,30 @@ export async function listenEvents(onEvent: (name: string, data: unknown) => voi
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
+  /*
+   * Watchdog: backend ping `: ping` mỗi 5s, nên 20s không có BYTE nào nghĩa là stream đã chết —
+   * kể cả khi socket trông còn sống. Bắt được trên stack thật: BFF restart thì proxy của Vite giữ
+   * socket phía trình duyệt mở, `read()` treo vĩnh viễn, `done` không bao giờ tới, và FE mù mà
+   * không có lấy một lỗi. Chỉ chờ `done` là tin vào một tín hiệu không được hứa.
+   */
+  const IDLE_MS = 20_000;
+  const readWithTimeout = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("events idle: mất keep-alive 20s")), IDLE_MS); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
   while (!signal.aborted) {
-    const { done, value } = await reader.read();
+    let done: boolean, value: Uint8Array | undefined;
+    try {
+      ({ done, value } = await readWithTimeout());
+    } catch (e) {
+      void reader.cancel().catch(() => {});
+      throw e;
+    }
     if (done) break;
     buf += dec.decode(value, { stream: true });
     const parts = buf.split("\n\n");

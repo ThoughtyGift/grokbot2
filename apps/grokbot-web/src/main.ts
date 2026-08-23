@@ -1647,16 +1647,38 @@ async function bootApp(): Promise<void> {
   await loadComputer();
   void refreshUpgrade();
   const ac = new AbortController();
-  void api.listenEvents((name, data) => {
+  const onEvent = (name: string, data: unknown) => {
     const d = data as { agentId?: string };
     if (name === "agent.upserted") { void refreshRoster(); void refreshUpgrade(); }
     if (name === "transcript.append" && (!d.agentId || d.agentId === state.selected)) void loadTranscript();
     if (name === "computer.status" && d.agentId === state.selected) void loadComputer();
-  }, ac.signal).catch((e) => {
-    if (e instanceof DOMException && e.name === "AbortError") return;
-    state.error = `SSE: ${e instanceof Error ? e.message : e}`;
-    paint();
-  });
+  };
+  /*
+   * SSE phải TỰ NỐI LẠI. `listenEvents` là fetch-stream: backend restart thì stream `done` và hàm
+   * return ÊM — bản trước nghe đúng một lần nên sau đó FE mù vĩnh viễn: turn xong rồi mà ba chấm
+   * vẫn treo (bắt được trên stack thật khi BFF chết giữa phiên đo). Đứt là lỡ sự kiện, nên mỗi lần
+   * nối lại phải đồng bộ roster + transcript + computer trước — SSE chỉ báo "có gì mới", không
+   * phát lại những gì đã bỏ lỡ.
+   */
+  void (async () => {
+    let backoff = 1_000;
+    for (;;) {
+      const started = Date.now();
+      try {
+        await api.listenEvents(onEvent, ac.signal);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+      if (ac.signal.aborted) return;
+      // Sống lâu rồi mới đứt ⇒ mạng chỉ chớp: thử lại nhanh. Chết ngay ⇒ backend đang sập: lùi dần.
+      backoff = Date.now() - started > 30_000 ? 1_000 : Math.min(15_000, backoff * 2);
+      await new Promise((r) => setTimeout(r, backoff));
+      if (ac.signal.aborted) return;
+      void refreshRoster();
+      void loadTranscript();
+      void loadComputer();
+    }
+  })();
 }
 
 

@@ -612,6 +612,21 @@ Kéo thả / panel đo lại nguyên bài: `measure:resize` **10/10**, `measure:
 - BFF `:8788` chết giữa phiên đo (ba cổng kia sống) — khởi động lại thì mọi bài xanh; **chưa rõ vì
   sao chết**, đáng soi ở lượt sau nếu tái diễn.
 
+**X7.3 — SSE phải tự nối lại, và phải có watchdog (cùng ngày).** Cái chết của BFF ở trên tặng ngay
+một bug thật: backend trả lời XONG mà FE vẫn treo ba chấm vĩnh viễn. Hai tầng, cả hai đều đã bắt
+được trên stack thật rồi mới sửa:
+
+1. `listenEvents` là fetch-stream nghe **một lần**: stream kết thúc êm là FE mù từ đó — không lỗi,
+   không thử lại. Giờ là vòng nghe lại có backoff (1s→15s, sống >30s thì reset), và mỗi lần nối lại
+   **đồng bộ roster + transcript + computer trước** vì SSE không phát lại sự kiện đã lỡ.
+2. Tệ hơn: BFF restart thì proxy của Vite **giữ socket phía trình duyệt mở** — `reader.read()` treo
+   vĩnh viễn, `done` không bao giờ tới, vòng nghe lại ở (1) không được chạy. Backend vốn ping
+   `: ping` mỗi 5s, nên FE thêm watchdog: **20s không nhận byte nào = chết**, cắt và nối lại.
+
+Nghiệm trên stack thật: giết BFF → khởi động lại → KHÔNG reload trang → PATCH `unread: true` →
+chấm xanh hiện sau **1 giây**. Trước bản sửa, cùng kịch bản đó FE mù vô hạn (đo: một request
+`/v1/events` duy nhất từ lúc load, PATCH không bao giờ hiện).
+
 Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
 có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau
 là đúng**: web đăng nhập tài khoản riêng (`local|…`), app là chủ máy (`auth0|grokbot2-user`) —
