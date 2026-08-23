@@ -702,6 +702,61 @@ export function closeMcp(): void {
 }
 
 /**
+ * Ask a remote server whether it wants a sign-in, without waiting to be asked.
+ *
+ * The status used to appear only AFTER something tried the server and failed, which put the person
+ * in a loop: the Authenticate button needs `needsAuth`, `needsAuth` needs a 401, and a 401 needs a
+ * call they cannot make until the connector works. So a url server with no verdict yet gets one
+ * cheap POST in the background; the answer lands in the same place a real refusal does, and the next
+ * status read — a second later, when the pane refreshes — has it.
+ *
+ * Deliberately not awaited: `mcpServerStatus` is called from response builders that are synchronous,
+ * and blocking them on a network round trip would stall the pane for every row.
+ *
+ * Rate-limited per server. The pane asks for status often, and a probe per ask would be a request
+ * storm against somebody else's service.
+ */
+const probedAt = new Map<string, number>();
+const PROBE_EVERY_MS = 60_000;
+
+function probeRemote(name: string, url: string, headers: Record<string, string>, owner: string): void {
+  const key = `${owner}::${name}`;
+  const last = probedAt.get(key) ?? 0;
+  if (Date.now() - last < PROBE_EVERY_MS) return;
+  probedAt.set(key, Date.now());
+
+  void (async () => {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          ...headers,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1, method: "initialize",
+          params: {
+            protocolVersion: MCP_PROTOCOL_VERSION,
+            capabilities: {},
+            clientInfo: { name: "grokbot2-probe", version: "0.1.0" },
+          },
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.status === 401) {
+        recordRefusal(name, res.headers.get("www-authenticate") ?? "The server requires authentication (401)", owner);
+      } else if (res.ok || res.status === 202) {
+        recordRefusal(name, null, owner);
+      }
+      // Anything else (5xx, a redirect, a non-MCP endpoint) is left unrecorded: it says the server is
+      // unhappy, not that it wants OAuth, and claiming needsAuth there would offer a button that
+      // cannot help.
+    } catch { /* unreachable right now; the next status read tries again after the interval */ }
+  })();
+}
+
+/**
  * What to tell the app about one server, for the Plugins pane.
  *
  * Every row used to report a flat `disconnected` with the detail "Runs on Grok Bot's computer" —
@@ -743,6 +798,18 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
     return { status: "connected", detail: `${s.tools.length} tool(s) available`, toolCount: s.tools.length };
   }
   if (s) return { status: "error", detail: s.transport.dead() ?? "Not running", toolCount: 0 };
+
+  // A remote server with no verdict yet: find out, in the background. Until this, the pane could
+  // only learn that a connector wants a sign-in by watching something fail first.
+  if (spec.url) {
+    const headers = { ...resolved.headers };
+    if (!Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) {
+      const token = oauthAccessToken(spec.url, owner);
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+    probeRemote(name, spec.url, headers, owner);
+    return { status: "disconnected", detail: "Checking with the server…", toolCount: 0 };
+  }
 
   // An unresolved placeholder in `env` does not stop the spawn — the key is dropped and the server
   // runs degraded (n8n serves its docs with no API key at all). So it is not an error, but leaving it

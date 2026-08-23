@@ -275,7 +275,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -297,7 +297,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -319,7 +319,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -341,7 +341,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -363,7 +363,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -385,7 +385,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
@@ -407,7 +407,7 @@
       },
       "credentials": {
         "ZERNIO_API_KEY": {
-          "title": "Zernio API key (optional)",
+          "title": "Zernio API key",
           "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
           "required": false
         }
