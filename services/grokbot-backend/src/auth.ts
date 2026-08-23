@@ -81,15 +81,76 @@ export function verifyJwt(authHeader?: string | string[]): TokenUser | null {
   const got = Buffer.from(s), exp = Buffer.from(expected);
   if (got.length !== exp.length || !timingSafeEqual(got, exp)) return null;
   try {
-    const { sub, email, exp: expSec } = JSON.parse(Buffer.from(p, "base64url").toString("utf8")) as {
-      sub?: string; email?: string; exp?: number;
+    const { sub, email, exp: expSec, purpose } = JSON.parse(Buffer.from(p, "base64url").toString("utf8")) as {
+      sub?: string; email?: string; exp?: number; purpose?: string;
     };
     if (!sub) return null;
     if (typeof expSec === "number" && expSec * 1000 < Date.now()) return null;
+    /*
+     * `purpose` — bịt một lỗ chỉ xuất hiện khi dùng chung secret với cinAPI (docs/plan/cinapi-merge.md P1).
+     *
+     * cinAPI phát NĂM loại token cùng thuật toán, cùng secret, cùng `sub`: `access`, `email_verify`,
+     * `password_reset`, `2fa_pending`, `step_up`. Bản trước chỉ kiểm chữ ký + `exp`, nên một token
+     * "đặt lại mật khẩu" hoặc "2FA chưa xong" cũng mở được toàn bộ agent — leo thang im lặng, không
+     * lỗi ở đâu cả. Có `purpose` thì bắt buộc phải là `access`.
+     *
+     * KHÔNG có `purpose` vẫn hợp lệ: đó là token grokbot2 tự mint (`mintJwt`, desktop, e2e) — giữ
+     * tương thích ngược thay vì bắt mọi đường cũ phải khai thêm một trường chúng chưa từng có.
+     */
+    if (typeof purpose === "string" && purpose !== "access") return null;
     return { authId: sub, email: email ?? "" };
   } catch {
     return null;
   }
+}
+
+/** Tên cookie access-token của cinAPI (`internal/middleware/auth.go`: `CookieAccess`). */
+const CINAPI_COOKIE = "cinapi_at";
+
+/**
+ * Token trong cookie — FE của cinAPI gửi danh tính bằng cookie httpOnly `cinapi_at`, KHÔNG phải
+ * header `Authorization` (ADR-005 của họ: không để JWT trong localStorage). grokbot2 trước đây chỉ
+ * đọc header, nên một phiên cinAPI hợp lệ vẫn bị coi là vô danh.
+ */
+function tokenFromCookie(cookieHeader?: string | string[]): string | undefined {
+  const raw = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader;
+  if (!raw) return undefined;
+  for (const part of raw.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() !== CINAPI_COOKIE) continue;
+    const v = part.slice(eq + 1).trim();
+    return v || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Danh tính của một request, xét CẢ header và cookie — điểm vào duy nhất cho `/v1`.
+ *
+ * Thứ tự có chủ ý: `Authorization` trước, vì một caller gắn header là đang nói rõ mình là ai (e2e,
+ * SDK, desktop), và nó phải thắng cookie của phiên trình duyệt đang mở cùng máy.
+ */
+export function ownerFromRequest(headers: { authorization?: string | string[]; cookie?: string | string[] }): string {
+  const byHeader = verifyJwt(headers.authorization);
+  if (byHeader) return byHeader.authId;
+  return cinapiCookieUser(headers)?.authId ?? DEFAULT_USER.authId;
+}
+
+/**
+ * Người dùng suy ra từ cookie `cinapi_at` — dùng ở CẢ hai lớp: cổng vào (`auth-gate.checkAuth`) và
+ * suy ra owner (`ownerFromRequest`). Một hàm cho cả hai, để luật `purpose` không thể đúng ở lớp này
+ * mà hở ở lớp kia.
+ *
+ * Nhận `Record<string, unknown>` vì `checkAuth` nhận headers ở dạng đó; đọc mềm thay vì ép kiểu.
+ */
+export function cinapiCookieUser(headers: Record<string, unknown> | { cookie?: string | string[] }): TokenUser | null {
+  const bag = headers as Record<string, unknown>;
+  const rawCookie = bag["cookie"] ?? bag["Cookie"];
+  const token = tokenFromCookie(
+    Array.isArray(rawCookie) ? rawCookie.map(String) : rawCookie == null ? undefined : String(rawCookie),
+  );
+  return token ? verifyJwt(token) : null;
 }
 
 /** The trusted owner for a request, from a verified JWT — or the default identity when absent/invalid

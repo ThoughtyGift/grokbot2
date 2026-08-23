@@ -7,7 +7,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
-import { handleAuth, userFromToken, ownerFromAuth, DEFAULT_USER } from "./auth.js";
+import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";
 import { mcpServers as mcpServersFor } from "./mcp.js";
@@ -121,7 +121,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // ── native API (S13; OpenAPI docs/api/grokbot2-v0.yaml) — beside /gw, not through it ──
   // Native /v1 (grokbot-web) — scope to the caller's owner from a VERIFIED user JWT (Phase 4),
   // default identity when absent/unsigned (the desktop, or the gateway-ticket session token).
-  const nativeOwner = ownerFromAuth(req.headers.authorization);
+  // Cookie được xét ở đây, không chỉ header: FE của cinAPI gửi danh tính bằng cookie httpOnly
+  // `cinapi_at` (docs/plan/cinapi-merge.md P1). `/gw` bên dưới vẫn chỉ đọc header — đường đó là
+  // ticket của desktop, không có phiên trình duyệt nào để nhầm.
+  const nativeOwner = ownerFromRequest(req.headers);
   if (await runWithOwner(nativeOwner, () => handleNative(url, body, res, req.headers, req.method ?? "?"))) return;
 
   // ── box gateway (JSON + SSE + chat) ──

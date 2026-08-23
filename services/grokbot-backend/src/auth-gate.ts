@@ -38,7 +38,7 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redact } from "./redact.js";
-import { verifyJwt } from "./auth.js";
+import { verifyJwt, cinapiCookieUser } from "./auth.js";
 
 const TOKEN_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 /** Where operator tools read the per-boot token from. Inside the gitignored state directory. */
@@ -130,6 +130,19 @@ const requiresToken = (url: string): "local-exec" | "webauthn" | null => {
 export function checkAuth(url: string, headers: Record<string, unknown>): AuthVerdict {
   const raw = String(headers["authorization"] ?? headers["Authorization"] ?? "");
   const expected = expectedToken();
+
+  /*
+   * Cổng này phải biết về cookie, không chỉ header — nếu không thì phiên cinAPI bị 401 TRƯỚC khi
+   * `ownerFromRequest` kịp nói nó là ai (docs/plan/cinapi-merge.md P1).
+   *
+   * Đo được khi nghiệm P1 trên stack thật: cookie `cinapi_at` với `purpose=access` → HTTP 401,
+   * trong khi cùng token đó đặt ở header → 200. Hai lớp riêng biệt (cổng vào và suy ra owner) nên
+   * sửa một lớp là chưa xong — và bài đo bắt đúng chỗ đó.
+   *
+   * `cinapiCookieUser` dùng chính `verifyJwt`, nên luật `purpose` bịt ở đó cũng có hiệu lực ở đây:
+   * một token `password_reset` trong cookie KHÔNG mở được cổng.
+   */
+  if (!raw && cinapiCookieUser(headers) != null) return { allow: true, saw: "user-jwt" };
 
   let saw: AuthVerdict["saw"];
   if (!raw) saw = "no-header";
