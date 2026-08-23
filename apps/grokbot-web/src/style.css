@@ -169,7 +169,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* 20×20: đo được ở `sand-chat-header__avatar` của app gốc, không phải chọn cho vừa mắt. */
 .chat-head .avatar { width: 20px; height: 20px; }
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.head-actions .status { font-size: var(--fs-meta); color: var(--fg-2); }
 .head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
 .head-actions button:hover:not(:disabled) { background: var(--surface-4); }
 /* Nút icon vuông trong toolbar (đóng/mở panel) — 28×28, không phải pill có chữ. */
@@ -216,6 +215,34 @@ button:disabled { opacity: 0.4; cursor: default; }
 .bubble.user { align-self: flex-end; background: var(--bubble-user); border-radius: 18px; }
 .bubble.agent.first { border-bottom-left-radius: 6px; }
 .bubble.user.first { border-bottom-right-radius: 6px; }
+
+/* ── markdown trong bubble bot ─────────────────────────────────────────────
+ * Đo trên app đang chạy (CDP :9222, 2026-08-23):
+ *   code chip: nền rgba(119,119,119,.173) · chữ rgb(255,86,103) · viền rgba(252,252,252,.1)
+ *              · bo 4px · đệm 0/4 · mono 13px
+ *   ul/ol:     margin 0 · padding-left 20px
+ * Khoảng cách giữa các khối (8px) và khối pre là giá trị tạm — app chưa có tin nào chứa chúng
+ * để đo. Bubble thường dùng `pre-wrap` cho text trần; markdown đã tự chia khối nên trả về normal,
+ * không thì mỗi newline giữa hai thẻ thành một dòng trống. */
+.bubble.md { white-space: normal; }
+.bubble.md > * + * { margin-top: 8px; }
+.bubble.md p { margin: 0; }
+.bubble.md .md-h { font-weight: 600; }
+.bubble.md ul, .bubble.md ol { margin: 0; padding-left: 20px; }
+.bubble.md li + li { margin-top: 2px; }
+.bubble.md code {
+  background: rgba(119, 119, 119, 0.173); color: rgb(255, 86, 103);
+  border: 1px solid rgba(252, 252, 252, 0.1); border-radius: 4px;
+  padding: 0 4px; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.bubble.md pre {
+  margin: 0; padding: 8px 10px; overflow-x: auto;
+  background: rgba(119, 119, 119, 0.173); border: 1px solid rgba(252, 252, 252, 0.1); border-radius: 8px;
+}
+.bubble.md pre code { background: none; border: 0; padding: 0; color: var(--fg-1); font-size: 13px; }
+.bubble.md a { color: var(--accent); }
+.bubble.md blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--surface-4); color: var(--fg-2); }
 /* Ba chấm "đang tới" — app gốc dùng chúng, KHÔNG dùng bubble rỗng kèm con trỏ.
    Thời lượng chưa đo được (app đang chạy không mở cổng gỡ lỗi), nên đây là giá trị tạm và được ghi
    rõ là tạm: 1,4s một vòng, ba chấm lệch pha 0,16s. Khi mở lại app bằng launcher F2 thì đo `x-ray`
@@ -230,6 +257,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 @keyframes think { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
 
 @keyframes bubble-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* Entry đã render từ lượt vẽ trước: đứng yên. Không có nó thì mỗi chunk streaming làm CẢ transcript
+   chạy lại `bubble-in` (opacity từ 0) — chính là cú nháy. Xem `markSeen` trong main.ts. */
+.transcript .still { animation: none; }
 
 /* ── lượt nói ─────────────────────────────────────────────────────────────── */
 /*
@@ -440,8 +470,17 @@ img.avatar { object-fit: cover; }
 .avatar.face { background: none; border-radius: 0; overflow: visible; }
 .avatar.face svg { width: 100%; height: 100%; display: block; }
 
-.avatar-btn { padding: 0; line-height: 0; border-radius: 50%; transition: opacity var(--t-fast) ease; }
+.avatar-btn { position: relative; padding: 0; line-height: 0; border-radius: 50%; transition: opacity var(--t-fast) ease; }
 .avatar-btn:hover { opacity: 0.8; }
+/* Chấm trạng thái trên avatar header — app gốc có `sand-avatar-status-dot` (marker/core/pulse)
+   ngay trên avatar 20px. Màu xanh và nhịp pulse là giá trị tạm, CHƯA đo được từ app. */
+.avatar-btn .pdot {
+  position: absolute; right: -1px; bottom: -1px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #3fb950; border: 2px solid var(--bg);
+}
+.avatar-btn .pdot.live { animation: pdot-pulse 1.4s ease-in-out infinite; }
+@keyframes pdot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); } 50% { box-shadow: 0 0 0 3px rgba(63, 185, 80, 0); } }
 
 /* ── bộ chọn ảnh ──────────────────────────────────────────────────────────── */
 
@@ -642,7 +681,9 @@ img.avatar { object-fit: cover; }
 .group:hover { background: var(--surface-2); color: var(--fg-1); }
 .group .caret { display: inline-block; transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 .group[aria-expanded="true"] .caret { transform: rotate(90deg); }
-.group .lbl { flex: 1; text-transform: uppercase; letter-spacing: 0.04em; }
+/* App gốc KHÔNG viết hoa tên nhóm: đo `.sand-agents-section__header` qua CDP ra
+   `text-transform: none · letter-spacing: normal` — "Phòng marketing" hiện đúng như người dùng gõ. */
+.group .lbl { flex: 1; }
 .group .count {
   min-width: 16px; padding: 0 4px; border-radius: var(--r-pill);
   background: var(--surface-3); color: var(--fg-2);

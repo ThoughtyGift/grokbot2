@@ -3,6 +3,7 @@ import * as api from "./api";
 import type { AnimatedAvatar, BotMood } from "./avatar";
 import { AVATAR_COLORS, AVATAR_EXPRESSIONS, AVATAR_SHAPES, TILE_INK, animateAvatar, botAvatarPng, botAvatarSvg, pickFor } from "./avatar";
 import type { NativeAgent, NativeEntry, ComputerStatus, Routine, SidebarSection } from "./api";
+import { mdToHtml } from "./markdown";
 
 const root = document.querySelector("#app")!;
 
@@ -281,7 +282,17 @@ function renderEntry(e: NativeEntry): HTMLElement {
     }
   }
   if (e.content && !(e.attachment && e.content === e.attachment.name)) {
-    bubble.append(document.createTextNode(e.content));
+    if (cls === "agent") {
+      /*
+       * Bot nói markdown — app gốc render nó thật (đo qua CDP: trong bubble có <p>/<code>/<ul>,
+       * code chip đỏ bo 4px). Tin của NGƯỜI DÙNG thì app để text trần, nên nhánh dưới giữ nguyên.
+       * `mdToHtml` escape toàn bộ đầu vào trước khi thay thẻ — xem markdown.ts.
+       */
+      bubble.classList.add("md");
+      bubble.insertAdjacentHTML("beforeend", mdToHtml(e.content));
+    } else {
+      bubble.append(document.createTextNode(e.content));
+    }
   }
   bubble.append(reactionStrip(e), messageActions(e));
   return wrap(bubble);
@@ -446,8 +457,13 @@ function openRun(e: NativeEntry, mine: boolean, opensBlock: boolean): HTMLElemen
   const gutter = el(`<div class="run-gutter"></div>`);
   if (!mine && e.author) gutter.innerHTML = avatarOf({ id: e.author.id, name: e.author.name });
   const col = el(`<div class="run-col"></div>`);
-  if (opensBlock) {
-    col.append(el(`<div class="run-author">${escapeHtml(mine ? "bạn" : (e.author?.name ?? "bot"))}</div>`));
+  /*
+   * Nhãn tên CHỈ cho lượt của bot. Đo trên app đang chạy (CDP, 2026-08-23): 12 lượt liên tiếp,
+   * mọi `sand-group-author` đều mang tên bot, lượt của người dùng không có nhãn nào — chữ "bạn"
+   * bên mình trước đây là thứ app gốc không có.
+   */
+  if (opensBlock && !mine) {
+    col.append(el(`<div class="run-author">${escapeHtml(e.author?.name ?? "bot")}</div>`));
   }
   run.append(gutter, col);
   run.dataset.entry = e.id;   // id của entry MỞ lượt: đủ để neo, và ổn định khi lượt dài thêm
@@ -472,6 +488,19 @@ function stampFor(ms: number): string {
   const yest = new Date(now.getTime() - 86_400_000);
   if (d.toDateString() === yest.toDateString()) return `Hôm qua ${time}`;
   return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
+}
+
+/**
+ * Entry đã từng render một lần — để `bubble-in` chỉ chạy cho tin MỚI.
+ *
+ * `paint()` dựng lại toàn bộ DOM, nên khi streaming (một sự kiện SSE mỗi chunk) mọi bubble đều là
+ * node mới và animation vào (opacity từ 0) chạy lại trên CẢ transcript — đó chính là cú "nháy"
+ * nhìn thấy được. Tin đã thấy rồi thì render tĩnh; chỉ tin lần đầu xuất hiện mới trượt vào.
+ */
+const renderedOnce = new Set<string>();
+function markSeen(node: HTMLElement, id: string): void {
+  if (renderedOnce.has(id)) node.classList.add("still");
+  else renderedOnce.add(id);
 }
 
 function renderRuns(entries: NativeEntry[]): HTMLElement[] {
@@ -499,6 +528,7 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
       run = null; runKey = "";
       const solo = renderEntry(e);
       solo.dataset.entry = e.id;   // neo cuộn bám vào đây, xem `captureAnchor`
+      markSeen(solo, e.id);
       out.push(solo);
       continue;
     }
@@ -519,6 +549,7 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
       node.classList.add("first");
     }
     node.dataset.entry = e.id;
+    markSeen(node, e.id);
     col.append(node);
   }
   return out;
@@ -971,13 +1002,15 @@ function paint(): void {
     <div class="grip grip-sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
     <section class="chat">
       <div class="chat-head">
-        ${selected ? `<button type="button" class="avatar-btn" data-act="settings" aria-label="View Bot settings">${avatarOf(selected)}</button>` : ""}
+        ${selected ? `<button type="button" class="avatar-btn" data-act="settings" aria-label="View Bot settings">${avatarOf(selected)}<span class="pdot${selected.presence.isRunning ? " live" : ""}"></span></button>` : ""}
         ${selected
           ? `<button type="button" class="identity" data-act="settings" aria-label="View Bot settings"><span class="nm">${escapeHtml(selected.name)}</span><span class="chev">›</span></button>`
           : `<span class="identity empty">chọn một bot</span>`}
         <div class="head-actions">
-          <span class="status">${selected?.presence.isRunning ? "đang trả lời" : "sẵn sàng"}</span>
-          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Close details" : "Open details"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}">${state.paneOpen ? "›" : "‹"}</button>
+          <!-- App gốc KHÔNG có pill trạng thái ở đây (đo header qua CDP: chỉ nút danh tính + một
+               icon-button "Grok Bot's Computer"). Trạng thái nằm ở chấm trên avatar + ba chấm
+               trong transcript, nên pill "sẵn sàng" cũ là thứ thừa so với app. -->
+          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Close details" : "Open details"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5.5 14h5M8 11.5V14"/></svg></button>
         </div>
       </div>
       ${state.error ? `<div class="err">${escapeHtml(state.error)}</div>` : ""}
@@ -985,7 +1018,7 @@ function paint(): void {
       <form class="composer">
         <div class="pending" hidden></div>
         <label class="attach" title="gửi ảnh">+<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" ${selected ? "" : "disabled"} /></label>
-        <textarea name="q" rows="1" aria-label="Prompt" placeholder="Hỏi bất cứ điều gì, hoặc kéo tệp vào." ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
+        <textarea name="q" rows="1" aria-label="Prompt" placeholder="${selected ? `Nhắn ${escapeHtml(selected.name)}` : "chọn một bot"}" ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
         ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
         ${state.draft.trim() && !selected?.presence.isRunning
           ? `<button type="submit" class="send" title="gửi" ${selected && !state.busy ? "" : "disabled"}>↑</button>` : ""}
@@ -1476,10 +1509,24 @@ async function loadRoutines(): Promise<void> {
   }
 }
 
+/**
+ * Nạp transcript có GỘP: khi streaming, mỗi chunk là một sự kiện SSE và bản trước `void
+ * loadTranscript()` cho mỗi sự kiện — các fetch chồng nhau, cái CŨ về sau cái MỚI thì transcript
+ * nhảy lùi một nhịp rồi nhảy tới, tức một cú nháy nữa ngoài chuyện animation. Giờ: đang nạp thì
+ * chỉ ghi cờ `dirty`, vòng lặp nạp lại MỘT lần khi xong — mọi thứ tự về đích đều đúng.
+ */
+let transcriptBusy = false, transcriptDirty = false;
 async function loadTranscript(): Promise<void> {
   if (!state.selected) { state.entries = []; paint(); return; }
-  state.entries = (await api.getTranscript(state.selected)).entries;
-  paint();
+  if (transcriptBusy) { transcriptDirty = true; return; }
+  transcriptBusy = true;
+  try {
+    do {
+      transcriptDirty = false;
+      state.entries = (await api.getTranscript(state.selected)).entries;
+      paint();
+    } while (transcriptDirty && state.selected);
+  } finally { transcriptBusy = false; }
 }
 
 async function loadComputer(): Promise<void> {

@@ -542,6 +542,46 @@ lúc tạo.
   Clipboard bị chặn (không phải ngữ cảnh an toàn) thì **nói ra**, không im lặng nuốt — một nút
   "sao chép" báo thành công mà không chép gì là kiểu hỏng khó phát hiện nhất.
 
+### X7 — mapping tin nhắn & header (2026-08-23, đo qua CDP trước khi sửa)
+
+Chủ máy so hai ảnh chụp và nói đúng: *"giao diện 5173 chưa mapping app local"*. `ui-diff` lúc đó
+165/165 — tức cái lệch nằm ở vùng **chưa có anchor**. Probe chỉ-đọc trên app đang chạy chốt năm
+điểm, sửa cả năm:
+
+| | app gốc (đo CDP) | bên mình trước đó |
+|---|---|---|
+| markdown trong bubble bot | render thật: `<p>/<code>/<ul>`; code chip nền `rgba(119,119,119,.173)` chữ `rgb(255,86,103)` bo 4px đệm 0/4 viền `rgba(252,252,252,.1)` mono 13px; `ul` margin 0 / padding-left 20px | `createTextNode` — `**đậm**`, `` `code` ``, `- bullet` hiện nguyên ký hiệu |
+| nhãn tên lượt người dùng | **không có** — 12 lượt liên tiếp, mọi `sand-group-author` đều là tên bot, lượt user `author: null` | in chữ "bạn" trên mỗi khối |
+| header phải | nút danh tính + đúng MỘT icon-button `Grok Bot's Computer` (icon màn hình); trạng thái nằm ở chấm trên avatar | pill chữ "sẵn sàng / đang trả lời" + glyph `‹/›` |
+| đầu nhóm sidebar | `text-transform: none · letter-spacing: normal` | `uppercase + 0.04em` |
+| placeholder ô nhập | `Message Claude` — theo tên bot | câu chung chung |
+
+`markdown.ts` là renderer tự viết ~100 dòng, **escape toàn bộ đầu vào trước rồi mới thay thẻ** —
+an toàn theo cấu trúc, không cần sanitizer; link chỉ nhận `http/https`. 10/10 test
+(`npx tsx --test apps/grokbot-web/src/markdown.test.ts`), gồm ca HTML sống ở mọi nhánh và ca
+`javascript:` không có đường vào. Khoảng cách khối 8px và style `pre` là **giá trị tạm** — app chưa
+có tin nào chứa chúng để đo.
+
+**Bug nháy khi streaming** (chủ máy báo giữa phiên) — hai gốc, sửa cả hai:
+
+- `paint()` dựng lại toàn bộ DOM mỗi chunk SSE nên **mọi** bubble chạy lại `bubble-in`
+  (opacity từ 0) → cả transcript chớp. Giờ `markSeen`: entry đã render một lần thì mang class
+  `.still` (animation: none), chỉ tin lần đầu xuất hiện mới trượt vào. Đo trong lúc stream: 6 mẫu
+  cách 700ms, `bubble.still == bubble` ở mọi mẫu, cuộn không nhảy.
+- `void loadTranscript()` mỗi sự kiện SSE → các fetch chồng nhau, cái cũ về sau cái mới thì
+  transcript **nhảy lùi một nhịp** rồi nhảy tới. Giờ nạp có gộp: đang nạp thì chỉ ghi cờ `dirty`,
+  vòng lặp nạp lại một lần khi xong.
+
+> Trong cùng lượt, `ui-diff` báo `shell bg` lệch (`rgba(0,0,0,0.5)`) — không phải regression:
+> `PAINTED_BG` lấy "phần tử sâu nhất phủ ≥90% khung có nền đục", và app lúc đó đang mở một dialog
+> nên nó vớ được `ui-dialog-backdrop`. Một backdrop nửa trong suốt lọt qua phép kiểm "nền đục" là
+> lỗ của chính bộ đo; đóng dialog là số về lại 165/165. Probe thẳng `.sand-shell` vẫn `rgb(7,7,7)`.
+
+Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
+có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau
+là đúng**: web đăng nhập tài khoản riêng (`local|…`), app là chủ máy (`auth0|grokbot2-user`) —
+multi-tenant scoping đang làm đúng việc của nó, không phải UI thiếu.
+
 ---
 
 ## 5. Luật
