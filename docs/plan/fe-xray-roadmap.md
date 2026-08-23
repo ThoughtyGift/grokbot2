@@ -333,7 +333,14 @@ kích hoạt viết lại.
   giữa màn hình. Nhân đó đọc được cả nhánh `automation-changed` — trước đây nó in ra đúng chữ
   `"automation-changed"` cho người dùng xem.
 - [x] **X4.4** Thẻ tệp bo **14px**, khung ảnh bo **12px** — hai số đo **khác nhau** ở app gốc, nên
-  không dùng chung một token.
+  không dùng chung một token. Và khung ảnh là **344×200 CỐ ĐỊNH**: sáu ảnh trong transcript của app
+  đều đúng 344×200 ở cùng toạ độ `x`, tức khung không co theo ảnh. Ta trước đây để `max-width: 320`
+  và cao tự nhiên — mỗi ảnh một chiều cao, transcript nhấp nhô. Giờ `object-fit: cover` để không méo.
+
+  > Số 344×200 đo ở **một** khổ cửa sổ. Câu còn bỏ ngỏ: khung đó cố định thật, hay co theo cột chat?
+  > Đã thêm anchor `ảnh đính kèm` vào `ui-anchors` để lượt `ui-diff` sau (khi app mở lại với CDP)
+  > **tự trả lời** thay vì tôi đoán — `ui-diff` chạy ở ba khổ, nên nếu nó co theo cột thì hai khổ
+  > nhỏ sẽ báo lệch ngay.
 
 > **Ba lần sai liên tiếp ở cùng một chỗ, đáng ghi lại.** Bản 1 đọc `scrollTop` từ phần tử *vừa được
 > tạo trong lượt vẽ này* — luôn là 0, nên phép tính "có đang ghim đáy không" luôn ra đúng và nó nhảy

@@ -85,6 +85,11 @@ export const ANCHORS = [
   { name: "bubble đầu lượt", app: '.sand-author-run:has(.sand-group-author) .sand-message', web: ".bubble.agent.first", props: ["bg", "radius", "pad", "font"] },
   { name: "bubble tiếp",     app: '.sand-author-run:not(:has(.sand-group-author)) .sand-message', web: ".bubble.agent:not(.first)", props: ["radius"] },
   { name: "bubble tôi",      app: '[data-role="user"] .sand-message', web: ".bubble.user",  props: ["bg", "pad", "font"] },
+  /*
+   * Ảnh đính kèm — thêm 2026-08-23. Số 344×200 đo được ở MỘT khổ cửa sổ; anchor này để lượt sau
+   * (khi app mở lại với CDP) tự trả lời câu còn bỏ ngỏ: khung đó cố định, hay co theo cột chat.
+   */
+  { name: "ảnh đính kèm", app: ".sand-attachment__image-button", web: ".att", props: ["w", "h", "radius"] },
   { name: "hover action", app: ".sand-message-hover-actions", web: ".msg-actions",   props: ["h"] },
   { name: "nút hover",    app: ".sand-message-hover-actions__button", web: ".msg-actions .act", props: ["w", "h", "radius"] },
   /* Vùng dựng ở A5/A6 — vào mẫu số ngay. */
