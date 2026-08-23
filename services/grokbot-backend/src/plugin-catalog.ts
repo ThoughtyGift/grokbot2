@@ -15,6 +15,11 @@
  *                    "mcp": { "name": "memory", "description": "…",
  *                             "command": "npx", "args": ["-y", "…"], "env": { … } } } ] }
  *
+ * A row must NEVER carry a real credential: this file is meant to be shared, and a token in it
+ * would be committed and then handed to every tenant who installed the row. Write the placeholder
+ * the credential is called instead — `"${GITHUB_PERSONAL_ACCESS_TOKEN}"`, in `env` or in `args` —
+ * and secrets.ts substitutes it at spawn from the machine actually running the server.
+ *
  * A URL registry is fetched ONCE per TTL and cached; a fetch failure keeps the last good catalog
  * rather than emptying the marketplace, because an unreachable registry is not the same as a
  * registry with no plugins. `env` never reaches the wire — see bootstrap.ts availableMcpServers.

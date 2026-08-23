@@ -20,6 +20,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
 import { currentOwner } from "./request-context.js";
 import { DEFAULT_USER } from "./auth.js";
 
@@ -166,9 +167,21 @@ async function start(name: string, owner: string): Promise<Live> {
   const spec = mcpServers(owner)[name];
   if (!spec?.command) throw new Error(`no MCP server "${name}" in ${configPathFor(owner)}`);
 
-  const proc = spawn(spec.command, spec.args ?? [], {
+  // A catalog row declares `${CREDENTIAL}` instead of a token, so nothing on disk holds a secret.
+  // Substituted here, per owner — see secrets.ts for why args and env fail differently.
+  const resolved = resolveSpecSecrets(spec, owner);
+  const blocking = missingArgSecrets(resolved);
+  if (blocking.length) {
+    throw new Error(
+      `MCP server "${name}" needs ${blocking.join(", ")} — set ` +
+      `${blocking.length > 1 ? "them" : "it"} in the backend environment or .data/secrets/<user>.json`,
+    );
+  }
+  warnMissing(name, resolved.missing);
+
+  const proc = spawn(spec.command, resolved.args, {
     stdio: ["pipe", "pipe", "pipe"],
-    env: childEnv(spec.env),
+    env: childEnv(resolved.env),
     ...(spec.cwd ? { cwd: spec.cwd } : {}),
     // `shell` ONLY for shims, never for a real executable — it re-parses the arguments.
     //

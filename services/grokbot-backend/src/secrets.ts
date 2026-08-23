@@ -1,0 +1,114 @@
+/**
+ * Credential placeholders for MCP server specs.
+ *
+ * A catalog row must not carry a real token. The registry is DATA meant to be shared — published as
+ * a community registry, even — and a token written into it would be committed, and then handed
+ * verbatim to every tenant who installed that row. So a row declares WHICH credential it needs,
+ * `"${GITHUB_PERSONAL_ACCESS_TOKEN}"`, and the value is substituted here, from the machine that
+ * actually runs the server.
+ *
+ * Resolution order, most specific first:
+ *   1. `.data/secrets/<authId>.json` — this owner's own credentials (multi-tenant)
+ *   2. `process.env`                 — the single-user desktop, or a unit file's EnvironmentFile
+ *
+ * Substitution happens at SPAWN, not at install: no config file on disk ever holds a secret, and
+ * rotating a token does not need a reinstall.
+ *
+ * Unresolved placeholders are never passed through. The literal string `${GITHUB_...}` reaching a
+ * server makes it fail as though the token were wrong, which sends you looking in the wrong place.
+ */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+const secretsPath = (owner: string): string =>
+  join(DATA_DIR, "secrets", `${owner.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+
+/** This owner's credential file, or `{}` — a missing or malformed file must not stop a spawn. */
+function ownerSecrets(owner: string): Record<string, string> {
+  try {
+    const raw = JSON.parse(readFileSync(secretsPath(owner), "utf8"));
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Names already reported, so a server that restarts does not reprint the same warning forever. */
+const warned = new Set<string>();
+
+export interface ResolvedSpec {
+  args: string[];
+  env: Record<string, string>;
+  /** Credential names a placeholder asked for and nothing supplied. */
+  missing: string[];
+}
+
+/**
+ * Substitute `${NAME}` in a spec's `args` and `env` for one owner.
+ *
+ * The two halves are treated differently on purpose:
+ *
+ * - **env**: an unresolved key is DROPPED. Credentials are often optional (n8n-mcp serves its node
+ *   documentation with no API key at all), so a missing one should degrade the server, not block it.
+ * - **args**: an unresolved value is a hard error, raised by the caller from `missing`. Arguments
+ *   are positional — dropping the value after `-a` silently shifts every flag that follows and the
+ *   server receives a different command than the one written down. Refusing to start is the honest
+ *   outcome, and it can name the credential.
+ */
+export function resolveSpecSecrets(
+  spec: { args?: string[]; env?: Record<string, string> },
+  owner: string,
+): ResolvedSpec {
+  const own = ownerSecrets(owner);
+  const missing = new Set<string>();
+  const lookup = (name: string): string | undefined => own[name] ?? process.env[name];
+
+  const expand = (value: string): string =>
+    value.replace(PLACEHOLDER, (whole, name: string) => {
+      const found = lookup(name);
+      if (found !== undefined && found !== "") return found;
+      missing.add(name);
+      return whole;   // left in place; the caller decides to drop the key or refuse the spawn
+    });
+
+  const args = (spec.args ?? []).map(expand);
+
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(spec.env ?? {})) {
+    const expanded = expand(v);
+    if (PLACEHOLDER.test(expanded)) {
+      PLACEHOLDER.lastIndex = 0;   // the regex is /g and stateful; reset before the next test
+      continue;                     // unresolved: drop the key rather than pass the placeholder on
+    }
+    PLACEHOLDER.lastIndex = 0;
+    env[k] = expanded;
+  }
+
+  return { args, env, missing: [...missing] };
+}
+
+/** Credential names still unresolved in `args` — the ones that must stop a spawn. */
+export function missingArgSecrets(resolved: ResolvedSpec): string[] {
+  const names = new Set<string>();
+  for (const a of resolved.args) {
+    for (const m of a.matchAll(PLACEHOLDER)) names.add(m[1]);
+  }
+  return [...names];
+}
+
+/** Warn once per credential name that a server started without it. */
+export function warnMissing(server: string, names: readonly string[]): void {
+  for (const n of names) {
+    const key = `${server}:${n}`;
+    if (warned.has(key)) continue;
+    warned.add(key);
+    console.warn(
+      `[grokbot2] [mcp] "${server}" wants ${n} and nothing supplies it — ` +
+      `set it in the backend environment, or in .data/secrets/<user>.json`,
+    );
+  }
+}
