@@ -254,7 +254,19 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
 
     skillsCatalog: () => [],
     syncPluginSkills: () => [],
-    getPluginSyncStatus: () => ({}),
+    /**
+     * The plugin-sync record. `{}` CRASHED the Plugins panel's "Yours" tab.
+     *
+     * The host persists `{fetchedAt, currentUserId, skills[], authBlocked[]}` (its own reader
+     * defaults the last two to `[]`), and the overlay's Yours view reads `authBlocked.length`
+     * directly — an empty object gave it `undefined`, so clicking Yours threw
+     * `Cannot read properties of undefined (reading 'length')` and closed the panel. Reported by the
+     * user, reproduced over CDP at view--8LkllMO.js `Ni` (the `sand-plugins__yours` section).
+     *
+     * There is nothing to sync here — skills are not published to a registry — so the honest answer
+     * is a well-formed record with empty lists, not an empty object.
+     */
+    getPluginSyncStatus: () => ({ fetchedAt: Date.now(), skills: [], authBlocked: [] }),
     getListenerIntegrations: () => ({}),
     getTeachRecordingStatus: () => ({ isRecording: false }),
     // Box-host summary rows. The overlay's Yours → Installed list is built from the *host's*
