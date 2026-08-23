@@ -235,7 +235,7 @@ async function start(name: string, owner: string): Promise<Live> {
   };
 
   s.transport = spec.url
-    ? httpTransport(name, spec.url, resolved.headers, deliver, failAll)
+    ? httpTransport(name, spec.url, resolved.headers, spec.type, deliver, failAll)
     : stdioTransport(name, spec, resolved, deliver, failAll);
 
   live.set(key, s);
@@ -295,18 +295,23 @@ function stdioTransport(
 }
 
 /**
- * MCP Streamable HTTP — one endpoint, POST a JSON-RPC frame, read the answer off the response.
+ * MCP over HTTP — Streamable HTTP first, legacy HTTP+SSE when the server is older.
  *
  * The vendor client only ever connects REMOTE http/sse servers for plugins, and this client could
  * only spawn processes, so anything remote needed `npx mcp-remote <url>` as a stdio shim: an extra
  * Node process per server, a download on first run, and its own copy of the auth state.
  *
- * The shape is the spec's, not an invention:
+ * STREAMABLE HTTP (2025-03-26 and later), the default:
  *   - POST with `accept: application/json, text/event-stream`; the server picks which it sends.
  *   - A reply may arrive as one JSON object, or as an SSE stream of them, because a server streams
  *     when it wants to send progress notifications ahead of the result.
  *   - `Mcp-Session-Id` comes back on initialize and must be echoed on every later request.
  *   - A notification (no `id`) is answered with 202 and no body, so nothing is delivered for it.
+ *
+ * LEGACY HTTP+SSE (2024-11-05): two endpoints. GET the URL, keep that stream open, read a first
+ * `event: endpoint` naming a SECOND url; POST there and get 202 back, while the actual replies come
+ * down the stream that is still open. Entered when the row says `"type": "sse"`, or on a 404/405 —
+ * which is what a legacy server answers when handed a Streamable HTTP POST.
  *
  * 401 is reported as itself. Remote servers advertise OAuth through `WWW-Authenticate`, and repeating
  * that header names the fix; guessing at a token here would only produce a second, vaguer failure.
@@ -315,15 +320,47 @@ function httpTransport(
   name: string,
   url: string,
   headers: Record<string, string>,
+  typeHint: string | undefined,
   deliver: (msg: any) => void,
   failAll: (why: string) => void,
 ): Transport {
   let sessionId: string | null = null;
   let negotiated: string | null = null;
   let closed: string | null = null;
+  /**
+   * Which HTTP dialect to open with.
+   *
+   * `"type": "sse"` in the row is explicit. Failing that, a path ending in `/sse` is the convention
+   * every legacy server follows (supergateway, mcp-proxy, and the servers written before the
+   * transport was replaced), and guessing from it is worth doing because the 404/405 fallback below
+   * cannot be relied on alone: measured against supergateway, a POST to its `/sse` neither answers
+   * nor refuses — it just hangs, so there is no status to react to.
+   */
+  const looksLegacy = /sse/i.test(typeHint ?? "") || /\/sse\/?$/i.test(new URL(url).pathname);
+  let mode: "unknown" | "streamable" | "legacy" = looksLegacy ? "legacy" : "unknown";
+  let postUrl = url;
+  let legacyReady: Promise<void> | null = null;
+  // The legacy GET stays open for the whole session, so closing has to be able to cut it. Without
+  // this the reader keeps the event loop alive and the process never exits — which is how it was
+  // found: the transport tests passed and then hung until the harness killed them.
+  const legacyAbort = new AbortController();
 
-  /** Pull JSON-RPC frames out of an SSE body. Only `data:` lines carry them. */
-  const readSse = async (res: Response): Promise<void> => {
+  const unauthorized = (res: Response): Error => {
+    const how = res.headers.get("www-authenticate");
+    return new Error(
+      `MCP server "${name}" refused the request (401)` +
+      (how ? ` — it wants OAuth: ${how}` : "") +
+      ". Set its credential in the plugin setup, or give it an Authorization header.",
+    );
+  };
+
+  /**
+   * Read an SSE body, handing each complete event to `on`.
+   *
+   * Both modes need this, for different spans: Streamable HTTP uses it for one response, legacy for
+   * the whole session — so the event NAME matters here, where it did not before.
+   */
+  const readSse = async (res: Response, on: (event: string, data: string) => void): Promise<void> => {
     const reader = res.body?.getReader();
     if (!reader) return;
     const dec = new TextDecoder();
@@ -337,18 +374,62 @@ function httpTransport(
       while ((sep = buf.search(/\r?\n\r?\n/)) !== -1) {
         const raw = buf.slice(0, sep);
         buf = buf.slice(sep).replace(/^\r?\n\r?\n/, "");
-        const data = raw
-          .split(/\r?\n/)
-          .filter((l) => l.startsWith("data:"))
-          .map((l) => l.slice(5).trim())
-          .join("");
-        if (!data) continue;
-        try { deliver(JSON.parse(data)); } catch { /* keep-alive or a comment frame */ }
+        const lines = raw.split(/\r?\n/);
+        const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim() || "message";
+        const data = lines.filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+        if (data) on(event, data);
       }
     }
   };
 
+  /** Open the legacy stream and resolve once it has named the POST endpoint. */
+  const openLegacyStream = (): Promise<void> => {
+    if (legacyReady) return legacyReady;
+    legacyReady = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`MCP server "${name}" sent no endpoint event`)),
+        START_TIMEOUT_MS,
+      );
+      void (async () => {
+        try {
+          const res = await fetch(url, { headers: { accept: "text/event-stream", ...headers }, signal: legacyAbort.signal });
+          if (res.status === 401) { clearTimeout(timer); reject(unauthorized(res)); return; }
+          if (!res.ok) { clearTimeout(timer); reject(new Error(`MCP server "${name}" answered HTTP ${res.status}`)); return; }
+          // Runs for the life of the session: this stream carries every reply.
+          await readSse(res, (event, data) => {
+            if (event === "endpoint") {
+              // Usually a relative path carrying a session id, so resolve it against the base.
+              postUrl = new URL(data, url).toString();
+              clearTimeout(timer);
+              resolve();
+              return;
+            }
+            try { deliver(JSON.parse(data)); } catch { /* comment or keep-alive */ }
+          });
+          if (!closed) failAll(`MCP server "${name}" closed the stream`);
+        } catch (e) {
+          clearTimeout(timer);
+          reject(e as Error);
+        }
+      })();
+    });
+    return legacyReady;
+  };
+
   const post = async (msg: any): Promise<void> => {
+    if (mode === "legacy") {
+      await openLegacyStream();
+      const res = await fetch(postUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(msg),
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      });
+      if (res.status === 401) throw unauthorized(res);
+      if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
+      return;                                   // the reply comes down the open stream
+    }
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -362,22 +443,25 @@ function httpTransport(
       signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
 
+    // A legacy server has no POST route at all. Switch once, then replay this message.
+    if ((res.status === 404 || res.status === 405) && mode === "unknown") {
+      mode = "legacy";
+      return post(msg);
+    }
+    mode = "streamable";
+
     const sid = res.headers.get("mcp-session-id");
     if (sid) sessionId = sid;
 
-    if (res.status === 401) {
-      const how = res.headers.get("www-authenticate");
-      throw new Error(
-        `MCP server "${name}" refused the request (401)` +
-        (how ? ` — it wants OAuth: ${how}` : "") +
-        ". Set its credential in the plugin setup, or give it an Authorization header.",
-      );
-    }
+    if (res.status === 401) throw unauthorized(res);
     if (res.status === 202 || res.status === 204) return;   // notification accepted, no body
     if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
 
     const ct = res.headers.get("content-type") ?? "";
-    if (ct.includes("text/event-stream")) { await readSse(res); return; }
+    if (ct.includes("text/event-stream")) {
+      await readSse(res, (_e, data) => { try { deliver(JSON.parse(data)); } catch { /* keep-alive */ } });
+      return;
+    }
 
     const text = (await res.text()).trim();
     if (!text) return;
@@ -400,6 +484,7 @@ function httpTransport(
     },
     close: () => {
       closed = "Closed";
+      legacyAbort.abort();          // cut the long-lived GET, if this session opened one
       const sid = sessionId;
       if (!sid) return;
       // Best effort: tell the server the session is over so it can free it.
