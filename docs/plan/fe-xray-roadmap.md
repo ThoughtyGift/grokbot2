@@ -683,9 +683,37 @@ Hai điều rút ra, cả hai đều là *lỗi hệ thống* chứ không phả
   `:not(.icon-btn)`, và thêm một chốt `.icon-btn.icon-btn` (0,2,0) để rule thứ ba kiểu đó không
   lệch âm thầm nữa.
 
-> Còn một giá trị chưa map: `Start voice input` của app có `ui-icon` **8×8** trong nút 28×28 — nhỏ
-> bất thường cho một hình mic, nên có thể đó là chấm trạng thái chứ không phải icon mic. Web để
-> 14×14 và tâm đã đúng; chưa đổi theo 8×8 vì chưa hiểu con số đó tả cái gì.
+### X7.5 — con số 8×8 tả cái gì (2026-08-23, cùng ngày)
+
+X7.4 để lại một số đo chưa hiểu: mic của app có `ui-icon` **8×8** trong nút 28×28, và tôi đoán "có
+thể là chấm trạng thái". **Đoán sai.** Probe sâu trả lời dứt điểm:
+
+Dock của app có **HAI** nút `Start voice input` cùng lúc:
+
+| | nút A | nút B |
+|---|---|---|
+| `inert` | **có** | không |
+| `opacity` | **0** | 1 |
+| nền | trong suốt | **`rgb(252,252,252)`** (trắng) |
+| icon | `transform: scale(.5)` → **đo ra 8×8** | `scale(1)` → **16×16** |
+| transition | `opacity .2s cubic-bezier(0.22,1,0.36,1)` | `color .1s, background-color .1s, transform .05s` |
+
+Tức 8×8 **không phải kích thước thiết kế**: đó là bản ĐANG ẨN của một cặp cross-fade, icon 16×16 co
+50%. Kích thước thật của icon mic là **16×16**, đúng bằng attach. Cả hai icon là font `cursor-icons`
+16px với `::before` box 16×16 — nên "icon 8×8" chỉ tồn tại vì `getBoundingClientRect()` trả hộp SAU
+transform. Một phép đo đúng vẫn trả lời sai câu hỏi nếu ta hỏi sai.
+
+Đã map theo đó, và trong cùng lượt phép đo lộ thêm hai lệch chưa ai để ý:
+
+- icon mic 14×14 → **16×16**; nền `#fff` → **`rgb(252,252,252)`** (app không dùng trắng tinh).
+- nút **attach của app KHÔNG trong suốt**: nền `rgba(119,119,119,.173)` (cùng giá trị code chip
+  trong bubble), chữ `rgba(252,252,252,.4)`. Web đang để trong suốt — đã sửa.
+- nhịp chuyển thật của nút icon: **`color .1s, background-color .1s, transform .05s`** (`--t-btn`,
+  `--t-press`). `transform` ngắn hơn hẳn vì nó là phản hồi lúc nhấn. Thêm `:active scale(.94)`.
+- nút gửi/dừng chỉ tồn tại ở một số trạng thái nên **fade vào 200ms easeOutQuint** thay vì bật ra
+  tức thì — chính là hành vi cặp nút cross-fade của app (`opacity 0` + `scale(.5)` → hiện).
+
+Nghiệm: mic/attach đều 28×28 · icon 16×16 · dx=dy=0 · màu và transition **trùng chuỗi app khai**.
 
 Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
 có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau

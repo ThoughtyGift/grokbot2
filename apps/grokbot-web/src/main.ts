@@ -1098,7 +1098,7 @@ function paint(): void {
         <div class="pending" hidden></div>
         <label class="attach" title="gửi tệp">${icon("paperclip", 16)}<input type="file" ${selected ? "" : "disabled"} /></label>
         <textarea name="q" rows="1" aria-label="Prompt" placeholder="${selected ? `Nhắn ${escapeHtml(selected.name)}` : "chọn một bot"}" ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
-        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>${icon("mic", 14)}</button>` : ""}
+        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>${icon("mic", 16)}</button>` : ""}
         ${state.draft.trim() && !selected?.presence.isRunning
           ? `<button type="submit" class="send" title="gửi" ${selected && !state.busy ? "" : "disabled"}>${icon("send", 16)}</button>` : ""}
         ${selected?.presence.isRunning
