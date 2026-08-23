@@ -21,6 +21,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
+import { oauthAccessToken } from "./mcp-oauth.js";
 import { currentOwner } from "./request-context.js";
 import { DEFAULT_USER } from "./auth.js";
 
@@ -244,8 +245,17 @@ async function start(name: string, owner: string): Promise<Live> {
     if (live.get(key) === s) live.delete(key);
   };
 
+  // A signed-in connector needs nothing typed into the setup form: when the row declares no
+  // Authorization of its own, use whatever the app's OAuth flow stored for this URL and owner.
+  // The row's own header still wins — somebody who pasted a key meant to use that key.
+  const headers = { ...resolved.headers };
+  if (spec.url && !Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) {
+    const token = oauthAccessToken(spec.url, owner);
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+
   s.transport = spec.url
-    ? httpTransport(name, spec.url, resolved.headers, spec.type, deliver, failAll,
+    ? httpTransport(name, spec.url, headers, spec.type, deliver, failAll,
         (why) => { if (why) authRefused.set(key, why); else authRefused.delete(key); })
     : stdioTransport(name, spec, resolved, deliver, failAll);
 

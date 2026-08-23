@@ -10,6 +10,7 @@ import { config } from "./config.js";
 import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";
+import { oauthPortFor } from "./mcp-oauth.js";
 import { mcpServers as mcpServersFor } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
 import { runWithOwner } from "./request-context.js";
@@ -147,6 +148,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     usage: currentPeriodUsage(rpcUser) ?? undefined,
     body,
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
+    // Where a sign-in is kept, so the app's own OAuth flow has somewhere to write. Without this the
+    // ten MCP OAuth RPCs answer empty and a completed sign-in stores nothing.
+    oauth: oauthPortFor(ownerFromAuth(req.headers.authorization)),
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
     mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))

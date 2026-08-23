@@ -8,6 +8,11 @@
  */
 import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
 import { pbStruct, readStringMapField, type StructValue } from "./struct.js";
+import { readString, readStrings, readVarint, readMessages } from "./decode.js";
+import {
+  storePendingStateResponse, getPendingStateResponse, completeResponse, storeTokenResponse,
+  getTokensResponse, validateTokensResponse, refreshLockBeginResponse, type OAuthPort,
+} from "./oauth.js";
 
 export const SPIKE_AUTH_ID = "auth0|grokbot2-user";
 
@@ -30,6 +35,15 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetCurrentPeriodUsage",
   "InstallUserPlugin",
   "UpdateUserPluginInstall",
+  "StoreMcpOAuthPendingState",
+  "GetMcpOAuthPendingState",
+  "CompleteMcpOAuth",
+  "StoreMcpOAuthToken",
+  "GetMcpOAuthTokens",
+  "ValidateMcpOAuthTokens",
+  "DeleteMcpOAuthToken",
+  "McpOAuthRefreshLockBegin",
+  "McpOAuthRefreshLockRelease",
   "UninstallUserPlugin",
   "ListMarketplaces",
   "GetAvailableMcpServers",
@@ -66,6 +80,13 @@ export interface RpcCtx {
    * Plugin installs for the caller, owned by the backend (it writes the per-user `.mcp.json`).
    * Absent ⇒ the historical hardcoded behaviour: plugin 1 shown installed, `Add` a no-op.
    */
+  /**
+   * Where an OAuth sign-in is remembered, owner-scoped by the backend.
+   *
+   * Absent ⇒ the OAuth RPCs answer empty, exactly as they did before they were handled — an
+   * embedder with no store stays where it was instead of half-enabling a flow it cannot finish.
+   */
+  oauth?: OAuthPort;
   plugins?: {
     installedIds: number[];
     /**
@@ -154,6 +175,108 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
     ctx.plugins?.setVariables?.(row.id, body ? readStringMapField(body, 6) : {});
     return message(pbMsg(1, userPluginInstall(row)));
   },
+
+
+  // ── MCP OAuth ───────────────────────────────────────────────────────────────
+  //
+  // Ten RPCs, all storage. The client runs the OAuth itself — PKCE, dynamic registration, the token
+  // exchange, and a loopback listener it binds — and persists each step through these. Answering
+  // nothing was worse than refusing: an unhandled RPC replies 200 with an empty body, so a sign-in
+  // reported success and saved nothing.
+  //
+  // With no `oauth` port these fall back to the previous empty replies, which keeps an embedder that
+  // has no store exactly where it was rather than half-enabling a flow it cannot finish.
+
+  // StoreMcpOAuthPendingStateRequest: 1 server_url · 2 code_verifier · 3 client_id · 4 client_secret
+  // · 5 redirect_uri · 6 service_account_id · 7 account_key
+  StoreMcpOAuthPendingState: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    return storePendingStateResponse(ctx.oauth.storePending({
+      serverUrl: readString(b, 1),
+      codeVerifier: readString(b, 2),
+      clientId: readString(b, 3) || undefined,
+      clientSecret: readString(b, 4) || undefined,
+      redirectUri: readString(b, 5) || undefined,
+      serviceAccountId: readString(b, 6) || undefined,
+      accountKey: readString(b, 7),
+    }));
+  },
+
+  // GetMcpOAuthPendingStateRequest: 1 state_id
+  GetMcpOAuthPendingState: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    return getPendingStateResponse(ctx.oauth.getPending(readString(b, 1)));
+  },
+
+  // CompleteMcpOAuthRequest: 1 state_id · 2 authorization_code
+  CompleteMcpOAuth: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    return completeResponse(ctx.oauth.complete(readString(b, 1), readString(b, 2)));
+  },
+
+  // StoreMcpOAuthTokenRequest: 1 server_url · 2 refresh_token · 3 client_id · 4 client_secret
+  // · 5 redirect_uri · 6 access_token · 7 service_account_id · 8 client_token_created_at_ms
+  // · 9 source · 10 account_key
+  StoreMcpOAuthToken: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    const redirectUri = readString(b, 5);
+    return storeTokenResponse(ctx.oauth.storeToken(
+      readString(b, 1),
+      readString(b, 10),
+      {
+        refreshToken: readString(b, 2) || undefined,
+        clientId: readString(b, 3),
+        clientSecret: readString(b, 4) || undefined,
+        redirectUris: redirectUri ? [redirectUri] : [],
+        accessToken: readString(b, 6) || undefined,
+      },
+      readVarint(b, 8),
+    ));
+  },
+
+  // GetMcpOAuthTokensRequest: 1 server_urls (repeated) · 2 service_account_id · 3 account_key
+  GetMcpOAuthTokens: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    return getTokensResponse(ctx.oauth.getTokens(readStrings(b, 1), readString(b, 3)));
+  },
+
+  // ValidateMcpOAuthTokensRequest: 1 server_urls (repeated) · 2 service_account_id
+  // · 3 targets (repeated Target{1 server_url · 2 account_key})
+  //
+  // Two ways of naming the same thing: older callers send bare urls, newer ones send targets that
+  // carry an account. Reading only one of them would report "not signed in" for the other.
+  ValidateMcpOAuthTokens: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (!b || !ctx.oauth) return message();
+    const targets = readMessages(b, 3).map((t) => ({ serverUrl: readString(t, 1), accountKey: readString(t, 2) }));
+    const bare = readStrings(b, 1)
+      .filter((u) => !targets.some((t) => t.serverUrl === u))
+      .map((serverUrl) => ({ serverUrl, accountKey: "" }));
+    return validateTokensResponse(ctx.oauth.validate([...targets, ...bare]));
+  },
+
+  // DeleteMcpOAuthTokenRequest: 1 server_url · 2 service_account_id · 3 source · 4 account_key
+  DeleteMcpOAuthToken: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    if (b && ctx.oauth) ctx.oauth.deleteToken(readString(b, 1), readString(b, 4));
+    return message();   // DeleteMcpOAuthTokenResponse has no fields
+  },
+
+  // McpOAuthRefreshLockBeginRequest: 1 server_url · 2 executor_kind · 3 executor_id
+  // · 4 observed_updated_at_ms · 5 service_account_id · 6 account_key
+  McpOAuthRefreshLockBegin: (ctx) => {
+    const b = ctx.body ? unframe(ctx.body) : null;
+    const who = b ? readString(b, 3) : "";
+    return refreshLockBeginResponse(`lease:${who || "local"}`);
+  },
+
+  // McpOAuthRefreshLockReleaseRequest: 1 lease_handle · 2 reason. No response fields.
+  McpOAuthRefreshLockRelease: () => message(),
 
   // The counterpart to Add. Request is UninstallUserPluginRequest{plugin_id @1}; the response is
   // UninstallUserPluginResponse{success @1}, so an unknown or not-installed id answers success:false

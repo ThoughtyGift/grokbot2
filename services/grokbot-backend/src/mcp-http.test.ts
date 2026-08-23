@@ -51,6 +51,19 @@ function streamableFixture(): Server {
   return createServer(async (req, res) => {
     // A server that wants OAuth advertises it exactly like this, and that header is the only
     // trustworthy signal that a row should show an Authenticate button.
+    // Only answers with the right Bearer — the fixture for "signed in, nothing typed".
+    if ((req.url ?? "").startsWith("/guarded")) {
+      if (req.headers.authorization !== "Bearer tok-from-signin") {
+        res.writeHead(401, { "www-authenticate": "Bearer" }).end();
+        return;
+      }
+      const msg = await body(req);
+      const reply = answer(msg);
+      if (!reply) { res.writeHead(202).end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(reply));
+      return;
+    }
     if ((req.url ?? "").startsWith("/needsauth")) {
       res.writeHead(401, { "www-authenticate": 'Bearer resource_metadata="http://example.test/.well-known/oauth-protected-resource"' }).end();
       return;
@@ -119,6 +132,7 @@ before(async () => {
       legacyByPath: { url: `http://127.0.0.1:${lp}/sse` },
       wantsOauth: { url: `http://127.0.0.1:${sp}/needsauth` },
       plainStdio: { command: "node", args: ["-e", "setTimeout(()=>{},1e9)"] },
+      guarded: { url: `http://127.0.0.1:${sp}/guarded` },
     },
   }));
   // mcp.ts reads this at import time, so it has to be set before the module is loaded.
@@ -195,4 +209,24 @@ test("a server that answered is reported connected, with its tool count", () => 
   const st = mcp.mcpServerStatus("modern", DEFAULT_OWNER);
   assert.equal(st.status, "connected");
   assert.equal(st.toolCount, 1);
+});
+
+// ── the point of the OAuth family: signed in, nothing typed ───────────────────
+
+test("a server that demands a Bearer is refused when nobody has signed in", async () => {
+  const out = await mcp.getMcpTools("guarded");
+  assert.match(out, /401/);
+});
+
+test("after a sign-in is stored, the same server connects with NOTHING in the setup form", async () => {
+  const { oauthPortFor, clearOAuth } = await import("./mcp-oauth.js");
+  const url = mcp.mcpServers(DEFAULT_OWNER).guarded.url as string;
+  oauthPortFor(DEFAULT_OWNER).storeToken(url, "default", { clientId: "c", accessToken: "tok-from-signin" });
+  try {
+    mcp.closeMcp();                       // drop the refused connection so the next call reconnects
+    const out = await mcp.getMcpTools("guarded");
+    assert.match(out, /echo_it/, "the stored token was sent as Authorization");
+  } finally {
+    clearOAuth(DEFAULT_OWNER);
+  }
 });
