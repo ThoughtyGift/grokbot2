@@ -43,6 +43,8 @@ const warned = new Set<string>();
 export interface ResolvedSpec {
   args: string[];
   env: Record<string, string>;
+  /** HTTP headers for a remote server — where a Bearer token lives, so it needs the same treatment. */
+  headers: Record<string, string>;
   /** Credential names a placeholder asked for and nothing supplied. */
   missing: string[];
 }
@@ -60,7 +62,7 @@ export interface ResolvedSpec {
  *   outcome, and it can name the credential.
  */
 export function resolveSpecSecrets(
-  spec: { args?: string[]; env?: Record<string, string> },
+  spec: { args?: string[]; env?: Record<string, string>; headers?: Record<string, string> },
   owner: string,
 ): ResolvedSpec {
   const own = ownerSecrets(owner);
@@ -77,18 +79,21 @@ export function resolveSpecSecrets(
 
   const args = (spec.args ?? []).map(expand);
 
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(spec.env ?? {})) {
-    const expanded = expand(v);
-    if (PLACEHOLDER.test(expanded)) {
+  /** Same rule for both string maps: an unresolved key is dropped, never passed through verbatim. */
+  const resolveMap = (src: Record<string, string> = {}): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(src)) {
+      const expanded = expand(v);
+      const unresolved = PLACEHOLDER.test(expanded);
       PLACEHOLDER.lastIndex = 0;   // the regex is /g and stateful; reset before the next test
-      continue;                     // unresolved: drop the key rather than pass the placeholder on
+      if (!unresolved) out[k] = expanded;
     }
-    PLACEHOLDER.lastIndex = 0;
-    env[k] = expanded;
-  }
+    return out;
+  };
 
-  return { args, env, missing: [...missing] };
+  // A missing Authorization header is dropped like a missing env key: the request then fails with the
+  // server's own 401, which names the problem better than a literal "${TOKEN}" sent as a credential.
+  return { args, env: resolveMap(spec.env), headers: resolveMap(spec.headers), missing: [...missing] };
 }
 
 /** Credential names still unresolved in `args` — the ones that must stop a spawn. */

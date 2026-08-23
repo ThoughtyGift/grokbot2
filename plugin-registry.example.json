@@ -267,15 +267,11 @@
       "logoUrl": "https://api.iconify.design/mdi/bullhorn-outline.svg?color=%23FF7B72&width=128",
       "mcp": {
         "name": "zernio",
-        "description": "mcp.zernio.com, reached through the mcp-remote bridge",
-        "command": "npx",
-        "args": [
-          "-y",
-          "mcp-remote",
-          "https://mcp.zernio.com/mcp",
-          "--header",
-          "Authorization: Bearer ${ZERNIO_API_KEY}"
-        ]
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
       },
       "credentials": {
         "ZERNIO_API_KEY": {

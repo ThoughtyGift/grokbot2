@@ -40,6 +40,16 @@ function configPathFor(owner: string): string {
   const safe = owner.replace(/[^a-zA-Z0-9._-]/g, "_");
   return join(DATA_DIR, "mcp", `${safe}.json`);
 }
+/**
+ * The protocol version we ask for.
+ *
+ * Streamable HTTP only exists from 2025-03-26 on, so the old 2024-11-05 this sent would have made a
+ * remote server fall back to the legacy two-endpoint SSE transport. Measured earlier on stdio: the
+ * handshake completes on 2024-11-05, 2025-06-18 and 2026-07-28 alike, so raising it costs nothing
+ * there and is required here.
+ */
+const MCP_PROTOCOL_VERSION = "2025-06-18";
+
 /** A server that will not answer must not hang the turn behind it. */
 const START_TIMEOUT_MS = 60_000;
 const CALL_TIMEOUT_MS = 60_000;
@@ -54,16 +64,45 @@ const CALL_TIMEOUT_MS = 60_000;
  * directory on `sys.path`. Claude Code and Cursor both accept `cwd` in the same config shape, so
  * this is matching the format rather than extending it.
  */
-interface ServerSpec { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
+interface ServerSpec {
+  /** stdio: the executable. Absent for a remote server, which carries `url` instead. */
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  /** http: the Streamable HTTP endpoint, e.g. https://mcp.example.com/mcp */
+  url?: string;
+  /** http: sent on every request — where a `Bearer ${TOKEN}` credential goes. */
+  headers?: Record<string, string>;
+  /** Optional hint ("stdio" | "http" | "sse"); the presence of `url` already decides. */
+  type?: string;
+}
 interface McpTool { name: string; description?: string; inputSchema?: unknown }
 
 /** One resource a server exposes. Field names are the MCP spec's. */
 interface McpResource { uri: string; name?: string; description?: string; mimeType?: string }
 
+/**
+ * How a server is reached. Two answers now, and the rest of this module knows neither.
+ *
+ * `stdio` spawns a process and talks over its pipes. `http` speaks MCP's Streamable HTTP to a URL —
+ * which is what remote servers use (Zernio, and the vendor client's own plugins, which are remote
+ * http/sse only). Until this existed a remote server needed the `mcp-remote` bridge as a stdio shim.
+ *
+ * `send` is fire-and-forget: a reply arrives later through `deliver`, exactly as it did when the only
+ * transport was a pipe. That is what lets `rpc()` stay unchanged across both.
+ */
+interface Transport {
+  kind: "stdio" | "http";
+  send(msg: unknown): void;
+  close(): void;
+  /** null while usable; a human-readable reason once it is not. */
+  dead(): string | null;
+}
+
 interface Live {
-  proc: ChildProcessWithoutNullStreams;
+  transport: Transport;
   pending: Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>;
-  buf: string;
   /**
    * What the server said it can do, from its `initialize` reply.
    *
@@ -107,7 +146,7 @@ function rpc(s: Live, method: string, params?: unknown): Promise<any> {
       resolve: (v) => { clearTimeout(timer); resolve(v); },
       reject: (e) => { clearTimeout(timer); reject(e); },
     });
-    s.proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, ...(params ? { params } : {}) })}\n`);
+    s.transport.send({ jsonrpc: "2.0", id, method, ...(params ? { params } : {}) });
   });
 }
 
@@ -162,10 +201,10 @@ export function childEnv(specEnv?: Record<string, string>): NodeJS.ProcessEnv {
 async function start(name: string, owner: string): Promise<Live> {
   const key = `${owner}::${name}`;
   const existing = live.get(key);
-  if (existing && existing.proc.exitCode == null) return existing;
+  if (existing && existing.transport.dead() == null) return existing;
 
   const spec = mcpServers(owner)[name];
-  if (!spec?.command) throw new Error(`no MCP server "${name}" in ${configPathFor(owner)}`);
+  if (!spec?.command && !spec?.url) throw new Error(`no MCP server "${name}" in ${configPathFor(owner)}`);
 
   // A catalog row declares `${CREDENTIAL}` instead of a token, so nothing on disk holds a secret.
   // Substituted here, per owner — see secrets.ts for why args and env fail differently.
@@ -179,7 +218,40 @@ async function start(name: string, owner: string): Promise<Live> {
   }
   warnMissing(name, resolved.missing);
 
-  const proc = spawn(spec.command, resolved.args, {
+  const s: Live = { transport: null as unknown as Transport, pending: new Map(), nextId: 0, tools: [], capabilities: {} };
+
+  /** One place both transports hand a decoded JSON-RPC object to whoever is waiting for it. */
+  const deliver = (msg: any): void => {
+    const slot = s.pending.get(msg?.id);
+    if (!slot) return;                       // a notification, or a reply to a call already timed out
+    s.pending.delete(msg.id);
+    if (msg.error) slot.reject(new Error(msg.error.message ?? "MCP error"));
+    else slot.resolve(msg.result);
+  };
+  const failAll = (why: string): void => {
+    for (const [, slot] of s.pending) slot.reject(new Error(why));
+    s.pending.clear();
+    if (live.get(key) === s) live.delete(key);
+  };
+
+  s.transport = spec.url
+    ? httpTransport(name, spec.url, resolved.headers, deliver, failAll)
+    : stdioTransport(name, spec, resolved, deliver, failAll);
+
+  live.set(key, s);
+  return finishHandshake(name, s);
+}
+
+/** A spawned process, talking newline-delimited JSON-RPC over its pipes. */
+function stdioTransport(
+  name: string,
+  spec: ServerSpec,
+  resolved: { args: string[]; env: Record<string, string> },
+  deliver: (msg: any) => void,
+  failAll: (why: string) => void,
+): Transport {
+  const command = spec.command as string;
+  const proc = spawn(command, resolved.args, {
     stdio: ["pipe", "pipe", "pipe"],
     env: childEnv(resolved.env),
     ...(spec.cwd ? { cwd: spec.cwd } : {}),
@@ -194,49 +266,162 @@ async function start(name: string, owner: string): Promise<Live> {
     //
     // Measured: with `shell` off, the same spawn completes the handshake on protocolVersion
     // 2024-11-05, 2025-06-18 AND 2026-07-28. The version negotiation was never the problem.
-    shell: process.platform === "win32" && !isDirectExecutable(spec.command),
+    shell: process.platform === "win32" && !isDirectExecutable(command),
   }) as ChildProcessWithoutNullStreams;
 
-  const s: Live = { proc, pending: new Map(), buf: "", nextId: 0, tools: [], capabilities: {} };
-
+  let buf = "";
   // JSON-RPC frames are newline-delimited; a chunk can split or join them.
   proc.stdout.setEncoding("utf8");
   proc.stdout.on("data", (chunk: string) => {
-    s.buf += chunk;
+    buf += chunk;
     let nl: number;
-    while ((nl = s.buf.indexOf("\n")) !== -1) {
-      const line = s.buf.slice(0, nl).trim();
-      s.buf = s.buf.slice(nl + 1);
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
       if (!line) continue;
-      let msg: any;
-      try { msg = JSON.parse(line); } catch { continue; }   // servers also log plain text here
-      const slot = s.pending.get(msg.id);
-      if (!slot) continue;
-      s.pending.delete(msg.id);
-      if (msg.error) slot.reject(new Error(msg.error.message ?? "MCP error"));
-      else slot.resolve(msg.result);
+      try { deliver(JSON.parse(line)); } catch { /* servers also log plain text here */ }
     }
   });
   // stderr is where servers print startup noise AND, sometimes, their env. Never log it.
   proc.stderr.resume();
-  proc.on("exit", () => {
-    for (const [, slot] of s.pending) slot.reject(new Error(`MCP server "${name}" exited`));
-    s.pending.clear();
-    if (live.get(key) === s) live.delete(key);
-  });
+  proc.on("exit", () => failAll(`MCP server "${name}" exited`));
 
-  live.set(key, s);
+  return {
+    kind: "stdio",
+    send: (msg) => { proc.stdin.write(`${JSON.stringify(msg)}\n`); },
+    close: () => { proc.kill(); },
+    dead: () => (proc.exitCode == null ? null : `Exited with code ${proc.exitCode}`),
+  };
+}
 
+/**
+ * MCP Streamable HTTP — one endpoint, POST a JSON-RPC frame, read the answer off the response.
+ *
+ * The vendor client only ever connects REMOTE http/sse servers for plugins, and this client could
+ * only spawn processes, so anything remote needed `npx mcp-remote <url>` as a stdio shim: an extra
+ * Node process per server, a download on first run, and its own copy of the auth state.
+ *
+ * The shape is the spec's, not an invention:
+ *   - POST with `accept: application/json, text/event-stream`; the server picks which it sends.
+ *   - A reply may arrive as one JSON object, or as an SSE stream of them, because a server streams
+ *     when it wants to send progress notifications ahead of the result.
+ *   - `Mcp-Session-Id` comes back on initialize and must be echoed on every later request.
+ *   - A notification (no `id`) is answered with 202 and no body, so nothing is delivered for it.
+ *
+ * 401 is reported as itself. Remote servers advertise OAuth through `WWW-Authenticate`, and repeating
+ * that header names the fix; guessing at a token here would only produce a second, vaguer failure.
+ */
+function httpTransport(
+  name: string,
+  url: string,
+  headers: Record<string, string>,
+  deliver: (msg: any) => void,
+  failAll: (why: string) => void,
+): Transport {
+  let sessionId: string | null = null;
+  let negotiated: string | null = null;
+  let closed: string | null = null;
+
+  /** Pull JSON-RPC frames out of an SSE body. Only `data:` lines carry them. */
+  const readSse = async (res: Response): Promise<void> => {
+    const reader = res.body?.getReader();
+    if (!reader) return;
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let sep: number;
+      // Events are separated by a blank line; CRLF is legal too.
+      while ((sep = buf.search(/\r?\n\r?\n/)) !== -1) {
+        const raw = buf.slice(0, sep);
+        buf = buf.slice(sep).replace(/^\r?\n\r?\n/, "");
+        const data = raw
+          .split(/\r?\n/)
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trim())
+          .join("");
+        if (!data) continue;
+        try { deliver(JSON.parse(data)); } catch { /* keep-alive or a comment frame */ }
+      }
+    }
+  };
+
+  const post = async (msg: any): Promise<void> => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+        ...(negotiated ? { "mcp-protocol-version": negotiated } : {}),
+        ...headers,
+      },
+      body: JSON.stringify(msg),
+      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    });
+
+    const sid = res.headers.get("mcp-session-id");
+    if (sid) sessionId = sid;
+
+    if (res.status === 401) {
+      const how = res.headers.get("www-authenticate");
+      throw new Error(
+        `MCP server "${name}" refused the request (401)` +
+        (how ? ` — it wants OAuth: ${how}` : "") +
+        ". Set its credential in the plugin setup, or give it an Authorization header.",
+      );
+    }
+    if (res.status === 202 || res.status === 204) return;   // notification accepted, no body
+    if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
+
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("text/event-stream")) { await readSse(res); return; }
+
+    const text = (await res.text()).trim();
+    if (!text) return;
+    // A server may batch replies into an array.
+    for (const m of ((b) => (Array.isArray(b) ? b : [b]))(JSON.parse(text))) deliver(m);
+  };
+
+  return {
+    kind: "http",
+    send: (msg) => {
+      const method = (msg as { method?: string })?.method;
+      // Fire-and-forget, like the pipe write it replaces. A transport-level failure has to become a
+      // rejection for THIS call, or `rpc` would sit until its timeout with no reason to report.
+      void post(msg).catch((e: Error) => {
+        const id = (msg as { id?: number })?.id;
+        if (id == null) return;                    // a notification: nothing is waiting on it
+        deliver({ id, error: { message: e.message } });
+      });
+      if (method === "initialize") negotiated = MCP_PROTOCOL_VERSION;
+    },
+    close: () => {
+      closed = "Closed";
+      const sid = sessionId;
+      if (!sid) return;
+      // Best effort: tell the server the session is over so it can free it.
+      void fetch(url, { method: "DELETE", headers: { "mcp-session-id": sid, ...headers } }).catch(() => {});
+      failAll(`MCP server "${name}" closed`);
+    },
+    dead: () => closed,
+  };
+}
+
+/** Shared tail of both transports: initialize, say hello back, learn the tool list. */
+async function finishHandshake(name: string, s: Live): Promise<Live> {
   const handshake = (async () => {
     const hello = await rpc(s, "initialize", {
-      protocolVersion: "2024-11-05",
+      protocolVersion: MCP_PROTOCOL_VERSION,
       // We now consume resources as well as tools. Declaring nothing was fine while only tools were
       // used; a server may gate features on what the client claims, so say what we actually read.
       capabilities: { tools: {}, resources: {} },
       clientInfo: { name: "grokbot2", version: "0.1.0" },
     });
     s.capabilities = (hello?.capabilities ?? {}) as Record<string, unknown>;
-    s.proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    s.transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
     const listed = await rpc(s, "tools/list");
     s.tools = Array.isArray(listed?.tools) ? listed.tools : [];
   })();
@@ -398,7 +583,7 @@ export function reportMcpConfig(log: (msg: string) => void): void {
 
 /** Stop every server (shutdown, and so a script can exit). */
 export function closeMcp(): void {
-  for (const [, s] of live) { try { s.proc.kill(); } catch { /* already gone */ } }
+  for (const [, s] of live) { try { s.transport.close(); } catch { /* already gone */ } }
   live.clear();
 }
 
@@ -423,7 +608,7 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   toolCount: number;
 } {
   const spec = mcpServers(owner)[name];
-  if (!spec?.command) return { status: "error", detail: "Not in this account's MCP config", toolCount: 0 };
+  if (!spec?.command && !spec?.url) return { status: "error", detail: "Not in this account's MCP config", toolCount: 0 };
 
   const resolved = resolveSpecSecrets(spec, owner);
   const blocking = missingArgSecrets(resolved);
@@ -433,10 +618,10 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   }
 
   const s = live.get(`${owner}::${name}`);
-  if (s && s.proc.exitCode == null) {
+  if (s && s.transport.dead() == null) {
     return { status: "connected", detail: `${s.tools.length} tool(s) available`, toolCount: s.tools.length };
   }
-  if (s) return { status: "error", detail: `Exited with code ${s.proc.exitCode}`, toolCount: 0 };
+  if (s) return { status: "error", detail: s.transport.dead() ?? "Not running", toolCount: 0 };
 
   // An unresolved placeholder in `env` does not stop the spawn — the key is dropped and the server
   // runs degraded (n8n serves its docs with no API key at all). So it is not an error, but leaving it

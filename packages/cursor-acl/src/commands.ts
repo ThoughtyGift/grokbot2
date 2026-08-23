@@ -87,7 +87,9 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       const sp = spec && typeof spec === "object" ? spec as Record<string, unknown> : {};
       const command = typeof sp.command === "string" ? sp.command : "";
       const url = typeof sp.url === "string" ? sp.url : undefined;
-      const transport = typeof sp.type === "string" ? sp.type : url ? "sse" : "stdio";
+      // "http" now, not "sse": the backend speaks MCP Streamable HTTP to a url server directly,
+      // so labelling it with the legacy two-endpoint transport would describe the wrong thing.
+      const transport = typeof sp.type === "string" ? sp.type : url ? "http" : "stdio";
       return [{
         id: String(i + 1),
         name,

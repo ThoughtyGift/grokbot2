@@ -97,3 +97,26 @@ test("two placeholders of the same name in one spec are both filled", () => {
   const r = withEnv({ T: "v" }, () => resolveSpecSecrets({ args: ["${T}", "x${T}y"] }, OWNER));
   assert.deepEqual(r.args, ["v", "xvy"]);
 });
+
+// ── headers: where a remote server's Bearer token lives ───────────────────────
+
+test("a header placeholder is filled — this is how a remote MCP server is authorised", () => {
+  const r = withEnv({ ZERNIO_API_KEY: "zk_live_1" }, () =>
+    resolveSpecSecrets({ headers: { Authorization: "Bearer ${ZERNIO_API_KEY}" } }, OWNER));
+  assert.deepEqual(r.headers, { Authorization: "Bearer zk_live_1" });
+  assert.deepEqual(r.missing, []);
+});
+
+test("an unresolved header is dropped, so the server answers its own 401", () => {
+  const r = withEnv({ ZERNIO_API_KEY: undefined }, () =>
+    resolveSpecSecrets({ headers: { Authorization: "Bearer ${ZERNIO_API_KEY}" } }, OWNER));
+  assert.equal("Authorization" in r.headers, false, "sending a literal ${…} would read as a bad token");
+  assert.deepEqual(r.missing, ["ZERNIO_API_KEY"]);
+});
+
+test("headers do not disturb args and env, and a spec with none still resolves to {}", () => {
+  const both = withEnv({ A: "1", B: "2", C: "3" }, () =>
+    resolveSpecSecrets({ args: ["${A}"], env: { E: "${B}" }, headers: { H: "${C}" } }, OWNER));
+  assert.deepEqual(both, { args: ["1"], env: { E: "2" }, headers: { H: "3" }, missing: [] });
+  assert.deepEqual(resolveSpecSecrets({}, OWNER).headers, {});
+});

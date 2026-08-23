@@ -40,7 +40,18 @@ export interface PluginEntry {
   displayName: string;
   description: string;
   /** The MCP server this plugin installs. `command`/`args`/`env` are install spec, never wire data. */
-  mcp?: { name: string; description: string; command?: string; args?: string[]; env?: Record<string, string> };
+  mcp?: {
+    name: string;
+    description: string;
+    /** stdio row: the command to spawn. */
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    /** remote row: a Streamable HTTP endpoint instead of a command. */
+    url?: string;
+    /** remote row: sent on every request — where a `Bearer ${TOKEN}` credential goes. */
+    headers?: Record<string, string>;
+  };
   skill?: { name: string; description: string };
   /**
    * An https image for the row's icon. The client fetches it in the MAIN process and rejects any
@@ -171,7 +182,9 @@ function credentialSchema(row: PluginEntry): PluginEntry["variablesSchema"] | un
   const names = (values: string[]): string[] =>
     [...new Set(values.flatMap((v) => [...v.matchAll(PLACEHOLDER)].map((m) => m[1])))];
 
-  const required = names(row.mcp?.args ?? []);
+  // A header credential is required for the same reason an arg one is: without it the server is not
+  // reachable at all (a remote server answers 401), so asking for it later is asking too late.
+  const required = names([...(row.mcp?.args ?? []), ...Object.values(row.mcp?.headers ?? {})]);
   const optional = names(Object.values(row.mcp?.env ?? {})).filter((n) => !required.includes(n));
   if (required.length + optional.length === 0) return undefined;
 
@@ -196,13 +209,18 @@ const withSchema = (rows: PluginEntry[]): PluginEntry[] =>
 /** The install spec for a catalog id — what `plugins.ts` writes into the user's MCP config. */
 export function serverSpecFor(pluginId: number): { name: string; spec: Record<string, unknown> } | null {
   const row = catalog().find((p) => p.id === pluginId);
-  if (!row?.mcp?.command) return null;
+  // A row installs a server if it names EITHER a command (stdio) or a url (remote). Requiring a
+  // command dropped every remote row on the floor: installed, and with nothing to connect to.
+  if (!row?.mcp?.command && !row?.mcp?.url) return null;
+  const m = row.mcp;
   return {
-    name: row.mcp.name,
+    name: m.name,
     spec: {
-      command: row.mcp.command,
-      ...(row.mcp.args ? { args: row.mcp.args } : {}),
-      ...(row.mcp.env ? { env: row.mcp.env } : {}),
+      ...(m.command ? { command: m.command } : {}),
+      ...(m.args ? { args: m.args } : {}),
+      ...(m.env ? { env: m.env } : {}),
+      ...(m.url ? { url: m.url } : {}),
+      ...(m.headers ? { headers: m.headers } : {}),
     },
   };
 }
