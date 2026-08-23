@@ -401,3 +401,53 @@ export function closeMcp(): void {
   for (const [, s] of live) { try { s.proc.kill(); } catch { /* already gone */ } }
   live.clear();
 }
+
+/**
+ * What to tell the app about one server, for the Plugins pane.
+ *
+ * Every row used to report a flat `disconnected` with the detail "Runs on Grok Bot's computer" —
+ * true of the machine, and a lie about the server: a memory server that had been answering tool
+ * calls all session still read as disconnected, and one whose credential was never supplied read
+ * the same, so the pane could not tell "fine" from "broken".
+ *
+ * The vocabulary is the client's own (`Tis` in electron-main maps its connection kinds onto these):
+ * `connected` · `initializing` · `needsAuth` · `error` · `disconnected`.
+ *
+ * `needsAuth` is deliberately NOT used. It renders an Authenticate button that hands off to an OAuth
+ * URL, and nothing here can produce one for a stdio server — the button would only fail. A missing
+ * credential is reported as `error` naming the variable, which is what it is and what fixes it.
+ */
+export function mcpServerStatus(name: string, owner: string = currentOwner()): {
+  status: "connected" | "initializing" | "error" | "disconnected";
+  detail: string;
+  toolCount: number;
+} {
+  const spec = mcpServers(owner)[name];
+  if (!spec?.command) return { status: "error", detail: "Not in this account's MCP config", toolCount: 0 };
+
+  const resolved = resolveSpecSecrets(spec, owner);
+  const blocking = missingArgSecrets(resolved);
+  const where = "the plugin's setup, the backend environment, or .data/secrets/<user>.json";
+  if (blocking.length) {
+    return { status: "error", detail: `Needs ${blocking.join(", ")} — set it in ${where}`, toolCount: 0 };
+  }
+
+  const s = live.get(`${owner}::${name}`);
+  if (s && s.proc.exitCode == null) {
+    return { status: "connected", detail: `${s.tools.length} tool(s) available`, toolCount: s.tools.length };
+  }
+  if (s) return { status: "error", detail: `Exited with code ${s.proc.exitCode}`, toolCount: 0 };
+
+  // An unresolved placeholder in `env` does not stop the spawn — the key is dropped and the server
+  // runs degraded (n8n serves its docs with no API key at all). So it is not an error, but leaving it
+  // unsaid is what made a credential-less Facebook look identical to a healthy server. Name it.
+  if (resolved.missing.length) {
+    return {
+      status: "disconnected",
+      detail: `Starts on first use, but ${resolved.missing.join(", ")} is not set — set it in ${where}`,
+      toolCount: 0,
+    };
+  }
+
+  return { status: "disconnected", detail: "Configured; starts on first use", toolCount: 0 };
+}

@@ -65,7 +65,7 @@ import {
   readAttachmentImage, readAttachmentText, readAttachmentChunk, stageFile, stageImage, stagedCount,
 } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
-import { closeMcp, mcpServers } from "./mcp.js";
+import { closeMcp, mcpServers, mcpServerStatus } from "./mcp.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody, clearUnknown,
@@ -161,7 +161,7 @@ const ports: AclPorts = {
     submitResponses,
     channelSnapshot,
   },
-  extensions: { closeMcp, mcpServers },
+  extensions: { closeMcp, mcpServers, mcpServerStatus },
   events: { subscribe },
   observe: {
     recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,

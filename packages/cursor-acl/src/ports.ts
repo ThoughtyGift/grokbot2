@@ -150,6 +150,11 @@ export type ChannelName = "local-exec" | "webauthn";
 export interface ExtensionsPort {
   closeMcp(): void;
   mcpServers(): Record<string, unknown>;
+  /**
+   * How one server is actually doing, for the Plugins pane. Optional so an embedder that has no
+   * answer keeps the previous flat report rather than being forced to invent one.
+   */
+  mcpServerStatus?(name: string): { status: string; detail: string; toolCount: number };
 }
 
 /**

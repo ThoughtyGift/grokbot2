@@ -97,10 +97,15 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         transport,
         ...(command ? { command } : {}),
         ...(url ? { url } : {}),
-        toolCount: 0,
+        // Was a flat `disconnected` + "Runs on Grok Bot's computer" for every row: true about the
+        // machine, wrong about the server, so a working server and a broken one looked identical.
+        ...(() => {
+          const st = extensions.mcpServerStatus?.(name);
+          return st
+            ? { status: st.status, statusDetail: st.detail, toolCount: st.toolCount }
+            : { status: "disconnected", statusDetail: "Runs on Grok Bot's computer", toolCount: 0 };
+        })(),
         isTeamServer: false,
-        status: "disconnected",
-        statusDetail: "Runs on Grok Bot's computer",
       }];
     });
 
