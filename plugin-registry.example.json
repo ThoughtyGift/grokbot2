@@ -258,6 +258,31 @@
         ]
       },
       "logoUrl": "https://api.iconify.design/mdi/head-cog-outline.svg?color=%237EE787&width=128"
+    },
+    {
+      "id": 20,
+      "name": "zernio",
+      "displayName": "Zernio Social",
+      "description": "Post, read the inbox, run ads and pull analytics across Facebook, Instagram, TikTok, YouTube, LinkedIn, X and more — one connector for all of them.",
+      "logoUrl": "https://api.iconify.design/mdi/bullhorn-outline.svg?color=%23FF7B72&width=128",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com, reached through the mcp-remote bridge",
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-remote",
+          "https://mcp.zernio.com/mcp",
+          "--header",
+          "Authorization: Bearer ${ZERNIO_API_KEY}"
+        ]
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. Leave the browser sign-in to Zernio itself if you prefer OAuth."
+        }
+      }
     }
   ]
 }
