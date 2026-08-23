@@ -27,6 +27,7 @@ Ba loại tài liệu, đừng lẫn:
 | Hiểu vì sao hệ thống như hiện tại | [adr/README.md](adr/README.md) |
 | Làm cho hệ thống chuyên nghiệp, scale được | [system-pipeline.md](plan/system-pipeline.md) |
 | Mở cho nhiều người dùng | [multi-tenant-roadmap.md](plan/multi-tenant-roadmap.md) |
+| Gộp grokbot2 với cinAPI thành một sản phẩm | [cinapi-merge.md](plan/cinapi-merge.md) |
 
 ## plan/ — ĐANG LÀM
 
