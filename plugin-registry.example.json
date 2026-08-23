@@ -268,17 +268,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -290,17 +280,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -312,17 +292,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -334,17 +304,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -356,17 +316,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -378,17 +328,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     },
     {
@@ -400,17 +340,7 @@
       "mcp": {
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
-        "url": "https://mcp.zernio.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${ZERNIO_API_KEY}"
-        }
-      },
-      "credentials": {
-        "ZERNIO_API_KEY": {
-          "title": "Zernio API key",
-          "description": "Leave this empty to sign in with your Zernio account instead — the connector asks for authorisation on first use. Paste a key only if you prefer one.",
-          "required": false
-        }
+        "url": "https://mcp.zernio.com/mcp"
       }
     }
   ]
