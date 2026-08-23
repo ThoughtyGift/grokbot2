@@ -793,7 +793,12 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   // Authenticate button. Only ever reported because the SERVER refused, never guessed from a config
   // that merely looks incomplete — an Authenticate button on a server that does not want OAuth would
   // just fail, and a button that fails is worse than no button.
-  const refused = authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner);
+  // A stored sign-in makes an older refusal stale evidence, so it must not outvote it. Getting this
+  // order wrong kept a freshly signed-in connector reading needsAuth: the refusal only clears on a
+  // successful request, and the pane never showed a reason to make one.
+  const signedIn = Boolean(spec.url && oauthAccessToken(spec.url, owner));
+  const refused = signedIn ? null : (authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner));
+  if (signedIn) recordRefusal(name, null, owner);
   if (refused) {
     // The refusal may have come off disk after a restart, in which case no probe ran and nothing has
     // built the sign-in URL yet. Warm it here too: the click asks for the URL twice in the same
