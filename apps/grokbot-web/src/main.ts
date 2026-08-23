@@ -4,6 +4,7 @@ import type { AnimatedAvatar, BotMood } from "./avatar";
 import { AVATAR_COLORS, AVATAR_EXPRESSIONS, AVATAR_SHAPES, TILE_INK, animateAvatar, botAvatarPng, botAvatarSvg, pickFor } from "./avatar";
 import type { NativeAgent, NativeEntry, ComputerStatus, Routine, SidebarSection, Plugin } from "./api";
 import { mdToHtml } from "./markdown";
+import { icon } from "./icons";
 
 const root = document.querySelector("#app")!;
 
@@ -303,7 +304,7 @@ function renderEntry(e: NativeEntry): HTMLElement {
       const card = el(`<a class="att-file" href="${escapeHtml(e.attachment.href)}" download target="_blank" rel="noreferrer">
         <span class="ext">${escapeHtml(ext || "FILE")}</span>
         <span class="fname">${escapeHtml(name)}</span>
-        <span class="dl">↓</span>
+        <span class="dl">${icon("download", 14)}</span>
       </a>`);
       bubble.append(card);
     }
@@ -414,11 +415,15 @@ function messageActions(e: NativeEntry): HTMLElement {
   const who = e.kind === "message" ? "bạn" : (e.author?.name ?? "bot");
   // `role="toolbar"` + nhãn mang theo giờ và id entry, đúng như thanh của app gốc: khi có nhiều
   // bubble giống nhau thì nhãn là thứ duy nhất phân biệt được cái nào đang hover.
+  /*
+   * Ba nút 24×24 với icon 14×14 — số đo app. Icon là SVG, KHÔNG phải glyph: đo qua CDP thì glyph
+   * trong ba nút này lệch 9px xuống dưới (baseline chữ), và kích thước nó trôi theo font.
+   */
   const bar = el(`<div class="msg-actions" role="toolbar" aria-label="Hành động cho tin của ${escapeHtml(who)} lúc ${escapeHtml(at)} (${escapeHtml(e.id)})">
-    <button type="button" class="act" aria-label="Add reaction"></button>
+    <button type="button" class="act" aria-label="Add reaction">${icon("smile", 14)}</button>
     <div class="react-menu" hidden role="menu"></div>
-    <button type="button" class="act reply" aria-label="Reply to ${escapeHtml(who)} message" title="Trả lời">↩</button>
-    <button type="button" class="act more" aria-label="More message actions" title="Thêm">⋯</button>
+    <button type="button" class="act reply" aria-label="Reply to ${escapeHtml(who)} message" title="Trả lời">${icon("reply", 14)}</button>
+    <button type="button" class="act more" aria-label="More message actions" title="Thêm">${icon("dots", 14)}</button>
     <div class="more-menu" hidden role="menu"></div>
   </div>`);
   const menu = bar.querySelector<HTMLElement>(".react-menu")!;
@@ -1042,15 +1047,15 @@ function paint(): void {
   root.replaceChildren(el(`<div class="shell${state.paneOpen ? "" : " no-pane"}">
     <aside class="sidebar${state.ui.sidebarCollapsed ? " rail" : ""}">
       <div class="side-head">
-        <button type="button" class="new-icon" data-act="new" aria-label="New" title="bot mới">+</button>
+        <button type="button" class="new-icon" data-act="new" aria-label="New" title="bot mới">${icon("plus", 18)}</button>
       </div>
       ${state.searchOpen || state.query
-        ? `<label class="search"><span class="ico">⌕</span><input type="search" placeholder="Search" value="${escapeHtml(state.query)}" /></label>`
-        : `<button type="button" class="search-btn" data-act="search" aria-label="Search"><span class="ico">⌕</span><span class="lbl">Search</span></button>`}
+        ? `<label class="search">${icon("search", 14)}<input type="search" placeholder="Search" value="${escapeHtml(state.query)}" /></label>`
+        : `<button type="button" class="search-btn" data-act="search" aria-label="Search">${icon("search", 14)}<span class="lbl">Search</span></button>`}
       <div class="roster"></div>
       <div class="side-foot">
         <button type="button" class="foot-row" data-act="plugins" aria-label="Plugins" aria-expanded="${state.pluginsOpen}">
-          <span class="ico">⊞</span><span class="lbl">Plugins</span>
+          <span class="ico-slot">${icon("plugins", 14)}</span><span class="lbl">Plugins</span>
         </button>
         ${state.accountOpen ? `<div class="account-menu" role="menu">
           <button type="button" role="menuitem" data-act="new">Bot mới</button>
@@ -1059,7 +1064,7 @@ function paint(): void {
           <hr />
           <button type="button" role="menuitem" data-act="logout">Đăng xuất</button>
         </div>` : ""}
-        <button type="button" class="foot-row rail-new" data-act="new" aria-label="New" title="bot mới">+</button>
+        <button type="button" class="foot-row rail-new" data-act="new" aria-label="New" title="bot mới">${icon("plus", 18)}</button>
         <button type="button" class="foot-row account" data-act="account" aria-expanded="${state.accountOpen}" aria-label="Open account menu">
           <span class="mono">${escapeHtml(initialsOf(api.currentEmail().split("@")[0] || "tk"))}</span>
           <span class="lbl">${escapeHtml(api.currentEmail() || "tài khoản")}</span>
@@ -1077,7 +1082,9 @@ function paint(): void {
           <!-- App gốc KHÔNG có pill trạng thái ở đây (đo header qua CDP: chỉ nút danh tính + một
                icon-button "Grok Bot's Computer"). Trạng thái nằm ở chấm trên avatar + ba chấm
                trong transcript, nên pill "sẵn sàng" cũ là thứ thừa so với app. -->
-          <button type="button" class="icon-btn" data-act="pane" aria-label="${state.paneOpen ? "Close details" : "Open details"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5.5 14h5M8 11.5V14"/></svg></button>
+          <!-- 34x28 với icon 18x18: số đo của nút Computer trên toolbar app, không phải 28x28/16x16 chọn cho vừa mắt.
+               (không dùng backtick trong comment này — nó đóng luôn template literal của paint) -->
+          <button type="button" class="icon-btn wide" data-act="pane" aria-label="${state.paneOpen ? "Close details" : "Open details"}" title="${state.paneOpen ? "Đóng panel" : "Mở panel"}">${icon("monitor", 18)}</button>
         </div>
       </div>
       ${state.error ? `<div class="err">${escapeHtml(state.error)}</div>` : ""}
@@ -1086,16 +1093,16 @@ function paint(): void {
         ${state.replyTo ? `<div class="reply-chip">
           <span class="rc-ico">↩</span>
           <span class="rc-body">Trả lời <strong>${escapeHtml(state.replyTo.author)}</strong>: ${escapeHtml(state.replyTo.excerpt)}</span>
-          <button type="button" class="icon-btn" data-act="reply-cancel" aria-label="Huỷ trả lời">×</button>
+          <button type="button" class="icon-btn" data-act="reply-cancel" aria-label="Huỷ trả lời">${icon("close", 14)}</button>
         </div>` : ""}
         <div class="pending" hidden></div>
-        <label class="attach" title="gửi tệp">+<input type="file" ${selected ? "" : "disabled"} /></label>
+        <label class="attach" title="gửi tệp">${icon("paperclip", 16)}<input type="file" ${selected ? "" : "disabled"} /></label>
         <textarea name="q" rows="1" aria-label="Prompt" placeholder="${selected ? `Nhắn ${escapeHtml(selected.name)}` : "chọn một bot"}" ${selected ? "" : "disabled"}>${escapeHtml(state.draft)}</textarea>
-        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>◉</button>` : ""}
+        ${SPEECH_OK ? `<button type="button" class="mic" data-act="mic" aria-label="Start voice input" title="Đọc để nhập" ${selected ? "" : "disabled"}>${icon("mic", 14)}</button>` : ""}
         ${state.draft.trim() && !selected?.presence.isRunning
-          ? `<button type="submit" class="send" title="gửi" ${selected && !state.busy ? "" : "disabled"}>↑</button>` : ""}
+          ? `<button type="submit" class="send" title="gửi" ${selected && !state.busy ? "" : "disabled"}>${icon("send", 16)}</button>` : ""}
         ${selected?.presence.isRunning
-          ? `<button type="button" class="stop" data-act="stop" title="dừng">■</button>` : ""}
+          ? `<button type="button" class="stop" data-act="stop" title="dừng">${icon("stop", 14)}</button>` : ""}
       </form>
     </section>
     <div class="grip grip-pane" role="separator" aria-orientation="vertical" aria-label="Resize details" tabindex="0"></div>
@@ -1108,7 +1115,7 @@ function paint(): void {
           <div class="routines">
             <div class="routines-head">
               <span>Routine</span>
-              <button type="button" class="icon-btn" data-act="routine-new" aria-label="Create Routine" ${selected ? "" : "disabled"}>+</button>
+              <button type="button" class="icon-btn" data-act="routine-new" aria-label="Create Routine" ${selected ? "" : "disabled"}>${icon("plus", 14)}</button>
             </div>
             ${!selected
               ? `<p class="empty-note">chọn một bot để xem routine</p>`
@@ -1122,14 +1129,14 @@ function paint(): void {
                       <label class="routine-toggle" title="${r.isEnabled ? "đang bật" : "đang tắt"}">
                         <input type="checkbox" data-act="routine-toggle" ${r.isEnabled ? "checked" : ""} />
                       </label>
-                      <button type="button" class="icon-btn" data-act="routine-del" aria-label="Xoá routine">×</button>
+                      <button type="button" class="icon-btn" data-act="routine-del" aria-label="Xoá routine">${icon("trash", 14)}</button>
                     </li>`).join("")}</ul>`
                 : `<p class="empty-note">Routine là việc lặp lại theo lịch mà bot tự chạy. Chưa có cái nào.</p>`}
           </div>
         </section>
         <section class="pane-page settings" ${state.panePage === "settings" ? "" : "aria-hidden=\"true\""}>
           <div class="pane-top">
-            <button type="button" class="icon-btn" data-act="back" aria-label="Back to details">‹</button>
+            <button type="button" class="icon-btn" data-act="back" aria-label="Back to details">${icon("chevron-left", 14)}</button>
             <span class="subpage-title">Bot settings</span>
           </div>
           ${selected ? `
@@ -1157,7 +1164,7 @@ function paint(): void {
       <div class="plugins-card">
         <div class="plugins-head">
           <span class="title">Plugins</span>
-          <button type="button" class="icon-btn" data-act="plugins-close" aria-label="Close plugins">×</button>
+          <button type="button" class="icon-btn" data-act="plugins-close" aria-label="Close plugins">${icon("close", 14)}</button>
         </div>
         ${state.plugins === null
           ? `<p class="empty-note">đang tải…</p>`

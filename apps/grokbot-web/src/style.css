@@ -100,15 +100,17 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 .sidebar { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
 
+/* 24×24 với icon 18×18 — số đo nút `New` của app; grid center để tâm icon trùng tâm nút. */
 .new-icon {
-  margin-left: auto; width: 28px; height: var(--h-control); border-radius: var(--r-row);
-  font-size: 16px; line-height: 1; color: var(--fg-2);
+  display: grid; place-items: center;
+  margin-left: auto; width: 28px; height: var(--h-control); padding: 0; border-radius: var(--r-row);
+  line-height: 1; color: var(--fg-2);
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 .new-icon:hover { background: var(--row-hover); color: var(--fg); }
 
 /* Ô tìm kiếm: app gốc đặt ở y=56, cao ~28, trong lề 12. */
-.search .ico { color: var(--fg-3); font-size: var(--fs-body); }
+.search .ui-icon, .search-btn .ui-icon { color: var(--fg-3); }
 
 .roster { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; }
 
@@ -169,15 +171,39 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* 20×20: đo được ở `sand-chat-header__avatar` của app gốc, không phải chọn cho vừa mắt. */
 .chat-head .avatar { width: 20px; height: 20px; }
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.head-actions button { padding: 5px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
-.head-actions button:hover:not(:disabled) { background: var(--surface-4); }
+/*
+ * `:not(.icon-btn)` có chủ ý, và nó là một BUG ĐÃ ĐO ĐƯỢC, không phải thẩm mỹ: `.head-actions
+ * button` (specificity 0,1,1) thắng `.icon-btn` (0,1,0), nên nút icon 28px border-box nhận
+ * `padding: 5px 12px` → content box còn 4px và icon 16px lệch **6px sang phải** (đo qua CDP,
+ * app dx=0). Một nút icon không được nhận padding của nút-có-chữ.
+ */
+.head-actions button:not(.icon-btn) { padding: 5px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
+.head-actions button:not(.icon-btn):hover:not(:disabled) { background: var(--surface-4); }
 /* Nút icon vuông trong toolbar (đóng/mở panel) — 28×28, không phải pill có chữ. */
 .icon-btn {
   display: inline-grid; place-items: center;
   width: 28px; height: var(--h-control); padding: 0; border-radius: var(--r-row);
   background: transparent; color: var(--fg-2); font-size: var(--fs-title); line-height: 1;
 }
+/* 34×28 — số đo nút `Grok Bot's Computer` trên toolbar app (nó KHÔNG vuông). */
+.icon-btn.wide { width: 34px; }
 .icon-btn:hover { background: var(--row-hover); color: var(--fg); }
+
+/*
+ * Hộp icon — tương ứng `i.ui-icon` của app: kích thước CỐ ĐỊNH, không co theo font, không mang
+ * baseline. `display: block` để nó không nhận khoảng trống dòng của inline element, đó chính là
+ * nguồn của độ lệch 9px mà glyph gây ra ở ba nút hover-action.
+ */
+.ui-icon { display: block; flex: none; }
+
+/*
+ * CHỐT HẠ, và nó có lý do đo được: hai lần trong cùng file, một rule dạng `.<vùng> button` (0,1,1)
+ * đã ghi đè `padding: 0` của `.icon-btn` (0,1,0) và đẩy icon ra khỏi tâm — `.head-actions button`
+ * làm lệch 6px, `.routines button` làm lệch 5px. Cả hai đã thêm `:not(.icon-btn)`, nhưng rule thứ
+ * ba như vậy sẽ lại lệch mà không ai biết. `.icon-btn.icon-btn` cho specificity (0,2,0) nên nó
+ * thắng mọi rule một-class-một-tag, tức nút icon luôn giữ padding 0 và tâm luôn trùng.
+ */
+.icon-btn.icon-btn { padding: 0; display: inline-grid; place-items: center; }
 
 .err {
   margin: 8px 16px; padding: 8px 12px; border-radius: var(--r-card);
@@ -422,14 +448,18 @@ button:disabled { opacity: 0.4; cursor: default; }
   transition: opacity var(--t-fast) ease;
 }
 .bubble:hover .msg-actions, .msg-actions:focus-within { opacity: 1; pointer-events: auto; }
+/*
+ * 24×24 với icon 14×14 — số đo app. `grid` + `place-items: center` + `padding: 0` cho dx=dy=0 bất
+ * kể font; bản trước dùng glyph (`::before { content }` cho nút reaction, ký tự trong markup cho
+ * reply/more) và đo được **lệch 9px xuống dưới** vì baseline chữ. Icon giờ là SVG `.ui-icon`, nên
+ * cũng không còn ký tự nào dính vào cú copy tin nhắn — lý do ban đầu của `::before` vẫn được giữ.
+ */
 .msg-actions .act {
-  width: 24px; height: var(--h-icon); border-radius: var(--r-ctl);
-  color: var(--fg-2); font-size: var(--fs-body); line-height: 1;
+  display: grid; place-items: center;
+  width: 24px; height: var(--h-icon); padding: 0; border-radius: var(--r-ctl);
+  color: var(--fg-2); line-height: 1;
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
-/* Icon là CSS content: `opacity: 0` không loại text khỏi `innerText`, nên ký tự trong markup sẽ
-   dính vào mọi cú copy tin nhắn. */
-.msg-actions .act::before { content: "☺"; }
 .msg-actions .act:hover { background: var(--row-hover); color: var(--fg); }
 
 /* Hộp reaction của app đo được 246×44 (X0.2): 6 emoji + `More emoji` trên MỘT hàng.
@@ -536,8 +566,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 .caption { font-size: var(--fs-meta); color: var(--fg-2); }
 .routines { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .routines p { margin: 0 0 10px; font-size: var(--fs-meta); line-height: 17px; color: var(--fg-2); }
-.routines button { padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
-.routines button:hover:not(:disabled) { background: var(--surface-4); }
+.routines button:not(.icon-btn) { padding: 6px 12px; border-radius: var(--r-pill); font-size: var(--fs-body); background: var(--surface-2); }
+.routines button:not(.icon-btn):hover:not(:disabled) { background: var(--surface-4); }
 
 /* ── avatar ───────────────────────────────────────────────────────────────── */
 
@@ -738,9 +768,11 @@ img.avatar { object-fit: cover; }
 .side-head { display: flex; align-items: center; justify-content: flex-end; height: 52px; padding: 0 16px; flex: 0 0 auto; }
 .side-head .new-icon { width: var(--h-icon); height: var(--h-icon); font-size: var(--fs-body); }
 
+/* Lề trái 7px, không phải 8px, và đây là số bù chứ không phải tuỳ ý: ô này có viền 1px mà ô của
+   app thì không, nên 8+1 đẩy tâm icon lệch 1px so với app (đo: web -171 vs app -172). */
 .search-btn, .search {
   display: flex; align-items: center; gap: 8px;
-  height: var(--h-field); margin: 0 12px; padding: 0 8px;
+  height: var(--h-field); margin: 0 12px; padding: 0 8px 0 7px;
   border: 1px solid var(--line); border-radius: var(--r-ctl);
   background: var(--surface-2); color: var(--fg-3); font-size: var(--fs-body);
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -788,11 +820,16 @@ img.avatar { object-fit: cover; }
 .foot-row:hover:not(:disabled) { background: var(--surface-2); color: var(--fg-1); }
 .foot-row:disabled { opacity: 0.45; cursor: default; }
 .foot-row .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.foot-row .mono {
-  display: grid; place-items: center; width: 24px; height: var(--h-icon); flex: 0 0 24px;
-  border-radius: 6px; background: var(--surface-3); color: var(--fg-1);
-  font-size: 11px; font-weight: 600;
+/*
+ * Ô đầu hàng rộng 28px cho MỌI hàng đáy — đó là cách app đặt chúng thẳng nhau: đo qua CDP thì
+ * tâm icon của cả hàng Plugins (icon 14, lề 15) và hàng account (avatar 28, lề 8) đều nằm ở
+ * **x=22** so với mép hàng. Một ô chung 28px + lề 8px cho ra đúng 22, và nhãn hai hàng tự thẳng.
+ */
+.foot-row .mono, .foot-row .ico-slot {
+  display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px;
+  border-radius: 6px;
 }
+.foot-row .mono { background: var(--surface-3); color: var(--fg-1); font-size: 11px; font-weight: 600; }
 
 .account-menu {
   position: absolute; left: 12px; right: 12px; bottom: 56px; z-index: 3;

@@ -650,6 +650,43 @@ Nghiệm trên stack thật: giết BFF → khởi động lại → KHÔNG relo
 chấm xanh hiện sau **1 giây**. Trước bản sửa, cùng kịch bản đó FE mù vô hạn (đo: một request
 `/v1/events` duy nhất từ lúc load, PATCH không bao giờ hiện).
 
+### X7.4 — TÂM icon trong nút (2026-08-23)
+
+Chủ máy nói "icon trong các button vẫn đang bị lệch". Đúng, và phép đo cũ **không thể thấy** điều
+đó: `ui-anchors` so hộp *nút*, không so hộp *icon bên trong nút* — nút đúng 24×24 mà icon lệch 9px
+vẫn cho 165/165. Nên lượt này đo thứ khác: **độ lệch tâm icon so với tâm nút (dx, dy)** trên cả hai
+bên, cùng khổ, cùng trạng thái sidebar.
+
+App: mọi nút đo được đều `dx=dy=0`, `padding: 0`, icon là `i.ui-icon` — một hộp có width/height cố
+định. Web: dùng **glyph chữ** (`+`, `⋯`, `↩`, `⌕`, `×`), và glyph mang line-height + baseline nên
+không căn giữa nổi, kích thước lại trôi theo font:
+
+| nút | web trước | app | sau |
+|---|---|---|---|
+| hover reply / more | glyph 11×17, **dy +9** | 14×14, dy 0 | 14×14, dy 0 ✓ |
+| header computer | 28×28 · icon 16, **dx +6** | **34×28** · icon 18, dx 0 | 34×28 · 18×18, dx 0 ✓ |
+| routine + | glyph, **dx +5** | — | 14×14, dx 0 ✓ |
+| Search | glyph 8×18, dx −171 | 14×14, dx −172 | 14×14, dx −172 ✓ |
+| Plugins | glyph 13×18, dx −173 | 14×14, dx −165 | 14×14, dx −165 ✓ |
+| account | avatar **24×24**, dx −167 | avatar **28×28**, dx −165 | 28×28, dx −165 ✓ |
+| add reaction | `::before` content, không đo được | 14×14, dx 0 | 14×14, dx 0 ✓ |
+
+**11/11 khớp tuyệt đối** sau khi sửa (btn, icon, dx, dy đều bằng app), `ui-diff` 0 lệch.
+
+Hai điều rút ra, cả hai đều là *lỗi hệ thống* chứ không phải lỗi một nút:
+
+- **Glyph không phải icon.** Đã thay bằng [`icons.ts`](../../apps/grokbot-web/src/icons.ts): SVG có
+  hộp cố định (`.ui-icon`, `display: block`), nét vẽ tự viết — không chép asset của hãng, chỉ HỘP
+  là theo số đo. Bonus: hết cảnh ký tự icon dính vào cú copy tin nhắn, đúng lý do `::before` ra đời.
+- **Một rule `.<vùng> button` (0,1,1) ghi đè `padding: 0` của `.icon-btn` (0,1,0)** — đã xảy ra
+  **hai lần** (`.head-actions button` → lệch 6px, `.routines button` → lệch 5px). Cả hai thêm
+  `:not(.icon-btn)`, và thêm một chốt `.icon-btn.icon-btn` (0,2,0) để rule thứ ba kiểu đó không
+  lệch âm thầm nữa.
+
+> Còn một giá trị chưa map: `Start voice input` của app có `ui-icon` **8×8** trong nút 28×28 — nhỏ
+> bất thường cho một hình mic, nên có thể đó là chấm trạng thái chứ không phải icon mic. Web để
+> 14×14 và tâm đã đúng; chưa đổi theo 8×8 vì chưa hiểu con số đó tả cái gì.
+
 Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
 có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau
 là đúng**: web đăng nhập tài khoản riêng (`local|…`), app là chủ máy (`auth0|grokbot2-user`) —
