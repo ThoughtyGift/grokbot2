@@ -42,6 +42,17 @@ export interface PluginEntry {
   /** The MCP server this plugin installs. `command`/`args`/`env` are install spec, never wire data. */
   mcp?: { name: string; description: string; command?: string; args?: string[]; env?: Record<string, string> };
   skill?: { name: string; description: string };
+  /**
+   * An https image for the row's icon. The client fetches it in the MAIN process and rejects any
+   * other scheme, so `data:` and `http://localhost` do not work — measured in `resolvePluginLogo`.
+   * Omit it for a plugin the client already has a built-in brand icon for (github, gmail, notion,
+   * playwright and a dozen more): the built-in is drawn locally and costs no request.
+   */
+  logoUrl?: string;
+  /** Wording for the credential form. The credentials themselves come from the spec placeholders. */
+  credentials?: Record<string, { title?: string; description?: string; required?: boolean }>;
+  /** JSON Schema the client renders as the setup form. Derived by `catalog()`, not written by hand. */
+  variablesSchema?: { properties: Record<string, Record<string, string>>; required: string[] };
 }
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -91,6 +102,8 @@ function parse(raw: unknown): PluginEntry[] {
       ...(p.skill && typeof p.skill.name === "string"
         ? { skill: { ...p.skill, description: p.skill.description ?? "" } }
         : {}),
+      ...(typeof p.logoUrl === "string" && /^https:\/\//i.test(p.logoUrl) ? { logoUrl: p.logoUrl } : {}),
+      ...(p.credentials && typeof p.credentials === "object" ? { credentials: p.credentials } : {}),
     }];
   });
 }
@@ -105,20 +118,20 @@ export function catalog(): PluginEntry[] {
   if (src && /^https?:\/\//i.test(src)) {
     if (cached) {
       if (Date.now() - cached.at > TTL_MS) void refreshRemoteCatalog(src);   // stale-while-revalidate
-      return cached.rows;
+      return withSchema(cached.rows);
     }
     void refreshRemoteCatalog(src);
-    return BUILT_IN;   // first call, nothing fetched yet
+    return withSchema(BUILT_IN);   // first call, nothing fetched yet
   }
 
   const file = src ? (isAbsolute(src) ? src : join(repoRoot, src)) : DEFAULT_FILE;
-  if (!existsSync(file)) return BUILT_IN;
+  if (!existsSync(file)) return withSchema(BUILT_IN);
   try {
     const rows = parse(JSON.parse(readFileSync(file, "utf8")));
-    return rows.length ? rows : BUILT_IN;
+    return withSchema(rows.length ? rows : BUILT_IN);
   } catch (e) {
     console.warn(`[grokbot2] [plugins] ${file} is not readable JSON: ${(e as Error).message}`);
-    return cached?.rows ?? BUILT_IN;
+    return withSchema(cached?.rows ?? BUILT_IN);
   }
 }
 
@@ -134,6 +147,51 @@ export async function refreshRemoteCatalog(url: string): Promise<void> {
     if (cached) cached.at = Date.now();   // back off; keep serving the last good catalog
   }
 }
+
+/**
+ * The credential form the client shows when someone clicks Add.
+ *
+ * Nothing new is declared for it: a row ALREADY says which credentials it needs, because
+ * secrets.ts substitutes `${NAME}` in the spec at spawn. Deriving the form from those placeholders
+ * keeps one source of truth — a row cannot ask for a credential it never uses, or use one it never
+ * asks for.
+ *
+ * Required follows the same split spawn already makes, so the form promises exactly what the spawn
+ * enforces:
+ *   a placeholder in `args` is REQUIRED  — the spawn refuses without it (arguments are positional)
+ *   a placeholder in `env`  is optional  — the spawn drops the key and the server runs degraded
+ *
+ * The shape is JSON Schema because that is what the client parses: `properties` becomes the fields,
+ * `title` the label, `description` the hint, and it marks a field secret on its own when the key
+ * matches /TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL/ — which our names already do.
+ */
+const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+function credentialSchema(row: PluginEntry): PluginEntry["variablesSchema"] | undefined {
+  const names = (values: string[]): string[] =>
+    [...new Set(values.flatMap((v) => [...v.matchAll(PLACEHOLDER)].map((m) => m[1])))];
+
+  const required = names(row.mcp?.args ?? []);
+  const optional = names(Object.values(row.mcp?.env ?? {})).filter((n) => !required.includes(n));
+  if (required.length + optional.length === 0) return undefined;
+
+  const properties: Record<string, Record<string, string>> = {};
+  for (const name of [...required, ...optional]) {
+    const note = row.credentials?.[name];
+    properties[name] = {
+      type: "string",
+      ...(note?.title ? { title: note.title } : {}),
+      ...(note?.description ? { description: note.description } : {}),
+    };
+  }
+  // A row may override the split — `required: false` on an arg placeholder, or true on an env one.
+  const isRequired = (n: string): boolean => row.credentials?.[n]?.required ?? required.includes(n);
+  return { properties, required: [...required, ...optional].filter(isRequired) };
+}
+
+/** Attach the derived form to a row. Kept out of `parse` so it also covers the built-in fallback. */
+const withSchema = (rows: PluginEntry[]): PluginEntry[] =>
+  rows.map((r) => { const v = credentialSchema(r); return v ? { ...r, variablesSchema: v } : r; });
 
 /** The install spec for a catalog id — what `plugins.ts` writes into the user's MCP config. */
 export function serverSpecFor(pluginId: number): { name: string; spec: Record<string, unknown> } | null {

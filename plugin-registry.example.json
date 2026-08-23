@@ -1,6 +1,5 @@
 {
-  "//": "Marketplace catalog. Copy to plugin-registry.json (gitignored) or point GROKBOT2_PLUGIN_REGISTRY at a file or URL. Credentials are ${PLACEHOLDERS} resolved at spawn from the backend environment or .data/secrets/<user>.json — never write a real token here, this file is meant to be shared.",
-
+  "//": "Marketplace catalog. Copy to plugin-registry.json (gitignored) or point GROKBOT2_PLUGIN_REGISTRY at a file or URL. Credentials are ${PLACEHOLDERS} resolved at spawn from the backend environment or .data/secrets/<user>.json — never write a real token here, this file is meant to be shared. Each placeholder becomes a field in the client's setup form; `credentials` only supplies its label and hint. `logoUrl` must be https — the client fetches it in the main process and rejects any other scheme.",
   "plugins": [
     {
       "id": 1,
@@ -11,47 +10,95 @@
         "name": "memory",
         "description": "@modelcontextprotocol/server-memory",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-memory"]
-      }
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ]
+      },
+      "logoUrl": "https://api.iconify.design/mdi/memory.svg?color=%23A78BFA&width=128"
     },
     {
       "id": 10,
       "name": "github",
       "displayName": "GitHub",
-      "description": "Repos, issues, pull requests and code search. Needs GITHUB_PERSONAL_ACCESS_TOKEN.",
+      "description": "Repos, issues, pull requests and code search.",
       "mcp": {
         "name": "github",
         "description": "@modelcontextprotocol/server-github",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}" }
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+        }
+      },
+      "credentials": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": {
+          "title": "Personal access token",
+          "description": "GitHub → Settings → Developer settings → Personal access tokens. Give it the repo scope.",
+          "required": true
+        }
       }
     },
     {
       "id": 11,
       "name": "lark",
       "displayName": "Lark / Feishu",
-      "description": "Messages, docs, sheets, calendar and Base through the Lark OpenAPI. Needs LARK_APP_ID and LARK_APP_SECRET from your Lark developer console.",
+      "description": "Messages, docs, sheets, calendar and Base through the Lark OpenAPI.",
       "mcp": {
         "name": "lark",
         "description": "@larksuiteoapi/lark-mcp",
         "command": "npx",
-        "args": ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-a", "${LARK_APP_ID}", "-s", "${LARK_APP_SECRET}"]
+        "args": [
+          "-y",
+          "@larksuiteoapi/lark-mcp",
+          "mcp",
+          "-a",
+          "${LARK_APP_ID}",
+          "-s",
+          "${LARK_APP_SECRET}"
+        ]
+      },
+      "logoUrl": "https://api.iconify.design/mdi/chat-processing-outline.svg?color=%233370FF&width=128",
+      "credentials": {
+        "LARK_APP_ID": {
+          "title": "App ID",
+          "description": "open.larksuite.com → your app → Credentials & Basic Info."
+        },
+        "LARK_APP_SECRET": {
+          "title": "App Secret",
+          "description": "Same page as the App ID."
+        }
       }
     },
     {
       "id": 12,
       "name": "gmail",
       "displayName": "Gmail",
-      "description": "Read, search, draft and send mail. One-time browser sign-in first: npx @gongrzhe/server-gmail-autoauth-mcp auth (needs a Google OAuth client file).",
+      "description": "Read, search, draft and send mail. Sign in once first: npx @gongrzhe/server-gmail-autoauth-mcp auth",
       "mcp": {
         "name": "gmail",
         "description": "@gongrzhe/server-gmail-autoauth-mcp",
         "command": "npx",
-        "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
+        "args": [
+          "-y",
+          "@gongrzhe/server-gmail-autoauth-mcp"
+        ],
         "env": {
           "GMAIL_OAUTH_PATH": "${GMAIL_OAUTH_PATH}",
           "GMAIL_CREDENTIALS_PATH": "${GMAIL_CREDENTIALS_PATH}"
+        }
+      },
+      "credentials": {
+        "GMAIL_OAUTH_PATH": {
+          "title": "OAuth client file",
+          "description": "Optional. Path to gcp-oauth.keys.json if it is not in the default place."
+        },
+        "GMAIL_CREDENTIALS_PATH": {
+          "title": "Saved credentials file",
+          "description": "Optional. Where the one-time sign-in stores its token."
         }
       }
     },
@@ -59,15 +106,31 @@
       "id": 13,
       "name": "facebook",
       "displayName": "Facebook Pages",
-      "description": "Post to a Page, read comments and insights. Community package, not audited by us. Needs FACEBOOK_ACCESS_TOKEN and FACEBOOK_PAGE_ID.",
+      "description": "Post to a Page, read comments and insights. Community package, not audited by us.",
       "mcp": {
         "name": "facebook",
         "description": "facebook-mcp-server (community)",
         "command": "npx",
-        "args": ["-y", "facebook-mcp-server"],
+        "args": [
+          "-y",
+          "facebook-mcp-server"
+        ],
         "env": {
           "FACEBOOK_ACCESS_TOKEN": "${FACEBOOK_ACCESS_TOKEN}",
           "FACEBOOK_PAGE_ID": "${FACEBOOK_PAGE_ID}"
+        }
+      },
+      "logoUrl": "https://api.iconify.design/simple-icons/facebook.svg?color=%231877F2&width=128",
+      "credentials": {
+        "FACEBOOK_ACCESS_TOKEN": {
+          "title": "Page access token",
+          "description": "Graph API Explorer → your Page → generate a long-lived token.",
+          "required": true
+        },
+        "FACEBOOK_PAGE_ID": {
+          "title": "Page ID",
+          "description": "Your Page → About → Page transparency.",
+          "required": true
         }
       }
     },
@@ -75,13 +138,25 @@
       "id": 14,
       "name": "notion",
       "displayName": "Notion",
-      "description": "Search, read and write pages and databases. Needs NOTION_TOKEN from a Notion integration, shared with the pages it may touch.",
+      "description": "Search, read and write pages and databases. Share the pages your integration may touch with it.",
       "mcp": {
         "name": "notion",
         "description": "@notionhq/notion-mcp-server (official)",
         "command": "npx",
-        "args": ["-y", "@notionhq/notion-mcp-server"],
-        "env": { "NOTION_TOKEN": "${NOTION_TOKEN}" }
+        "args": [
+          "-y",
+          "@notionhq/notion-mcp-server"
+        ],
+        "env": {
+          "NOTION_TOKEN": "${NOTION_TOKEN}"
+        }
+      },
+      "credentials": {
+        "NOTION_TOKEN": {
+          "title": "Integration token",
+          "description": "notion.so/my-integrations → create one, then share the pages it may read with it.",
+          "required": true
+        }
       }
     },
     {
@@ -93,32 +168,63 @@
         "name": "playwright",
         "description": "@playwright/mcp (official)",
         "command": "npx",
-        "args": ["-y", "@playwright/mcp@latest"]
+        "args": [
+          "-y",
+          "@playwright/mcp@latest"
+        ]
       }
     },
     {
       "id": 16,
       "name": "n8n",
       "displayName": "n8n",
-      "description": "Build and run n8n workflows. Serves node documentation with no credentials; set N8N_API_URL and N8N_API_KEY to reach your own instance.",
+      "description": "Build and run n8n workflows. Serves node documentation even with no instance configured.",
       "mcp": {
         "name": "n8n",
         "description": "n8n-mcp",
         "command": "npx",
-        "args": ["-y", "n8n-mcp"],
-        "env": { "N8N_API_URL": "${N8N_API_URL}", "N8N_API_KEY": "${N8N_API_KEY}" }
+        "args": [
+          "-y",
+          "n8n-mcp"
+        ],
+        "env": {
+          "N8N_API_URL": "${N8N_API_URL}",
+          "N8N_API_KEY": "${N8N_API_KEY}"
+        }
+      },
+      "logoUrl": "https://api.iconify.design/simple-icons/n8n.svg?color=%23EA4B71&width=128",
+      "credentials": {
+        "N8N_API_URL": {
+          "title": "n8n URL",
+          "description": "e.g. http://localhost:5678 — leave empty to browse node docs only."
+        },
+        "N8N_API_KEY": {
+          "title": "API key",
+          "description": "n8n → Settings → API. Only needed to run workflows."
+        }
       }
     },
     {
       "id": 17,
       "name": "filesystem",
       "displayName": "Filesystem",
-      "description": "Read and write files under one root you choose. Set GROKBOT2_FS_ROOT — deliberately required, since it decides what the agent may touch.",
+      "description": "Read and write files under one folder you choose.",
       "mcp": {
         "name": "filesystem",
         "description": "@modelcontextprotocol/server-filesystem",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "${GROKBOT2_FS_ROOT}"]
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "${GROKBOT2_FS_ROOT}"
+        ]
+      },
+      "logoUrl": "https://api.iconify.design/mdi/folder-outline.svg?color=%23E3B341&width=128",
+      "credentials": {
+        "GROKBOT2_FS_ROOT": {
+          "title": "Folder the agent may use",
+          "description": "One absolute path. The agent can read and write anything under it, and nothing outside."
+        }
       }
     },
     {
@@ -130,8 +236,12 @@
         "name": "context7",
         "description": "@upstash/context7-mcp",
         "command": "npx",
-        "args": ["-y", "@upstash/context7-mcp"]
-      }
+        "args": [
+          "-y",
+          "@upstash/context7-mcp"
+        ]
+      },
+      "logoUrl": "https://api.iconify.design/simple-icons/upstash.svg?color=%2300E9A3&width=128"
     },
     {
       "id": 19,
@@ -142,8 +252,12 @@
         "name": "sequential-thinking",
         "description": "@modelcontextprotocol/server-sequential-thinking",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
-      }
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ]
+      },
+      "logoUrl": "https://api.iconify.design/mdi/head-cog-outline.svg?color=%237EE787&width=128"
     }
   ]
 }

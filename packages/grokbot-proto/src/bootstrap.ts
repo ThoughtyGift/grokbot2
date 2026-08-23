@@ -7,6 +7,7 @@
  *   SandAccessState.GRANTED = 1, SandAccessBlockReason.NONE = 1, SandTrialClaimStatus.NONE = 1.
  */
 import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
+import { pbStruct, readStringMapField, type StructValue } from "./struct.js";
 
 export const SPIKE_AUTH_ID = "auth0|grokbot2-user";
 
@@ -28,6 +29,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetEffectiveUserPlugins",
   "GetCurrentPeriodUsage",
   "InstallUserPlugin",
+  "UpdateUserPluginInstall",
   "UninstallUserPlugin",
   "ListMarketplaces",
   "GetAvailableMcpServers",
@@ -66,10 +68,15 @@ export interface RpcCtx {
    */
   plugins?: {
     installedIds: number[];
-    /** Install by catalog id; returns false when the id is unknown. Writes the user's MCP config. */
-    install(pluginId: number): boolean;
+    /**
+     * Install by catalog id; false when the id is unknown. Writes the user's MCP config, and stores
+     * `values` — what they typed into the credential form — where the spawn reads them from.
+     */
+    install(pluginId: number, values?: Record<string, string>): boolean;
     /** Remove an install; false when it was not installed. Takes its server out of the config. */
     uninstall?(pluginId: number): boolean;
+    /** Re-save the credential form for an already-installed plugin (the "edit" flow). */
+    setVariables?(pluginId: number, values: Record<string, string>): void;
   };
   /**
    * The MCP servers configured for the caller, from their own config (backend-owned, per-user under
@@ -126,9 +133,25 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
   // The Marketplace "Add" button. Decodes plugin_id (field 1) from the request and asks the backend
   // to install it; the app then reloads its MCP servers and the row moves to "Yours → Installed".
   InstallUserPlugin: (ctx) => {
-    const id = ctx.body ? readVarintField(unframe(ctx.body), 1) : null;
+    const body = ctx.body ? unframe(ctx.body) : null;
+    const id = body ? readVarintField(body, 1) : null;
     const row = id == null ? undefined : (ctx.catalog ?? LOCAL_PLUGINS).find((p) => p.id === id);
-    if (!row || !ctx.plugins?.install(row.id)) return message();   // unknown id / no port: empty reply
+    // variables (5) carries whatever the person typed into the setup form. Empty when the plugin
+    // declared none, so the no-credentials path is byte-identical to what it was.
+    const values = body ? readStringMapField(body, 5) : {};
+    if (!row || !ctx.plugins?.install(row.id, values)) return message();   // unknown id / no port
+    return message(pbMsg(1, userPluginInstall(row)));
+  },
+
+  // "Edit" on an installed plugin submits the same form again. Request is
+  // UpdateUserPluginInstallRequest{plugin_id @1, is_enabled @3, pinned_git_ref @5, variables @6};
+  // without this the pencil saved nothing and the app reported success anyway.
+  UpdateUserPluginInstall: (ctx) => {
+    const body = ctx.body ? unframe(ctx.body) : null;
+    const id = body ? readVarintField(body, 1) : null;
+    const row = id == null ? undefined : (ctx.catalog ?? LOCAL_PLUGINS).find((p) => p.id === id);
+    if (!row) return message();
+    ctx.plugins?.setVariables?.(row.id, body ? readStringMapField(body, 6) : {});
     return message(pbMsg(1, userPluginInstall(row)));
   },
 
@@ -230,6 +253,10 @@ export interface PluginEntry {
   /** The MCP server this plugin installs. `command`/`args`/`env` are the install spec, not wire data. */
   mcp?: { name: string; description: string; command?: string; args?: string[]; env?: Record<string, string> };
   skill?: { name: string; description: string };
+  /** https image for the row's icon. Any other scheme is rejected by the client's own fetcher. */
+  logoUrl?: string;
+  /** JSON Schema for the credential form. Built by the backend from the spec's `${…}` placeholders. */
+  variablesSchema?: { properties: Record<string, Record<string, string>>; required: string[] };
 }
 
 function plugin(p: PluginEntry): Buffer {
@@ -239,11 +266,18 @@ function plugin(p: PluginEntry): Buffer {
     pbStr(3, p.displayName),
     pbStr(4, p.description),
     pbVar(6, 3),
+    // logo_url (10). Absent for a plugin the client already draws from its built-in brand set —
+    // github, gmail→google, notion, playwright and a dozen more resolve locally, no request.
+    p.logoUrl ? pbStr(10, p.logoUrl) : null,
     pbBool(12, true),
     pbStr(24, "https://local.test"),
     pbStr(27, "local.test"),
     "skill" in p && p.skill ? pbMsg(28, skillDescriptor(p.skill.name, p.skill.description)) : null,
     "mcp" in p && p.mcp ? pbMsg(32, mcpDescriptor(p.mcp.name, p.mcp.description)) : null,
+    // variables (38), a google.protobuf.Struct holding JSON Schema. A non-empty one is what makes
+    // the client open its "setup" form on Add instead of installing straight away — the reason a
+    // plugin needing FACEBOOK_ACCESS_TOKEN had nowhere to type it.
+    p.variablesSchema ? pbStruct(38, p.variablesSchema as unknown as Record<string, StructValue>) : null,
     pbVar(41, 1),
   );
 }
@@ -252,6 +286,8 @@ function pluginJson(p: PluginEntry): Record<string, unknown> {
   return {
     id: String(p.id),
     name: p.name,
+    ...(p.logoUrl ? { logoUrl: p.logoUrl } : {}),
+    ...(p.variablesSchema ? { variables: p.variablesSchema } : {}),
     displayName: p.displayName,
     description: p.description,
     status: "PLUGIN_STATUS_APPROVED",

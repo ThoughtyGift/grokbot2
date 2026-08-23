@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_USER } from "./auth.js";
 import { currentOwner } from "./request-context.js";
 import { isKnownPlugin, serverSpecFor } from "./plugin-catalog.js";
+import { saveSecrets } from "./secrets.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
@@ -48,9 +49,17 @@ export function installedIds(owner: string = currentOwner()): number[] {
  * failure throws rather than reporting success, because "installed" that installed nothing is the
  * exact silent failure this replaces.
  */
-export function installPlugin(pluginId: number, owner: string = currentOwner()): boolean {
+export function installPlugin(
+  pluginId: number,
+  owner: string = currentOwner(),
+  values: Record<string, string> = {},
+): boolean {
   // The catalog decides what exists and what it installs — see plugin-catalog.ts (file or URL).
   if (!isKnownPlugin(pluginId)) return false;
+
+  // Credentials from the setup form go to the owner's secret store, NOT into the MCP config: the
+  // config keeps the `${NAME}` placeholders and secrets.ts substitutes them at spawn.
+  saveSecrets(owner, values);
 
   const ids = installedIds(owner);
   if (!ids.includes(pluginId)) {
@@ -106,9 +115,25 @@ export function uninstallPlugin(pluginId: number, owner: string = currentOwner()
   return true;
 }
 
+/**
+ * Re-save the credential form for an already-installed plugin.
+ *
+ * Deliberately does not touch the install record or the MCP config: editing credentials is not
+ * reinstalling, and the spec on disk never held the values in the first place.
+ */
+export function setPluginVariables(
+  pluginId: number,
+  values: Record<string, string>,
+  owner: string = currentOwner(),
+): void {
+  if (!isKnownPlugin(pluginId)) return;
+  saveSecrets(owner, values);
+}
+
 /** The port shape `RpcCtx.plugins` expects, bound to one owner. */
 export const pluginsPortFor = (owner: string) => ({
   installedIds: installedIds(owner),
-  install: (id: number) => installPlugin(id, owner),
+  install: (id: number, values?: Record<string, string>) => installPlugin(id, owner, values ?? {}),
   uninstall: (id: number) => uninstallPlugin(id, owner),
+  setVariables: (id: number, values: Record<string, string>) => setPluginVariables(id, values, owner),
 });

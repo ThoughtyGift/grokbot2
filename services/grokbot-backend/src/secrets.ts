@@ -17,7 +17,7 @@
  * Unresolved placeholders are never passed through. The literal string `${GITHUB_...}` reaching a
  * server makes it fail as though the token were wrong, which sends you looking in the wrong place.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -111,4 +111,32 @@ export function warnMissing(server: string, names: readonly string[]): void {
       `set it in the backend environment, or in .data/secrets/<user>.json`,
     );
   }
+}
+
+/**
+ * Store credentials this owner typed into a plugin's setup form.
+ *
+ * Merged, not replaced: two plugins can want different credentials, and installing the second must
+ * not wipe the first. An empty string clears a key, which is how the edit form removes one.
+ *
+ * This file is the ONLY place a real token lands. It sits under `.data/`, one file per owner, and
+ * `resolveSpecSecrets` reads it at spawn — so the MCP config keeps holding placeholders.
+ */
+export function saveSecrets(owner: string, values: Record<string, string>): void {
+  const entries = Object.entries(values).map(([k, v]) => [k, v.trim()] as const);
+  if (entries.length === 0) return;
+
+  const file = secretsPath(owner);
+  const merged = { ...ownerSecrets(owner) };
+  for (const [k, v] of entries) {
+    if (v.length === 0) delete merged[k];
+    else merged[k] = v;
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(merged, null, 2)}
+`, { mode: 0o600 });
+  // `warned` is keyed by server, not owner, so clear every entry naming a credential just supplied —
+  // otherwise the "wants X and nothing supplies it" line stays suppressed after X is finally set.
+  const supplied = new Set(entries.filter(([, v]) => v.length > 0).map(([k]) => k));
+  for (const key of [...warned]) if (supplied.has(key.slice(key.indexOf(":") + 1))) warned.delete(key);
 }
