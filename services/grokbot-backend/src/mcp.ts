@@ -119,6 +119,16 @@ interface Live {
 
 const live = new Map<string, Live>();
 
+/**
+ * Servers that answered 401, keyed the same way as `live`.
+ *
+ * The Plugins pane needs to be able to say needsAuth, and the only honest source for that is the
+ * server itself having refused. It cannot be derived from the config: a row may carry a token that
+ * has expired, or carry none and be a public server. Recorded on the refusal, cleared as soon as a
+ * request succeeds.
+ */
+const authRefused = new Map<string, string>();
+
 /** Declared servers for `owner` (default: the current request's owner), read fresh each call. */
 export function mcpServers(owner: string = currentOwner()): Record<string, ServerSpec> {
   const path = configPathFor(owner);
@@ -235,7 +245,8 @@ async function start(name: string, owner: string): Promise<Live> {
   };
 
   s.transport = spec.url
-    ? httpTransport(name, spec.url, resolved.headers, spec.type, deliver, failAll)
+    ? httpTransport(name, spec.url, resolved.headers, spec.type, deliver, failAll,
+        (why) => { if (why) authRefused.set(key, why); else authRefused.delete(key); })
     : stdioTransport(name, spec, resolved, deliver, failAll);
 
   live.set(key, s);
@@ -323,6 +334,8 @@ function httpTransport(
   typeHint: string | undefined,
   deliver: (msg: any) => void,
   failAll: (why: string) => void,
+  /** Given the reason on a 401, and given null as soon as a request succeeds. */
+  onAuth: (why: string | null) => void,
 ): Transport {
   let sessionId: string | null = null;
   let negotiated: string | null = null;
@@ -347,6 +360,7 @@ function httpTransport(
 
   const unauthorized = (res: Response): Error => {
     const how = res.headers.get("www-authenticate");
+    onAuth(how ?? "The server requires authentication (401)");
     return new Error(
       `MCP server "${name}" refused the request (401)` +
       (how ? ` — it wants OAuth: ${how}` : "") +
@@ -454,6 +468,7 @@ function httpTransport(
     if (sid) sessionId = sid;
 
     if (res.status === 401) throw unauthorized(res);
+    if (res.ok) onAuth(null);   // whatever was wrong with the credential is no longer wrong
     if (res.status === 202 || res.status === 204) return;   // notification accepted, no body
     if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
 
@@ -688,7 +703,7 @@ export function closeMcp(): void {
  * credential is reported as `error` naming the variable, which is what it is and what fixes it.
  */
 export function mcpServerStatus(name: string, owner: string = currentOwner()): {
-  status: "connected" | "initializing" | "error" | "disconnected";
+  status: "connected" | "initializing" | "needsAuth" | "error" | "disconnected";
   detail: string;
   toolCount: number;
 } {
@@ -701,6 +716,13 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   if (blocking.length) {
     return { status: "error", detail: `Needs ${blocking.join(", ")} — set it in ${where}`, toolCount: 0 };
   }
+
+  // A server that answered 401 gets the client's own `needsAuth`, which is what renders the
+  // Authenticate button. Only ever reported because the SERVER refused, never guessed from a config
+  // that merely looks incomplete — an Authenticate button on a server that does not want OAuth would
+  // just fail, and a button that fails is worse than no button.
+  const refused = authRefused.get(`${owner}::${name}`);
+  if (refused) return { status: "needsAuth", detail: refused, toolCount: 0 };
 
   const s = live.get(`${owner}::${name}`);
   if (s && s.transport.dead() == null) {

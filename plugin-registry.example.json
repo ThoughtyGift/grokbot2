@@ -262,8 +262,8 @@
     {
       "id": 20,
       "name": "zernio",
-      "displayName": "Zernio Social",
-      "description": "Post, read the inbox, run ads and pull analytics across Facebook, Instagram, TikTok, YouTube, LinkedIn, X and more — one connector for all of them.",
+      "displayName": "Zernio (all platforms)",
+      "description": "Every platform Zernio supports in one row — Bluesky, Threads, Reddit, Pinterest, Telegram, Discord, WhatsApp, Google Business and more, plus the six listed separately.",
       "logoUrl": "https://api.iconify.design/mdi/bullhorn-outline.svg?color=%23FF7B72&width=128",
       "mcp": {
         "name": "zernio",
@@ -277,6 +277,132 @@
         "ZERNIO_API_KEY": {
           "title": "Zernio API key",
           "description": "From your Zernio dashboard. Leave the browser sign-in to Zernio itself if you prefer OAuth."
+        }
+      }
+    },
+    {
+      "id": 21,
+      "name": "zernio-facebook",
+      "displayName": "Facebook",
+      "logoUrl": "https://api.iconify.design/simple-icons/facebook.svg?color=%231877F2&width=128",
+      "description": "Post to Pages, read comments, pull insights. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
+        }
+      }
+    },
+    {
+      "id": 22,
+      "name": "zernio-instagram",
+      "displayName": "Instagram",
+      "logoUrl": "https://api.iconify.design/simple-icons/instagram.svg?color=%23E4405F&width=128",
+      "description": "Publish posts and reels, read comments and insights. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
+        }
+      }
+    },
+    {
+      "id": 23,
+      "name": "zernio-tiktok",
+      "displayName": "TikTok",
+      "logoUrl": "https://api.iconify.design/simple-icons/tiktok.svg?color=%23000000&width=128",
+      "description": "Publish videos and read performance. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
+        }
+      }
+    },
+    {
+      "id": 24,
+      "name": "zernio-youtube",
+      "displayName": "YouTube",
+      "logoUrl": "https://api.iconify.design/simple-icons/youtube.svg?color=%23FF0000&width=128",
+      "description": "Upload videos, manage descriptions, read analytics. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
+        }
+      }
+    },
+    {
+      "id": 25,
+      "name": "zernio-linkedin",
+      "displayName": "LinkedIn",
+      "logoUrl": "https://api.iconify.design/simple-icons/linkedin.svg?color=%230A66C2&width=128",
+      "description": "Post to a profile or company page, read engagement. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
+        }
+      }
+    },
+    {
+      "id": 26,
+      "name": "zernio-x",
+      "displayName": "X (Twitter)",
+      "logoUrl": "https://api.iconify.design/simple-icons/x.svg?color=%23000000&width=128",
+      "description": "Post, reply, and read metrics. Runs through your Zernio account — one connector, so adding another platform here reuses the same connection.",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ZERNIO_API_KEY}"
+        }
+      },
+      "credentials": {
+        "ZERNIO_API_KEY": {
+          "title": "Zernio API key",
+          "description": "From your Zernio dashboard. One key covers every platform you have connected there."
         }
       }
     }

@@ -22,6 +22,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { DEFAULT_USER } from "./auth.js";
+
+const DEFAULT_OWNER = DEFAULT_USER.authId;
 
 const TOOLS = [{ name: "echo_it", description: "echoes", inputSchema: { type: "object" } }];
 
@@ -46,6 +49,12 @@ const body = async (req: any): Promise<any> => {
 /** One endpoint. The reply comes back on the same POST. */
 function streamableFixture(): Server {
   return createServer(async (req, res) => {
+    // A server that wants OAuth advertises it exactly like this, and that header is the only
+    // trustworthy signal that a row should show an Authenticate button.
+    if ((req.url ?? "").startsWith("/needsauth")) {
+      res.writeHead(401, { "www-authenticate": 'Bearer resource_metadata="http://example.test/.well-known/oauth-protected-resource"' }).end();
+      return;
+    }
     if (req.method !== "POST") { res.writeHead(405).end(); return; }
     const msg = await body(req);
     const reply = answer(msg);
@@ -108,6 +117,8 @@ before(async () => {
       modern: { url: `http://127.0.0.1:${sp}/mcp` },
       legacyExplicit: { url: `http://127.0.0.1:${lp}/sse`, type: "sse" },
       legacyByPath: { url: `http://127.0.0.1:${lp}/sse` },
+      wantsOauth: { url: `http://127.0.0.1:${sp}/needsauth` },
+      plainStdio: { command: "node", args: ["-e", "setTimeout(()=>{},1e9)"] },
     },
   }));
   // mcp.ts reads this at import time, so it has to be set before the module is loaded.
@@ -159,4 +170,29 @@ test("legacy: a tool call round-trips through the two endpoints", async () => {
 test("an unreachable server reports why instead of hanging until the call times out", async () => {
   const out = await mcp.getMcpTools("modern-missing");
   assert.match(out, /không có server/i, "an unknown name is named, not silently empty");
+});
+
+// ── the 401 that turns into an Authenticate button ────────────────────────────
+
+test("a 401 is reported with the server's own WWW-Authenticate, not as a vague failure", async () => {
+  const out = await mcp.getMcpTools("wantsOauth");
+  assert.match(out, /401/);
+  assert.match(out, /resource_metadata/, "the header names where the OAuth metadata lives");
+});
+
+test("after that 401 the pane says needsAuth — the status that renders Authenticate", () => {
+  const st = mcp.mcpServerStatus("wantsOauth", DEFAULT_OWNER);
+  assert.equal(st.status, "needsAuth");
+  assert.match(st.detail, /Bearer/);
+});
+
+test("needsAuth is never guessed: a server that has not refused is not marked", () => {
+  assert.notEqual(mcp.mcpServerStatus("modern", DEFAULT_OWNER).status, "needsAuth");
+  assert.notEqual(mcp.mcpServerStatus("plainStdio", DEFAULT_OWNER).status, "needsAuth");
+});
+
+test("a server that answered is reported connected, with its tool count", () => {
+  const st = mcp.mcpServerStatus("modern", DEFAULT_OWNER);
+  assert.equal(st.status, "connected");
+  assert.equal(st.toolCount, 1);
 });

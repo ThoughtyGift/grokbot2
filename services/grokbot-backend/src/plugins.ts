@@ -100,8 +100,16 @@ export function uninstallPlugin(pluginId: number, owner: string = currentOwner()
 
   const server = serverSpecFor(pluginId);
   if (server) {
+    // Several catalog rows may install the SAME server: one connector can cover many services, and
+    // listing them separately is the only way somebody looking for "Instagram" finds it. Removing
+    // one row must not disconnect the others, so the server goes only when nothing else still
+    // installs it — otherwise uninstalling TikTok would silently take Facebook down with it.
+    const stillUsed = installedIds(owner)
+      .filter((i) => i !== pluginId)
+      .some((i) => serverSpecFor(i)?.name === server.name);
+
     const cfgPath = configPathFor(owner);
-    if (existsSync(cfgPath)) {
+    if (!stillUsed && existsSync(cfgPath)) {
       try {
         const cfg = JSON.parse(readFileSync(cfgPath, "utf8")) ?? {};
         if (cfg.mcpServers && server.name in cfg.mcpServers) {
