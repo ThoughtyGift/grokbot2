@@ -22,6 +22,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
 import { oauthAccessToken, recordRefusal, refusalFor } from "./mcp-oauth.js";
+import { warmAuthUrl } from "./oauth-client.js";
 import { currentOwner } from "./request-context.js";
 import { DEFAULT_USER } from "./auth.js";
 
@@ -746,6 +747,8 @@ function probeRemote(name: string, url: string, headers: Record<string, string>,
       });
       if (res.status === 401) {
         recordRefusal(name, res.headers.get("www-authenticate") ?? "The server requires authentication (401)", owner);
+        // Start building the sign-in URL now, so it is ready when the button is pressed.
+        warmAuthUrl(url, owner);
       } else if (res.ok || res.status === 202) {
         recordRefusal(name, null, owner);
       }
@@ -791,7 +794,13 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   // that merely looks incomplete — an Authenticate button on a server that does not want OAuth would
   // just fail, and a button that fails is worse than no button.
   const refused = authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner);
-  if (refused) return { status: "needsAuth", detail: refused, toolCount: 0 };
+  if (refused) {
+    // The refusal may have come off disk after a restart, in which case no probe ran and nothing has
+    // built the sign-in URL yet. Warm it here too: the click asks for the URL twice in the same
+    // instant and never comes back, so it has to exist before the button is pressed.
+    if (spec.url) warmAuthUrl(spec.url, owner);
+    return { status: "needsAuth", detail: refused, toolCount: 0 };
+  }
 
   const s = live.get(`${owner}::${name}`);
   if (s && s.transport.dead() == null) {

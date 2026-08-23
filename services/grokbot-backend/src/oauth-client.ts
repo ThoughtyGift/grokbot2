@@ -23,7 +23,7 @@
  * the next one has it. The client polls, so this settles on its own.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { oauthPortFor, type PendingState } from "./mcp-oauth.js";
+import { oauthPortFor, rememberRedirect, lastRedirect, type PendingState } from "./mcp-oauth.js";
 
 /** Long enough that a person can finish signing in; short enough that a stale URL is not reused. */
 const AUTH_URL_TTL_MS = 10 * 60_000;
@@ -156,6 +156,8 @@ async function clientFor(d: Discovered, redirectUri: string): Promise<Registrati
  * page that cannot complete.
  */
 export function authUrlFor(serverUrl: string, redirectUri: string, owner: string): string | undefined {
+  // Remember it: the next 401 can then build the URL before anybody clicks, instead of after.
+  rememberRedirect(redirectUri, owner);
   const k = key(serverUrl, redirectUri);
   const hit = prepared.get(k);
   if (hit && Date.now() - hit.at < AUTH_URL_TTL_MS) return hit.authUrl;
@@ -255,4 +257,16 @@ export async function completeAuthorization(stateId: string, code: string, owner
   } catch (e) {
     console.warn(`[grokbot2] [oauth] exchange failed for ${pending.serverUrl}: ${(e as Error).message}`);
   }
+}
+
+/**
+ * Build the URL ahead of the click, using the redirect this client last asked with.
+ *
+ * Called when a server is first seen to refuse us. Without it the work only starts when the button
+ * is pressed — and the client asks twice in the same instant and never returns, so discovery and
+ * registration cannot finish in time and it gets an empty auth_url.
+ */
+export function warmAuthUrl(serverUrl: string, owner: string): void {
+  const redirectUri = lastRedirect(owner);
+  if (redirectUri) authUrlFor(serverUrl, redirectUri, owner);
 }
