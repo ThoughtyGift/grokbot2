@@ -88,6 +88,14 @@ export interface RpcCtx {
    * embedder with no store stays where it was instead of half-enabling a flow it cannot finish.
    */
   oauth?: OAuthPort;
+  /**
+   * The URL to send somebody to, for a server that wants a sign-in.
+   *
+   * `CheckHttpMcpStatusResponse.auth_url` is a field the BACKEND fills — the client opens whatever it
+   * is given and listens on `oauth_redirect_uri` for the callback. Returning nothing means the
+   * Authenticate button has nowhere to go, which is exactly how it failed silently.
+   */
+  authUrlFor?(serverUrl: string, redirectUri: string): string | undefined;
   plugins?: {
     installedIds: number[];
     /**
@@ -207,13 +215,21 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
     const body = ctx.body ? unframe(ctx.body) : null;
     const wanted = body ? readVarints(body, 1) : [];
     const ids = wanted.length ? wanted : all.map((_, i) => i + 1);
+    const redirectUri = body ? readString(body, 2) : "";
     return httpMcpStatusResponse(ids.flatMap((id) => {
       const s = all[id - 1];
       if (!s?.url) return [];          // stdio rows are not this RPC's business
+      const requiresAuth = s.status === "needsAuth";
+      // The URL is asked for only when it is needed, and only when the client told us where to send
+      // the callback — building one against a redirect it is not listening on cannot complete.
+      const authUrl = requiresAuth && redirectUri && !s.hasToken
+        ? ctx.authUrlFor?.(s.url, redirectUri)
+        : undefined;
       return [{
         id,
         isAvailable: s.status !== "error",
-        requiresAuth: s.status === "needsAuth",
+        requiresAuth,
+        ...(authUrl ? { authUrl } : {}),
         hasValidToken: Boolean(s.hasToken),
       }];
     }));

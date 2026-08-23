@@ -11,6 +11,7 @@ import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USE
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";
 import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
+import { authUrlFor, completeAuthorization } from "./oauth-client.js";
 import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
 import { runWithOwner } from "./request-context.js";
@@ -150,7 +151,22 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
     // Where a sign-in is kept, so the app's own OAuth flow has somewhere to write. Without this the
     // ten MCP OAuth RPCs answer empty and a completed sign-in stores nothing.
-    oauth: oauthPortFor(ownerFromAuth(req.headers.authorization)),
+    oauth: (() => {
+      const owner = ownerFromAuth(req.headers.authorization);
+      const port = oauthPortFor(owner);
+      return {
+        ...port,
+        // Finishing the flow is more than forgetting the verifier: the code still has to be
+        // exchanged. Done in the background because the response carries no token — the client
+        // learns it worked when user_has_access_token flips on its next status read.
+        complete: (stateId: string, code: string) => {
+          void completeAuthorization(stateId, code, owner);
+          return { postAuthReturnUrl: "", accountKey: "default" };
+        },
+      };
+    })(),
+    authUrlFor: (serverUrl: string, redirectUri: string) =>
+      authUrlFor(serverUrl, redirectUri, ownerFromAuth(req.headers.authorization)),
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
     mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))
