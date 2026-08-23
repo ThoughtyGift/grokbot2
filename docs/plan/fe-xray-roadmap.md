@@ -577,6 +577,15 @@ có tin nào chứa chúng để đo.
 > nên nó vớ được `ui-dialog-backdrop`. Một backdrop nửa trong suốt lọt qua phép kiểm "nền đục" là
 > lỗ của chính bộ đo; đóng dialog là số về lại 165/165. Probe thẳng `.sand-shell` vẫn `rgb(7,7,7)`.
 
+**X7.1 — phím tắt composer (cùng ngày).** App không khai `aria-keyshortcuts` ở đâu (probe ra rỗng),
+composer của họ là textbox `aria-multiline=true`; hành vi xác nhận từ chính app: **Enter gửi,
+Shift+Enter xuống dòng**. Web trước đó chỉ gửi bằng nút ↑, Enter chèn xuống dòng. Đã map, kèm hai
+điều dễ hỏng: IME tiếng Việt đang ghép vần thì Enter là "chốt chữ" (`isComposing`/`keyCode 229`
+cho qua), và Enter chỉ gửi khi nút ↑ đang hiện — không gửi được thì nuốt phím, không chèn dòng
+trống. Ô nhập tự cao theo nội dung (trần 160px = `max-height` sẵn có; số dòng tối đa của app chưa
+đo). Nghiệm bằng phím thật qua CDP: Shift+Enter xuống dòng + cao 40→60, Enter gửi + co về 40,
+Enter lúc rỗng không làm gì — 3/3.
+
 Chưa mapping (biết, và chưa làm): tài khoản web hiện **email** ở đáy sidebar vì tài khoản web chỉ
 có email — app hiện tên (`Grok Local`) vì tài khoản của máy có tên. Và roster hai bên **khác nhau
 là đúng**: web đăng nhập tài khoản riêng (`local|…`), app là chủ máy (`auth0|grokbot2-user`) —

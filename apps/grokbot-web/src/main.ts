@@ -1273,15 +1273,45 @@ function paint(): void {
    */
   const draftBox = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
   if (draftBox) {
+    /*
+     * Cao theo nội dung: `rows=1` cố định làm Shift+Enter thành cuộn trong một hàng — không thấy
+     * mình vừa xuống dòng. 160px trần lấy từ `max-height` trong CSS; số dòng tối đa của app gốc
+     * chưa đo nên trần này là giá trị tạm.
+     */
+    const autosize = () => {
+      draftBox.style.height = "auto";
+      draftBox.style.height = `${Math.min(draftBox.scrollHeight, 160)}px`;
+    };
+    autosize();   // draft khôi phục sau paint() có thể đã nhiều dòng
     draftBox.oninput = () => {
       const had = state.draft.trim().length > 0;
       state.draft = draftBox.value;
+      autosize();
       if (had !== (state.draft.trim().length > 0)) {
         const at = draftBox.selectionStart;
         paint();
         const next = root.querySelector<HTMLTextAreaElement>('textarea[name="q"]');
         if (next) { next.focus(); next.setSelectionRange(at, at); }
       }
+    };
+    /*
+     * Phím tắt của app gốc: **Enter gửi, Shift+Enter xuống dòng** (composer của họ là textbox
+     * `aria-multiline=true`, không khai `aria-keyshortcuts` — hành vi xác nhận từ chính app).
+     *
+     * Hai chỗ dễ hỏng, cả hai đều có chủ ý:
+     * - Gõ tiếng Việt bằng IME: lúc đang ghép vần thì Enter là "chốt chữ", không phải "gửi" —
+     *   `isComposing`/`keyCode 229` phải cho qua, không thì gửi giữa chừng một chữ đang gõ dở.
+     * - Enter chỉ gửi khi nút ↑ đang hiện (có nội dung, bot không chạy, không busy). Khi không gửi
+     *   được thì nuốt phím luôn thay vì chèn một dòng trống vô nghĩa vào draft.
+     */
+    draftBox.onkeydown = (ev) => {
+      if (ev.key !== "Enter" || ev.shiftKey) return;
+      if (ev.isComposing || ev.keyCode === 229) return;
+      ev.preventDefault();
+      const sel = state.agents.find((a) => a.id === state.selected);
+      const canSend = (state.draft.trim().length > 0 || state.pending.length > 0)
+        && !!sel && !sel.presence.isRunning && !state.busy;
+      if (canSend) root.querySelector<HTMLFormElement>("form.composer")?.requestSubmit();
     };
     if (state.draft) {
       draftBox.focus();
