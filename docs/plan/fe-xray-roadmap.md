@@ -458,10 +458,23 @@ tức phải gửi một tin — đó là X0.3, và tôi cố ý không tự g�
   `runs` **luôn** là mảng kể cả routine vừa tạo: ở client hãng biểu tượng trạng thái đọc thẳng
   `runs[0]?.status` không kiểm tra gì, nên một bản ghi thiếu `runs` làm vỡ cả panel bên phải. Giữ
   nguyên bất biến đó cho FE của mình.
-- [x] **X5.2 Tìm bot** — `GET /v1/search?q=`. `searchAgents` đã tìm cả **tên lẫn nội dung
+- [x] **X5.2 Tìm bot** — `GET /v1/search?q=`, **và FE đã nối** (2026-08-23). `searchAgents` đã tìm cả **tên lẫn nội dung
   transcript**, nên kết quả trả kèm `why: "name" | "transcript"`: không nói vì sao một bot khớp thì
   người dùng thấy một cái tên chẳng liên quan gì tới từ vừa gõ. `q` rỗng trả rỗng, **không** đổ cả
   roster ra.
+
+  **FE:** ô Search gọi backend, gộp nhịp 250ms — gõ "marketing" là chín ký tự nhưng chỉ **một** lượt
+  gọi mạng (đã đo). Trong lúc chờ vẫn lọc theo tên để danh sách không nhấp nháy trống, rồi thay bằng
+  kết quả thật khi nó về; và kiểm lại từ khoá trước khi nhận, vì trả lời của một truy vấn cũ về sau
+  truy vấn mới là cách chắc chắn để danh sách sai.
+
+  Bot khớp theo **nội dung** được đánh dấu *"khớp trong nội dung"* ngay trước dòng xem trước. Đo
+  thật: gõ `Marketing` ra 6 bot — `Marketing Lead` khớp theo tên (không có nhãn), năm bot còn lại
+  khớp theo transcript (có nhãn). Không có nhãn đó thì người dùng thấy năm cái tên chẳng liên quan
+  gì tới từ mình vừa gõ.
+
+  > Chỗ này lộ ra vì `self-xray` báo `api.ts:searchAgents` là **code chết**: tôi thêm route và hàm
+  > gọi từ hôm qua mà chưa nối vào UI. Mốc code chết bắt đúng thứ nó sinh ra để bắt.
 - [x] **X5.5 Khay subagent** — `GET /v1/subagents`, chỉ đọc: đây là bảng đăng ký tĩnh, không phải
   danh sách đang chạy. Bốn loại: `browserUse`, `pastConversationExplorer`, `explore`, `shell`.
   `toolCount` là số **tiền tố** tool được phép gọi, không phải số tool cụ thể — `allow` khớp theo

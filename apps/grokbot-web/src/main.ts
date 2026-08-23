@@ -50,6 +50,13 @@ const state = {
   /** Routine của bot đang chọn (X5.1). Nạp cùng lúc với transcript. */
   routines: [] as Routine[],
   /**
+   * Kết quả `/v1/search` (X5.2). `null` = chưa hỏi backend lần nào cho từ khoá hiện tại.
+   *
+   * Lọc ở FE chỉ so được TÊN; backend so cả nội dung transcript. Nên gõ "hoá đơn" mà bot tên
+   * "Kế toán" từng nói về hoá đơn thì chỉ backend tìm ra.
+   */
+  hits: null as { agentId: string; why: "name" | "transcript" }[] | null,
+  /**
    * Nội dung ô nhập.
    *
    * Phải nằm trong state vì nút gửi CHỈ hiện khi có chữ — đọc từ ảnh app gốc: ô trống thì bên phải
@@ -303,6 +310,38 @@ const SHAPE_LABELS: Record<string, string> = {
   triangle: "Tam giác", hexagone: "Lục giác", nuage: "Mây", goutte: "Giọt",
 };
 
+/**
+ * Menu `More message actions` — app gốc chỉ có HAI mục: `Start a thread` và `Copy` (đo ở X0.2,
+ * hộp 200×74). Nên đây là toàn bộ menu, không phải một tập con.
+ *
+ * `Tạo luồng` để `disabled` kèm lý do: luồng con cần một mô hình dữ liệu chưa tồn tại ở đâu —
+ * `replyTo`/`threadId` không có trong hợp đồng lẫn backend. Vẽ ra một mục bấm vào không làm gì thì
+ * tệ hơn một mục mờ nói rõ vì sao.
+ */
+function wireMoreMenu(bar: HTMLElement, e: NativeEntry): void {
+  const more = bar.querySelector<HTMLElement>(".more-menu")!;
+  const copyItem = el(`<button type="button" role="menuitem">Sao chép</button>`);
+  copyItem.onclick = async (ev) => {
+    ev.stopPropagation();
+    more.hidden = true;
+    try {
+      await navigator.clipboard.writeText(e.content ?? "");
+      state.error = "";
+    } catch {
+      // Clipboard bị chặn (không phải ngữ cảnh an toàn) — nói ra, đừng im lặng nuốt.
+      state.error = "trình duyệt không cho ghi clipboard ở đây";
+      paint();
+    }
+  };
+  const threadItem = el(`<button type="button" role="menuitem" disabled title="Luồng con chưa dựng: replyTo/threadId chưa có ở hợp đồng lẫn backend">Tạo luồng</button>`);
+  more.append(copyItem, threadItem);
+  bar.querySelector<HTMLButtonElement>(".more")!.onclick = (ev) => {
+    ev.stopPropagation();
+    root.querySelectorAll<HTMLElement>(".react-menu, .more-menu").forEach((o) => { if (o !== more) o.hidden = true; });
+    more.hidden = !more.hidden;
+  };
+}
+
 /** Mười sáu biểu cảm, đúng thứ tự bảng của bloub. */
 const EXPRESSION_LABELS: Record<string, string> = {
   neutre: "Bình thường", attentif: "Chú ý", surpris: "Ngạc nhiên", excite: "Phấn khích",
@@ -347,35 +386,7 @@ function messageActions(e: NativeEntry): HTMLElement {
     pick.onclick = (ev) => { ev.stopPropagation(); menu.hidden = true; void toggleReaction(e.id, emoji); };
     menu.append(pick);
   }
-  /*
-   * Menu `More message actions` — app gốc chỉ có HAI mục: `Start a thread` và `Copy` (đo được ở
-   * X0.2, hộp 200×74). Nên đây là toàn bộ menu, không phải một tập con.
-   *
-   * `Start a thread` để `disabled` kèm lý do: luồng con cần một mô hình dữ liệu chưa tồn tại ở đâu
-   * — `replyTo`/`threadId` không có trong hợp đồng lẫn backend. Vẽ ra một mục bấm vào không làm gì
-   * thì tệ hơn một mục mờ nói rõ vì sao.
-   */
-  const more = bar.querySelector<HTMLElement>(".more-menu")!;
-  const copyItem = el(`<button type="button" role="menuitem">Sao chép</button>`);
-  copyItem.onclick = async (ev) => {
-    ev.stopPropagation();
-    more.hidden = true;
-    try {
-      await navigator.clipboard.writeText(e.content ?? "");
-      state.error = "";
-    } catch {
-      // Clipboard bị chặn (không phải ngữ cảnh an toàn) — nói ra, đừng im lặng nuốt.
-      state.error = "trình duyệt không cho ghi clipboard ở đây";
-      paint();
-    }
-  };
-  const threadItem = el(`<button type="button" role="menuitem" disabled title="Luồng con chưa dựng: replyTo/threadId chưa có ở hợp đồng lẫn backend">Tạo luồng</button>`);
-  more.append(copyItem, threadItem);
-  bar.querySelector<HTMLButtonElement>(".more")!.onclick = (ev) => {
-    ev.stopPropagation();
-    root.querySelectorAll<HTMLElement>(".react-menu, .more-menu").forEach((o) => { if (o !== more) o.hidden = true; });
-    more.hidden = !more.hidden;
-  };
+  wireMoreMenu(bar, e);
 
   /*
    * Trả lời = TRÍCH DẪN vào ô nhập, không phải luồng con.
@@ -902,6 +913,27 @@ function renderTranscript(log: HTMLElement, selected: NativeAgent | undefined): 
   else if (!restoreAnchor(log, anchor)) log.scrollTop = log.scrollHeight;
 }
 
+/**
+ * Hỏi `/v1/search`, gộp nhịp 250ms.
+ *
+ * Không hỏi theo từng ký tự: gõ "marketing" là chín lượt gọi mạng và chín lần vẽ lại. Và kiểm lại
+ * từ khoá trước khi nhận kết quả — trả lời của một truy vấn cũ về sau truy vấn mới là cách chắc
+ * chắn để danh sách nhấp nháy sai.
+ */
+let searchTimer: number | undefined;
+function queueSearch(q: string): void {
+  clearTimeout(searchTimer);
+  if (!q) { state.hits = null; return; }
+  searchTimer = window.setTimeout(async () => {
+    try {
+      const { hits } = await api.searchAgents(q);
+      if (state.query.trim() !== q) return;   // đã gõ tiếp, kết quả này lỗi thời
+      state.hits = hits.map((h) => ({ agentId: h.agentId, why: h.why }));
+      paint();
+    } catch { /* mất mạng thì giữ lọc theo tên, đừng làm trống danh sách */ }
+  }, 250);
+}
+
 function paint(): void {
   captureScroll();   // PHẢI là việc đầu tiên: sau `replaceChildren` thì không còn gì để đọc
   const selected = state.agents.find((a) => a.id === state.selected);
@@ -1020,7 +1052,20 @@ function paint(): void {
 
   const roster = root.querySelector(".roster")!;
   const q = state.query.trim().toLowerCase();
-  const shown = q ? state.agents.filter((a) => a.name.toLowerCase().includes(q)) : state.agents;
+  /*
+   * Ưu tiên kết quả backend; lọc theo tên chỉ là bước đệm trong lúc chờ.
+   *
+   * Backend tìm cả trong nội dung transcript, FE thì không thể. Nhưng nếu chờ mạng mới vẽ thì mỗi
+   * ký tự gõ vào là một khoảng trắng nhấp nháy — nên vẽ ngay bằng lọc tên, rồi thay bằng kết quả
+   * thật khi nó về.
+   */
+  const hits = state.hits;
+  const shown = !q
+    ? state.agents
+    : hits
+      ? state.agents.filter((a) => hits.some((x) => x.agentId === a.id))
+      : state.agents.filter((a) => a.name.toLowerCase().includes(q));
+  const whyOf = (id: string) => state.hits?.find((x) => x.agentId === id)?.why ?? null;
   if (q && !shown.length) roster.append(el(`<div class="group">không có bot nào khớp "${escapeHtml(state.query.trim())}"</div>`));
 
   /**
@@ -1076,7 +1121,7 @@ function paint(): void {
       ${a.presence.isRunning || a.unread
         ? `<span class="dot${a.presence.isRunning ? " live" : ""}"></span>`
         : `<span class="when">${escapeHtml(shortTime(a.updatedAtMs))}</span>`}
-      <span class="preview">${escapeHtml(preview(a))}</span>
+      <span class="preview">${whyOf(a.id) === "transcript" ? "khớp trong nội dung · " : ""}${escapeHtml(preview(a))}</span>
     </button>`);
       item.onclick = () => { state.selected = a.id; void loadTranscript(); void loadComputer(); void loadRoutines().then(paint); paint(); };
       bay.append(item);
@@ -1087,7 +1132,12 @@ function paint(): void {
   if (search) {
     // `paint()` dựng lại cả cây DOM, nên phải trả lại focus và vị trí con trỏ, nếu không
     // gõ được đúng một ký tự rồi mất focus.
-    search.oninput = () => { state.query = search.value; paint(); };
+    search.oninput = () => {
+      state.query = search.value;
+      state.hits = null;          // kết quả cũ không còn đúng với từ khoá mới
+      paint();
+      queueSearch(state.query.trim());
+    };
     if (state.query) {
       const next = root.querySelector<HTMLInputElement>(".search input")!;
       next.focus();
