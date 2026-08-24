@@ -7,6 +7,7 @@ import { config, loadPoolKey } from "../config.js";
 import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
 import { isAutoApproved, unquote } from "../tools.js";
+import { isDesktopLook } from "../desktop.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
@@ -714,6 +715,9 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   // → click → screenshot in one breath, and a card per step would make that impossible. What
   // still asks is anything that writes to disk.
   const isBrowserAction = lower.startsWith("browser_");
+  // Looking at the box screen changes nothing, and it is the step that tells the model where
+  // to click — see isDesktopLook. Clicking and typing on that desktop is not covered here.
+  const isDesktopLookOnly = lower === "computer_use" && isDesktopLook(arg);
   /**
    * The user's standing answer to the permission card, which we were storing and ignoring.
    *
@@ -738,7 +742,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     onUpdate(agentId);
     return;
   }
-  if (known && (standing === "always" || AUTO_APPROVED.has(lower) || isBrowserAction || isAutoApproved(lower))) {
+  if (known && (standing === "always" || AUTO_APPROVED.has(lower) || isBrowserAction || isDesktopLookOnly || isAutoApproved(lower))) {
     runTool(agentId, toolCallId, lower, arg, history);
     onUpdate(agentId);
     return;

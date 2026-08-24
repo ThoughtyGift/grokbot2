@@ -8,6 +8,7 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowser
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
+import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo } from "../desktop.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { knowledgeBase } from "../memory.js";
@@ -961,8 +962,51 @@ const TEACH_PROTOCOL = isBrowserConfigured()
     "not always."
   : "";
 
+/**
+ * Driving the box's desktop, for tasks that are not in a browser.
+ *
+ * The screen size is in here because the vendor puts it in theirs, and for the same reason: every
+ * action is a COORDINATE, and a model that has not been told the screen is 1920x1080 is guessing at
+ * the scale of everything it sees. The size is read from the box once and cached — it does not
+ * change between turns.
+ *
+ * The discipline matters more than the actions. There is no "click the Save button" here, only
+ * "click (x, y)", so the only way to be right is to look first and look again: screenshot, choose
+ * coordinates from what is actually on screen, act, and check the result. A model that fires three
+ * clicks from one screenshot is guessing at two of them.
+ */
+let desktopProtocolCache: string | null = null;
+
+/**
+ * Ask the box its screen size once, at startup rather than on the first turn.
+ *
+ * Building the prompt is synchronous, so a size fetched lazily arrives one turn too late — and the
+ * turn it misses is the first one, where the model has the least idea what it is looking at. The
+ * screen does not change, so one read at boot covers the whole run; if the box is down the
+ * paragraph simply goes out without the numbers.
+ */
+if (desktopConfigured()) {
+  void screenInfo().then((info) => {
+    if (info) desktopProtocolCache = desktopParagraph(info);
+  });
+}
+
+const desktopProtocol = (): string =>
+  !desktopConfigured() ? "" : (desktopProtocolCache ?? desktopParagraph(null));
+
+const desktopParagraph = (info: { width: number; height: number; dpi: number } | null): string =>
+  "\n\nDESKTOP: the box has a full desktop, not only a browser. " +
+  (info ? `Its screen is ${info.width}x${info.height} pixels at ${info.dpi} DPI. ` : "") +
+  'Drive it with TOOL_CALL: computer_use({"action":"…"}) — screenshot, click, mouse_move, ' +
+  "mouse_down, mouse_up, drag, scroll, type, key, cursor_position. Every action takes COORDINATES, " +
+  "not a name: there is no way to say \"the Save button\", only where it is. So look before you " +
+  "act and look after: take a screenshot, read the coordinates off it, do ONE action, and check " +
+  "the screenshot that comes back. Firing several clicks from one screenshot is guessing at all " +
+  "but the first. Prefer the browser_* tools whenever the task is inside a web page — they match " +
+  "on selectors and do not go stale when a window moves.";
+
 const toolProtocolFor = (owner: string): string =>
-  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + mcpProtocolFor(owner);
+  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
@@ -984,10 +1028,42 @@ const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
 const BARRIER_TOOLS = new Set(["ask_question", "request_box_help"]);
 const isParallelSafe = (name: string): boolean => {
   const l = name.toLowerCase();
-  if (BARRIER_TOOLS.has(l) || l.startsWith("browser_")) return false;
+  if (BARRIER_TOOLS.has(l) || l.startsWith("browser_") || l === "computer_use") return false;
   return isAutoApproved(l);
 };
 
 
-export { TOOLS, isKnownTool, isParallelSafe, toolProtocolFor };
+/**
+ * `computer_use` — điều khiển desktop của box, giai đoạn 1 của docs/plan/desktop-computer-use.md.
+ *
+ * Một tool thay vì mười, đúng như bản gốc: `ComputerUseParams` của họ là một danh sách action với
+ * `oneof` 11 nhánh, không phải 11 RPC. Model chọn nhánh bằng trường `action`.
+ *
+ * Sau mỗi hành động có thay đổi màn hình, tool tự chụp lại và đính vào hội thoại. Đó không phải
+ * tiện nghi: toàn bộ cách làm việc ở đây là chụp → chọn toạ độ → hành động → **nhìn lại**, và bắt
+ * model tự nhớ gọi screenshot sau mỗi bước là chỗ nó sẽ quên.
+ */
+if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
+  const parsed = parseDesktopArg(arg);
+  if ("error" in parsed) return parsed.error;
 
+  const r = await desktopAct(parsed);
+  if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;
+
+  if (parsed.action === "screenshot") {
+    if (r.imageBase64) ctx.attach(`data:image/jpeg;base64,${r.imageBase64}`, "screen.jpg", "màn hình máy tính của bot");
+    return `đã chụp màn hình ${r.width}x${r.height}`;
+  }
+  if (parsed.action === "cursor_position") return `con trỏ đang ở (${r.x}, ${r.y})`;
+  if (parsed.action === "screen_info") return `màn hình ${r.width}x${r.height}, ${r.dpi} DPI`;
+
+  // Mọi action còn lại đều đổi màn hình. Chụp lại ngay thay vì trông chờ model tự nhớ: bước
+  // "nhìn lại" chính là bước nó sẽ bỏ, và bỏ rồi thì hành động sau bấm mù.
+  const after = await desktopAct({ action: "screenshot" });
+  if (after.ok && after.imageBase64) {
+    ctx.attach(`data:image/jpeg;base64,${after.imageBase64}`, "screen.jpg", `màn hình sau khi ${parsed.action}`);
+  }
+  return `${parsed.action} xong`;
+};
+
+export { TOOLS, isKnownTool, isParallelSafe, toolProtocolFor };

@@ -1,7 +1,7 @@
 # Điều khiển và dạy việc **ngoài** trình duyệt
 
-Trạng thái: lộ trình, chưa làm. Viết ra vì phần khó nhất — spec của hãng — **trích được**, và
-không nên để ai phải suy lại từ đầu.
+Trạng thái: **giai đoạn 1 đã làm** (24/08/2026), giai đoạn 2 chưa. Viết ra vì phần khó nhất —
+spec của hãng — **trích được**, và không nên để ai phải suy lại từ đầu.
 
 ## Hiện tại có gì
 
@@ -69,6 +69,40 @@ Việc thật cần làm:
    dựng mới.
 
 Giai đoạn này **tự nó đã có giá trị**: bot dùng được mọi app trên box, không cần dạy gì.
+
+### Đã làm — `src/desktop.ts` + tool `computer_use`
+
+Khác kế hoạch một chỗ, và khác có lý do: **không sửa box daemon**. Driver là một file Python nhỏ
+gói trong `desktop.ts`, tự đẩy lên box theo băm nội dung (`desktop-<hash>.py`) rồi gọi qua op `run`
+có sẵn. Không phải chờ deploy lại daemon, và hai phiên bản backend không giẫm lên nhau.
+
+Không dùng `xdotool` mà dùng **XTEST qua python-xlib** — cùng cơ chế xdotool dùng, nhưng cài được
+không cần root.
+
+| chỗ | việc |
+|---|---|
+| `desktop.ts` | driver + `desktopAct` + `parseDesktopArg` + `screenInfo` + `isDesktopLook` |
+| `runtime/tools.ts` | tool `computer_use`, chỉ đăng ký khi `desktopConfigured()`; đoạn prompt DESKTOP |
+| `runtime/turn.ts` | chỉ hành động **nhìn** được duyệt sẵn |
+| `desktop.test.ts` | 8 test cho phần đọc đối số |
+
+Ba quyết định đáng nhớ:
+
+- **Ảnh JPEG q75, không thu nhỏ.** Thu nhỏ làm nhẹ ảnh nhưng phá tỉ lệ 1:1 giữa ảnh và toạ độ —
+  model đọc toạ độ trên ảnh rồi bấm trượt. PNG 602KB → JPEG 193KB mà toạ độ vẫn thật.
+  Ảnh cũng không đi thẳng qua stdout: daemon cắt ở 200.000 ký tự, nên driver ghi file trong gốc
+  daemon rồi TS đọc về bằng `readBytes`.
+- **Chụp lại sau mỗi hành động, tự động.** Bước "nhìn lại" chính là bước model sẽ quên, và quên rồi
+  thì hành động sau bấm mù.
+- **Duyệt: nhìn thì tự chạy, bấm thì theo quyền thường.** Cố ý khác `browser_*` — thao tác trình
+  duyệt bị giới hạn trong một trang, một cú click trên desktop thì không.
+
+Đã chứng minh chạy thật trên box: mở một trang có ô input, chụp màn hình, đọc toạ độ ô **từ chính
+tấm ảnh**, `click` → `type "xin chao 123"` → `key exclam`, rồi đọc lại `input.value` qua CDP:
+`"xin chao 123!"`. Đúng vòng lặp mà model sẽ chạy.
+
+Còn thiếu so với spec: `wait` (làm ở backend, chưa cần) và `mouse_down`/`mouse_up` tuy có driver
+nhưng chưa dùng thật lần nào.
 
 ## Giai đoạn 2 — ghi thao tác desktop (dạy việc ngoài Chrome)
 
