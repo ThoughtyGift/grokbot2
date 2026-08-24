@@ -79,9 +79,19 @@ async function ask(agentId, content, waitMs = 150_000) {
   return { text: last, fresh: ((await post("getAgentTranscript", { id: agentId, limit: 300 })).entries ?? []).slice(before) };
 }
 
-const { agent } = await post("createAgent", { name: "DesktopE2E" });
-console.log(`bot thử: ${agent.id}\n`);
+/**
+ * Dùng lại một bot thử duy nhất.
+ *
+ * Bản đầu tạo bot mới mỗi lần chạy, và sau sáu lần chạy trong một buổi thì bảng bot của người dùng
+ * có sáu con "DesktopE2E" chen giữa bot thật của họ. Một bài kiểm chạy nhiều lần không được để lại
+ * dấu vết tích luỹ.
+ */
+const roster = await post("listAgents", {});
+const existing = (Array.isArray(roster) ? roster : Object.values(roster)).find((a) => a?.name === "DesktopE2E");
+const agent = existing ?? (await post("createAgent", { name: "DesktopE2E" })).agent;
+console.log(`bot thử: ${agent.id}${existing ? " (dùng lại)" : " (mới tạo)"}\n`);
 const WORD = `MOC-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+let createdRoutineId = null;
 
 // ── 1. bề mặt ────────────────────────────────────────────────────────────────
 console.log("1. tool có mặt và biết màn hình rộng bao nhiêu");
@@ -211,6 +221,7 @@ console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, l
   const list = await post("listAllAutomations", {});
   const rows = Array.isArray(list) ? list : (list.automations ?? list.list ?? []);
   const saved = rows.find((r) => (r?.name ?? "") === stopped?.saved);
+  createdRoutineId = saved?.id ?? null;
   const prompt = saved?.prompt ?? saved?.trigger?.prompt ?? "";
   check("routine có mặt trong bảng Routines", saved != null, saved ? saved.name : `${rows.length} routine, không thấy`);
   // Điểm cốt lõi của giai đoạn 2: bước phải mô tả THỨ cần bấm, không chỉ toạ độ. Chỉ có toạ độ thì
@@ -218,6 +229,13 @@ console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, l
   check("mỗi bước bấm được tả bằng lời, không chỉ toạ độ", /bấm vào "[^"]{10,}"/.test(prompt),
     prompt ? prompt.split("\n").find((l) => l.startsWith("1.")) ?? prompt.slice(0, 80) : "routine không có prompt");
   check("chữ đã gõ nằm trong routine", prompt.includes("Nguyen Van A"), prompt ? "có" : "không");
+}
+
+// Routine do bài kiểm tự tạo thì bài kiểm tự dọn — nếu không, mỗi lần chạy để lại một dòng
+// "Việc đã dạy trên máy" trong bảng Routines của người dùng.
+if (createdRoutineId) {
+  await post("deleteAgentAutomation", { id: createdRoutineId });
+  console.log(`\n(đã dọn routine thử ${createdRoutineId})`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
