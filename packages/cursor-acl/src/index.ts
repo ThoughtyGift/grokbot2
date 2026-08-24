@@ -26,7 +26,7 @@ export interface CursorAcl {
   /** The host's `/health` body, also served at the bare `/health`. */
   hostHealth: GatewayRouter["hostHealth"];
   /** A ConnectRPC bootstrap gate, or `null` if the URL is not one. `ctx` carries the caller's user. */
-  handleBootstrapRpc(url: string, contentType: string, ctx?: RpcCtx): RpcReply | null;
+  handleBootstrapRpc(url: string, contentType: string, ctx?: RpcCtx): Promise<RpcReply | null>;
 }
 
 export function createCursorAcl(ports: AclPorts): CursorAcl {

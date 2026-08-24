@@ -63,3 +63,7 @@ services/grokbot-backend/scripts/_tmp-*
 
 # Plugin catalog — may hold MCP server tokens in `env`. The .example is the committed template.
 plugin-registry.json
+
+# Speech-to-text engine: a local venv with the faster-whisper stack (~290MB) plus a model cache.
+# Recreate with:  python -m venv .venv-stt && .venv-stt/Scripts/pip install faster-whisper
+.venv-stt/

@@ -32,6 +32,7 @@ import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
+import { transcribe, isSttAvailable, closeStt } from "./stt.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -245,7 +246,7 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   // Resolve the caller (falling back to the single default identity) so the access gate has a user.
   // Under GROKBOT2_BILLING off/warn, accessVerdict is always "granted" — this stays inert.
   const rpcUser = userFromToken(req.headers.authorization) ?? DEFAULT_USER;
-  const rpc = runWithOwner(ownerFromAuth(req.headers.authorization), () => handleBootstrapRpc(url, ct, {
+  const rpc = await runWithOwner(ownerFromAuth(req.headers.authorization), () => handleBootstrapRpc(url, ct, {
     user: rpcUser,
     access: accessVerdict(rpcUser),
     usage: currentPeriodUsage(rpcUser) ?? undefined,
@@ -308,6 +309,8 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     // `env`, which holds live tokens and must not reach the renderer.
     ...mcpPorts(ownerFromAuth(req.headers.authorization)),
     catalog: pluginCatalog(),
+    // The microphone. Local, so the audio never leaves this machine — see stt.ts.
+    ...(isSttAvailable() ? { transcribe } : {}),
   }));
   if (rpc) {
     res.writeHead(rpc.status, { "content-type": rpc.contentType });
@@ -331,7 +334,7 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
 // Flush state to disk on shutdown so an in-flight debounce isn't lost. Coverage too: the
 // observe pass is worthless if the list it built dies with the process it was gathered in.
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => { saveNow(chatSnapshot); saveCoverageNow(); closeMcp(); process.exit(0); });
+  process.on(sig, () => { saveNow(chatSnapshot); saveCoverageNow(); closeMcp(); closeStt(); process.exit(0); });
 }
 
 server.listen(config.port, "127.0.0.1", () => {

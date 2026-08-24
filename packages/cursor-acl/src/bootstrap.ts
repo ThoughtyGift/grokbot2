@@ -20,12 +20,12 @@ export interface RpcReply { status: number; contentType: string; body: Buffer | 
  * — checking `connect+` first and stuffing proto bytes into those frames is how Marketplace
  * decoded `plugins: []` / threw (EuTQUZ) while GetMe (bare proto, tiny varints) still worked.
  */
-export function handleBootstrapRpc(
+export async function handleBootstrapRpc(
   url: string,
   contentType: string,
   observe: ObservePort,
   ctx: RpcCtx = { user: null },
-): RpcReply | null {
+): Promise<RpcReply | null> {
   const rpc = RPC_PATH.exec(url);
   if (!rpc) return null;
   const method = rpc[2];
@@ -40,7 +40,9 @@ export function handleBootstrapRpc(
     return { status: 200, contentType: "application/json", body };
   }
   const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;
-  const payload = build ? build(ctx) : undefined;
+  // One builder answers asynchronously (transcription waits for a model). Awaiting an ordinary
+  // Buffer costs a microtask and keeps every other builder synchronous.
+  const payload = build ? await build(ctx) : undefined;
   if (framed) {
     return { status: 200, contentType, body: connectStreamEnd(payload) };
   }

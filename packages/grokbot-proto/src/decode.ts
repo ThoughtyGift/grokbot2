@@ -129,3 +129,18 @@ export function readVarints(buf: Buffer, fieldNo: number): number[] {
   }
   return out;
 }
+
+/**
+ * A length-delimited field as raw bytes.
+ *
+ * `readString` would work on the wire — `bytes` and `string` share wire type 2 — but decoding audio
+ * as UTF-8 and re-encoding it corrupts it. Returns an empty buffer when the field is absent, so a
+ * caller can tell "no audio" from "silence" only by length, which is the honest distinction here.
+ */
+export function readBytes(buf: Buffer, fieldNo: number): Buffer {
+  let out = Buffer.alloc(0);
+  // Copied rather than a subarray view: the caller keeps this past the request that owned the frame,
+  // and a view into a recycled buffer is a bug that only shows up under load.
+  for (const f of walk(buf)) if (f.no === fieldNo && f.wire === 2) out = Buffer.from(buf.subarray(f.at, f.at + f.len));
+  return out;
+}

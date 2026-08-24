@@ -8,7 +8,7 @@
  */
 import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
 import { pbStruct, readStringMapField, type StructValue } from "./struct.js";
-import { readString, readStrings, readVarint, readVarints, readMessages } from "./decode.js";
+import { readString, readStrings, readVarint, readVarints, readMessages, readBytes } from "./decode.js";
 import {
   storePendingStateResponse, getPendingStateResponse, completeResponse, storeTokenResponse, httpMcpStatusResponse,
   getTokensResponse, validateTokensResponse, refreshLockBeginResponse, type OAuthPort,
@@ -52,6 +52,7 @@ export const BOOTSTRAP_GATE_METHODS = [
   "GetMcpConfig",
   "RenameMcpOAuthAccount",
   "DeleteMcpOAuthAccount",
+  "TranscribeAudio",
 ] as const;
 
 /**
@@ -140,6 +141,14 @@ export interface RpcCtx {
    */
   catalog?: readonly PluginEntry[];
   /**
+   * Turn recorded audio into text, for the composer's microphone.
+   *
+   * Absent ⇒ `TranscribeAudio` answers an empty text, which is what it did for its whole life: the
+   * button recorded, sent, and got nothing back. A backend with no transcriber installed says so in
+   * the log rather than pretending.
+   */
+  transcribe?(audio: Buffer, mimeType: string, language?: string): Promise<{ text: string; ms: number }>;
+  /**
    * The caller's MCP config as the client wants to read it back.
    *
    * `GetMcpConfig` is the second most called RPC in the whole plugin surface and answered an empty
@@ -161,8 +170,14 @@ export interface RpcCtx {
   };
 }
 
-/** Map of RPC method name -> bare protobuf response body. */
-export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
+/**
+ * Map of RPC method name -> bare protobuf response body.
+ *
+ * A builder may answer asynchronously. Only one does — transcription has to wait for a model — and
+ * the dispatcher awaits whatever it gets, so every other builder stays the plain synchronous
+ * function it was.
+ */
+export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promise<Buffer>> = {
   // DashboardService.GetSandAccessStatus. Enum numbers verified against the vendor bundle
   // (SandAccessState / SandAccessBlockReason): GRANTED=1/NONE=1, PAYMENT_REQUIRED=3/PAYWALL_INDIVIDUAL=7.
   // Default (ctx.access unset or "granted") is the historical constant, so this stays inert until
@@ -243,6 +258,30 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
    *
    * `server_ids` index the same list `GetAvailableMcpServers` numbers, 1-based.
    */
+  /**
+   * aiserver.v1.TranscribeAudio — the microphone button, which did nothing at all.
+   *
+   * Request: audio (1, bytes), mime_type (2), language (3, optional). Response: text (1),
+   * transcription_time_ms (2). Read as BYTES, not as a string: the two share a wire type, and
+   * decoding audio as UTF-8 corrupts it silently.
+   *
+   * A failure answers empty text rather than an error status. The client puts whatever it is given
+   * into the composer, and an empty box the person can retype is a better outcome than an error
+   * dialog over a dictation attempt.
+   */
+  TranscribeAudio: async (ctx) => {
+    const body = ctx.body ? unframe(ctx.body) : null;
+    const audio = body ? readBytes(body, 1) : Buffer.alloc(0);
+    if (!audio.length || !ctx.transcribe) return message(pbStr(1, ""), pbVar(2, 0));
+    try {
+      const { text, ms } = await ctx.transcribe(audio, readString(body!, 2), readString(body!, 3) || undefined);
+      return message(pbStr(1, text), pbVar(2, ms));
+    } catch (e) {
+      console.warn(`[grokbot2] transcription failed: ${(e as Error).message}`);
+      return message(pbStr(1, ""), pbVar(2, 0));
+    }
+  },
+
   /**
    * aiserver.v1.GetMcpConfig — the config the client reads back, and the name -> id map beside it.
    *

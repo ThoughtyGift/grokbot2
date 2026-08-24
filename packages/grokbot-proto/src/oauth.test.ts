@@ -53,8 +53,17 @@ function fakePort() {
   return { port, tokens, pending };
 }
 
+/**
+ * A builder may answer asynchronously since TranscribeAudio arrived. Every builder these tests
+ * touch is synchronous, and saying so out loud beats casting the union away.
+ */
+const sync = (answer: Buffer | Promise<Buffer>): Buffer => {
+  assert.ok(Buffer.isBuffer(answer), "this builder is expected to answer synchronously");
+  return answer;
+};
+
 const call = (method: string, body: Buffer, oauth: OAuthPort): Buffer =>
-  bootstrapResponses[method]({ user: null, body, oauth } as never);
+  sync(bootstrapResponses[method]({ user: null, body, oauth } as never));
 
 // ── the browser round trip ────────────────────────────────────────────────────
 
@@ -164,7 +173,7 @@ test("the refresh lease is granted, with nothing to enforce on a single install"
 test("with no port at all they answer empty, exactly as before they were handled", () => {
   for (const m of ["StoreMcpOAuthPendingState", "GetMcpOAuthPendingState", "CompleteMcpOAuth",
     "StoreMcpOAuthToken", "GetMcpOAuthTokens", "ValidateMcpOAuthTokens"]) {
-    const r = bootstrapResponses[m]({ user: null, body: message(pbStr(1, SERVER)) } as never);
+    const r = sync(bootstrapResponses[m]({ user: null, body: message(pbStr(1, SERVER)) } as never));
     assert.equal(r.length, 0, `${m} must not invent an answer without a store`);
   }
 });
@@ -180,7 +189,7 @@ test("CheckHttpMcpStatus turns a needsAuth server into requires_auth, not an err
       { name: "local", command: "node", status: "connected" },
     ],
   };
-  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  const rows = readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1);
   assert.equal(rows.length, 1, "a stdio row is not this RPC's business");
   assert.equal(readVarint(rows[0], 1), 1, "id");
   assert.equal(readVarint(rows[0], 2), 1, "is_available — waiting on auth is not broken");
@@ -190,28 +199,28 @@ test("CheckHttpMcpStatus turns a needsAuth server into requires_auth, not an err
 
 test("a signed-in server reports a valid token and stops asking", () => {
   const ctx = { user: null, body: message(pbVar(1, 1)), mcpServers: [{ name: "r", url: SERVER, status: "connected", hasToken: true }] };
-  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  const rows = readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1);
   assert.equal(readVarint(rows[0], 3), 0, "requires_auth false");
   assert.equal(readVarint(rows[0], 6), 1, "has_valid_token true");
 });
 
 test("no auth_url is invented — the client builds it with its own PKCE verifier", () => {
   const ctx = { user: null, body: message(pbVar(1, 1)), mcpServers: [{ name: "r", url: SERVER, status: "needsAuth" }] };
-  assert.equal(readString(readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1)[0], 4), "");
+  assert.equal(readString(readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1)[0], 4), "");
 });
 
 test("an empty request asks about every configured server", () => {
   const ctx = { user: null, body: message(), mcpServers: [{ name: "a", url: SERVER, status: "needsAuth" }, { name: "b", url: "https://x.test/mcp", status: "connected" }] };
-  assert.equal(readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1).length, 2);
+  assert.equal(readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1).length, 2);
 });
 
 // ── GetAvailableMcpServers: where the pane actually reads "signed in" ─────────
 
 test("a remote server with a stored sign-in reports user_has_access_token", () => {
-  const r = bootstrapResponses.GetAvailableMcpServers({
+  const r = sync(bootstrapResponses.GetAvailableMcpServers({
     user: null,
     mcpServers: [{ name: "zernio", url: SERVER, hasToken: true, pluginId: 20 }],
-  } as never);
+  } as never));
   const row = readMessages(r, 1)[0];
   assert.equal(readString(row, 2), "zernio");
   assert.equal(readVarint(row, 9), 20, "plugin_id ties the connector to its plugin row");
@@ -222,18 +231,18 @@ test("a remote server with a stored sign-in reports user_has_access_token", () =
 });
 
 test("without a sign-in it reports false, rather than leaving the field out", () => {
-  const r = bootstrapResponses.GetAvailableMcpServers({
+  const r = sync(bootstrapResponses.GetAvailableMcpServers({
     user: null, mcpServers: [{ name: "zernio", url: SERVER, hasToken: false }],
-  } as never);
+  } as never));
   const row = readMessages(r, 1)[0];
   assert.equal(readVarint(row, 11), 0);
   assert.equal(readVarint(readMessages(row, 17)[0], 3), 0);
 });
 
 test("a stdio server still comes through unchanged", () => {
-  const r = bootstrapResponses.GetAvailableMcpServers({
+  const r = sync(bootstrapResponses.GetAvailableMcpServers({
     user: null, mcpServers: [{ name: "memory", command: "npx", args: ["-y", "pkg"] }],
-  } as never);
+  } as never));
   const row = readMessages(r, 1)[0];
   assert.equal(readString(row, 5), "stdio");
   assert.equal(readString(row, 6), "npx");
@@ -275,7 +284,7 @@ test("account_key asks about one platform, and an unconnected one still requires
     }],
     authUrlFor: (_u: string, _r: string, key?: string) => { asked.push(key ?? ""); return "https://instagram.test/authorize"; },
   };
-  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  const rows = readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1);
   assert.equal(readVarint(rows[0], 3), 1, "requires_auth — this is the button that was missing");
   assert.equal(readVarint(rows[0], 6), 0, "has_valid_token false for THIS account");
   assert.equal(readString(rows[0], 4), "https://instagram.test/authorize", "and it has somewhere to go");
@@ -292,7 +301,7 @@ test("the same connector answers 'already connected' for the platform that is", 
     }],
     authUrlFor: () => "https://should-not-be-asked.test",
   };
-  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  const rows = readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1);
   assert.equal(readVarint(rows[0], 3), 0, "requires_auth false");
   assert.equal(readString(rows[0], 4), "", "no sign-in is offered for an account that has one");
 });
@@ -307,14 +316,14 @@ test("without account_key the connector answers for itself, as it always did", (
     }],
     authUrlFor: (_u: string, _r: string, key?: string) => (key === undefined ? "https://zernio.test/signin" : "wrong"),
   };
-  const rows = readMessages(bootstrapResponses.CheckHttpMcpStatus(ctx as never), 1);
+  const rows = readMessages(sync(bootstrapResponses.CheckHttpMcpStatus(ctx as never)), 1);
   assert.equal(readString(rows[0], 4), "https://zernio.test/signin");
 });
 
 // ── ListSandMcpTools: the status drawn beside each account row ───────────────────
 
 const listTools = (body: Buffer, servers: unknown[]) =>
-  readMessages(bootstrapResponses.ListSandMcpTools({ user: null, body, mcpServers: servers } as never), 1);
+  readMessages(sync(bootstrapResponses.ListSandMcpTools({ user: null, body, mcpServers: servers } as never)), 1);
 
 /** The client asks by connector name; the per-account split has to come back in the ANSWER. */
 test("one request for the connector answers one row per account", () => {
@@ -375,7 +384,7 @@ test("GetMcpConfig answers the config and the name → id map the client joins o
       return { json: '{"mcpServers":{"memory":{}}}', ids: { memory: { serverId: 1, pluginId: 7 }, other: { serverId: 2 } } };
     },
   };
-  const r = bootstrapResponses.GetMcpConfig(ctx as never);
+  const r = sync(bootstrapResponses.GetMcpConfig(ctx as never));
   assert.equal(readString(r, 1), '{"mcpServers":{"memory":{}}}');
   assert.equal(askedRedact, true, "redact_secrets is the client's flag and must not be ignored");
   const entries = readMessages(r, 2).map((m) => [readString(m, 1), readMessages(m, 2)[0]] as const);
@@ -387,11 +396,11 @@ test("GetMcpConfig answers the config and the name → id map the client joins o
 
 test("team scope answers empty — this backend has no teams to describe", () => {
   const ctx = { user: null, body: message(pbVar(1, 1)), mcpConfig: () => ({ json: "{}", ids: {} }) };
-  assert.equal(bootstrapResponses.GetMcpConfig(ctx as never).length, 0);
+  assert.equal(sync(bootstrapResponses.GetMcpConfig(ctx as never)).length, 0);
 });
 
 test("with no config port it answers empty, as it did before it was handled", () => {
-  assert.equal(bootstrapResponses.GetMcpConfig({ user: null, body: message() } as never).length, 0);
+  assert.equal(sync(bootstrapResponses.GetMcpConfig({ user: null, body: message() } as never)).length, 0);
 });
 
 // ── The account RPCs: empty responses, but the ACTION has to happen ─────────────
@@ -403,7 +412,7 @@ test("RenameMcpOAuthAccount hands the backend all three fields", () => {
     body: message(pbVar(1, 4), pbStr(2, "discord"), pbStr(3, "kenh-chinh")),
     accounts: { rename: (...a: unknown[]) => calls.push(a), remove: () => {} },
   };
-  const r = bootstrapResponses.RenameMcpOAuthAccount(ctx as never);
+  const r = sync(bootstrapResponses.RenameMcpOAuthAccount(ctx as never));
   assert.equal(r.length, 0, "the response IS an empty message — that part was never wrong");
   assert.deepEqual(calls, [[4, "discord", "kenh-chinh"]]);
 });
@@ -415,12 +424,70 @@ test("DeleteMcpOAuthAccount hands the backend the server and the account", () =>
     body: message(pbVar(1, 2), pbStr(2, "tiktok")),
     accounts: { rename: () => {}, remove: (...a: unknown[]) => calls.push(a) },
   };
-  assert.equal(bootstrapResponses.DeleteMcpOAuthAccount(ctx as never).length, 0);
+  assert.equal(sync(bootstrapResponses.DeleteMcpOAuthAccount(ctx as never)).length, 0);
   assert.deepEqual(calls, [[2, "tiktok"]]);
 });
 
 test("both stay harmless with no port — an ack, and nothing done", () => {
   for (const m of ["RenameMcpOAuthAccount", "DeleteMcpOAuthAccount"]) {
-    assert.equal(bootstrapResponses[m]({ user: null, body: message(pbVar(1, 1), pbStr(2, "x")) } as never).length, 0);
+    assert.equal(sync(bootstrapResponses[m]({ user: null, body: message(pbVar(1, 1), pbStr(2, "x")) } as never)).length, 0);
   }
+});
+
+// ── TranscribeAudio: the microphone button ─────────────────────────────────────
+
+/** The audio field must be read as BYTES — `bytes` and `string` share a wire type, and UTF-8 eats it. */
+const audioRequest = (bytes: Buffer, mime = "audio/webm", lang?: string) => {
+  const len: number[] = [];
+  let n = bytes.length;
+  do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; len.push(b); } while (n);
+  return Buffer.concat([
+    Buffer.from([0x0a]), Buffer.from(len), bytes,
+    message(pbStr(2, mime), ...(lang ? [pbStr(3, lang)] : [])),
+  ]);
+};
+
+test("TranscribeAudio hands the audio through byte for byte", async () => {
+  const audio = Buffer.from([0x00, 0xff, 0x1a, 0x0a, 0xc3, 0x28, 0x80]);   // includes invalid UTF-8
+  let got: { audio: Buffer; mime: string; lang?: string } | null = null;
+  const r = await bootstrapResponses.TranscribeAudio({
+    user: null,
+    body: audioRequest(audio, "audio/webm", "vi"),
+    transcribe: async (a: Buffer, mime: string, lang?: string) => {
+      got = { audio: a, mime, lang };
+      return { text: "xin chào", ms: 1234 };
+    },
+  } as never);
+  assert.deepEqual([...(got!.audio)], [...audio], "a string round trip would have mangled these bytes");
+  assert.equal(got!.mime, "audio/webm");
+  assert.equal(got!.lang, "vi");
+  assert.equal(readString(r, 1), "xin chào");
+  assert.equal(readVarint(r, 2), 1234);
+});
+
+test("no transcriber installed answers empty text, not an error", async () => {
+  const r = await bootstrapResponses.TranscribeAudio({
+    user: null, body: audioRequest(Buffer.from([1, 2, 3])),
+  } as never);
+  assert.equal(readString(r, 1), "", "the composer gets an empty box, not a dialog");
+  assert.equal(readVarint(r, 2), 0);
+});
+
+test("a failing transcriber is reported as empty text, and does not throw at the RPC", async () => {
+  const r = await bootstrapResponses.TranscribeAudio({
+    user: null,
+    body: audioRequest(Buffer.from([1, 2, 3])),
+    transcribe: async () => { throw new Error("model unavailable"); },
+  } as never);
+  assert.equal(readString(r, 1), "");
+});
+
+test("an empty request never reaches the transcriber", async () => {
+  let called = false;
+  const r = await bootstrapResponses.TranscribeAudio({
+    user: null, body: message(pbStr(2, "audio/webm")),
+    transcribe: async () => { called = true; return { text: "x", ms: 1 }; },
+  } as never);
+  assert.equal(called, false, "no audio is not a transcription job");
+  assert.equal(readString(r, 1), "");
 });
