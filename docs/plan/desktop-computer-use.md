@@ -297,7 +297,7 @@ Một box dùng chung cho tất cả. Nên phải có đúng cái trọng tài m
 Đường dài đúng hơn là **mỗi bot một box**, đúng như hãng. Cái khoá này là lời giải cho hạ tầng
 hiện có, không phải cho hạ tầng nên có — và nó **làm được**: xem
 [one-display-per-bot.md](one-display-per-bot.md), đã dựng thử display riêng trên chính box này và
-chứng minh hai màn hình không thấy nhau. Chỗ chật không phải kỹ thuật mà là đĩa (đang dùng 87%).
+chứng minh hai màn hình không thấy nhau. Chỗ chật không phải kỹ thuật mà là RAM: 14 bot theo RAM so với 37 theo đĩa.
 
 ## Cảnh báo phải nói trước
 

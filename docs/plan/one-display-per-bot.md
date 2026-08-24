@@ -45,12 +45,26 @@ không phải điều gì lạ với nó.
 | CPU | 19 nhân |
 | đĩa | 100 GB, **đã dùng 87%**, còn 14 GB |
 
-Nghĩa là trần thực tế khoảng **15 bot chạy đồng thời** theo RAM — nhưng **đĩa mới là chỗ chật
-trước**: mỗi Chrome cần một `--user-data-dir` riêng, và 14 GB không đi được xa.
+Tính ra, chừa lại 1 GB: **14 bot theo RAM, 37 bot theo đĩa** → **RAM chặn trước**.
+
+Tôi đã viết ngược điều này ở bản đầu — thấy 87% đĩa thì kết luận đĩa hết trước, mà không tính. Con
+số 87% nghe đáng lo hơn "còn 8 GB RAM", và đó đúng là cái bẫy. Nên `/admin` trả về **cả hai** con số
+và nói rõ cái nào đang chặn, thay vì chọn hộ người đọc.
+
+Còn một điều nữa chỉ lộ ra khi đo: **box này dùng chung với phần mềm khác.** Sáu Chrome
+`/root/flow-profiles/ip-…-both-93NN` đang ăn ~6 GB và không phải của grokbot2. Chúng cũng chiếm sáu
+display. Nghĩa là 8 GB "còn trống" đã là phần sau khi trừ họ, và họ có thể lớn lên bất cứ lúc nào.
 
 Kết luận thẳng: cấp theo bot phải là **cấp khi dùng, thu khi nghỉ**, không phải cấp sẵn cho mọi bot
 trong danh sách. Đúng như hãng làm — `releaseAgent(agentId)` chạy khi xoá bot, và box của một bot
 không sống mãi.
+
+## Theo dõi
+
+`/admin` (BFF, xem `src/admin.ts` + `src/box-resources.ts`) trả lời đúng một câu: **cấp thêm được
+mấy bot, và cái gì đang chặn.** Kèm từng màn hình và từng hồ sơ Chrome, vì khi con số tổng trông lạ
+thì phải thấy ngay ai đang ăn. Trang chỉ đọc — sáu Chrome trên box không thuộc mình, nên một nút
+"thu hồi" ở đó là nút giết tiến trình của người khác.
 
 ## Phải sửa những đâu
 
