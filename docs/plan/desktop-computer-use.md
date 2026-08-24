@@ -199,7 +199,8 @@ Ba điều học được khi làm:
   subshell đó vẫn giữ ống stdout của daemon dù B đã tự chuyển hướng. Đổi thành `A; B &` là xong —
   250ms. Đo được vì mỗi lần bấm "bắt đầu ghi" treo đúng bằng thời hạn phiên ghi.
 - **`keysym_to_string(XK_Return)` trả về một ký tự dài 1**, nên bộ ghi đầu tiên nuốt phím Enter vào
-  giữa chuỗi chữ: `"abc"` thay vì `"abc"` rồi `Return`.
+  giữa chuỗi chữ: `"abc
+"` thay vì `"abc"` rồi `Return`.
 
 ### Checklist E2E giai đoạn 2
 
@@ -215,6 +216,45 @@ Trong `scripts/e2e-desktop.mjs`, nhóm 7. Kết quả 24/08/2026: **19/19 toàn 
 
 Chưa kiểm: **chạy lại** một routine desktop trên màn hình đã đổi bố cục. Đó là phép thử thật của
 mô tả bằng lời, và nó cần một app desktop thật chứ không phải trang web dựng cho test.
+
+## Một màn hình, nhiều bot — và bản gốc điều phối thế nào
+
+Phát hiện từ một lỗi thật: một bot đang đọc trang Shopee bị bot khác gõ chữ vào đúng tab đó, pane
+"màn hình" của nó hiện ra trang của việc khác. Không có lỗi nào nổi lên, vì mọi thao tác đều
+"thành công" — chỉ là trúng cửa sổ của người khác.
+
+Vì sao `browser_*` không sao mà `computer_use` thì có: mỗi bot có **tab riêng**, và CDP tác động
+thẳng vào tab đó dù nó không nằm trên cùng. `computer_use` ngược lại — nó bấm vào **cửa sổ đang ở
+trên cùng**, trên một box mà mọi bot dùng chung.
+
+### Bản gốc (trích từ `app.asar`, v0.20.0)
+
+| tầng | thứ có thật |
+|---|---|
+| **BE** | `forever-box` cấp box **theo từng bot**: `releaseAgentBox(id)` → `api("forever-box").releaseAgent(id)`, gọi khi xoá bot |
+| **API** | `GET /health` → `{ok, pid, isBusy, busyOnlyAwaitingApproval, activeAgentId, startedAt, lastBusyAtMs}` |
+| | `isBusy = liveRunningAgentIds().size > 0` — **nhiều bot chạy cùng lúc là bình thường** |
+| | `activeAgentId = rosterBookkeeping.latestActiveAgentId` — bot người dùng đang MỞ, nạp từ `subscribeAgents(n => apply(n.activeAgentId))` |
+| **FE** | pane máy tính giữ `{currentAgentId, isLoadPending}`; đổi bot đang xem thì đặt `shouldOpen:true, isHostReady:false` và mở lại host cho bot mới |
+
+Điểm mấu chốt: `latestActiveAgentId` **không phải một cái khoá**. Nó chỉ là danh tính dự phòng cho
+đính kèm (`setFallbackAgentId`) và cho telemetry. Bản gốc không có trọng tài nào giành máy, vì
+**không có gì để giành**: hai bot là hai box, hai Chrome, hai màn hình.
+
+### Bên mình
+
+Một box dùng chung cho tất cả. Nên phải có đúng cái trọng tài mà họ không cần:
+
+- `claimDesktop` / `releaseDesktop` trong `desktop.ts` — mỗi lúc một bot cầm màn hình.
+- Bot thứ hai bị **từ chối kèm tên bot đang giữ**, không xếp hàng: bot bị từ chối còn nói lại được
+  với người dùng, bot xếp hàng thì treo im.
+- Nhả ngay khi hết lượt, không đợi bộ hẹn giờ hai phút của pane — màn hình là thứ bot khác đang
+  chờ, pane chỉ là thứ người dùng đang nhìn. Giữ quá ba phút thì coi như bỏ rơi.
+- Bộ ghi thao tác cũng phải giành: nó ghi mọi sự kiện trên box bất kể của ai, nên một cú bấm của
+  bot khác sẽ nằm luôn trong bài dạy mà không ai đọc routine sau này nhận ra.
+
+Đường dài đúng hơn là **mỗi bot một box**, đúng như hãng. Cái khoá này là lời giải cho hạ tầng
+hiện có, không phải cho hạ tầng nên có.
 
 ## Cảnh báo phải nói trước
 
