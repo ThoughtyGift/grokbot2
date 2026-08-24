@@ -172,3 +172,15 @@ export const authorOf = (agentId: string): { id: string; name: string } => ({ id
 export function automationsChanged(agentId: string): void {
   publish({ type: "automations.changed", agentId });
 }
+
+/**
+ * Whether a bot is still here.
+ *
+ * Exists for the scheduler: a routine outlives the bot it belongs to when the bot is removed by a
+ * path that does not reach `bindAutomationCleanup`, and four such orphans were found firing — one of
+ * them a daily cron sending a prompt into a bot nobody could read. Asking before firing is cheaper
+ * than a pool call into nothing.
+ */
+export function agentExists(id: string): boolean {
+  return agents.has(id);
+}

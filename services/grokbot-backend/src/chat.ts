@@ -29,6 +29,7 @@ export {
   bindAutomationCleanup,
   transcriptEpoch,
   automationsChanged,
+  agentExists,
 } from "./chat/state.js";
 export {
   nextRosterOrdered,

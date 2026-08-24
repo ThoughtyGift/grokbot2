@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { agentExists, sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -411,6 +411,19 @@ export function setAgentAutomationEnabled(a: { id?: string; agentId?: string; au
 function fire(rec: Automation, trigger: AutomationRun["trigger"], context?: string): void {
   rec.lastRunAt = Date.now();
   const run: AutomationRun = { id: `run-${runSeq++}`, status: "running", trigger, startedAt: Date.now() };
+  // A routine can outlive its bot: removal does not always reach `bindAutomationCleanup`, and four
+  // orphans were found here — one a daily cron prompting a bot nobody could read, spending a pool
+  // call on a conversation that no longer exists. The run is recorded as failed rather than dropped
+  // silently, so the panel can say why, and the routine is left alone: deleting somebody's routine
+  // because a lookup missed once is the worse mistake.
+  if (!agentExists(rec.agentId)) {
+    run.status = "failed";
+    rec.runs.unshift(run);
+    rec.runs.length = Math.min(rec.runs.length, MAX_RUNS);
+    console.warn(`[grokbot2] routine "${rec.name}" points at ${rec.agentId}, which no longer exists — not firing`);
+    persistState();
+    return;
+  }
   rec.runs.unshift(run);
   rec.runs.length = Math.min(rec.runs.length, MAX_RUNS);
   console.log(`[grokbot2] routine ${trigger}: "${rec.name}" -> ${rec.agentId}`);
