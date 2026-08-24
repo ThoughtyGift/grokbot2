@@ -71,3 +71,30 @@ test("chỉ hành động nhìn mới được duyệt sẵn", () => {
   assert.equal(isDesktopLook('{"action":"click","x":1,"y":2}'), false);
   assert.equal(isDesktopLook('{"action":"type","text":"rm -rf /"}'), false);
 });
+
+/**
+ * Một màn hình, nhiều bot.
+ *
+ * `browser_*` chịu được nhiều bot cùng chạy vì mỗi bot có tab riêng và CDP không cần tab nằm trên
+ * cùng. `computer_use` thì bấm vào cửa sổ đang ở trên cùng — của bất kỳ ai. Chuyện này đã xảy ra
+ * thật: một bot đang đọc trang Shopee bị bot khác gõ chữ vào đúng tab đó, và không có lỗi nào nổi
+ * lên vì mọi thao tác đều "thành công", chỉ là trúng cửa sổ của người khác.
+ */
+test("chỉ một bot cầm màn hình tại một thời điểm", async (t) => {
+  const { claimDesktop, releaseDesktop, desktopHeldBy } = await import("./desktop.js");
+  releaseDesktop(desktopHeldBy() ?? "");
+  t.after(() => releaseDesktop(desktopHeldBy() ?? ""));
+
+  assert.deepEqual(claimDesktop("bot-a"), { ok: true });
+  assert.deepEqual(claimDesktop("bot-b"), { ok: false, heldBy: "bot-a" },
+    "bot thứ hai phải bị từ chối kèm tên bot đang giữ, để nó nói lại được với người dùng");
+  assert.deepEqual(claimDesktop("bot-a"), { ok: true }, "chính chủ gọi lại thì không tự chặn mình");
+  assert.equal(desktopHeldBy(), "bot-a");
+
+  releaseDesktop("bot-b");
+  assert.equal(desktopHeldBy(), "bot-a", "bot khác không nhả hộ được");
+  releaseDesktop("bot-a");
+  assert.equal(desktopHeldBy(), null);
+  assert.deepEqual(claimDesktop("bot-b"), { ok: true }, "nhả rồi thì người sau vào được");
+  releaseDesktop("bot-b");
+});

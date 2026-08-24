@@ -414,3 +414,43 @@ export function parseDesktopArg(arg: string): DesktopAction | { error: string } 
   if (action === "key" && !a.key) return { error: 'computer_use key cần "key", ví dụ "ctrl+s" hoặc "Return"' };
   return a;
 }
+
+/**
+ * Ai đang cầm màn hình.
+ *
+ * `browser_*` an toàn khi nhiều bot chạy cùng lúc vì mỗi bot có TAB riêng và CDP tác động thẳng
+ * vào tab đó, không cần tab nằm trên cùng. `computer_use` thì ngược lại: nó bấm vào cửa sổ nào
+ * đang ở trên cùng. Trên một box dùng chung, cú bấm của bot B rơi vào trang mà bot A đang làm.
+ *
+ * Đã xảy ra thật: một bot đang phân tích trang Shopee bị cắt ngang vì một bot khác gõ chữ vào
+ * chính tab đó. Không ai báo lỗi, vì mọi thao tác đều "thành công" — chỉ là trúng cửa sổ của
+ * người khác.
+ *
+ * Bản gốc không gặp chuyện này: box của họ cấp THEO TỪNG BOT (`forever-box.releaseAgent(agentId)`,
+ * gọi khi xoá bot), nên hai bot là hai máy, hai Chrome. Bên mình một box dùng chung, nên phải có
+ * trọng tài — và trọng tài đúng là "từ chối", không phải "chờ": bot bị từ chối còn nói lại được
+ * với người dùng, bot chờ thì treo im.
+ */
+interface DesktopHold { agentId: string; atMs: number }
+let hold: DesktopHold | null = null;
+
+/** Giữ quá lâu mà không ai nhả thì coi như bỏ rơi — một lượt chết không được khoá máy vĩnh viễn. */
+const HOLD_STALE_MS = Number(process.env.GROKBOT2_DESKTOP_HOLD_MS ?? 180_000);
+
+export function claimDesktop(agentId: string): { ok: true } | { ok: false; heldBy: string } {
+  if (hold && hold.agentId !== agentId && Date.now() - hold.atMs < HOLD_STALE_MS) {
+    return { ok: false, heldBy: hold.agentId };
+  }
+  hold = { agentId, atMs: Date.now() };
+  return { ok: true };
+}
+
+export function releaseDesktop(agentId: string): void {
+  if (hold?.agentId === agentId) hold = null;
+}
+
+/** Ai đang giữ, hoặc null. Dùng cho e2e và cho câu trả lời gửi model. */
+export const desktopHeldBy = (): string | null => {
+  if (hold && Date.now() - hold.atMs >= HOLD_STALE_MS) hold = null;
+  return hold?.agentId ?? null;
+};

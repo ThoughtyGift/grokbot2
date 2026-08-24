@@ -7,7 +7,7 @@ import { config, loadPoolKey } from "../config.js";
 import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
 import { isAutoApproved, unquote } from "../tools.js";
-import { isDesktopLook } from "../desktop.js";
+import { isDesktopLook, releaseDesktop } from "../desktop.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
@@ -153,6 +153,10 @@ const clearPresence = (agentId: string): void => {
   // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
   // on screen, because that card exists precisely to make the user look at it.
   endComputerUse(agentId);
+  // Nhả màn hình NGAY khi lượt kết thúc, không đợi bộ hẹn giờ của pane: quyền dùng màn hình là thứ
+  // bot khác đang chờ, còn pane chỉ là thứ người dùng đang nhìn. Giữ thêm hai phút cho đẹp pane
+  // đồng nghĩa hai phút bot khác không làm gì được.
+  releaseDesktop(agentId);
   finishComputerUseRun(agentId);
   setPresence(agentId, { isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null });
 };
@@ -198,7 +202,9 @@ const computerRuns = new Map<string, string>();   // agentId → subagentId
 function startComputerUseRun(agentId: string, tool: string): void {
   beginComputerUse(agentId);
   if (computerRuns.has(agentId)) return;
-  const title = tool.startsWith("browser_") ? "Đang dùng trình duyệt" : "Đang cần bạn thao tác";
+  const title = tool.startsWith("browser_") ? "Đang dùng trình duyệt"
+    : tool === "computer_use" ? "Đang dùng máy tính"
+    : "Đang cần bạn thao tác";
   computerRuns.set(agentId, startSubagentRun(agentId, COMPUTER_USE, title));
 }
 
@@ -368,7 +374,7 @@ function runTool(
   // Claim the computer for this bot. Browser actions drive its Chrome window; a handoff puts a
   // card on screen the user has to act on. Either way this bot — and only this bot — should
   // show a live screen while it lasts.
-  if (name.startsWith("browser_") || name === "request_box_help") startComputerUseRun(agentId, name);
+  if (name.startsWith("browser_") || name === "computer_use" || name === "request_box_help") startComputerUseRun(agentId, name);
   // A box handoff waits on a human, which can be minutes or never. Leaving the turn "running"
   // meanwhile is what made the app look dead: `isRunning` stayed true, the avatar spun behind
   // a card that needed a click, and because the promise had not settled nothing ever cleared

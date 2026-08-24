@@ -12,7 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import { boxCall, boxConfigured } from "./box-exec.js";
-import { sq, boxRoot } from "./desktop.js";
+import { sq, boxRoot, claimDesktop, releaseDesktop, desktopHeldBy } from "./desktop.js";
 import { callPool } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { automationCreateRef } from "./chat/state.js";
@@ -231,6 +231,9 @@ let current: { agentId: string; dir: string; startedAtMs: number } | null = null
 
 export const desktopRecordConfigured = (): boolean => boxConfigured();
 
+/** Ai đang giữ màn hình — để lệnh gateway trả lời được "vì sao không ghi được". */
+export const desktopBlockedBy = (): string | null => (current ? null : desktopHeldBy());
+
 export const desktopRecordingState = (): DesktopRecordingState =>
   current
     ? { state: "recording", agentId: current.agentId, startedAtMs: current.startedAtMs, maxDurationMs: MAX_MS }
@@ -238,6 +241,9 @@ export const desktopRecordingState = (): DesktopRecordingState =>
 
 export async function startDesktopRecording(agentId: string): Promise<DesktopRecordingState> {
   if (current) return desktopRecordingState();
+  // Bộ ghi bắt MỌI thao tác trên máy, không phân biệt của ai. Một bot khác bấm một cái trong lúc
+  // người dùng đang dạy là cú bấm đó nằm luôn trong bài dạy — và không ai nhìn ra khi đọc routine.
+  if (!claimDesktop(agentId).ok) return IDLE;
   await ensureRecorder();
   const dir = `${await boxRoot()}/.grokbot2-teach/${Date.now()}`;
   // nohup + setsid: phiên ghi phải sống lâu hơn lệnh exec đã đẻ ra nó, nếu không nó chết ngay khi
@@ -259,6 +265,7 @@ export async function stopDesktopRecording(): Promise<{ steps: DesktopStep[]; di
   const s = current;
   current = null;
   if (!s) return null;
+  releaseDesktop(s.agentId);
   await boxCall<ExecResult>("exec", { command: `kill $(cat ${sq(`${s.dir}/pid`)}) 2>/dev/null; sleep 0.4; echo done` });
   const steps = await readSteps(s.dir);
   return { steps, dir: s.dir, agentId: s.agentId };

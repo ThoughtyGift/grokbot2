@@ -8,7 +8,7 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowser
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
-import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo } from "../desktop.js";
+import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from "../desktop-record.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
@@ -1004,7 +1004,7 @@ const desktopParagraph = (info: { width: number; height: number; dpi: number } |
   "act and look after: take a screenshot, read the coordinates off it, do ONE action, and check " +
   "the screenshot that comes back. Firing several clicks from one screenshot is guessing at all " +
   "but the first. Prefer the browser_* tools whenever the task is inside a web page — they match " +
-  "on selectors and do not go stale when a window moves." +
+  "on selectors and do not go stale when a window moves. The screen is SHARED between all bots on this box, and a desktop click lands in whatever window is frontmost — so read the screenshot and make sure what you see is YOUR page before acting; if it belongs to another task, stop and say so." +
   (desktopRecordConfigured()
     ? "\n\nDẠY VIỆC TRÊN MÁY: nếu người dùng muốn CHỈ cho bạn một việc ngoài trình duyệt, gọi "
       + 'TOOL_CALL: desktop_teach_start(), để họ tự làm trong khung máy tính, rồi khi họ báo xong thì gọi '
@@ -1053,6 +1053,15 @@ const isParallelSafe = (name: string): boolean => {
 if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   const parsed = parseDesktopArg(arg);
   if ("error" in parsed) return parsed.error;
+
+  // Màn hình chỉ có một, và cú bấm rơi vào cửa sổ đang ở trên cùng — của bất kỳ bot nào. Giành
+  // quyền trước khi chạm vào nó, kể cả để chụp: một tấm ảnh chụp giữa lúc bot khác đang làm sẽ
+  // dẫn tới toạ độ đọc từ màn hình của người khác.
+  const claim = claimDesktop(ctx.agentId);
+  if (!claim.ok) {
+    return `máy tính đang do bot ${claim.heldBy} dùng — chờ nó xong rồi thử lại, đừng bấm vào lúc này`
+      + " (một cú bấm bây giờ sẽ rơi vào cửa sổ mà bot kia đang làm dở)";
+  }
 
   const r = await desktopAct(parsed);
   if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;

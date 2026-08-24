@@ -79,6 +79,11 @@ const resultOf = (fresh) => fresh.find((e) => e.kind === "tool-call")?.result ??
 async function ask(agentId, content, waitMs = 150_000) {
   const anchor = anchorOf(await read(agentId));
   await post("sendPrompt", { agentId, content, clientNonce: `a${Date.now()}${Math.random()}` });
+  return waitQuiet(agentId, anchor, waitMs);
+}
+
+/** Chờ tới khi bot ngừng hẳn — dùng cho cả tin nhắn lẫn routine tự chạy. */
+async function waitQuiet(agentId, anchor, waitMs = 150_000) {
   const until = Date.now() + waitMs;
   let sig = "", stable = 0, last = "";
   while (Date.now() < until) {
@@ -103,12 +108,42 @@ async function ask(agentId, content, waitMs = 150_000) {
  * có sáu con "DesktopE2E" chen giữa bot thật của họ. Một bài kiểm chạy nhiều lần không được để lại
  * dấu vết tích luỹ.
  */
+/**
+ * Không chạy khi có bot khác đang làm việc.
+ *
+ * Bài này lái đúng con Chrome và đúng cái màn hình mà mọi bot đang dùng chung. Lần đầu chạy nó đã
+ * cắt ngang một bot đang phân tích trang Shopee: pane "màn hình" của bot đó hiện ra trang test của
+ * bài kiểm. Một bài kiểm không được phép phá công việc thật, kể cả khi nó đang kiểm một tính năng
+ * thật.
+ */
 const roster = await post("listAgents", {});
+const busy = (Array.isArray(roster) ? roster : Object.values(roster))
+  .filter((a) => a?.name !== "DesktopE2E" && (a?.isRunning === true || a?.isRunningTurn === true));
+if (busy.length) {
+  console.log(`DỪNG: ${busy.map((a) => a.name ?? a.id).join(", ")} đang chạy — bài này dùng chung màn hình`);
+  console.log("Chờ bot kia xong rồi chạy lại, hoặc chạy trên một box riêng.");
+  process.exit(2);
+}
 const existing = (Array.isArray(roster) ? roster : Object.values(roster)).find((a) => a?.name === "DesktopE2E");
 const agent = existing ?? (await post("createAgent", { name: "DesktopE2E" })).agent;
 console.log(`bot thử: ${agent.id}${existing ? " (dùng lại)" : " (mới tạo)"}\n`);
 const WORD = `MOC-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 let createdRoutineId = null;
+
+/**
+ * Cùng một biểu mẫu, hai bố cục.
+ *
+ * Bài dạy diễn ra trên A, bài chạy lại diễn ra trên B — nút chuyển sang phía đối diện và đổi độ
+ * cao. Đó là toàn bộ điểm của giai đoạn 2: nếu bot bấm theo toạ độ đã ghi thì trên B nó bấm vào
+ * chỗ trống, và ô kết quả sẽ nói thẳng ra điều đó.
+ */
+const LAYOUT_A = { inputLeft: 40, inputTop: 60, btnLeft: 40, btnTop: 220 };
+const LAYOUT_B = { inputLeft: 900, inputTop: 420, btnLeft: 900, btnTop: 600 };
+const form = (L) => "<body style='margin:0;font:20px sans-serif;background:%23fafafa'>"
+  + `<input id=t placeholder='Ten khach hang' style='position:fixed;left:${L.inputLeft}px;top:${L.inputTop}px;width:700px;height:90px;padding:0 16px;font:30px sans-serif'>`
+  + `<button id=b style='position:fixed;left:${L.btnLeft}px;top:${L.btnTop}px;width:700px;height:140px;font:bold 40px sans-serif;background:%231565c0;color:%23fff;border:0;border-radius:10px'>LUU HO SO</button>`
+  + "<div id=r style='position:fixed;left:40px;bottom:20px;color:%23888;font:24px monospace'>chua luu</div>"
+  + "<script>b.onclick=function(){r.textContent='DA-LUU: '+t.value}</script></body>";
 
 // ── 1. bề mặt ────────────────────────────────────────────────────────────────
 console.log("1. tool có mặt và biết màn hình rộng bao nhiêu");
@@ -212,11 +247,7 @@ console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, l
 {
   // Các phần tử để to hẳn: bài kiểm này kiểm BỘ GHI, không kiểm khả năng bấm chính xác của tôi.
   // Một cú bấm trượt mép nút vẫn được ghi đúng, nhưng lời mô tả sinh ra sẽ nói về cái mép đó.
-  const html = "<body style='margin:0;font:20px sans-serif;background:%23fafafa'>"
-    + "<input id=t placeholder='Ten khach hang' style='position:fixed;left:40px;top:60px;width:700px;height:90px;padding:0 16px;font:30px sans-serif'>"
-    + "<button id=b style='position:fixed;left:40px;top:220px;width:700px;height:140px;font:bold 40px sans-serif;background:%231565c0;color:%23fff;border:0;border-radius:10px'>LUU HO SO</button>"
-    + "</body>";
-  await callTool(agent.id, "browser_navigate", { url: `data:text/html,${html}` });
+  await callTool(agent.id, "browser_navigate", { url: `data:text/html,${form(LAYOUT_A)}` });
   await sleep(1500);
 
   const started = await post("startDesktopTeachRecording", { agentId: agent.id });
@@ -246,6 +277,32 @@ console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, l
   check("mỗi bước bấm được tả bằng lời, không chỉ toạ độ", /bấm vào "[^"]{10,}"/.test(prompt),
     prompt ? prompt.split("\n").find((l) => l.startsWith("1.")) ?? prompt.slice(0, 80) : "routine không có prompt");
   check("chữ đã gõ nằm trong routine", prompt.includes("Nguyen Van A"), prompt ? "có" : "không");
+}
+
+// ── 8. CHẠY LẠI — phép thử thật của giai đoạn 2 ─────────────────────────────
+console.log("\n8. chạy lại bài đã dạy trên một BỐ CỤC KHÁC");
+if (!createdRoutineId) {
+  check("chạy lại được bài đã dạy", false, "nhóm 7 chưa tạo được routine nên không có gì để chạy");
+} else {
+  // Đổi bố cục trước khi chạy. Nếu bot bấm theo toạ độ đã ghi, trên bố cục này nó bấm vào nền
+  // trống — và ô kết quả vẫn nói "chua luu". Không có cách nào đi qua bài này bằng toạ độ cũ.
+  await callTool(agent.id, "browser_navigate", { url: `data:text/html,${form(LAYOUT_B)}` });
+  await sleep(1500);
+  const before = resultOf(await callTool(agent.id, "browser_evaluate", { expression: "document.getElementById('r').textContent" }));
+  check("bố cục mới bắt đầu ở trạng thái sạch", before.includes("chua luu"), before.slice(0, 40));
+
+  const anchor = anchorOf(await read(agent.id));
+  await post("runAgentAutomationNow", { agentId: agent.id, automationId: createdRoutineId });
+  const { fresh } = await waitQuiet(agent.id, anchor, 300_000);
+
+  const calls = fresh.filter((e) => e.kind === "tool-call" && e.name === "computer_use");
+  const looked = calls.filter((e) => /screenshot/.test(e.summary ?? "")).length;
+  check("bot dùng computer_use chứ không lén dùng browser_", calls.length >= 2, `${calls.length} lần gọi computer_use`);
+  check("bot có nhìn màn hình trước khi bấm", looked >= 1, `${looked} lần chụp`);
+
+  const after = resultOf(await callTool(agent.id, "browser_evaluate", { expression: "document.getElementById('r').textContent" }));
+  check("bài đã dạy chạy đúng trên bố cục đã đổi", after.includes("DA-LUU: Nguyen Van A"),
+    `ô kết quả nói: ${after.slice(0, 60)}`);
 }
 
 // Routine do bài kiểm tự tạo thì bài kiểm tự dọn — nếu không, mỗi lần chạy để lại một dòng
