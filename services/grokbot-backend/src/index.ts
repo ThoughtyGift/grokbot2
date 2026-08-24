@@ -14,7 +14,9 @@ import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";
 import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
-import { socialAccounts, socialConnectUrl, aliasServers, CONNECT_DONE_PATH } from "./social-connect.js";
+import {
+  socialAccounts, socialConnectUrl, aliasServers, renameSocialAccount, clearSocialAlias, CONNECT_DONE_PATH,
+} from "./social-connect.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
@@ -37,6 +39,88 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on("data", (c) => chunks.push(c as Buffer));
     req.on("end", () => resolve(Buffer.concat(chunks)));
   });
+}
+
+
+/**
+ * The plugin-facing ports, built once per request so every view agrees on ids.
+ *
+ * `server_id` is the 1-based position in this list, and three different RPCs are joined on it:
+ * `GetAvailableMcpServers` hands the ids out, `GetMcpConfig` maps names to them, and the account
+ * RPCs arrive carrying one. Building the list twice was how those could silently disagree.
+ */
+function mcpPorts(owner: string) {
+  const configured = mcpServersFor(owner);
+  const real = Object.entries(configured).map(([name, spec]) => {
+    const url = (spec as { url?: string }).url;
+    return {
+      name, command: spec.command, args: spec.args, url,
+      // For CheckHttpMcpStatus: the pane needs to tell "wants a sign-in" from "broken", and an
+      // http row with no status at all is drawn as an error over a connector merely awaiting auth.
+      status: mcpServerStatus(name, owner).status,
+      hasToken: url ? oauthAccessToken(url, owner) != null : false,
+      // Which catalog row installed this server, so the pane can file the connector under it.
+      pluginId: pluginCatalog().find((p) => p.mcp?.name === name)?.id,
+      // One row per installed platform, when this connector fronts several — see social-connect.
+      accounts: socialAccounts(name, owner),
+    };
+  });
+  // Plus a row each platform plugin can own, so its own pane has the sign-in button. Answer-only:
+  // they are not in the MCP config, so no extra connection and no repeated tools — see aliasServers.
+  const rows = [
+    ...real,
+    ...aliasServers(
+      owner,
+      (n) => mcpServerStatus(n, owner).status,
+      (n) => (configured[n] as { url?: string } | undefined)?.url,
+    ),
+  ];
+  const nameOf = (serverId: number) => rows[serverId - 1]?.name;
+  /** An alias row acts on its canonical connector — that is where the accounts actually live. */
+  const canonicalOf = (name?: string) =>
+    name == null ? undefined : name in configured ? name : pluginCatalog().find((p) => p.name === name)?.mcp?.name;
+
+  return {
+    mcpServers: rows,
+    mcpConfig: (redactSecrets: boolean) => ({
+      json: JSON.stringify({ mcpServers: redactSecrets ? redactSpecs(configured) : configured }, null, 2),
+      ids: Object.fromEntries(rows.map((r, i) => [r.name, { serverId: i + 1, ...(r.pluginId ? { pluginId: r.pluginId } : {}) }])),
+    }),
+    accounts: {
+      rename: (serverId: number, accountKey: string, newAccountKey: string) => {
+        const server = canonicalOf(nameOf(serverId));
+        if (server) renameSocialAccount(server, accountKey, newAccountKey, owner);
+      },
+      remove: (serverId: number, accountKey: string) => {
+        const server = canonicalOf(nameOf(serverId));
+        if (!server) return;
+        // Only the alias is dropped here. The account itself lives in the connector's own store —
+        // disconnecting it is that vendor's `delete-account`, a destructive call on somebody's real
+        // Facebook Page, and it is not something to fire off a button press unasked.
+        clearSocialAlias(server, accountKey, owner);
+      },
+    },
+  };
+}
+
+/**
+ * The config with credential VALUES stripped, for `redact_secrets`.
+ *
+ * These specs hold `${PLACEHOLDER}` strings rather than literal keys — the real values live in the
+ * per-owner secrets file — so this is belt and braces. It is worth the belt: the one thing that must
+ * never happen is a token reaching the renderer because a flag was ignored.
+ */
+function redactSpecs(configured: Record<string, unknown>): Record<string, unknown> {
+  const hide = (o?: Record<string, string>) =>
+    o && Object.fromEntries(Object.keys(o).map((k) => [k, "***"]));
+  return Object.fromEntries(Object.entries(configured).map(([name, spec]) => {
+    const s = spec as Record<string, unknown> & { env?: Record<string, string>; headers?: Record<string, string> };
+    return [name, {
+      ...s,
+      ...(s.env ? { env: hide(s.env) } : {}),
+      ...(s.headers ? { headers: hide(s.headers) } : {}),
+    }];
+  }));
 }
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -222,34 +306,7 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     },
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
-    mcpServers: (() => {
-      const owner = ownerFromAuth(req.headers.authorization);
-      const configured = mcpServersFor(owner);
-      const real = Object.entries(configured).map(([name, spec]) => {
-        const url = (spec as { url?: string }).url;
-        return {
-          name, command: spec.command, args: spec.args, url,
-          // For CheckHttpMcpStatus: the pane needs to tell "wants a sign-in" from "broken", and an
-          // http row with no status at all is drawn as an error over a connector merely awaiting auth.
-          status: mcpServerStatus(name, owner).status,
-          hasToken: url ? oauthAccessToken(url, owner) != null : false,
-          // Which catalog row installed this server, so the pane can file the connector under it.
-          pluginId: pluginCatalog().find((p) => p.mcp?.name === name)?.id,
-          // One row per installed platform, when this connector fronts several — see social-connect.
-          accounts: socialAccounts(name, owner),
-        };
-      });
-      // Plus a row each platform plugin can own, so its own pane has the sign-in button. Answer-only:
-      // they are not in the MCP config, so no extra connection and no repeated tools — see aliasServers.
-      return [
-        ...real,
-        ...aliasServers(
-          owner,
-          (n) => mcpServerStatus(n, owner).status,
-          (n) => (configured[n] as { url?: string } | undefined)?.url,
-        ),
-      ];
-    })(),
+    ...mcpPorts(ownerFromAuth(req.headers.authorization)),
     catalog: pluginCatalog(),
   }));
   if (rpc) {

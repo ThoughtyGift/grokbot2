@@ -362,3 +362,65 @@ test("a server name containing a colon still resolves", () => {
   assert.equal(readString(rows[0], 5), "host:8080");
   assert.equal(readString(rows[0], 4), "facebook");
 });
+
+// ── GetMcpConfig: the config the client reads back ──────────────────────────────
+
+test("GetMcpConfig answers the config and the name → id map the client joins on", () => {
+  let askedRedact: boolean | null = null;
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 0), pbVar(3, 1)),
+    mcpConfig: (redact: boolean) => {
+      askedRedact = redact;
+      return { json: '{"mcpServers":{"memory":{}}}', ids: { memory: { serverId: 1, pluginId: 7 }, other: { serverId: 2 } } };
+    },
+  };
+  const r = bootstrapResponses.GetMcpConfig(ctx as never);
+  assert.equal(readString(r, 1), '{"mcpServers":{"memory":{}}}');
+  assert.equal(askedRedact, true, "redact_secrets is the client's flag and must not be ignored");
+  const entries = readMessages(r, 2).map((m) => [readString(m, 1), readMessages(m, 2)[0]] as const);
+  assert.deepEqual(entries.map(([n]) => n), ["memory", "other"]);
+  assert.equal(readVarint(entries[0][1], 2), 1, "server_id");
+  assert.equal(readVarint(entries[0][1], 1), 7, "plugin_id when there is one");
+  assert.equal(readVarint(entries[1][1], 1), undefined, "and absent when there is not");
+});
+
+test("team scope answers empty — this backend has no teams to describe", () => {
+  const ctx = { user: null, body: message(pbVar(1, 1)), mcpConfig: () => ({ json: "{}", ids: {} }) };
+  assert.equal(bootstrapResponses.GetMcpConfig(ctx as never).length, 0);
+});
+
+test("with no config port it answers empty, as it did before it was handled", () => {
+  assert.equal(bootstrapResponses.GetMcpConfig({ user: null, body: message() } as never).length, 0);
+});
+
+// ── The account RPCs: empty responses, but the ACTION has to happen ─────────────
+
+test("RenameMcpOAuthAccount hands the backend all three fields", () => {
+  const calls: unknown[] = [];
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 4), pbStr(2, "discord"), pbStr(3, "kenh-chinh")),
+    accounts: { rename: (...a: unknown[]) => calls.push(a), remove: () => {} },
+  };
+  const r = bootstrapResponses.RenameMcpOAuthAccount(ctx as never);
+  assert.equal(r.length, 0, "the response IS an empty message — that part was never wrong");
+  assert.deepEqual(calls, [[4, "discord", "kenh-chinh"]]);
+});
+
+test("DeleteMcpOAuthAccount hands the backend the server and the account", () => {
+  const calls: unknown[] = [];
+  const ctx = {
+    user: null,
+    body: message(pbVar(1, 2), pbStr(2, "tiktok")),
+    accounts: { rename: () => {}, remove: (...a: unknown[]) => calls.push(a) },
+  };
+  assert.equal(bootstrapResponses.DeleteMcpOAuthAccount(ctx as never).length, 0);
+  assert.deepEqual(calls, [[2, "tiktok"]]);
+});
+
+test("both stay harmless with no port — an ack, and nothing done", () => {
+  for (const m of ["RenameMcpOAuthAccount", "DeleteMcpOAuthAccount"]) {
+    assert.equal(bootstrapResponses[m]({ user: null, body: message(pbVar(1, 1), pbStr(2, "x")) } as never).length, 0);
+  }
+});

@@ -49,6 +49,9 @@ export const BOOTSTRAP_GATE_METHODS = [
   "ListMarketplaces",
   "GetAvailableMcpServers",
   "ListSandMcpTools",
+  "GetMcpConfig",
+  "RenameMcpOAuthAccount",
+  "DeleteMcpOAuthAccount",
 ] as const;
 
 /**
@@ -136,6 +139,26 @@ export interface RpcCtx {
    * Absent ⇒ the two built-in rows, so a caller that supplies nothing behaves as before.
    */
   catalog?: readonly PluginEntry[];
+  /**
+   * The caller's MCP config as the client wants to read it back.
+   *
+   * `GetMcpConfig` is the second most called RPC in the whole plugin surface and answered an empty
+   * message for its entire life. The client parses `config_json` into `{mcpServers}` and keeps the
+   * name -> server_id map beside it; that pair is what the OAuth flow validates an auth URL against.
+   * `redactSecrets` is the client's own flag and is honoured, not ignored.
+   */
+  mcpConfig?(redactSecrets: boolean): { json: string; ids: Record<string, { serverId: number; pluginId?: number }> } | undefined;
+  /**
+   * Acting on one account row of a connector.
+   *
+   * Both RPCs answer an empty message, so the wire was never wrong — the ACTION was missing. Save
+   * on a renamed account reverted a second later, which is the shape of bug this project keeps
+   * finding: the call succeeds, nothing happens, and the UI quietly undoes itself.
+   */
+  accounts?: {
+    rename(serverId: number, accountKey: string, newAccountKey: string): void;
+    remove(serverId: number, accountKey: string): void;
+  };
 }
 
 /** Map of RPC method name -> bare protobuf response body. */
@@ -220,6 +243,48 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer> = {
    *
    * `server_ids` index the same list `GetAvailableMcpServers` numbers, 1-based.
    */
+  /**
+   * aiserver.v1.GetMcpConfig — the config the client reads back, and the name -> id map beside it.
+   *
+   * Request: team_scope (1), team_id (2), redact_secrets (3). Response: config_json (1) and
+   * server_metadata_by_name (2) of ServerMetadata{1 plugin_id, 2 server_id}. A zero server_id is
+   * dropped by the client's own reader, so ids here are the same 1-based numbers
+   * `GetAvailableMcpServers` hands out — anything else and the two views disagree.
+   *
+   * Team scope answers empty: this backend has no teams, and inventing one would put a phantom
+   * team's servers in the pane.
+   */
+  GetMcpConfig: (ctx) => {
+    const body = ctx.body ? unframe(ctx.body) : null;
+    if (body && readVarint(body, 1)) return message();
+    const cfg = ctx.mcpConfig?.(Boolean(body && readVarint(body, 3)));
+    if (!cfg) return message();
+    return message(
+      pbStr(1, cfg.json),
+      ...Object.entries(cfg.ids).map(([name, meta]) => pbMsg(2, message(
+        pbStr(1, name),
+        pbMsg(2, message(
+          ...(meta.pluginId ? [pbVar(1, meta.pluginId)] : []),
+          pbVar(2, meta.serverId),
+        )),
+      ))),
+    );
+  },
+
+  /** aiserver.v1.RenameMcpOAuthAccount — server_id (1), account_key (2), new_account_key (3). */
+  RenameMcpOAuthAccount: (ctx) => {
+    const body = ctx.body ? unframe(ctx.body) : null;
+    if (body) ctx.accounts?.rename(readVarint(body, 1) ?? 0, readString(body, 2), readString(body, 3));
+    return message();
+  },
+
+  /** aiserver.v1.DeleteMcpOAuthAccount — server_id (1), account_key (2). */
+  DeleteMcpOAuthAccount: (ctx) => {
+    const body = ctx.body ? unframe(ctx.body) : null;
+    if (body) ctx.accounts?.remove(readVarint(body, 1) ?? 0, readString(body, 2));
+    return message();
+  },
+
   /**
    * aiserver.v1.ListSandMcpTools — the per-ACCOUNT status the pane draws beside each row.
    *

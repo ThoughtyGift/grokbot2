@@ -91,3 +91,48 @@ test("a stdio connector has no account surface, so it is never aliased", () => {
   const rows = social.aliasServers(OWNER, statusOf, () => undefined);
   assert.deepEqual(rows, [], "no url means the pane cannot offer a sign-in at all");
 });
+
+/**
+ * Renaming an account row. The pane's Save button called the RPC, we acked it, and the row reverted
+ * on the next poll — the rename has to be a real alias because the pane prints the KEY, and the key
+ * is also what the connector is matched on.
+ */
+test("a renamed platform account keeps its new key, and still resolves to the platform", () => {
+  assert.equal(social.renameSocialAccount("hub", "tiktok", "kenh-chinh", OWNER), true);
+  const rows = social.aliasServers(OWNER, statusOf, urlOf);
+  const tiktok = rows.find((r) => r.pluginId === 203);
+  assert.deepEqual(tiktok?.accounts, [{ key: "kenh-chinh", hasToken: false }], "the pane sees the new key");
+  assert.equal(social.platformForKey("hub", "kenh-chinh", OWNER), "tiktok", "the connector still sees tiktok");
+});
+
+test("an empty name is refused rather than stored", () => {
+  assert.equal(social.renameSocialAccount("hub", "kenh-chinh", "   ", OWNER), false);
+  assert.equal(social.platformForKey("hub", "kenh-chinh", OWNER), "tiktok", "unchanged");
+});
+
+test("a name already used by another account on the same connector is refused", () => {
+  // 202 (facebook) is installed by the earlier test, so `facebook` is taken.
+  assert.equal(social.renameSocialAccount("hub", "kenh-chinh", "facebook", OWNER), false,
+    "two rows with the same key would make the status lookup ambiguous");
+});
+
+test("renaming back to the platform name drops the alias instead of storing a no-op", () => {
+  assert.equal(social.renameSocialAccount("hub", "kenh-chinh", "tiktok", OWNER), true);
+  assert.equal(social.platformForKey("hub", "tiktok", OWNER), "tiktok");
+  const rows = social.aliasServers(OWNER, statusOf, urlOf);
+  assert.deepEqual(rows.find((r) => r.pluginId === 203)?.accounts, [{ key: "tiktok", hasToken: false }]);
+});
+
+test("Remove clears the alias and leaves the account itself alone", () => {
+  assert.equal(social.renameSocialAccount("hub", "tiktok", "tam-thoi", OWNER), true);
+  social.clearSocialAlias("hub", "tam-thoi", OWNER);
+  assert.equal(social.platformForKey("hub", "tiktok", OWNER), "tiktok");
+  assert.deepEqual(
+    social.aliasServers(OWNER, statusOf, urlOf).find((r) => r.pluginId === 203)?.accounts,
+    [{ key: "tiktok", hasToken: false }],
+  );
+});
+
+test("an unknown key resolves to itself — no alias is invented", () => {
+  assert.equal(social.platformForKey("hub", "never-seen", OWNER), "never-seen");
+});

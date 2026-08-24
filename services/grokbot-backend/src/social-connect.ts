@@ -16,6 +16,9 @@
  * Everything here is best-effort and cached: `mcpServerStatus` is read on every pane refresh and is
  * synchronous, so a miss returns nothing now and starts the work that fills it in for the next read.
  */
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { callMcpTool, callUnlistedTool } from "./mcp.js";
 import { config } from "./config.js";
 import { catalog } from "./plugin-catalog.js";
@@ -31,6 +34,9 @@ import { installedIds } from "./plugins.js";
  * person is not left staring at the vendor's dashboard wondering what happened.
  */
 export const CONNECT_DONE_PATH = "/connect/done";
+
+/** Beside the other per-owner state. `GROKBOT2_DATA_DIR` is what the test runner redirects. */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 
 /** How long a platform list stays fresh. The pane polls; asking Zernio each time would be rude. */
 const ACCOUNTS_TTL_MS = 30_000;
@@ -110,7 +116,7 @@ export function socialAccounts(serverName: string, owner: string): { key: string
   const live = connectedFor(serverName, owner);
   // Lower case throughout: the key is matched against the connector's own platform names and is
   // what electron-main joins on. There is no separate display name — the pane prints the key.
-  const rows = platforms.map((key) => ({ key, hasToken: live.has(key) }));
+  const rows = platforms.map((platform) => ({ key: keyFor(serverName, platform, owner), hasToken: live.has(platform) }));
   // Have the links ready before anybody presses anything. Asking only when the button is clicked
   // costs two poll cycles — profile first, then URL — and in between the button does nothing, which
   // is indistinguishable from the bug this whole thing fixes.
@@ -126,7 +132,9 @@ export function socialAccounts(serverName: string, owner: string): { key: string
  * button has its destination. `connect_get_connect_url` is not in the server's advertised tool list
  * but answers when called, which is why this does not check for it first.
  */
-export function socialConnectUrl(serverName: string, platform: string, owner: string): string | undefined {
+export function socialConnectUrl(serverName: string, key: string, owner: string): string | undefined {
+  // The pane sends whatever key it was shown; the connector only knows platform names.
+  const platform = platformForKey(serverName, key, owner);
   const k = `${owner}::${serverName}::${platform}`;
   const hit = urls.get(k);
   if (hit && Date.now() - hit.atMs < URL_TTL_MS) return hit.value;
@@ -184,8 +192,88 @@ export function aliasServers(
     if (!hasToken) socialConnectUrl(canonical, p.platform, owner);
     rows.push({
       name: p.name, url, status: statusOf(canonical), hasToken, pluginId: p.id,
-      accounts: [{ key: p.platform, hasToken }],
+      accounts: [{ key: keyFor(canonical, p.platform, owner), hasToken }],
     });
   }
   return rows;
+}
+
+/**
+ * Renaming a platform account.
+ *
+ * The pane offers "Edit <key> account" with a Save button, and Save reverted a second later: the
+ * client called `RenameMcpOAuthAccount`, we answered the empty message its contract asks for, and
+ * then kept sending the old key — the optimistic rename held until the next poll and vanished. A
+ * button that appears to work and then undoes itself is worse than one that is missing.
+ *
+ * It cannot be a display label: the pane prints the account KEY, and the key is also what the
+ * connector is matched on. So a rename has to be a real alias — the key we send changes, and every
+ * lookup that used to use the platform name resolves through here first.
+ */
+const ALIAS_DIR = join(DATA_DIR, "social-aliases");
+
+type AliasMap = Record<string, Record<string, string>>;   // server -> platform -> alias
+
+function aliasFile(owner: string): string {
+  return join(ALIAS_DIR, `${owner.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+}
+
+function loadAliases(owner: string): AliasMap {
+  try { return JSON.parse(readFileSync(aliasFile(owner), "utf8")) as AliasMap; } catch { return {}; }
+}
+
+function saveAliases(owner: string, map: AliasMap): void {
+  mkdirSync(ALIAS_DIR, { recursive: true });
+  const f = aliasFile(owner);
+  // Written through a temp file: the pane reads this on every refresh, and a torn read once cost a
+  // real OAuth token in this project.
+  const tmp = `${f}.tmp`;
+  writeFileSync(tmp, JSON.stringify(map, null, 2), { mode: 0o600 });
+  renameSync(tmp, f);
+}
+
+/** The key to show for a platform — its alias if it has one. */
+function keyFor(server: string, platform: string, owner: string): string {
+  return loadAliases(owner)[server]?.[platform] ?? platform;
+}
+
+/** The platform behind a key, which is what the connector actually understands. */
+export function platformForKey(server: string, key: string, owner: string): string {
+  const forServer = loadAliases(owner)[server] ?? {};
+  for (const [platform, alias] of Object.entries(forServer)) if (alias === key) return platform;
+  return key;
+}
+
+/**
+ * Give one platform account a new key, or drop the alias when the new key is the platform itself.
+ * Returns false when the name is unusable — empty, or already taken by another account on the same
+ * connector, which would make two rows collide and the status lookup ambiguous.
+ */
+export function renameSocialAccount(server: string, fromKey: string, toKey: string, owner: string): boolean {
+  const next = toKey.trim();
+  if (!next) return false;
+  const platform = platformForKey(server, fromKey, owner);
+  if (next === fromKey) return true;
+
+  const map = loadAliases(owner);
+  const forServer = { ...(map[server] ?? {}) };
+  const taken = new Set(platformsFor(server, owner).map((p) => (p === platform ? null : keyFor(server, p, owner))).filter(Boolean));
+  if (taken.has(next)) return false;
+
+  if (next === platform) delete forServer[platform];
+  else forServer[platform] = next;
+  saveAliases(owner, { ...map, [server]: forServer });
+  resetSocialCache();
+  return true;
+}
+
+/** Forget an alias, putting the row back to the platform's own name. */
+export function clearSocialAlias(server: string, key: string, owner: string): void {
+  const map = loadAliases(owner);
+  const platform = platformForKey(server, key, owner);
+  if (map[server]?.[platform] == null) return;
+  const forServer = { ...map[server] };
+  delete forServer[platform];
+  saveAliases(owner, { ...map, [server]: forServer });
+  resetSocialCache();
 }
