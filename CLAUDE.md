@@ -28,6 +28,8 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 | `pnpm web` | fallback Vite UI on `localhost:5173` (proxies `/v1`) |
 | `pnpm phase:gate` | current phase from `docs/parity-runs/phase-current.json`. From **F3**, CDP `:9222` is required (RED if missing). `--phase F3` measures without moving the pointer. |
 | `pnpm typecheck` / `pnpm build` | turbo across workspace |
+| `infra\scripts\start-app.cmd` | double-click launcher (Desktop shortcut "Grok Bot (local)"). **Never double-click the installed `Grok Bot.exe`** — it starts with none of the four env vars, so it talks to the vendor's servers *and* can auto-update over the patch set. |
+| `infra\scripts\check-app.cmd` | which backend is the app talking to? Counts real RPC traffic for 6s. |
 | `infra\scripts\run-web.ps1` | Vite FE only — does not spawn `Grok Bot.exe` |
 | `python -m venv services/grokbot-backend/.venv-stt` then `.venv-stt\Scripts\pip install faster-whisper` | the composer's microphone. Runs offline; the model downloads on first use. Without it `TranscribeAudio` answers empty text and the mic silently does nothing. |
 
