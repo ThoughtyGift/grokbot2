@@ -12,10 +12,29 @@
  * point `GROKBOT2_BROWSER_CDP` at the local end. An open CDP port is unauthenticated remote
  * code execution, so it must never be published.
  *
- * Raw CDP over the built-in WebSocket keeps this dependency-free, matching scripts/e2e-vnc.mjs.
+ * Raw CDP over the built-in WebSocket keeps this dependency-free of npm packages, matching
+ * scripts/e2e-vnc.mjs. The one internal import below is deliberate and narrow: which CDP endpoint
+ * a bot talks to is now a property of that bot, not of the machine, and there is nowhere else to
+ * learn it. Nothing else about this file changes when the feature is off.
  */
+import { displayOf, ensureDisplay, touchDisplay, perBotDisplays } from "./displays.js";
 
-const CDP_BASE = (): string => process.env.GROKBOT2_BROWSER_CDP ?? "http://127.0.0.1:9223";
+/**
+ * Cổng CDP của con Chrome thuộc bot này.
+ *
+ * Mặc định là con Chrome dùng chung (`GROKBOT2_BROWSER_CDP`, đi qua đường hầm SSH cổng 9223). Khi
+ * bot đã được cấp màn hình riêng thì nó có Chrome riêng ở một cổng slot — xem displays.ts.
+ *
+ * Cả một hàm chỉ để đổi một chuỗi, nhưng **đây là chỗ rủi ro nhất của cả thay đổi**: mọi thao tác
+ * browser của mọi bot đều đi qua nó. Nên khi cờ tắt, `displayOf` luôn trả null và hàm này trả về
+ * đúng chuỗi cũ — đường đang chạy tốt không đổi một byte nào.
+ */
+const SHARED_CDP = (): string => process.env.GROKBOT2_BROWSER_CDP ?? "http://127.0.0.1:9223";
+
+const CDP_BASE = (agentId: string = currentAgent): string => {
+  const lease = displayOf(agentId);
+  return lease ? `http://127.0.0.1:${lease.cdpPort}` : SHARED_CDP();
+};
 const CALL_TIMEOUT_MS = 20_000;
 
 /**
@@ -88,6 +107,10 @@ async function createTab(): Promise<string | null> {
 
 async function connect(): Promise<WebSocket> {
   const agentId = currentAgent;
+  // Cấp màn hình riêng cho bot này nếu tính năng đang bật. Đặt ở đây vì mọi thao tác browser đều
+  // đi qua `connect`, nên không có đường nào lọt. Cờ tắt thì hàm này trả null tức thì, không gọi box.
+  if (perBotDisplays()) await ensureDisplay(agentId);
+  touchDisplay(agentId);
   const live = sessions.get(agentId);
   if (live != null && live.socket.readyState === WebSocket.OPEN) return live.socket;
   const target = await pageTarget(agentId);
@@ -449,7 +472,7 @@ export async function closeAgentTab(agentId: string): Promise<void> {
   sessions.delete(agentId);
   if (session) { try { session.socket.close(); } catch { /* already closed */ } }
   if (!targetId) return;
-  try { await fetch(`${CDP_BASE()}/json/close/${targetId}`, { signal: AbortSignal.timeout(4000) }); } catch { /* tab already gone */ }
+  try { await fetch(`${CDP_BASE(agentId)}/json/close/${targetId}`, { signal: AbortSignal.timeout(4000) }); } catch { /* tab already gone */ }
 }
 
 /** Bring the current bot's tab to the front of the shared window. */
@@ -478,7 +501,7 @@ export async function activateTabOf(agentId: string): Promise<boolean> {
   const id = sessions.get(agentId)?.targetId ?? ownedTabs.get(agentId);
   if (!id) return false;
   try {
-    await fetch(`${CDP_BASE()}/json/activate/${id}`, { signal: AbortSignal.timeout(4000) });
+    await fetch(`${CDP_BASE(agentId)}/json/activate/${id}`, { signal: AbortSignal.timeout(4000) });
     return true;
   } catch { return false; }
 }

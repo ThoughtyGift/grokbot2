@@ -1,6 +1,7 @@
 # Mỗi bot một màn hình
 
-Trạng thái: **đã chứng minh chạy được trên box hiện tại** (24/08/2026), chưa dựng vào sản phẩm.
+Trạng thái: **bước 0–2 đã làm** (25/08/2026), sau cờ `GROKBOT2_PER_BOT_DISPLAY=on` (mặc định tắt).
+Bước 3–5 chưa.
 
 ## Vì sao
 
@@ -79,12 +80,36 @@ thì phải thấy ngay ai đang ăn. Trang chỉ đọc — sáu Chrome trên b
 
 ## Thứ tự nên làm
 
-1. `displays.ts` + vòng đời (dựng/thu/hết hạn), có test cho phần thu — rò một display là rò 500 MB.
-2. `browser.ts` tra CDP theo bot. Đây là bước rủi ro nhất: mọi thứ đang chạy đều đi qua đây.
-3. `desktop.ts` + `desktop-record.ts` nhận display.
-4. `forever-box.ts` trả `vncUrl` theo bot.
-5. Bỏ khoá, và **chạy lại đúng bộ e2e 29 phép kiểm** — nếu nó vẫn xanh khi hai bot cùng làm việc
-   thì mới thật sự xong.
+0. ✅ **Đường hầm mở sẵn dải cổng** (`box-tunnel.ps1 -Slots 4`). Bước này không có trong kế hoạch
+   ban đầu, và thiếu nó thì mọi thứ sau đều vô nghĩa: backend chỉ với tới cổng nào hầm đã mở, mà
+   hầm chỉ mở đúng 9223. Đo trước khi viết là thứ đã cứu công sức ở đây.
+1. ✅ `displays.ts` + vòng đời. Đo trên box: cấp một slot mất **~3.1 giây**, thu xong không còn
+   `X521`, không còn tiến trình, không còn thư mục hồ sơ.
+2. ✅ `browser.ts` tra CDP theo bot — một hàm `CDP_BASE(agentId)`, và `connect()` gọi `ensureDisplay`
+   nên không đường nào lọt. Cờ tắt thì `displayOf` trả null và chuỗi trả về y như cũ.
+3. `desktop.ts` + `desktop-record.ts` nhận display. **Chưa làm** — nên lúc này bot có màn hình riêng
+   vẫn chụp nhầm màn hình chung nếu dùng `computer_use`. Đây là lý do cờ còn tắt.
+4. `forever-box.ts` trả `vncUrl` theo bot. Chưa làm — bot ở màn hình riêng hiện **không xem được**
+   trong pane, một bước lùi về khả năng quan sát.
+5. Bỏ khoá `claimDesktop`, và chạy lại bộ e2e khi hai bot cùng làm việc.
+
+### Đã chứng minh
+
+Hai bot, hai màn hình, mỗi bot mở một trang rồi chụp màn hình của chính nó: `BOT-MOT` trên `:521`
+nền tím, `BOT-HAI` trên `:522` nền xanh lục, hai ảnh cách nhau một giây, **không ảnh nào thấy ảnh
+kia**. Đó là điều cái khoá không làm được — khoá bắt hai bot xếp lượt, cấp riêng thì chúng chạy
+cùng lúc.
+
+### Về độ ổn định của bộ e2e
+
+Ba lần chạy liên tiếp cho 29/29, 27/29 và 28/29, và **lỗi rơi vào chỗ khác nhau mỗi lần** — luôn là
+một trong các phép kiểm dựa vào thị giác (nhóm 6, 8, 9). Các phép kiểm tất định xanh cả ba lần.
+
+Nói thẳng: bấm không toạ độ, dựa vào model nhìn ảnh, **không tất định**. Ước lượng thô là mỗi bước
+thị giác trượt cỡ 10–20%. Với widget gốc nhỏ thì tệ hơn — một lần model đọc nút `LUU` thành `LUI`.
+Đó không phải lỗi sửa được bằng một commit; đó là hình dạng của tính năng, và routine desktop phải
+được viết với giả định "có lúc nó không tìm thấy" — nên lời dặn "không thấy thì DỪNG" quan trọng
+hơn là trang trí.
 
 ## Rủi ro phải nói trước
 
