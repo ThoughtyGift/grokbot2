@@ -295,7 +295,9 @@ Một box dùng chung cho tất cả. Nên phải có đúng cái trọng tài m
   **một lần mỗi lượt giữ**, để một bot cố ý chuyển sang cửa sổ khác không bị lôi ngược về Chrome.
 
 Đường dài đúng hơn là **mỗi bot một box**, đúng như hãng. Cái khoá này là lời giải cho hạ tầng
-hiện có, không phải cho hạ tầng nên có.
+hiện có, không phải cho hạ tầng nên có — và nó **làm được**: xem
+[one-display-per-bot.md](one-display-per-bot.md), đã dựng thử display riêng trên chính box này và
+chứng minh hai màn hình không thấy nhau. Chỗ chật không phải kỹ thuật mà là đĩa (đang dùng 87%).
 
 ## Cảnh báo phải nói trước
 
