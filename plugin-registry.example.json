@@ -103,38 +103,6 @@
       }
     },
     {
-      "id": 13,
-      "name": "facebook",
-      "displayName": "Facebook Pages",
-      "description": "Post to a Page, read comments and insights. Community package, not audited by us.",
-      "mcp": {
-        "name": "facebook",
-        "description": "facebook-mcp-server (community)",
-        "command": "npx",
-        "args": [
-          "-y",
-          "facebook-mcp-server"
-        ],
-        "env": {
-          "FACEBOOK_ACCESS_TOKEN": "${FACEBOOK_ACCESS_TOKEN}",
-          "FACEBOOK_PAGE_ID": "${FACEBOOK_PAGE_ID}"
-        }
-      },
-      "logoUrl": "https://api.iconify.design/simple-icons/facebook.svg?color=%231877F2&width=128",
-      "credentials": {
-        "FACEBOOK_ACCESS_TOKEN": {
-          "title": "Page access token",
-          "description": "Graph API Explorer → your Page → generate a long-lived token.",
-          "required": true
-        },
-        "FACEBOOK_PAGE_ID": {
-          "title": "Page ID",
-          "description": "Your Page → About → Page transparency.",
-          "required": true
-        }
-      }
-    },
-    {
       "id": 14,
       "name": "notion",
       "displayName": "Notion",
@@ -347,7 +315,7 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "x"
+      "platform": "twitter"
     }
   ]
 }
