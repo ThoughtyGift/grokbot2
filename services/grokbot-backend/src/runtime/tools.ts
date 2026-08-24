@@ -1066,7 +1066,16 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   // lái tab qua CDP mà tab vẫn nằm sau tab của bot khác — và bot đứng chụp màn hình của người khác
   // rồi bấm vào đó. Đo được đúng như vậy: bot báo "tab data:text/html vẫn còn nhưng không phải tab
   // đang hiển thị", ngay sau khi chụp nhầm trang Shopee của một bot khác.
-  if (claim.fresh) await activateTabOf(ctx.agentId);
+  if (claim.fresh) {
+    // …nhưng CHỈ khi thứ đang ở trên cùng là Chrome. Kéo tab lên trong khi một app gốc đang mở là
+    // che mất chính cái app bot cần dùng — đo được đúng như vậy: bot chụp màn hình rồi báo "trên
+    // màn hình không có hộp thoại xmessage nào, màn hình hiện tại là cửa sổ Chrome", vì tab vừa
+    // bị kéo lên đè lên hộp thoại. Không đọc được cửa sổ nào đang trên cùng thì kéo, vì trên box
+    // này Chrome là thứ gần như luôn ở đó.
+    const front = await desktopAct({ action: "active_window" });
+    const cls = String(front.wmClass ?? "").toLowerCase();
+    if (!front.ok || cls === "" || cls.includes("chrom")) await activateTabOf(ctx.agentId);
+  }
 
   const r = await desktopAct(parsed);
   if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;

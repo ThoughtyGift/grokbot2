@@ -65,7 +65,7 @@ MAX_STEPS = int(sys.argv[3]) if len(sys.argv) > 3 else 300
 from Xlib import display, X, XK
 from Xlib.ext import record
 from Xlib.protocol import rq
-from PIL import Image
+from PIL import Image, ImageDraw
 
 local = display.Display()      # de doc man hinh + tra keysym
 rec = display.Display()        # XRecord doi mot ket noi rieng
@@ -106,8 +106,21 @@ def crop_at(x, y):
     try:
         raw = root.get_image(left, top, CROP_W, CROP_H, X.ZPixmap, 0xffffffff)
         img = Image.frombytes("RGB", (CROP_W, CROP_H), raw.data, "raw", "BGRX")
+        # Danh dau DUNG diem bam bang mot vong tron do.
+        #
+        # "Phan tu o chinh giua mau anh" nghe thi ro, nhung voi widget goc cua he dieu hanh thi
+        # khong: nut xmessage chi rong 40px nen mot mau 320x200 chua ca nut ben canh, va model da
+        # ta NHAM nut XOA trong khi cu bam roi vao nut LUU. Mot cai vong tron thi khong the hieu
+        # sai — model chi can noi cai gi nam duoi vong tron.
+        px, py = x - left, y - top
+        d = ImageDraw.Draw(img)
+        R = 13
+        for w, color in ((3, (255, 255, 255)), (1, (255, 0, 0))):
+            d.ellipse([px - R, py - R, px + R, py + R], outline=color, width=w)
+        d.line([px - 4, py, px + 4, py], fill=(255, 0, 0), width=1)
+        d.line([px, py - 4, px, py + 4], fill=(255, 0, 0), width=1)
         name = "%03d.jpg" % n[0]
-        img.save(os.path.join(OUTDIR, name), format="JPEG", quality=80)
+        img.save(os.path.join(OUTDIR, name), format="JPEG", quality=85)
         return name, left, top
     except Exception:
         return None, left, top
@@ -329,8 +342,8 @@ export async function describeCrops(
       [{
         role: "user",
         content:
-          "Đây là một mẩu ảnh cắt từ màn hình máy tính, và người dùng vừa bấm chuột vào ĐÚNG ĐIỂM GIỮA của mẩu ảnh. "
-          + "Hãy tả phần tử ở điểm giữa đó trong MỘT câu ngắn, để người khác nhìn màn hình có thể tìm lại được nó: "
+          "Đây là một mẩu ảnh cắt từ màn hình máy tính. Người dùng vừa bấm chuột vào ĐÚNG CHỖ CÓ VÒNG TRÒN ĐỎ. "
+          + "Hãy tả phần tử NẰM DƯỚI VÒNG TRÒN ĐỎ trong MỘT câu ngắn, để người khác nhìn màn hình có thể tìm lại được nó: "
           + "loại phần tử (nút, ô nhập, tab, biểu tượng, dòng danh sách), chữ trên nó nếu đọc được, màu, và vị trí "
           + "tương đối. Nếu không nhìn rõ, trả lời đúng hai chữ: không rõ.",
       }],

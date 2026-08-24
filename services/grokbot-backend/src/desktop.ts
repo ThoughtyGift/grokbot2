@@ -22,7 +22,7 @@ const REMOTE_DIR = "/tmp/grokbot2";
 
 export interface DesktopAction {
   action: "mouse_move" | "click" | "mouse_down" | "mouse_up" | "drag" | "scroll"
-    | "type" | "key" | "screenshot" | "cursor_position" | "screen_info";
+    | "type" | "key" | "screenshot" | "cursor_position" | "screen_info" | "active_window";
   x?: number;
   y?: number;
   toX?: number;
@@ -48,6 +48,9 @@ export interface DesktopResult {
   width?: number;
   height?: number;
   dpi?: number;
+  /** Lớp cửa sổ đang ở trên cùng (WM_CLASS), chỉ có với `active_window`. */
+  wmClass?: string;
+  name?: string;
   note?: string;
 }
 
@@ -219,6 +222,30 @@ try:
             xtest.fake_input(d, X.KeyRelease, m)
         flush()
         out({"ok": ok} if ok else {"ok": False, "error": "khong biet phim: " + combo})
+
+    if act == "active_window":
+        # Cua so nao dang o tren cung. Khong phai de model dung — de backend biet co nen keo tab
+        # Chrome cua bot len truoc hay khong. Keo len khi mot app goc dang mo la che mat chinh
+        # cai app bot can dung.
+        cls, nm = "", ""
+        try:
+            na = d.intern_atom("_NET_ACTIVE_WINDOW")
+            pr = root.get_full_property(na, X.AnyPropertyType)
+            wid = pr.value[0] if pr and len(pr.value) else 0
+            w = d.create_resource_object("window", wid) if wid else d.get_input_focus().focus
+        except Exception:
+            w = d.get_input_focus().focus
+        try:
+            c = w.get_wm_class()
+            if c:
+                cls = c[1] or c[0] or ""
+        except Exception:
+            pass
+        try:
+            nm = w.get_wm_name() or ""
+        except Exception:
+            pass
+        out({"ok": True, "wmClass": str(cls), "name": str(nm)[:120]})
 
     if act == "screenshot":
         s = d.screen()

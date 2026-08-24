@@ -305,6 +305,74 @@ if (!createdRoutineId) {
     `ô kết quả nói: ${after.slice(0, 60)}`);
 }
 
+// ── 9. APP THẬT, KHÔNG PHẢI TRANG WEB ───────────────────────────────────────
+console.log("\n9. dạy và chạy lại trên một app X11 GỐC (xmessage), cửa sổ đã dời chỗ");
+let routine9 = null;
+{
+  // `xmessage` là app X11 thật, toolkit Athena — nút của nó không giống bất cứ thứ gì trên web,
+  // và không có DOM nào để hỏi. Nó cũng tự khai báo kết quả một cách không thể cãi: bấm LUU thì
+  // tiến trình thoát với mã 10, bấm XOA thì mã 20. Ghi mã đó ra file là có một phép kiểm khách
+  // quan, không phải "model nhìn ảnh rồi bảo là đã bấm".
+  const sh = (command) => callTool(agent.id, "run_terminal_command_v2", { command });
+  const launch = (geom) => sh(`pkill xmessage; rm -f /tmp/xm.exit; sleep 0.3; `
+    + `sh -c 'xmessage -fn 10x20 -geometry ${geom} -buttons LUU:10,XOA:20 "Ho so khach hang - ban muon lam gi?"; `
+    + `echo $? > /tmp/xm.exit' > /tmp/xm.log 2>&1 < /dev/null & sleep 2; echo started`);
+  // `run_terminal_command_v2` trả về "exit=0 / stdout: / <output>", không trả về mỗi output.
+  // Bản đầu so cả chuỗi đó với "10" và báo FAIL cho ba phép kiểm ĐANG ĐÚNG.
+  const stdoutOf = (text) => {
+    const i = String(text).indexOf("stdout:");
+    const body = i >= 0 ? String(text).slice(i + 7) : String(text);
+    return body.split(/stderr:/)[0].trim();
+  };
+  const exitCode = async () => stdoutOf(resultOf(await sh("cat /tmp/xm.exit 2>/dev/null || echo none")));
+
+  // Nút LUU nằm ở gốc cửa sổ + (29, 78) — đo trên màn hình thật, và mã thoát dưới đây sẽ nói
+  // ngay nếu số đó sai, nên không có chuyện dạy nhầm mà tưởng là đúng.
+  const LUU = (gx, gy) => ({ x: gx + 29, y: gy + 78 });
+
+  await launch("+120+120");
+  const started = stdoutOf(resultOf(await sh("ps -eo args | grep -c '[x]message'")));
+  check("app X11 gốc đang chạy", Number(started) >= 1, started.slice(0, 20));
+
+  const rec = await post("startDesktopTeachRecording", { agentId: agent.id });
+  check("ghi được trên app gốc", rec?.state === "recording", JSON.stringify(rec).slice(0, 60));
+  await sleep(2000);
+  const p = LUU(120, 120);
+  await callTool(agent.id, "computer_use", { action: "click", x: p.x, y: p.y });
+  await sleep(1200);
+  check("bài dạy thật sự bấm trúng nút LUU", (await exitCode()) === "10", await exitCode());
+
+  const saved = await post("stopDesktopTeachRecording", { agentId: agent.id, save: true });
+
+  const rows9 = await post("listAllAutomations", {});
+  const list9 = Array.isArray(rows9) ? rows9 : (rows9.automations ?? []);
+  const row9 = list9.find((r) => (r?.name ?? "") === saved?.saved);
+  routine9 = row9?.id ?? null;
+  const prompt9 = row9?.prompt ?? "";
+  // Mô tả của một widget gốc hay chứa dấu nháy bên trong (nút "LƯU" cạnh nút "XOÁ"), nên
+  // `[^"]{10,}` khớp hụt ngay ở dấu nháy đầu tiên và báo FAIL cho một mô tả hoàn toàn đúng.
+  const line9 = prompt9.split("\n").find((l) => l.startsWith("1.")) ?? "";
+  check("nút của app gốc được tả bằng lời", /^1\. bấm vào "/.test(line9) && line9.length > 60,
+    line9 || "không có routine");
+
+  // Dời cửa sổ đi chỗ khác. Toạ độ đã ghi giờ trỏ vào nền trống.
+  await launch("+900+600");
+  check("mở lại app ở chỗ khác, chưa ai bấm", (await exitCode()) === "none", await exitCode());
+
+  if (routine9) {
+    const anchor9 = anchorOf(await read(agent.id));
+    await post("runAgentAutomationNow", { agentId: agent.id, automationId: routine9 });
+    await waitQuiet(agent.id, anchor9, 300_000);
+    const code = await exitCode();
+    check("bài đã dạy bấm đúng nút trên app gốc đã dời chỗ", code === "10",
+      code === "20" ? "bấm nhầm nút XOA" : code === "none" ? "không bấm trúng gì cả" : code);
+  } else {
+    check("bài đã dạy bấm đúng nút trên app gốc đã dời chỗ", false, "không tạo được routine");
+  }
+  await sh("pkill xmessage; rm -f /tmp/xm.exit; echo done");
+  if (routine9) await post("deleteAgentAutomation", { agentId: agent.id, automationId: routine9 });
+}
+
 // Routine do bài kiểm tự tạo thì bài kiểm tự dọn — nếu không, mỗi lần chạy để lại một dòng
 // "Việc đã dạy trên máy" trong bảng Routines của người dùng.
 if (createdRoutineId) {

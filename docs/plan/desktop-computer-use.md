@@ -204,7 +204,7 @@ Ba điều học được khi làm:
 
 ### Checklist E2E giai đoạn 2
 
-Trong `scripts/e2e-desktop.mjs`, nhóm 7 và 8. Kết quả 24/08/2026: **23/23 toàn bài**.
+Trong `scripts/e2e-desktop.mjs`, nhóm 7–9. Kết quả 24/08/2026: **29/29 toàn bài**.
 
 | # | Kiểm | Trạng thái |
 |---|---|---|
@@ -223,8 +223,34 @@ chạy lại trên bố cục B (cả hai dời sang phải và xuống dưới)
 vào nền trống; ô kết quả trả về `DA-LUU: Nguyen Van A`, nghĩa là bot đã **tìm bằng mắt** đúng ô và
 đúng nút ở chỗ mới.
 
-Vẫn chưa kiểm: một app desktop THẬT, ngoài trình duyệt. Trang web dựng cho test đã chứng minh vòng
-lặp, chưa chứng minh nó chịu được giao diện gốc của hệ điều hành.
+### Nhóm 9 — app X11 gốc, không phải trang web
+
+| # | Kiểm | Trạng thái |
+|---|---|---|
+| 24 | app X11 gốc (`xmessage`, toolkit Athena) đang chạy | ✅ |
+| 25 | ghi được thao tác trên app gốc | ✅ |
+| 26 | bài dạy thật sự bấm trúng nút (mã thoát 10) | ✅ |
+| 27 | nút của app gốc được tả bằng lời | ✅ |
+| 28 | mở lại app ở chỗ khác, chưa ai bấm | ✅ |
+| 29 | **bài đã dạy bấm đúng nút trên app gốc ĐÃ DỜI CHỖ** | ✅ |
+
+`xmessage` được chọn vì nó tự khai kết quả một cách không thể cãi: bấm `LUU` thì tiến trình thoát
+với mã **10**, bấm `XOA` thì mã **20**. Không có DOM nào để hỏi, và cũng không cần — mã thoát là
+bằng chứng khách quan, khác hẳn kiểu "model nhìn ảnh rồi tự bảo là đã bấm".
+
+Hai thứ phải sửa mới qua được nhóm này, cả hai đều chỉ lộ ra khi rời khỏi trang web:
+
+- **Mẩu ảnh phải đánh dấu điểm bấm.** "Phần tử ở chính giữa mẩu ảnh" nghe rõ ràng, nhưng widget gốc
+  nhỏ: nút `xmessage` rộng 40px nên mẩu 320x200 chứa cả nút bên cạnh, và model đã tả **nhầm nút
+  XOA** trong khi cú bấm rơi vào `LUU`. Vẽ một vòng tròn đỏ ngay điểm bấm thì không thể hiểu sai —
+  model chỉ cần nói cái gì nằm dưới vòng tròn.
+- **Chỉ kéo tab Chrome lên khi Chrome đang ở trên cùng.** Bản trước kéo vô điều kiện, và nó che mất
+  chính hộp thoại bot cần dùng; bot chụp màn hình rồi báo *"trên màn hình không có hộp thoại
+  xmessage nào, màn hình hiện tại là cửa sổ Chrome"* — trả lời đúng cho một màn hình sai. Driver
+  giờ đọc `_NET_ACTIVE_WINDOW` và chỉ kéo khi `WM_CLASS` là Chrome.
+
+Nhận xét đáng giữ: cả hai lỗi này **không thể lộ ra trên trang web dựng cho test**. Nút web to,
+cách xa nhau, và luôn nằm trong Chrome. Chỉ có app gốc mới hỏi đúng câu hỏi.
 
 ## Một màn hình, nhiều bot — và bản gốc điều phối thế nào
 
