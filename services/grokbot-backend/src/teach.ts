@@ -63,6 +63,14 @@ const BINDING = "__grokTeachStep";
 
 const RECORDER = `(() => {
   if (window.__grokTeachArmed) return;
+  // Only the top frame records. addScriptToEvaluateOnNewDocument arms EVERY frame, and a real news
+  // site loads a dozen ad iframes that each announce themselves — a demonstration of "open the site,
+  // click a headline, click another" came back as 14 steps of which 8 were banner iframes loading
+  // cdn.../html5_banner_thuong_.../index.html. Nobody demonstrated those.
+  //
+  // The cost is an app embedded in an iframe, which cannot be taught this way. That is rarer than
+  // advertising, and a step list full of ad frames is not a lesser problem than a missing one.
+  if (window.top !== window) return;
   window.__grokTeachArmed = true;
   // Every step leaves the page immediately. Keeping them in a page array was the first version and
   // it silently lost everything on navigation: \`addScriptToEvaluateOnNewDocument\` re-arms the
@@ -70,6 +78,21 @@ const RECORDER = `(() => {
   // A binding call reaches the backend, which is the only place that outlives the page.
   const out = (s) => { try { window.${BINDING}(JSON.stringify(s)); } catch (e) { /* binding gone */ } };
   const steps = [];
+  // What was clicked is often a leaf inside the thing that was MEANT to be clicked: an icon's
+  // \`svg\`, its \`path\`, a \`span\` of label text. A real recording on a React/Tailwind app came back
+  // with "bấm \`path\`" and "bấm \`svg\`" — true about the DOM and useless to replay. Walk up to the
+  // nearest thing a person can actually click, which is also where the aria-label and the text live.
+  const actionable = (el) => {
+    for (let n = el, hops = 0; n && n.tagName && hops < 5; n = n.parentElement, hops++) {
+      const tag = n.tagName.toLowerCase();
+      if (tag === "button" || tag === "a" || tag === "input" || tag === "select" ||
+          tag === "textarea" || tag === "label" || tag === "summary") return n;
+      const role = n.getAttribute && n.getAttribute("role");
+      if (role === "button" || role === "link" || role === "menuitem" || role === "tab") return n;
+      if (n.getAttribute && n.getAttribute("aria-label")) return n;
+    }
+    return el;
+  };
   const sel = (el) => {
     if (!el || !el.tagName) return { sel: "?", quality: "none" };
     if (el.id) return { sel: "#" + el.id, quality: "id" };
@@ -91,8 +114,9 @@ const RECORDER = `(() => {
     out(step);
   };
   document.addEventListener("click", (e) => {
-    const s = sel(e.target);
-    push({ act: "click", sel: s.sel, quality: s.quality, text: (e.target.textContent || "").trim().slice(0, 60) });
+    const t = actionable(e.target);
+    const s = sel(t);
+    push({ act: "click", sel: s.sel, quality: s.quality, text: (t.textContent || "").trim().slice(0, 60) });
   }, true);
   document.addEventListener("change", (e) => {
     const t = e.target;
@@ -178,7 +202,10 @@ export function stepsToPrompt(steps: Step[]): string {
       // percent-encoding. A long http URL is truncated instead: the host and path are what identify
       // it, and the agent has the page in front of it.
       if (/^(about:|data:)/i.test(s.url)) continue;
-      lines.push(`${++n}. mở ${s.url.length > 120 ? `${s.url.slice(0, 117)}…` : s.url}`);
+      // NOT truncated. A cut URL cannot be opened, so shortening one turns an actionable step into
+      // a dead one — five of the fourteen steps in the first real recording ended in an ellipsis and
+      // none of those five could have been replayed. Length is capped by the step count instead.
+      lines.push(`${++n}. mở ${s.url}`);
       continue;
     }
     if (s.act === "click") { lines.push(`${++n}. bấm \`${s.sel}\`${s.text ? ` ("${s.text}")` : ""}${weak}`); continue; }

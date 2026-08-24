@@ -56,12 +56,17 @@ test("about:blank and data: are not somewhere a replay can navigate back to", ()
   assert.match(out, /^1\. bấm `#go`/m, "the first real action is numbered 1");
 });
 
-test("a long url is truncated so one step cannot swamp the list", () => {
-  const long = `https://shop.test/a/${"x".repeat(400)}`;
+/**
+ * A long URL stays whole. Truncating one looked tidy and made the step useless: the first real
+ * recording — a news site with ad frames — ended five of its fourteen steps in an ellipsis, and not
+ * one of those five could have been opened again.
+ */
+test("a long url is NOT truncated, because a cut url cannot be opened", () => {
+  const long = `https://shop.test/a/${"x".repeat(400)}?cID=4&t=${"y".repeat(60)}`;
   const out = stepsToPrompt([{ act: "navigate", url: long }] as S[]);
   const line = out.split("\n").find((l) => l.startsWith("1."))!;
-  assert.ok(line.length < 140, `still readable, got ${line.length}`);
-  assert.match(line, /…$/, "and says it was cut");
+  assert.ok(line.includes(long), "the whole url survives");
+  assert.ok(!line.endsWith("…"), "nothing was cut");
 });
 
 test("nothing recorded produces no prompt, so no empty routine is created", () => {
