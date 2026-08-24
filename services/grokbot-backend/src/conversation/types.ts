@@ -57,6 +57,19 @@ export interface Parked {
 
 export interface ToolCtx {
   attach(dataUrl: string, fileName: string, alt: string): void;
+  /**
+   * Show this picture to the MODEL on the follow-up turn, not only to the person.
+   *
+   * `attach` puts an image in the transcript, which is where the user sees it — and that is all it
+   * ever did. The model's next turn is built from text, so a tool that answered with a screenshot
+   * was talking to the room and not to the model: it read "đã chụp màn hình 1920x1080" and nothing
+   * else. Measured on a real box, the bot said so itself — "ảnh chụp trả về nhưng mình không nhận
+   * được nội dung hình để đọc".
+   *
+   * Only for tools whose whole point is that the model looks. The pool carries one picture per
+   * request, so the last call before the follow-up wins.
+   */
+  see(dataUrl: string): void;
   ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean }): string | null;
   note(text: string): void;
   requestBoxHelp(instruction: string): Promise<string>;

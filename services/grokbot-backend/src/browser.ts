@@ -427,7 +427,12 @@ const ACTIONS: Record<string, { primary: string; run: Action }> = {
 export const BROWSER_TOOL_NAMES = Object.keys(ACTIONS);
 
 /** Anything a tool may do besides return text (mirrors chat.ts ToolCtx, kept local to avoid a cycle). */
-export interface BrowserCtx { attach(dataUrl: string, fileName: string, alt: string): void; agentId?: string }
+export interface BrowserCtx {
+  attach(dataUrl: string, fileName: string, alt: string): void;
+  /** Show the page to the MODEL, not only to the person watching — see ToolCtx.see. */
+  see?(dataUrl: string): void;
+  agentId?: string;
+}
 
 /**
  * Close the tab a bot owned, when its computer session is released.
@@ -496,7 +501,13 @@ export async function runBrowserTool(name: string, rawArg: string, ctx?: Browser
   // after each action, including failures — seeing the wrong page is how you spot a bad selector.
   if (ctx != null) {
     const shot = await screenshotDataUrl();
-    if (shot != null) ctx.attach(shot, `${name}.png`, `${name} — trạng thái trang sau hành động`);
+    if (shot != null) {
+      ctx.attach(shot, `${name}.png`, `${name} — trạng thái trang sau hành động`);
+      // …and hand it to the model too. Attaching alone only ever showed the picture to the person:
+      // the follow-up turn is built from text, so "the model never has to ask for a screenshot"
+      // was true only in the sense that asking would not have helped either.
+      ctx.see?.(shot);
+    }
   }
   return text;
 }

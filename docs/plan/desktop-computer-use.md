@@ -104,6 +104,54 @@ tấm ảnh**, `click` → `type "xin chao 123"` → `key exclam`, rồi đọc 
 Còn thiếu so với spec: `wait` (làm ở backend, chưa cần) và `mouse_down`/`mouse_up` tuy có driver
 nhưng chưa dùng thật lần nào.
 
+## Checklist E2E giai đoạn 1
+
+Chạy: `pnpm backend` rồi `node scripts/e2e-desktop.mjs`. Kết quả dưới đây là lần chạy thật ngày
+24/08/2026 trên box, **13/13**.
+
+| # | Kiểm | Cách kiểm | Trạng thái |
+|---|---|---|---|
+| 1 | tool được chào khi box có mặt | gọi `screen_info` qua gateway | ✅ |
+| 2 | prompt mang kích thước màn hình | đoạn DESKTOP có `1920x1080, 100 DPI` | ✅ |
+| 3 | chụp màn hình ra ảnh thật | `readAttachmentImage` đo lại được | ✅ |
+| 4 | ảnh giữ tỉ lệ 1:1 | ảnh 1920x1080 khớp `screen_info` | ✅ |
+| 5 | chuột thật sự di chuyển | đi tới (731,419) rồi **đọc lại** con trỏ | ✅ |
+| 6 | thiếu toạ độ bị chặn tại chỗ | `click` không x/y ⇒ từ chối | ✅ |
+| 7 | action lạ bị chặn tại chỗ | `double_click` ⇒ từ chối kèm danh sách thật | ✅ |
+| 8 | cú bấm rơi đúng chỗ | `document.activeElement.id` qua CDP | ✅ |
+| 9 | gõ chữ tới nơi | `input.value` chứa từ ngẫu nhiên | ✅ |
+| 10 | phím rời tới nơi | `exclam` ⇒ giá trị kết thúc bằng `!` | ✅ |
+| 11 | **model NHÌN được ảnh nó chụp** | từ ngẫu nhiên trên màn hình, bot đọc lại đúng | ✅ *(sau khi sửa)* |
+| 12 | **vòng lặp đầy đủ** | nút đỏ ở chỗ ngẫu nhiên, không cho selector — bot tự tìm rồi bấm | ✅ *(sau khi sửa)* |
+| 13 | không bao giờ chạy song song | `isParallelSafe("computer_use") === false` | ✅ (unit) |
+| 14 | nhìn thì tự chạy, bấm thì hỏi | `isDesktopLook` | ✅ (unit) |
+
+### Cái E2E tìm ra — và bốn nhóm đầu không thể tìm ra
+
+Mục 1–10 xanh hết **trong khi bot đang mù**. `continueAfterTool` dựng lượt tiếp theo hoàn toàn bằng
+chữ, nên tấm ảnh `ctx.attach` chỉ tới được **người xem**, không tới model. Model đọc đúng bảy chữ
+"đã chụp màn hình 1920x1080" rồi tự nói ra:
+
+> "Ảnh chụp trả về nhưng mình không nhận được nội dung hình để đọc, nên mình không dám đọc đại."
+
+Nghĩa là toàn bộ `computer_use` chỉ là một màn kịch câm: bấm theo toạ độ, đính một tấm ảnh, rồi
+đọc lại mấy chữ mô tả. Và `browser_*` mang đúng lỗi đó từ đầu — dòng chú thích ngay chỗ chụp ảnh
+còn ghi "mọi tool browser đều trả về ảnh nên model không cần hỏi", trong khi model chưa từng thấy
+tấm nào.
+
+Sửa: `ToolCtx.see(dataUrl)` — ảnh dành cho **model**, tách khỏi `attach` là ảnh dành cho **người**.
+Cả hai đường nối lượt (`continueAfterTool`, `continueAfterTools`) mang nó sang lượt sau rồi xoá,
+nên một tấm được nhìn đúng một lần chứ không đi theo mãi.
+
+Bài học đáng giữ: **`ok: true` của mọi nguyên thuỷ vẫn đúng khi thứ quan trọng nhất đã hỏng.** Nếu
+dừng ở nhóm 4 thì đã tuyên bố giai đoạn 1 xong, và nó xong theo nghĩa không dùng được.
+
+### Chuyển sang giai đoạn 2 khi nào
+
+Điều kiện đã đủ: vòng lặp *chụp → chọn toạ độ → hành động → nhìn lại* chạy được với bot thật, không
+người mớm toạ độ (mục 12). Đó là điều kiện mà mục "Khuyến nghị" cuối trang này đặt ra cho giai
+đoạn 2.
+
 ## Giai đoạn 2 — ghi thao tác desktop (dạy việc ngoài Chrome)
 
 Ba đường bắt input, đánh đổi khác nhau:

@@ -1050,8 +1050,13 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   const r = await desktopAct(parsed);
   if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;
 
+  // Into the transcript for the person AND in front of the model for the next turn. Only the first
+  // half existed at first, and it made the whole feature a mime show: the bot clicked by
+  // coordinate, attached a picture, and read back the words "đã chụp màn hình 1920x1080".
+  const show = (dataUrl: string, alt: string) => { ctx.attach(dataUrl, "screen.jpg", alt); ctx.see(dataUrl); };
+
   if (parsed.action === "screenshot") {
-    if (r.imageBase64) ctx.attach(`data:image/jpeg;base64,${r.imageBase64}`, "screen.jpg", "màn hình máy tính của bot");
+    if (r.imageBase64) show(`data:image/jpeg;base64,${r.imageBase64}`, "màn hình máy tính của bot");
     return `đã chụp màn hình ${r.width}x${r.height}`;
   }
   if (parsed.action === "cursor_position") return `con trỏ đang ở (${r.x}, ${r.y})`;
@@ -1060,9 +1065,7 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   // Mọi action còn lại đều đổi màn hình. Chụp lại ngay thay vì trông chờ model tự nhớ: bước
   // "nhìn lại" chính là bước nó sẽ bỏ, và bỏ rồi thì hành động sau bấm mù.
   const after = await desktopAct({ action: "screenshot" });
-  if (after.ok && after.imageBase64) {
-    ctx.attach(`data:image/jpeg;base64,${after.imageBase64}`, "screen.jpg", `màn hình sau khi ${parsed.action}`);
-  }
+  if (after.ok && after.imageBase64) show(`data:image/jpeg;base64,${after.imageBase64}`, `màn hình sau khi ${parsed.action}`);
   return `${parsed.action} xong`;
 };
 

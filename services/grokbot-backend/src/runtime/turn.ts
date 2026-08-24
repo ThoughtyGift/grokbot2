@@ -274,6 +274,15 @@ export function interruptAgentRun(a: { agentId?: string; id?: string }) {
   return { id: agentId, interrupted: true };
 }
 
+/**
+ * A picture a tool wants the model to actually look at on the follow-up turn.
+ *
+ * Kept beside the turn rather than in the transcript, because the transcript is what the PERSON
+ * reads: an entry there has never put bytes in front of the model. Cleared as it is consumed, so a
+ * screenshot is looked at once instead of riding along on every later turn.
+ */
+const pendingVision = new Map<string, string>();
+
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   agentId,
@@ -282,6 +291,7 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
     onUpdate(agentId);
   },
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
+  see: (dataUrl) => { pendingVision.set(agentId, dataUrl); },
   ask: (widget) => postWidget(agentId, widget),
   note: (text) => {
     tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
@@ -813,7 +823,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "",
         "## Ảnh đính kèm",
         "",
-        "Ảnh của người dùng đã được đính kèm trực tiếp vào lượt này và bạn ĐANG thấy nó.",
+        "Một ảnh đã được đính kèm trực tiếp vào lượt này — của người dùng, hoặc ảnh màn hình do công cụ của bạn vừa chụp — và bạn ĐANG thấy nó.",
         "Không có công cụ nào để mở ảnh và bạn không cần mở file nào — hãy nhìn ảnh rồi trả lời ngay.",
       ].join(NEWLINE)
     : "";
@@ -1116,6 +1126,7 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
+  const seen = pendingVision.get(agentId); pendingVision.delete(agentId);
   void runTurn(agentId, bubble, [
     ...history,
     { role: "assistant", content: done.map((d) => `TOOL_CALL: ${d.name}(${d.arg})`).join("\n") },
@@ -1127,7 +1138,7 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
         ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
         : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
     },
-  ], key, controller);
+  ], key, controller, seen);
 }
 
 /** Hand the tool result back to the model, which may call another tool or answer. */
@@ -1142,6 +1153,7 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
+  const seen = pendingVision.get(agentId); pendingVision.delete(agentId);
   void runTurn(agentId, bubble, [
     ...history,
     { role: "assistant", content: `TOOL_CALL: ${toolName}(${arg})` },
@@ -1151,7 +1163,7 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
         ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
         : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
     },
-  ], key, controller);
+  ], key, controller, seen);
 }
 
 /** Run one tool with a real ToolCtx. Exported for the e2e scripts only. */
