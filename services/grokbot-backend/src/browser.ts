@@ -459,6 +459,30 @@ async function activateOwnTab(): Promise<void> {
   try { await fetch(`${CDP_BASE()}/json/activate/${id}`, { signal: AbortSignal.timeout(4000) }); } catch { /* best effort */ }
 }
 
+/**
+ * Bring one bot's tab forward — for desktop actions, which cannot work any other way.
+ *
+ * Browser tools deliberately do NOT do this (see the note at the end of runBrowserTool): CDP
+ * reaches a tab whether or not it is in front, so raising one only yanked the view away from the
+ * bot the user was watching.
+ *
+ * `computer_use` has no such luxury. It clicks whatever window is frontmost, so a bot whose own
+ * tab is behind another's is reading somebody else's screen and clicking into it. Measured exactly
+ * that way: the bot reported "tab data:text/html is still open but is not the tab being shown",
+ * having just screenshotted another bot's Shopee page.
+ *
+ * Called once per desktop hold, not per action — a bot that deliberately switches to another
+ * window mid-turn is not dragged back to Chrome.
+ */
+export async function activateTabOf(agentId: string): Promise<boolean> {
+  const id = sessions.get(agentId)?.targetId ?? ownedTabs.get(agentId);
+  if (!id) return false;
+  try {
+    await fetch(`${CDP_BASE()}/json/activate/${id}`, { signal: AbortSignal.timeout(4000) });
+    return true;
+  } catch { return false; }
+}
+
 /** Capture the page as a data: URL — the only URL form the transcript renders without a host. */
 async function screenshotDataUrl(): Promise<string | null> {
   try {

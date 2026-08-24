@@ -85,16 +85,17 @@ test("chỉ một bot cầm màn hình tại một thời điểm", async (t) =>
   releaseDesktop(desktopHeldBy() ?? "");
   t.after(() => releaseDesktop(desktopHeldBy() ?? ""));
 
-  assert.deepEqual(claimDesktop("bot-a"), { ok: true });
+  assert.deepEqual(claimDesktop("bot-a"), { ok: true, fresh: true });
   assert.deepEqual(claimDesktop("bot-b"), { ok: false, heldBy: "bot-a" },
     "bot thứ hai phải bị từ chối kèm tên bot đang giữ, để nó nói lại được với người dùng");
-  assert.deepEqual(claimDesktop("bot-a"), { ok: true }, "chính chủ gọi lại thì không tự chặn mình");
+  assert.deepEqual(claimDesktop("bot-a"), { ok: true, fresh: false },
+    "chính chủ gọi lại thì không tự chặn mình, và không kéo lại tab của nó lần nữa");
   assert.equal(desktopHeldBy(), "bot-a");
 
   releaseDesktop("bot-b");
   assert.equal(desktopHeldBy(), "bot-a", "bot khác không nhả hộ được");
   releaseDesktop("bot-a");
   assert.equal(desktopHeldBy(), null);
-  assert.deepEqual(claimDesktop("bot-b"), { ok: true }, "nhả rồi thì người sau vào được");
+  assert.deepEqual(claimDesktop("bot-b"), { ok: true, fresh: true }, "nhả rồi thì người sau vào được");
   releaseDesktop("bot-b");
 });

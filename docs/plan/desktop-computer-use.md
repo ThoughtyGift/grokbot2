@@ -204,7 +204,7 @@ Ba điều học được khi làm:
 
 ### Checklist E2E giai đoạn 2
 
-Trong `scripts/e2e-desktop.mjs`, nhóm 7. Kết quả 24/08/2026: **19/19 toàn bài**.
+Trong `scripts/e2e-desktop.mjs`, nhóm 7 và 8. Kết quả 24/08/2026: **23/23 toàn bài**.
 
 | # | Kiểm | Trạng thái |
 |---|---|---|
@@ -213,9 +213,18 @@ Trong `scripts/e2e-desktop.mjs`, nhóm 7. Kết quả 24/08/2026: **19/19 toàn 
 | 17 | lưu thành routine, có mặt trong bảng Routines | ✅ |
 | 18 | **mỗi bước bấm được tả bằng lời**, không chỉ toạ độ | ✅ |
 | 19 | chữ đã gõ nằm nguyên trong routine | ✅ |
+| 20 | bố cục mới bắt đầu ở trạng thái sạch | ✅ |
+| 21 | chạy lại bằng `computer_use`, không lén dùng `browser_*` | ✅ |
+| 22 | có chụp màn hình trước khi bấm | ✅ |
+| 23 | **bài đã dạy chạy đúng trên bố cục ĐÃ ĐỔI** | ✅ |
 
-Chưa kiểm: **chạy lại** một routine desktop trên màn hình đã đổi bố cục. Đó là phép thử thật của
-mô tả bằng lời, và nó cần một app desktop thật chứ không phải trang web dựng cho test.
+Mục 23 là phép thử thật của cả giai đoạn 2. Bài dạy trên bố cục A (ô nhập trên trái, nút dưới nó),
+chạy lại trên bố cục B (cả hai dời sang phải và xuống dưới). Bấm theo toạ độ đã ghi thì trên B rơi
+vào nền trống; ô kết quả trả về `DA-LUU: Nguyen Van A`, nghĩa là bot đã **tìm bằng mắt** đúng ô và
+đúng nút ở chỗ mới.
+
+Vẫn chưa kiểm: một app desktop THẬT, ngoài trình duyệt. Trang web dựng cho test đã chứng minh vòng
+lặp, chưa chứng minh nó chịu được giao diện gốc của hệ điều hành.
 
 ## Một màn hình, nhiều bot — và bản gốc điều phối thế nào
 
@@ -252,6 +261,12 @@ Một box dùng chung cho tất cả. Nên phải có đúng cái trọng tài m
   chờ, pane chỉ là thứ người dùng đang nhìn. Giữ quá ba phút thì coi như bỏ rơi.
 - Bộ ghi thao tác cũng phải giành: nó ghi mọi sự kiện trên box bất kể của ai, nên một cú bấm của
   bot khác sẽ nằm luôn trong bài dạy mà không ai đọc routine sau này nhận ra.
+- **Giành được máy thì kéo tab của chính mình lên trước.** Đây là chỗ tôi quyết định sai lần đầu:
+  ban đầu chỉ khoá mà không nâng tab, vì sợ nâng nhầm khi bot làm việc ngoài trình duyệt. Chạy thử
+  thì bảy phép kiểm rớt, và bot nói thẳng lý do — *"tab data:text/html vẫn còn nhưng không phải tab
+  đang hiển thị"* — nó vừa chụp trang Shopee của một bot khác. `browser_navigate` lái tab qua CDP
+  mà không đưa tab lên trước, nên không nâng thì bot luôn nhìn vào màn hình của người khác. Chỉ nâng
+  **một lần mỗi lượt giữ**, để một bot cố ý chuyển sang cửa sổ khác không bị lôi ngược về Chrome.
 
 Đường dài đúng hơn là **mỗi bot một box**, đúng như hãng. Cái khoá này là lời giải cho hạ tầng
 hiện có, không phải cho hạ tầng nên có.

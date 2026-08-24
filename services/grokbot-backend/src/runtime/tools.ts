@@ -4,7 +4,7 @@
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import { config, loadPoolKey } from "../config.js";
-import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe } from "../browser.js";
+import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, activateTabOf } from "../browser.js";
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
@@ -1062,6 +1062,11 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
     return `máy tính đang do bot ${claim.heldBy} dùng — chờ nó xong rồi thử lại, đừng bấm vào lúc này`
       + " (một cú bấm bây giờ sẽ rơi vào cửa sổ mà bot kia đang làm dở)";
   }
+  // Vừa giành được máy thì kéo tab của chính bot này lên trước. Không có bước này, `browser_navigate`
+  // lái tab qua CDP mà tab vẫn nằm sau tab của bot khác — và bot đứng chụp màn hình của người khác
+  // rồi bấm vào đó. Đo được đúng như vậy: bot báo "tab data:text/html vẫn còn nhưng không phải tab
+  // đang hiển thị", ngay sau khi chụp nhầm trang Shopee của một bot khác.
+  if (claim.fresh) await activateTabOf(ctx.agentId);
 
   const r = await desktopAct(parsed);
   if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;

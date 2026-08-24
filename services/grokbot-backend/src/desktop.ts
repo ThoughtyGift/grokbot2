@@ -437,12 +437,15 @@ let hold: DesktopHold | null = null;
 /** Giữ quá lâu mà không ai nhả thì coi như bỏ rơi — một lượt chết không được khoá máy vĩnh viễn. */
 const HOLD_STALE_MS = Number(process.env.GROKBOT2_DESKTOP_HOLD_MS ?? 180_000);
 
-export function claimDesktop(agentId: string): { ok: true } | { ok: false; heldBy: string } {
+export function claimDesktop(agentId: string): { ok: true; fresh: boolean } | { ok: false; heldBy: string } {
   if (hold && hold.agentId !== agentId && Date.now() - hold.atMs < HOLD_STALE_MS) {
     return { ok: false, heldBy: hold.agentId };
   }
+  // `fresh` phân biệt "vừa giành được" với "đang giữ sẵn". Chỉ lần đầu mới kéo tab của bot lên
+  // trước: kéo ở mọi hành động thì một bot cố ý chuyển sang cửa sổ khác sẽ bị lôi ngược về Chrome.
+  const fresh = hold?.agentId !== agentId;
   hold = { agentId, atMs: Date.now() };
-  return { ok: true };
+  return { ok: true, fresh };
 }
 
 export function releaseDesktop(agentId: string): void {
