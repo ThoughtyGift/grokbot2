@@ -316,6 +316,120 @@
         "url": "https://mcp.zernio.com/mcp"
       },
       "platform": "twitter"
+    },
+    {
+      "id": 27,
+      "name": "shopify",
+      "displayName": "Shopify",
+      "description": "Đọc và sửa products, orders, customers, variants của store qua Admin GraphQL API. Cần Admin API access token của một custom app trong store của bạn.",
+      "logoUrl": "https://api.iconify.design/simple-icons/shopify.svg?color=%237AB55C&width=128",
+      "mcp": {
+        "name": "shopify",
+        "description": "shopify-mcp (Admin GraphQL API)",
+        "command": "npx",
+        "args": [
+          "-y",
+          "shopify-mcp"
+        ],
+        "env": {
+          "SHOPIFY_ACCESS_TOKEN": "${SHOPIFY_ACCESS_TOKEN}",
+          "MYSHOPIFY_DOMAIN": "${MYSHOPIFY_DOMAIN}"
+        }
+      },
+      "credentials": {
+        "SHOPIFY_ACCESS_TOKEN": "Admin API access token (Settings → Apps and sales channels → Develop apps)",
+        "MYSHOPIFY_DOMAIN": "Tên miền store, ví dụ your-store.myshopify.com"
+      }
+    },
+    {
+      "id": 28,
+      "name": "zernio-whatsapp",
+      "displayName": "WhatsApp",
+      "description": "Gửi và đọc tin nhắn WhatsApp Business. Chạy qua tài khoản Zernio — nối thêm nền tảng ở đây dùng lại cùng một kết nối.",
+      "logoUrl": "https://api.iconify.design/mdi/whatsapp.svg?color=%2325D366&width=128",
+      "platform": "whatsapp",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 29,
+      "name": "zernio-bluesky",
+      "displayName": "Bluesky",
+      "description": "Đăng bài và đọc tương tác trên Bluesky. Nối bằng handle + app password ngay trên trang Zernio.",
+      "logoUrl": "https://api.iconify.design/simple-icons/bluesky.svg?color=%230285FF&width=128",
+      "platform": "bluesky",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 30,
+      "name": "zernio-threads",
+      "displayName": "Threads",
+      "description": "Đăng bài và đọc tương tác trên Threads. Chạy qua tài khoản Zernio.",
+      "logoUrl": "https://api.iconify.design/simple-icons/threads.svg?color=%23E1306C&width=128",
+      "platform": "threads",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 31,
+      "name": "zernio-reddit",
+      "displayName": "Reddit",
+      "description": "Đăng bài lên subreddit, đọc comment và điểm. Chạy qua tài khoản Zernio.",
+      "logoUrl": "https://api.iconify.design/mdi/reddit.svg?color=%23FF4500&width=128",
+      "platform": "reddit",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 32,
+      "name": "zernio-pinterest",
+      "displayName": "Pinterest",
+      "description": "Tạo pin, quản lý board, đọc số liệu. Chạy qua tài khoản Zernio.",
+      "logoUrl": "https://api.iconify.design/mdi/pinterest.svg?color=%23E60023&width=128",
+      "platform": "pinterest",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 33,
+      "name": "zernio-discord",
+      "displayName": "Discord",
+      "description": "Đăng vào channel và đọc tin nhắn. Chạy qua tài khoản Zernio.",
+      "logoUrl": "https://api.iconify.design/mdi/discord.svg?color=%235865F2&width=128",
+      "platform": "discord",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
+    },
+    {
+      "id": 34,
+      "name": "zernio-telegram",
+      "displayName": "Telegram",
+      "description": "Đăng vào channel/group Telegram. Nối bằng mã: nhắn Grok \"nối Telegram\" — nó lấy mã, bạn thêm bot làm admin rồi gửi mã kèm @channel cho bot.",
+      "logoUrl": "https://api.iconify.design/mdi/telegram.svg?color=%2326A5E4&width=128",
+      "mcp": {
+        "name": "zernio",
+        "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
+        "url": "https://mcp.zernio.com/mcp"
+      }
     }
   ]
 }
