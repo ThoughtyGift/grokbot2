@@ -17,8 +17,20 @@
  * synchronous, so a miss returns nothing now and starts the work that fills it in for the next read.
  */
 import { callMcpTool, callUnlistedTool } from "./mcp.js";
+import { config } from "./config.js";
 import { catalog } from "./plugin-catalog.js";
 import { installedIds } from "./plugins.js";
+
+/**
+ * Where a finished connect flow lands.
+ *
+ * Served by this backend rather than pointing back at the client's OAuth loopback on purpose: that
+ * listener is waiting for an authorization `code` it issued a verifier for, and handing it somebody
+ * else's callback would fail an exchange that never needed to happen. The connector's own token is
+ * already in place; the pane notices the new account on its next poll. This page exists only so the
+ * person is not left staring at the vendor's dashboard wondering what happened.
+ */
+export const CONNECT_DONE_PATH = "/connect/done";
 
 /** How long a platform list stays fresh. The pane polls; asking Zernio each time would be rude. */
 const ACCOUNTS_TTL_MS = 30_000;
@@ -121,7 +133,14 @@ export function socialConnectUrl(serverName: string, platform: string, owner: st
 
   const profileId = profileFor(serverName, owner);
   if (profileId) refresh(k, async () => {
-    const out = await tool(serverName, "connect_get_connect_url", { platform, profile_id: profileId }, owner);
+    const out = await tool(serverName, "connect_get_connect_url", {
+      platform, profile_id: profileId,
+      // Where the person lands when they are done. Without it the vendor picks, and it picks its own
+      // dashboard: authorizing TikTok from inside the app ended on zernio.com/dashboard/connections,
+      // which reads like the flow went somewhere it should not have. The value is carried inside the
+      // authorize `state`, so this is the only chance to say it.
+      redirect_url: `http://127.0.0.1:${config.port}${CONNECT_DONE_PATH}`,
+    }, owner);
     const url = out && (/'authUrl':\s*'([^']+)'/.exec(out)?.[1] ?? /"authUrl":\s*"([^"]+)"/.exec(out)?.[1]);
     if (url) urls.set(k, { value: url, atMs: Date.now() });
   });
@@ -131,4 +150,42 @@ export function socialConnectUrl(serverName: string, platform: string, owner: st
 /** Test seam: the caches outlive a config change otherwise. */
 export function resetSocialCache(): void {
   connected.clear(); profiles.clear(); urls.clear(); inFlight.clear();
+}
+
+/**
+ * One synthesized connector per installed platform plugin, so its own pane can offer the button.
+ *
+ * The pane shows an Accounts section only for the plugin that OWNS a connector — electron-main's
+ * `ot()` matches `server.pluginId === plugin.id`, and a connector carries exactly one plugin id. Six
+ * plugin rows sharing one Zernio endpoint meant five of them owned nothing, so adding TikTok and
+ * looking for somewhere to sign in found an empty pane. Twice reported, and reasonably so: the row
+ * you added is the row you expect to connect from.
+ *
+ * These rows exist only in the RPC answer. They are NOT written to the MCP config, so nothing here
+ * opens a second connection to the same endpoint or repeats 51 tools into the model's prompt — the
+ * canonical server stays the only one that does any work. `canonical` is what a tool call resolves
+ * back to.
+ */
+export function aliasServers(
+  owner: string,
+  statusOf: (serverName: string) => string,
+  urlOf: (serverName: string) => string | undefined,
+): { name: string; url: string; status: string; hasToken: boolean; pluginId: number; accounts: { key: string; hasToken: boolean }[] }[] {
+  const mine = new Set(installedIds(owner));
+  const rows: ReturnType<typeof aliasServers> = [];
+  for (const p of catalog()) {
+    const canonical = p.mcp?.name;
+    if (!p.platform || !canonical || !mine.has(p.id)) continue;
+    // A platform row whose plugin IS the connector's owner needs no alias — it already has the pane.
+    if (catalog().find((q) => q.mcp?.name === canonical)?.id === p.id) continue;
+    const url = urlOf(canonical);
+    if (!url) continue;                       // stdio connectors have no account surface at all
+    const hasToken = connectedFor(canonical, owner).has(p.platform);
+    if (!hasToken) socialConnectUrl(canonical, p.platform, owner);
+    rows.push({
+      name: p.name, url, status: statusOf(canonical), hasToken, pluginId: p.id,
+      accounts: [{ key: p.platform, hasToken }],
+    });
+  }
+  return rows;
 }

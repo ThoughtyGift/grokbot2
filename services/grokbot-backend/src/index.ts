@@ -14,7 +14,7 @@ import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";
 import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
-import { socialAccounts, socialConnectUrl } from "./social-connect.js";
+import { socialAccounts, socialConnectUrl, aliasServers, CONNECT_DONE_PATH } from "./social-connect.js";
 import { runWithOwner } from "./request-context.js";
 import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
@@ -68,6 +68,23 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (url.startsWith("/v1/traces") || url.startsWith("/v1/metrics") || url.startsWith("/v1/logs")) {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end("{}");
+  }
+
+  // ── where a social connect flow lands ──
+  //
+  // The vendor decides this unless told otherwise, and it decides on its own dashboard: authorizing
+  // TikTok from inside the app dropped the person on zernio.com/dashboard/connections, which reads
+  // like the flow leaked somewhere. Nothing is exchanged here — the account now lives in the
+  // connector's own store and the pane picks it up on its next poll — so this page only has to say
+  // so and get out of the way. Nothing from the query string is echoed into it.
+  if (url === CONNECT_DONE_PATH || url.startsWith(`${CONNECT_DONE_PATH}?`)) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(`<!doctype html><meta charset="utf-8"><title>Đã kết nối</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:32rem;margin:20vh auto;padding:0 1.5rem;color:#111}
+h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
+<h1>Đã kết nối xong</h1>
+<p>Bạn có thể đóng tab này và quay lại Grok Bot.</p>
+<p>Dòng tài khoản trong Plugins sẽ chuyển sang <strong>Connected</strong> trong vài giây.</p>`);
   }
 
   // ── bare /health ──
@@ -205,21 +222,34 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     },
     // The caller's own MCP servers, for GetAvailableMcpServers. Only name/command/args/url — never
     // `env`, which holds live tokens and must not reach the renderer.
-    mcpServers: Object.entries(mcpServersFor(ownerFromAuth(req.headers.authorization)))
-      .map(([name, spec]) => {
+    mcpServers: (() => {
+      const owner = ownerFromAuth(req.headers.authorization);
+      const configured = mcpServersFor(owner);
+      const real = Object.entries(configured).map(([name, spec]) => {
         const url = (spec as { url?: string }).url;
         return {
           name, command: spec.command, args: spec.args, url,
           // For CheckHttpMcpStatus: the pane needs to tell "wants a sign-in" from "broken", and an
           // http row with no status at all is drawn as an error over a connector merely awaiting auth.
-          status: mcpServerStatus(name, ownerFromAuth(req.headers.authorization)).status,
-          hasToken: url ? oauthAccessToken(url, ownerFromAuth(req.headers.authorization)) != null : false,
+          status: mcpServerStatus(name, owner).status,
+          hasToken: url ? oauthAccessToken(url, owner) != null : false,
           // Which catalog row installed this server, so the pane can file the connector under it.
           pluginId: pluginCatalog().find((p) => p.mcp?.name === name)?.id,
           // One row per installed platform, when this connector fronts several — see social-connect.
-          accounts: socialAccounts(name, ownerFromAuth(req.headers.authorization)),
+          accounts: socialAccounts(name, owner),
         };
-      }),
+      });
+      // Plus a row each platform plugin can own, so its own pane has the sign-in button. Answer-only:
+      // they are not in the MCP config, so no extra connection and no repeated tools — see aliasServers.
+      return [
+        ...real,
+        ...aliasServers(
+          owner,
+          (n) => mcpServerStatus(n, owner).status,
+          (n) => (configured[n] as { url?: string } | undefined)?.url,
+        ),
+      ];
+    })(),
     catalog: pluginCatalog(),
   }));
   if (rpc) {
