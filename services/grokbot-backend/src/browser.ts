@@ -39,6 +39,8 @@ const sessions = new Map<string, Session>();
 const ownedTabs = new Map<string, string>();
 /** Which bot a call belongs to. Set per call so the 16 actions need no signature change. */
 let currentAgent = "default";
+/** Raw CDP event listeners — see onCdpEvent. */
+const eventHandlers = new Set<(method: string, params: any) => void>();
 let nextId = 0;
 const pendingCalls = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 
@@ -104,6 +106,13 @@ async function connect(): Promise<WebSocket> {
   ws.addEventListener("message", (ev: MessageEvent) => {
     let msg: any;
     try { msg = JSON.parse(String(ev.data)); } catch { return; }
+    // A CDP frame with no `id` is an EVENT, and this handler used to drop every one of them. Teach
+    // recording needs `Runtime.bindingCalled`: steps have to leave the page as they happen, because
+    // a navigation replaces `window` and takes any array kept there with it.
+    if (msg.id == null) {
+      if (typeof msg.method === "string") for (const fn of eventHandlers) { try { fn(msg.method, msg.params); } catch { /* a listener must not kill the socket */ } }
+      return;
+    }
     const slot = pendingCalls.get(msg.id);
     if (slot == null) return;
     pendingCalls.delete(msg.id);
@@ -543,4 +552,17 @@ export async function cdpForAgent(
   currentAgent = agentId || "default";
   await ensureWindowVisible();
   return send(method, params);
+}
+
+/**
+ * Subscribe to raw CDP events on the box's browser session. Returns an unsubscribe.
+ *
+ * The teach recorder is the reason this exists: steps must leave the page the moment they happen,
+ * so it calls a `Runtime.addBinding` function and the step arrives here as `Runtime.bindingCalled`.
+ * Keeping the steps in a page variable looked simpler and was wrong — a navigation replaces
+ * `window`, and the first version of this lost every click that happened before the page changed.
+ */
+export function onCdpEvent(handler: (method: string, params: any) => void): () => void {
+  eventHandlers.add(handler);
+  return () => { eventHandlers.delete(handler); };
 }

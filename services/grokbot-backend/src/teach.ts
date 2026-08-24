@@ -20,7 +20,7 @@
  * What it cannot do: only actions inside the box's Chrome are events. A desktop app outside the
  * browser reaches us as pixels over VNC and nothing more, so it cannot be taught this way.
  */
-import { cdpForAgent } from "./browser.js";
+import { cdpForAgent, onCdpEvent } from "./browser.js";
 import { automationCreateRef } from "./chat/state.js";
 
 /** The client's own limit (`600 * 1e3` in the bundle). Sending a different one desynchronises its countdown. */
@@ -44,7 +44,10 @@ export interface Step {
 }
 
 /** One recording at a time: the pane is modal and the box has one screen. */
-let active: { agentId: string; startedAtMs: number; timer: NodeJS.Timeout } | null = null;
+let active: {
+  agentId: string; startedAtMs: number; timer: NodeJS.Timeout;
+  steps: Step[]; off: () => void;
+} | null = null;
 
 /**
  * The recorder, injected into the page.
@@ -56,10 +59,17 @@ let active: { agentId: string; startedAtMs: number; timer: NodeJS.Timeout } | nu
  * Selector preference is id → aria-label → name → first class → tag, and it is recorded so a replay
  * can say how much to trust it: `#id` is stable, a bare tag is a guess.
  */
+const BINDING = "__grokTeachStep";
+
 const RECORDER = `(() => {
-  if (window.__grokTeach) return;
+  if (window.__grokTeachArmed) return;
+  window.__grokTeachArmed = true;
+  // Every step leaves the page immediately. Keeping them in a page array was the first version and
+  // it silently lost everything on navigation: \`addScriptToEvaluateOnNewDocument\` re-arms the
+  // listeners on the new document, but the new document has a new \`window\` and a new empty array.
+  // A binding call reaches the backend, which is the only place that outlives the page.
+  const out = (s) => { try { window.${BINDING}(JSON.stringify(s)); } catch (e) { /* binding gone */ } };
   const steps = [];
-  window.__grokTeach = steps;
   const sel = (el) => {
     if (!el || !el.tagName) return { sel: "?", quality: "none" };
     if (el.id) return { sel: "#" + el.id, quality: "id" };
@@ -77,7 +87,8 @@ const RECORDER = `(() => {
     // The same field fires change more than once and a click can bubble twice; a repeat of the
     // previous step is noise, not a second action.
     if (last && last.act === step.act && last.sel === step.sel && last.value === step.value) return;
-    if (steps.length < 200) steps.push(step);
+    steps.push(step);
+    out(step);
   };
   document.addEventListener("click", (e) => {
     const s = sel(e.target);
@@ -96,19 +107,33 @@ const RECORDER = `(() => {
 export async function startTeach(agentId: string): Promise<TeachState> {
   if (active) return recordingState();
   const id = agentId || "default";
+  const steps: Step[] = [];
+  // Collect BEFORE arming, so a step fired during setup is not dropped.
+  const off = onCdpEvent((method, params) => {
+    if (method !== "Runtime.bindingCalled" || params?.name !== BINDING) return;
+    try {
+      const step = JSON.parse(String(params.payload)) as Step;
+      // A cap, because a page with a mousemove-happy widget could otherwise grow this without end.
+      if (steps.length < 300) steps.push(step);
+    } catch { /* not our payload */ }
+  });
   try {
+    await cdpForAgent(id, "Runtime.enable");
     await cdpForAgent(id, "Page.enable");
-    // Survive navigations, and also arm the page that is already open.
+    // The binding outlives navigations, which is the whole point of using one.
+    await cdpForAgent(id, "Runtime.addBinding", { name: BINDING });
+    // Re-arm the listeners on every new document, and on the page already open.
     await cdpForAgent(id, "Page.addScriptToEvaluateOnNewDocument", { source: RECORDER });
     await cdpForAgent(id, "Runtime.evaluate", { expression: RECORDER, returnByValue: true });
   } catch (e) {
+    off();
     console.warn(`[grokbot2] [teach] cannot start: ${(e as Error).message}`);
     return IDLE;
   }
   // The client stops itself at ten minutes; this is the backend not being left recording for ever
   // if the app is closed mid-take.
   const timer = setTimeout(() => { void stopTeach(id, false); }, MAX_DURATION_MS + 30_000);
-  active = { agentId: id, startedAtMs: Date.now(), timer };
+  active = { agentId: id, startedAtMs: Date.now(), timer, steps, off };
   console.log(`[grokbot2] [teach] recording for ${id}`);
   return recordingState();
 }
@@ -118,19 +143,20 @@ export function recordingState(): TeachState {
   return { state: "recording", agentId: active.agentId, startedAtMs: active.startedAtMs, maxDurationMs: MAX_DURATION_MS };
 }
 
-/** Read the steps out of the page, dropping the recorder. */
-async function collect(agentId: string): Promise<Step[]> {
+/**
+ * Stop listening and disarm the page.
+ *
+ * The steps are already here — they arrived one binding call at a time — so this reads nothing back
+ * out of the page. That is the fix for the version that did: whatever the page still held was only
+ * ever the steps from the LAST document.
+ */
+async function finish(agentId: string): Promise<void> {
   try {
-    const r = await cdpForAgent(agentId, "Runtime.evaluate", {
-      expression: `JSON.stringify(window.__grokTeach || [])`,
-      returnByValue: true,
-    });
-    const raw = String(r?.result?.value ?? "[]");
-    return JSON.parse(raw) as Step[];
-  } catch (e) {
-    console.warn(`[grokbot2] [teach] cannot read steps: ${(e as Error).message}`);
-    return [];
-  }
+    await cdpForAgent(agentId, "Runtime.removeBinding", { name: BINDING });
+  } catch { /* session may be gone */ }
+  try {
+    await cdpForAgent(agentId, "Runtime.evaluate", { expression: `delete window.__grokTeachArmed`, returnByValue: true });
+  } catch { /* tab may be gone */ }
 }
 
 /**
@@ -176,12 +202,12 @@ export function stepsToPrompt(steps: Step[]): string {
  */
 export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number }> {
   const id = active?.agentId ?? agentId ?? "default";
-  const wasActive = active != null;
-  if (active) { clearTimeout(active.timer); active = null; }
-  if (!wasActive) return IDLE;
+  const run = active;
+  if (run) { clearTimeout(run.timer); run.off(); active = null; }
+  if (!run) return IDLE;
 
-  const steps = await collect(id);
-  try { await cdpForAgent(id, "Runtime.evaluate", { expression: `delete window.__grokTeach`, returnByValue: true }); } catch { /* tab may be gone */ }
+  const steps = run.steps;
+  await finish(id);
   console.log(`[grokbot2] [teach] stopped for ${id}: ${steps.length} step(s), save=${save}`);
 
   if (!save) return IDLE;
@@ -201,5 +227,5 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
 
 /** Shutdown: never leave a recorder armed in the box's browser. */
 export function closeTeach(): void {
-  if (active) { clearTimeout(active.timer); active = null; }
+  if (active) { clearTimeout(active.timer); active.off(); active = null; }
 }
