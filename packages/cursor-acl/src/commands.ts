@@ -26,6 +26,14 @@ import type { WireChannel } from "./sse.js";
  * of letting the count read as though sharing works. A number that cannot tell a refusal from a
  * feature is the kind of metric this repo has already been burned by.
  */
+/**
+ * The teach-recording state the renderer expects back, matching its own idle constant.
+ *
+ * `maxDurationMs` is the client's ten minutes (`600 * 1e3` in the bundle); sending a different
+ * number here would make the pane's countdown disagree with the limit it enforces itself.
+ */
+const TEACH_IDLE = { state: "idle", agentId: null, startedAtMs: null, maxDurationMs: 600_000 } as const;
+
 export const SHARED_ROOM_COMMANDS = [
   "createRoomFromAgent", "createRoomInvite", "joinSharedRoom", "respondToRoomJoinRequest",
   "createSharedRoom", "addOwnAgentToSharedRoom", "removeOwnAgentFromSharedRoom",
@@ -275,7 +283,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      */
     getPluginSyncStatus: () => ({ fetchedAt: Date.now(), skills: [], authBlocked: [] }),
     getListenerIntegrations: () => ({}),
-    getTeachRecordingStatus: () => ({ isRecording: false }),
+    getTeachRecordingStatus: () => TEACH_IDLE,
     // Box-host summary rows. The overlay's Yours → Installed list is built from the *host's*
     // MCP settings, using this reply only to fill status/toolCount — so `.mcp.json` alone will
     // not create cards. `id` must be a positive integer string (`/^[1-9]\d*$/`). Never echo `env`.
@@ -376,6 +384,19 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     createGroup: () => null,
     setGroupMembers: () => null,
 
+    // ── teach a task ────────────────────────────────────────────────────────────
+    //
+    // The reply IS the new state, not an acknowledgement. The renderer sets its optimistic
+    // `{state:"recording", …}` before the call and then overwrites it with whatever comes back
+    // (`h(M)`), so `{ok:false}` — the shape these three used to return — handed it a state object
+    // with no `state` field at all. That is why pressing Start recording left the pane sitting on
+    // its default placeholder, "Starting desktop", instead of either recording or refusing: the
+    // state machine had been pushed into a value it has no branch for.
+    //
+    // `idle` is the honest answer. Nothing here records a screen, and claiming `recording` would
+    // let somebody demonstrate a whole task into a recorder that does not exist — the pane would
+    // count down ten minutes and produce nothing. A clear no is worth more than a convincing yes.
+    // Its shape matches the client's own idle constant, `maxDurationMs` included.
     // ── the computer pane ───────────────────────────────────────────────────────
     //
     // All of these return the same decorated status the box host returns, because that status is
@@ -406,8 +427,8 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     updateForeverBox: (a) => computer.status(a),
     // Clears the handoff card AND resumes the turn that was waiting on the user.
     handBackForeverBox: (a) => computer.handBack(a),
-    startTeachRecording: () => ({ isRecording: false, ok: false }),
-    stopTeachRecording: () => ({ isRecording: false, ok: false }),
+    startTeachRecording: () => TEACH_IDLE,
+    stopTeachRecording: () => TEACH_IDLE,
 
     // ── box lifecycle ──────────────────────────────────────────────────────────
     //
