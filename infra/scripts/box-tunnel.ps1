@@ -20,7 +20,13 @@ param(
   [switch]$Uninstall,
   [switch]$Status,
   [int]$LocalPort = 9223,
-  [int]$RemotePort = 9223
+  [int]$RemotePort = 9223,
+  # One display per bot needs one CDP port per bot, and ssh must forward every one of them
+  # BEFORE any of them exists. Measured the hard way: the tunnel forwarded exactly 9223, so a
+  # second Chrome on the box was invisible to the backend no matter how correct the code was.
+  # Keep -Slots in step with GROKBOT2_MAX_DISPLAYS; a slot is a (display, port) pair, not a bot.
+  [int]$Slots = 4,
+  [int]$SlotBase = 9301
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,15 +113,31 @@ function Get-PortOwner([int]$port) {
 }
 
 if ($Status) {
+  $slotPortsForStatus = @()
+  if ($Slots -gt 0) { $slotPortsForStatus = $SlotBase..($SlotBase + $Slots - 1) }
   $owner = Get-PortOwner $LocalPort
   if (Test-Tunnel $LocalPort)  { Write-Host "UP    127.0.0.1:$LocalPort answers CDP (held by $($owner.Name), PID $($owner.Pid))" -ForegroundColor Green }
   elseif ($owner)              { Write-Host "STUCK 127.0.0.1:$LocalPort is held by $($owner.Name) (PID $($owner.Pid)) but does not answer CDP" -ForegroundColor Red }
   else                         { Write-Host "DOWN  nothing is listening on 127.0.0.1:$LocalPort" -ForegroundColor Yellow }
+  # A slot port answering CDP means a per-bot Chrome is live behind it; bound-but-silent is the
+  # normal resting state, not a fault. Saying which is which is the whole point of this line.
+  foreach ($sp in $slotPortsForStatus) {
+    $so = Get-PortOwner $sp
+    if (Test-Tunnel $sp)  { Write-Host "  slot $sp : a per-bot Chrome is answering" -ForegroundColor Green }
+    elseif ($so)          { Write-Host "  slot $sp : forwarded, nothing running behind it (normal)" }
+    else                  { Write-Host "  slot $sp : NOT forwarded - restart the tunnel to pick it up" -ForegroundColor Yellow }
+  }
   Write-Host "log: $logFile"
   exit 0
 }
 
-Write-Log "tunnel loop start: 127.0.0.1:$LocalPort -> box:$RemotePort (ssh $user@${boxHost}:$sshPort)"
+# Every -L this tunnel carries: the shared Chrome, plus one slot per per-bot display.
+$slotPorts = @()
+if ($Slots -gt 0) { $slotPorts = $SlotBase..($SlotBase + $Slots - 1) }
+$forwardArgs = @('-L', "${LocalPort}:127.0.0.1:${RemotePort}")
+foreach ($sp in $slotPorts) { $forwardArgs += @('-L', "${sp}:127.0.0.1:${sp}") }
+
+Write-Log "tunnel loop start: 127.0.0.1:$LocalPort -> box:$RemotePort plus slots $($slotPorts -join ',') (ssh $user@${boxHost}:$sshPort)"
 
 # --- hold it open, and put it back when it drops ------------------------------
 # A dropped tunnel presents to the agent as "no page target", which reads as a broken backend
@@ -151,12 +173,37 @@ while ($true) {
 
   # Keep ssh's own words. Piping this to Out-Null hid "connect failed: Connection refused"
   # for long enough to send a diagnosis down the wrong path once already.
-  & ssh -i $key -p $sshPort -N `
-    -o ExitOnForwardFailure=yes -o BatchMode=yes `
-    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 `
-    -o StrictHostKeyChecking=accept-new `
-    -L "${LocalPort}:127.0.0.1:${RemotePort}" "$user@$boxHost" 2>&1 |
-    ForEach-Object { "$(Get-Date -Format 'HH:mm:ss') ssh: $_" } | Add-Content -Path $logFile
+  # $forwardArgs is passed WITHOUT the splat operator on purpose. Windows PowerShell 5.1 refuses
+  # `@array` in an argument position for a native command (ParserError: SplattingNotPermitted),
+  # while a bare array variable is expanded into separate arguments, which is what ssh needs.
+  # Measured: with the @ form the tunnel came up carrying NO forwards at all - ssh alive, nothing
+  # bound, no error line - which reads exactly like a dead box.
+  #
+  # Note on ExitOnForwardFailure: with several -L, ONE local port already in use kills the whole
+  # tunnel, CDP included. That is the behaviour we want - a half-forwarded tunnel is the state
+  # that reads as "the backend is broken" - but it means a stray process on 9301 takes 9223 down
+  # with it, and the log line is ssh's own.
+  # $ErrorActionPreference is 'Stop' for this script, and that is fatal HERE for a reason worth
+  # spelling out: in Windows PowerShell 5.1 every stderr line from a native command arrives as a
+  # NativeCommandError, and under Stop the FIRST one terminates the script - taking its ssh child,
+  # and the tunnel, with it. Recent OpenSSH prints a post-quantum key-exchange WARNING on every
+  # connect. So a warning that changes nothing was killing the tunnel about a second after it came
+  # up: ssh gone, nothing bound, and a log that stopped at "dialing ssh" with no reason given.
+  #
+  # Keep the redirect - ssh's own words diagnosed a refused connection once already - and stop
+  # treating them as failures.
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & ssh -i $key -p $sshPort -N `
+      -o ExitOnForwardFailure=yes -o BatchMode=yes `
+      -o ServerAliveInterval=30 -o ServerAliveCountMax=3 `
+      -o StrictHostKeyChecking=accept-new `
+      $forwardArgs "$user@$boxHost" 2>&1 |
+      ForEach-Object { "$(Get-Date -Format 'HH:mm:ss') ssh: $_" } | Add-Content -Path $logFile
+  } finally {
+    $ErrorActionPreference = $prevEap
+  }
 
   Write-Log "ssh exited, redialing in 5s"
   $lastState = ''
