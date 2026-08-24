@@ -65,6 +65,7 @@ import {
   readAttachmentImage, readAttachmentText, readAttachmentChunk, stageFile, stageImage, stagedCount,
 } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
+import { startTeach, stopTeach, recordingState } from "./teach.js";
 import { closeMcp, mcpServers, mcpServerStatus } from "./mcp.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -130,6 +131,12 @@ const ports: AclPorts = {
     handBack: handBackBox,
     beginUse: beginComputerUse,
     endUse: endComputerUse,
+  },
+  // Teach a task: record a demonstration in the box's browser, save it as a routine — see teach.ts.
+  teach: {
+    start: (agentId: string) => startTeach(agentId),
+    stop: (agentId: string, save: boolean) => stopTeach(agentId, save),
+    status: () => recordingState(),
   },
   media: {
     readAttachmentImage,

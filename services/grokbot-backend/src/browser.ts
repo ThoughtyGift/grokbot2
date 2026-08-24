@@ -526,3 +526,21 @@ export async function browserProbe(): Promise<string> {
     return `unreachable (${(e as Error).message})`;
   }
 }
+
+/**
+ * Internal seam for teach.ts: one raw CDP call in a given bot's tab.
+ *
+ * Teach recording needs the SAME tab the browser tools use — that is the tab the VNC pane shows,
+ * so it is the one the person is demonstrating in and the one the bot will replay in. Opening a
+ * second CDP socket to the same Chrome would work and would also mean two clients racing over one
+ * tab's lifecycle; reusing this module's session is the cheaper truth.
+ *
+ * Not part of the browser TOOL surface: the model cannot reach this, only backend code can.
+ */
+export async function cdpForAgent(
+  agentId: string, method: string, params: Record<string, unknown> = {},
+): Promise<any> {
+  currentAgent = agentId || "default";
+  await ensureWindowVisible();
+  return send(method, params);
+}

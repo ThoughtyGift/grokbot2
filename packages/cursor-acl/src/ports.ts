@@ -93,6 +93,18 @@ export interface ComputerPort {
   endUse(agentId: string): void | Promise<void>;
 }
 
+/**
+ * Teach a task — record a demonstration, save it as a routine.
+ *
+ * Absent ⇒ the three commands answer the idle state, which is what they did before any of this
+ * existed: an honest "nothing is recording" rather than a shape the renderer cannot read.
+ */
+export interface TeachPort {
+  start(agentId: string): Promise<unknown>;
+  stop(agentId: string, save: boolean): Promise<unknown>;
+  status(): unknown;
+}
+
 /** S8 media — attachment staging and reads. */
 export interface MediaPort {
   readAttachmentImage: Call;
@@ -207,6 +219,7 @@ export interface AclPorts {
   conversation: ConversationPort;
   runtime: RuntimePort;
   computer: ComputerPort;
+  teach?: TeachPort;
   media: MediaPort;
   memory: MemoryPort;
   automations: AutomationsPort;

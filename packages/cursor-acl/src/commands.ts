@@ -283,7 +283,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      */
     getPluginSyncStatus: () => ({ fetchedAt: Date.now(), skills: [], authBlocked: [] }),
     getListenerIntegrations: () => ({}),
-    getTeachRecordingStatus: () => TEACH_IDLE,
+    getTeachRecordingStatus: () => ports.teach?.status() ?? TEACH_IDLE,
     // Box-host summary rows. The overlay's Yours → Installed list is built from the *host's*
     // MCP settings, using this reply only to fill status/toolCount — so `.mcp.json` alone will
     // not create cards. `id` must be a positive integer string (`/^[1-9]\d*$/`). Never echo `env`.
@@ -427,8 +427,8 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     updateForeverBox: (a) => computer.status(a),
     // Clears the handoff card AND resumes the turn that was waiting on the user.
     handBackForeverBox: (a) => computer.handBack(a),
-    startTeachRecording: () => TEACH_IDLE,
-    stopTeachRecording: () => TEACH_IDLE,
+    startTeachRecording: (a) => ports.teach?.start(idOf(a) ?? "") ?? TEACH_IDLE,
+    stopTeachRecording: (a) => ports.teach?.stop(idOf(a) ?? "", a?.save !== false) ?? TEACH_IDLE,
 
     // ── box lifecycle ──────────────────────────────────────────────────────────
     //

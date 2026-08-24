@@ -939,7 +939,30 @@ const PLUGIN_PROTOCOL =
   "never invent one, and never print a credential back into the chat — pass it in `values` and say " +
   "which keys you saved. If a required value is missing, ask the person for it.";
 
-const toolProtocolFor = (owner: string): string => toolProtocolBase() + PLUGIN_PROTOCOL + mcpProtocolFor(owner);
+/**
+ * Replaying a task somebody demonstrated.
+ *
+ * A taught task arrives as an ordinary routine whose prompt is a numbered step list, so nothing
+ * about the turn is special — except one thing that has to be said out loud: a step list is a record
+ * of what a PERSON did, not a plan the model may improve. Selectors go stale, pages get redesigned,
+ * and the tempting failure is to find something that looks close and click it. Stopping at the first
+ * mismatch and naming the step is worth more than a run that half-worked somewhere unexpected.
+ *
+ * Only offered when the browser is configured: a step list is browser steps, and advertising a
+ * protocol for tools this install cannot run just teaches the model to try them.
+ */
+const TEACH_PROTOCOL = isBrowserConfigured()
+  ? "\n\nTAUGHT TASKS: a routine whose prompt is a numbered list of browser steps was RECORDED from " +
+    "somebody demonstrating it. Replay it with the browser_* tools in the order given, and treat the " +
+    "list as evidence rather than a suggestion: do not reorder it, do not add steps, and do not " +
+    "substitute a control that merely looks similar. A step marked as having a weak selector needs a " +
+    "look at the page first. If a step has no match, STOP and say which step and what you saw " +
+    "instead — a taught task that stops halfway is recoverable; one that clicked the wrong thing is " +
+    "not always."
+  : "";
+
+const toolProtocolFor = (owner: string): string =>
+  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;

@@ -33,6 +33,7 @@ import { ensureGatewayToken, authMode } from "./auth-gate.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
+import { closeTeach } from "./teach.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -334,7 +335,7 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
 // Flush state to disk on shutdown so an in-flight debounce isn't lost. Coverage too: the
 // observe pass is worthless if the list it built dies with the process it was gathered in.
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => { saveNow(chatSnapshot); saveCoverageNow(); closeMcp(); closeStt(); process.exit(0); });
+  process.on(sig, () => { saveNow(chatSnapshot); saveCoverageNow(); closeMcp(); closeStt(); closeTeach(); process.exit(0); });
 }
 
 server.listen(config.port, "127.0.0.1", () => {
