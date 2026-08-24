@@ -234,8 +234,13 @@ console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, l
 // Routine do bài kiểm tự tạo thì bài kiểm tự dọn — nếu không, mỗi lần chạy để lại một dòng
 // "Việc đã dạy trên máy" trong bảng Routines của người dùng.
 if (createdRoutineId) {
-  await post("deleteAgentAutomation", { id: createdRoutineId });
-  console.log(`\n(đã dọn routine thử ${createdRoutineId})`);
+  // `automationId`, không phải `id`: deleteAgentAutomation tra theo trường đó, và gọi sai tên thì
+  // nó trả về danh sách như thường mà không xoá gì — im lặng đúng nghĩa. Bản dọn đầu tiên gọi sai
+  // và báo "đã dọn" trong khi routine vẫn nằm nguyên trong bảng.
+  await post("deleteAgentAutomation", { agentId: agent.id, automationId: createdRoutineId });
+  const after = await post("listAllAutomations", {});
+  const still = (Array.isArray(after) ? after : after.automations ?? []).some((r) => r?.id === createdRoutineId);
+  console.log(`\n(${still ? "KHÔNG dọn được" : "đã dọn"} routine thử ${createdRoutineId})`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
