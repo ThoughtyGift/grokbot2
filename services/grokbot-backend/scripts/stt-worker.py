@@ -58,6 +58,31 @@ def to_wav(raw: bytes) -> str:
     return dst
 
 
+def pick_language(raw: str | None) -> str | None:
+    """
+    Which language to decode as, or None to let the model work it out.
+
+    The client is not a useful source here. `electron-main` sends `en-US` whenever nobody picked a
+    language, and faster-whisper rejects locales outright — `'en-US' is not a valid language code` —
+    so the very first real recording failed while a hand-written test passing `en` had passed. Worse,
+    honouring it would force English onto a Vietnamese sentence, which fails quietly instead of
+    loudly.
+
+    So the hint is treated as advisory: a real language code is used, a locale is reduced to one, and
+    the client's `en-US` default means "nobody said" and becomes auto-detect. `GROKBOT2_STT_LANGUAGE`
+    pins it for anyone who wants no guessing (`auto` to force detection).
+    """
+    forced = os.environ.get("GROKBOT2_STT_LANGUAGE")
+    if forced:
+        return None if forced.lower() == "auto" else forced.lower()
+    if not raw:
+        return None
+    if raw.strip().lower() == "en-us":
+        return None
+    base = raw.strip().lower().split("-")[0]
+    return base or None
+
+
 def main() -> None:
     from faster_whisper import WhisperModel
 
@@ -78,9 +103,16 @@ def main() -> None:
             if not audio:
                 raise ValueError("request carried no audio")
             wav = to_wav(audio)
-            language = req.get("language") or None
-            segments, _info = model.transcribe(wav, language=language, vad_filter=True)
+            language = pick_language(req.get("language"))
+            try:
+                segments, info = model.transcribe(wav, language=language, vad_filter=True)
+            except ValueError as bad_lang:
+                # Belt and braces: a code that looked plausible and is not on the model's list must
+                # cost a detection pass, not the recording.
+                log(f"{bad_lang} — falling back to auto-detect")
+                segments, info = model.transcribe(wav, language=None, vad_filter=True)
             text = "".join(s.text for s in segments).strip()
+            log(f"{len(text)} chars in {int((time.time() - started) * 1000)}ms (lang {info.language})")
             print(json.dumps({"text": text, "ms": int((time.time() - started) * 1000)}), flush=True)
         except Exception as exc:  # noqa: BLE001 — the caller gets the message, the worker stays up
             print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}), flush=True)
