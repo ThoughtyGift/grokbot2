@@ -30,6 +30,7 @@ import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
 import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
+import { handleAdmin } from "./admin.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
@@ -183,6 +184,12 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(hostHealth()));
   }
+
+  // ── /admin — bảng theo dõi sức chứa box (admin.ts) ──
+  //
+  // Trước router /gw vì nó không phải một lệnh gateway, và nó tự gọi `checkAuth`. Ở tiến trình
+  // ops thì sai chỗ: :8791 là cửa công khai cho webhook.
+  if (await handleAdmin(url, req, res)) return;
 
   // ── ops internal (loopback — this server binds 127.0.0.1, not via /gw) ──
   if (url.startsWith("/internal/ops/")) {
