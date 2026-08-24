@@ -257,14 +257,27 @@ let shotPath: string | null = null;
 
 async function shotTarget(): Promise<string> {
   if (shotPath) return shotPath;
+  return `${await boxRoot()}/.grokbot2-shot.jpg`;
+}
+
+/**
+ * Thư mục gốc daemon phục vụ.
+ *
+ * Mọi thứ cần đọc NGƯỢC về đây phải nằm trong này: `readBytes` từ chối đường dẫn ngoài gốc
+ * ("path escapes root"), nên `/tmp` viết được nhưng không đọc lại được — đúng cái bẫy đã mất một
+ * vòng khi làm ảnh chụp màn hình.
+ */
+let cachedRoot: string | null = null;
+
+export async function boxRoot(): Promise<string> {
+  if (cachedRoot) return cachedRoot;
   const h = await boxCall<{ root?: string }>("health");
-  const root = String(h.root ?? "").replace(/\/+$/, "") || "/home/box/workspace";
-  shotPath = `${root}/.grokbot2-shot.jpg`;
-  return shotPath;
+  cachedRoot = String(h.root ?? "").replace(/\/+$/, "") || "/home/box/workspace";
+  return cachedRoot;
 }
 
 /** Quote một chuỗi cho shell POSIX. */
-const sq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
+export const sq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
 interface ExecResult { stdout?: string; stderr?: string; exitCode?: number }
 

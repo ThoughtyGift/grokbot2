@@ -105,6 +105,16 @@ export interface TeachPort {
   status(): unknown;
 }
 
+/**
+ * Recording a demonstration on the box's DESKTOP rather than inside its browser.
+ *
+ * Same three calls plus `available`, because unlike the browser recorder this one needs an X11
+ * session on the box: offering a Start button that cannot record is worse than offering none.
+ */
+export interface DesktopTeachPort extends TeachPort {
+  available(): boolean;
+}
+
 /** S8 media — attachment staging and reads. */
 export interface MediaPort {
   readAttachmentImage: Call;
@@ -220,6 +230,7 @@ export interface AclPorts {
   runtime: RuntimePort;
   computer: ComputerPort;
   teach?: TeachPort;
+  desktopTeach?: DesktopTeachPort;
   media: MediaPort;
   memory: MemoryPort;
   automations: AutomationsPort;

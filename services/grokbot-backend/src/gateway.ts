@@ -66,6 +66,7 @@ import {
 } from "./attachments.js";
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 import { startTeach, stopTeach, recordingState } from "./teach.js";
+import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktopRecordConfigured } from "./desktop-record.js";
 import { closeMcp, mcpServers, mcpServerStatus } from "./mcp.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -137,6 +138,21 @@ const ports: AclPorts = {
     start: (agentId: string) => startTeach(agentId),
     stop: (agentId: string, save: boolean) => stopTeach(agentId, save),
     status: () => recordingState(),
+  },
+  /**
+   * The same thing for what the browser cannot reach — see desktop-record.ts.
+   *
+   * Kept as its own surface rather than a flag on `teach`, because the two must never run together:
+   * a person demonstrating in the box's Chrome produces an X11 event AND a DOM event for one click,
+   * so both recorders running would write every step twice. When the work is inside a web page,
+   * `teach` is the better tool and stays the default — a selector survives a window moving, a
+   * coordinate does not.
+   */
+  desktopTeach: {
+    available: () => desktopRecordConfigured(),
+    start: (agentId: string) => startDesktopRecording(agentId),
+    stop: (_agentId: string, save: boolean) => stopDesktopTeach(save),
+    status: () => desktopRecordingState(),
   },
   media: {
     readAttachmentImage,

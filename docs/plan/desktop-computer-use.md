@@ -1,6 +1,6 @@
 # Điều khiển và dạy việc **ngoài** trình duyệt
 
-Trạng thái: **giai đoạn 1 đã làm** (24/08/2026), giai đoạn 2 chưa. Viết ra vì phần khó nhất —
+Trạng thái: **giai đoạn 1 và 2 đã làm** (24/08/2026). Viết ra vì phần khó nhất —
 spec của hãng — **trích được**, và không nên để ai phải suy lại từ đầu.
 
 ## Hiện tại có gì
@@ -163,6 +163,58 @@ Ba đường bắt input, đánh đổi khác nhau:
 | **Chụp ảnh kèm mỗi hành động** | replay bằng thị giác: tìm lại vùng ảnh đó | nặng hơn, cần vision tốt |
 
 Cách thứ ba gần như chắc là cách của hãng — không thì `computerUseModel` tồn tại để làm gì.
+
+### Đã làm — `src/desktop-record.ts`
+
+Đi đường thứ ba, nhưng bẻ một chỗ mà kế hoạch chưa nhìn ra: **pool chỉ mang được MỘT ảnh mỗi lượt.**
+Một routine tám bước có tám mẩu ảnh, nên không có cách nào vừa đưa "ảnh cái nút cần tìm" vừa đưa
+"ảnh màn hình bây giờ" cho model trong cùng một lượt. Nếu không xử lý, giai đoạn 2 sẽ chết đúng ở
+chỗ nó hứa hẹn nhất.
+
+Lời giải: **đổi pixel thành lời một lần, ngay lúc dạy xong.** Mỗi cú bấm được cắt một mẩu ảnh
+320x200 quanh điểm bấm, rồi model thị giác tả lại mẩu ảnh đó thành một câu. Lúc chạy lại chỉ còn
+cần một tấm ảnh màn hình thật — và câu mô tả sống sót qua những thứ toạ độ không sống nổi: cửa sổ
+dịch chỗ, đổi độ phân giải, một thông báo chen ngang.
+
+Mô tả thật, sinh ra từ một buổi dạy thật:
+
+> 1. bấm vào "Ô nhập liệu (text input) hình chữ nhật nền trắng, viền xám mảnh, chứa chữ gợi ý màu
+>    xám 'Ten khach hang'" — lúc dạy nó ở khoảng (300, 250)
+> 2. gõ "Nguyen Van A"
+> 3. bấm vào "Nút bấm hình chữ nhật màu xanh dương với chữ trắng in hoa 'LUU HO SO'" — lúc dạy nó
+>    ở khoảng (300, 435)
+
+| chỗ | việc |
+|---|---|
+| `desktop-record.ts` | bộ ghi XRecord trên box + `describeCrops` + `desktopStepsToPrompt` + `stopDesktopTeach` |
+| `gateway.ts` / `cursor-acl` | cổng `desktopTeach` + ba lệnh `*DesktopTeach*` (tên của mình, không mượn tên client) |
+| `runtime/tools.ts` | `desktop_teach_start` / `desktop_teach_stop` — đường dùng trong app gốc, không cần thêm UI |
+| `desktop-record.test.ts` | 7 test cho câu chữ giao cho bot chạy lại |
+
+Ba điều học được khi làm:
+
+- **Hai bộ ghi phải loại trừ nhau.** Người dùng thao tác trong Chrome của box qua VNC thì MỘT cú
+  bấm sinh ra cả sự kiện X11 lẫn sự kiện DOM. Bật cả hai là mọi bước bị ghi hai lần.
+- **`A && B &` trong shell làm daemon chờ 60 giây.** Shell tách một subshell cho cả nhóm, và
+  subshell đó vẫn giữ ống stdout của daemon dù B đã tự chuyển hướng. Đổi thành `A; B &` là xong —
+  250ms. Đo được vì mỗi lần bấm "bắt đầu ghi" treo đúng bằng thời hạn phiên ghi.
+- **`keysym_to_string(XK_Return)` trả về một ký tự dài 1**, nên bộ ghi đầu tiên nuốt phím Enter vào
+  giữa chuỗi chữ: `"abc"` thay vì `"abc"` rồi `Return`.
+
+### Checklist E2E giai đoạn 2
+
+Trong `scripts/e2e-desktop.mjs`, nhóm 7. Kết quả 24/08/2026: **19/19 toàn bài**.
+
+| # | Kiểm | Trạng thái |
+|---|---|---|
+| 15 | bật được bản ghi trên desktop | ✅ |
+| 16 | thao tác thật được ghi lại (bấm, gõ, phím) | ✅ |
+| 17 | lưu thành routine, có mặt trong bảng Routines | ✅ |
+| 18 | **mỗi bước bấm được tả bằng lời**, không chỉ toạ độ | ✅ |
+| 19 | chữ đã gõ nằm nguyên trong routine | ✅ |
+
+Chưa kiểm: **chạy lại** một routine desktop trên màn hình đã đổi bố cục. Đó là phép thử thật của
+mô tả bằng lời, và nó cần một app desktop thật chứ không phải trang web dựng cho test.
 
 ## Cảnh báo phải nói trước
 

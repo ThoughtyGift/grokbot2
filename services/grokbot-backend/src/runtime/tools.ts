@@ -9,6 +9,7 @@ import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo } from "../desktop.js";
+import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from "../desktop-record.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { knowledgeBase } from "../memory.js";
@@ -1003,7 +1004,13 @@ const desktopParagraph = (info: { width: number; height: number; dpi: number } |
   "act and look after: take a screenshot, read the coordinates off it, do ONE action, and check " +
   "the screenshot that comes back. Firing several clicks from one screenshot is guessing at all " +
   "but the first. Prefer the browser_* tools whenever the task is inside a web page — they match " +
-  "on selectors and do not go stale when a window moves.";
+  "on selectors and do not go stale when a window moves." +
+  (desktopRecordConfigured()
+    ? "\n\nDẠY VIỆC TRÊN MÁY: nếu người dùng muốn CHỈ cho bạn một việc ngoài trình duyệt, gọi "
+      + 'TOOL_CALL: desktop_teach_start(), để họ tự làm trong khung máy tính, rồi khi họ báo xong thì gọi '
+      + "TOOL_CALL: desktop_teach_stop() — nó lưu lại thành một routine. Trong lúc đang ghi, TUYỆT ĐỐI "
+      + "không tự bấm hay gõ gì trên máy: thao tác của bạn cũng bị ghi vào bài dạy của họ."
+    : "");
 
 const toolProtocolFor = (owner: string): string =>
   toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + mcpProtocolFor(owner);
@@ -1068,5 +1075,32 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   if (after.ok && after.imageBase64) show(`data:image/jpeg;base64,${after.imageBase64}`, `màn hình sau khi ${parsed.action}`);
   return `${parsed.action} xong`;
 };
+
+/**
+ * Dạy một việc bằng cách LÀM trên desktop của box — giai đoạn 2 của kế hoạch computer-use.
+ *
+ * Hai tool thay vì một nút bấm: nút Teach của app gốc gọi bộ ghi trình duyệt, và ta không mượn tên
+ * đó cho một bộ ghi khác. Người dùng đang nhìn khung VNC rồi, nên bảo bot "dạy tôi việc này" rồi
+ * "xong rồi, lưu lại" là đường ngắn nhất — không phải dựng thêm giao diện nào.
+ *
+ * Bot KHÔNG được thao tác trong lúc ghi: XRecord thấy cả input do XTEST bơm vào, nên mỗi cú bấm
+ * của bot cũng thành một bước trong bài dạy của người dùng.
+ */
+if (desktopRecordConfigured()) {
+  TOOLS.desktop_teach_start = async (_arg, ctx) => {
+    const s = await startDesktopRecording(ctx.agentId);
+    if (s.state !== "recording") return "không bật được bản ghi trên máy tính của bot";
+    return "Đang ghi thao tác trên màn hình. Hãy làm việc đó trong khung máy tính, xong thì nhắn tôi"
+      + " một tiếng để tôi lưu lại. Trong lúc ghi tôi sẽ không tự bấm gì cả (bấm là nó ghi vào bài dạy).";
+  };
+  TOOLS.desktop_teach_stop = async (arg) => {
+    const save = !/["\s:]?(false|huỷ|huy|bỏ|bo)\b/i.test(arg);
+    const s = await stopDesktopTeach(save);
+    if (!save) return "đã dừng ghi và bỏ bản ghi";
+    if (s.saved) return `đã lưu thành routine "${s.saved}" (${s.steps} bước) — chạy được từ bảng Routines`;
+    if (s.steps === 0) return "không ghi được thao tác nào nên không tạo routine";
+    return "đã dừng ghi nhưng không lưu được thành routine";
+  };
+}
 
 export { TOOLS, isKnownTool, isParallelSafe, toolProtocolFor };

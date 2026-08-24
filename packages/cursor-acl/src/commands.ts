@@ -430,6 +430,18 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     startTeachRecording: (a) => ports.teach?.start(idOf(a) ?? "") ?? TEACH_IDLE,
     stopTeachRecording: (a) => ports.teach?.stop(idOf(a) ?? "", a?.save !== false) ?? TEACH_IDLE,
 
+    /**
+     * Recording a demonstration on the box's DESKTOP — names of our own, deliberately.
+     *
+     * The three above are the client's; these are not, and borrowing `startTeachRecording` for a
+     * different recorder would make one name mean two things depending on the box. The stock app's
+     * single Teach button keeps its browser recorder; the desktop one is reached through the chat
+     * tools, which is also where the person already is when they are watching the VNC pane.
+     */
+    getDesktopTeachStatus: () => ports.desktopTeach?.status() ?? TEACH_IDLE,
+    startDesktopTeachRecording: (a) => ports.desktopTeach?.start(idOf(a) ?? "") ?? TEACH_IDLE,
+    stopDesktopTeachRecording: (a) => ports.desktopTeach?.stop(idOf(a) ?? "", a?.save !== false) ?? TEACH_IDLE,
+
     // ── box lifecycle ──────────────────────────────────────────────────────────
     //
     // Commands the app can send about updating, snapshotting and recreating the box. This backend

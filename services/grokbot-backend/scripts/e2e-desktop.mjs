@@ -180,5 +180,45 @@ console.log("\n6. bot tự nhìn màn hình rồi bấm đúng chỗ (không ai 
   check("bot tự tìm được nút và bấm trúng", r.includes("DA-BAM"), `ô kết quả nói: ${r.slice(0, 40)}`);
 }
 
+// ── 7. GIAI ĐOẠN 2 — dạy một việc trên desktop rồi lưu thành routine ────────
+console.log("\n7. dạy trên desktop: ghi thao tác, tả lại bằng lời, lưu thành routine");
+{
+  // Các phần tử để to hẳn: bài kiểm này kiểm BỘ GHI, không kiểm khả năng bấm chính xác của tôi.
+  // Một cú bấm trượt mép nút vẫn được ghi đúng, nhưng lời mô tả sinh ra sẽ nói về cái mép đó.
+  const html = "<body style='margin:0;font:20px sans-serif;background:%23fafafa'>"
+    + "<input id=t placeholder='Ten khach hang' style='position:fixed;left:40px;top:60px;width:700px;height:90px;padding:0 16px;font:30px sans-serif'>"
+    + "<button id=b style='position:fixed;left:40px;top:220px;width:700px;height:140px;font:bold 40px sans-serif;background:%231565c0;color:%23fff;border:0;border-radius:10px'>LUU HO SO</button>"
+    + "</body>";
+  await callTool(agent.id, "browser_navigate", { url: `data:text/html,${html}` });
+  await sleep(1500);
+
+  const started = await post("startDesktopTeachRecording", { agentId: agent.id });
+  check("bật được bản ghi desktop", started?.state === "recording", JSON.stringify(started).slice(0, 80));
+  await sleep(2500);
+
+  // "Người dùng" làm mẫu. Ở đây do driver giai đoạn 1 bơm vào — XRecord thấy cả input của XTEST,
+  // nên e2e tự lái được một buổi dạy mà không cần người ngồi bấm.
+  await callTool(agent.id, "computer_use", { action: "click", x: 300, y: 250 });
+  await callTool(agent.id, "computer_use", { action: "type", text: "Nguyen Van A" });
+  await callTool(agent.id, "computer_use", { action: "click", x: 300, y: 435 });
+  await sleep(1500);
+
+  const stopped = await post("stopDesktopTeachRecording", { agentId: agent.id, save: true });
+  check("ghi được thao tác", (stopped?.steps ?? 0) >= 3, `${stopped?.steps} bước`);
+  check("lưu thành routine", typeof stopped?.saved === "string" && stopped.saved.length > 0,
+    stopped?.saved ?? JSON.stringify(stopped).slice(0, 80));
+
+  const list = await post("listAllAutomations", {});
+  const rows = Array.isArray(list) ? list : (list.automations ?? list.list ?? []);
+  const saved = rows.find((r) => (r?.name ?? "") === stopped?.saved);
+  const prompt = saved?.prompt ?? saved?.trigger?.prompt ?? "";
+  check("routine có mặt trong bảng Routines", saved != null, saved ? saved.name : `${rows.length} routine, không thấy`);
+  // Điểm cốt lõi của giai đoạn 2: bước phải mô tả THỨ cần bấm, không chỉ toạ độ. Chỉ có toạ độ thì
+  // routine hỏng ngay lần đầu cửa sổ nằm khác chỗ — và hỏng im lặng.
+  check("mỗi bước bấm được tả bằng lời, không chỉ toạ độ", /bấm vào "[^"]{10,}"/.test(prompt),
+    prompt ? prompt.split("\n").find((l) => l.startsWith("1.")) ?? prompt.slice(0, 80) : "routine không có prompt");
+  check("chữ đã gõ nằm trong routine", prompt.includes("Nguyen Van A"), prompt ? "có" : "không");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
