@@ -31,20 +31,37 @@ const check = (name, ok, detail) => {
   console.log(`  ${ok ? "ok  " : "FAIL"} ${name}${detail ? `  — ${detail}` : ""}`);
 };
 
+const LIMIT = 400;
+const read = async (agentId) => (await post("getAgentTranscript", { id: agentId, limit: LIMIT })).entries ?? [];
+
+/**
+ * "Những gì mới kể từ lúc này" — neo vào ID của entry cuối, KHÔNG vào số lượng entry.
+ *
+ * Đếm rồi `slice(n)` chỉ đúng khi transcript ngắn hơn `limit`. Bot thử được dùng lại nên nó dài ra
+ * theo từng lần chạy, và khi vượt 200 thì `before` luôn bằng 200, `slice(200)` luôn rỗng — mười
+ * phép kiểm báo FAIL trong khi mọi tool đều chạy đúng. Một bộ đo hỏng trông y hệt một tính năng
+ * hỏng, và đó là kiểu sai tốn thời gian nhất.
+ */
+const anchorOf = (entries) => entries[entries.length - 1]?.id ?? null;
+const since = (entries, anchor) => {
+  const i = anchor ? entries.findIndex((e) => e.id === anchor) : -1;
+  return i >= 0 ? entries.slice(i + 1) : entries;
+};
+
 /** Gọi một tool và trả về các entry mới nó sinh ra. */
 async function callTool(agentId, name, args) {
-  const before = (await post("getAgentTranscript", { id: agentId, limit: 200 })).entries?.length ?? 0;
+  const anchor = anchorOf(await read(agentId));
   await post("sendPrompt", {
     agentId, content: `/tool ${name} ${JSON.stringify(args)}`,
     clientNonce: `d${Date.now()}${Math.random()}`,
   });
   for (let i = 0; i < 40; i++) {
     await sleep(700);
-    const fresh = ((await post("getAgentTranscript", { id: agentId, limit: 200 })).entries ?? []).slice(before);
+    const fresh = since(await read(agentId), anchor);
     const tc = fresh.find((e) => e.kind === "tool-call");
     if (tc && (tc.status === "done" || tc.status === "failed")) {
       await sleep(400);
-      return ((await post("getAgentTranscript", { id: agentId, limit: 200 })).entries ?? []).slice(before);
+      return since(await read(agentId), anchor);
     }
   }
   return [];
@@ -60,13 +77,13 @@ const resultOf = (fresh) => fresh.find((e) => e.kind === "tool-call")?.result ??
  * kiểu sai tốn nhất: nghi ngờ nhầm chỗ.
  */
 async function ask(agentId, content, waitMs = 150_000) {
-  const before = (await post("getAgentTranscript", { id: agentId, limit: 300 })).entries?.length ?? 0;
+  const anchor = anchorOf(await read(agentId));
   await post("sendPrompt", { agentId, content, clientNonce: `a${Date.now()}${Math.random()}` });
   const until = Date.now() + waitMs;
   let sig = "", stable = 0, last = "";
   while (Date.now() < until) {
     await sleep(2000);
-    const fresh = ((await post("getAgentTranscript", { id: agentId, limit: 300 })).entries ?? []).slice(before);
+    const fresh = since(await read(agentId), anchor);
     const busy = fresh.some((e) => (e.kind === "tool-call" && e.status !== "done" && e.status !== "failed")
       || (e.kind === "send-message" && e.streaming));
     const bubbles = fresh.filter((e) => e.kind === "send-message" && e.message?.type === "text" && e.message.content);
@@ -76,7 +93,7 @@ async function ask(agentId, content, waitMs = 150_000) {
     sig = now;
     if (!busy && stable >= 2) return { text: last, fresh };
   }
-  return { text: last, fresh: ((await post("getAgentTranscript", { id: agentId, limit: 300 })).entries ?? []).slice(before) };
+  return { text: last, fresh: since(await read(agentId), anchor) };
 }
 
 /**
