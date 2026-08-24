@@ -91,4 +91,6 @@ thì phải thấy ngay ai đang ăn. Trang chỉ đọc — sáu Chrome trên b
 - Bước 2 chạm vào đường đang chạy tốt của mọi bot. Nên làm sau một mốc commit sạch.
 - Chrome trên display mới hiện cảnh báo `--no-sandbox` và một hộp "Can't update Chrome"; vô hại
   nhưng nó **chiếm chỗ trên ảnh chụp**, và model đọc toạ độ từ ảnh đó. Cần cờ tắt bớt.
-- Đĩa 87% là vấn đề **trước** khi RAM là vấn đề. Thu hồi profile khi thu display, không giữ lại.
+- RAM chặn trước đĩa ở thời điểm này (14 so với 37), nhưng tỉ lệ đó đổi theo việc phần mềm khác
+  trên box lớn lên. Đừng gắn cứng bên nào: lấy số nhỏ hơn trong hai, như `headroomOf` đang làm.
+- Thu hồi phải xoá cả profile dir, không giữ lại — đó là phần chiếm đĩa.
