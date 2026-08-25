@@ -204,6 +204,52 @@ export function buildExe({ distDir, stagingDir, patchSrc, startSrc, version, out
 // `String.raw` là bắt buộc ở đây: ISS đầy dấu `\` (đường dẫn, và dấu nối dòng cuối dòng). Trong một
 // template thường, `\B` bị JS nuốt thành `B` — và bản dựng đầu tiên đã hỏng đúng vì thế:
 // `{userdesktop}\Bot Noi Bo` ra thành `{userdesktop}Bot Noi Bo`, Inno báo "Name must include a path".
+
+/**
+ * Icon của bản CHỞ APP: lấy thẳng từ `Grok Bot.exe`.
+ *
+ * Bản 2 MB mang dấu "B" của mình, và phải như vậy — nó chỉ là bộ cấu hình, dán logo của hãng lên đó
+ * là nói sai nó là gì. Bản chở app thì **cài đúng ứng dụng đó**, nên mang icon của ứng dụng là mô tả
+ * đúng, không phải mạo danh. Nó cũng giải quyết một chuyện thật: ba file trong Downloads cùng một
+ * dấu "B" thì không phân biệt được cái nào là bản nào.
+ *
+ * Ranh giới không đổi: gói này dùng cho máy của chính bạn. Ngày nào phát ra ngoài thì icon phải quay
+ * về dấu của mình, vì lúc đó nó mới thành chuyện nguồn gốc.
+ *
+ * `PrivateExtractIcons` lấy được bản 256×256; `ExtractAssociatedIcon` chỉ cho 32×32 mờ.
+ */
+function appIcon(appExe, dir) {
+  const out = join(dir, "app-icon.ico");
+  const ps = String.raw`
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class IcoX {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+  public static extern int PrivateExtractIcons(string sz, int idx, int cx, int cy, IntPtr[] h, int[] id, int n, int flags);
+}
+"@
+foreach ($size in 256,128,64,48,32) {
+  $h = New-Object IntPtr[] 1; $id = New-Object int[] 1
+  $n = [IcoX]::PrivateExtractIcons($env:GB2_SRC, 0, $size, $size, $h, $id, 1, 0)
+  if ($n -gt 0 -and $h[0] -ne [IntPtr]::Zero) {
+    $icon = [System.Drawing.Icon]::FromHandle($h[0])
+    $fs = [IO.File]::Create($env:GB2_OUT); $icon.Save($fs); $fs.Close()
+    exit 0
+  }
+}
+exit 1
+`;
+  try {
+    execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+      { stdio: "pipe", env: { ...process.env, GB2_SRC: appExe, GB2_OUT: out } });
+    return existsSync(out) ? out : null;
+  } catch {
+    return null;   // không lấy được thì dùng dấu "B" — không chặn bản dựng vì một cái icon
+  }
+}
+
 const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc }) => String.raw`; Sinh bởi scripts/setup-exe.mjs — đừng sửa tay.
 [Setup]
 AppId={{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBOFULL}
@@ -231,7 +277,7 @@ Name: "vi"; MessagesFile: "compiler:Default.isl"
 Source: "${appSrc}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; \
   Excludes: "app.asar.disabled-by-grokbot2"
 Source: "{#SourceDir}\start-bot.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\icon.ico";      DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\*.ico";         DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Tro vao start-bot.cmd, KHONG tro thang vao exe: bon bien moi truong nam trong do.
@@ -306,7 +352,10 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
   writeFileSync(join(stagingDir, "start-bot.cmd"), START_BUNDLED.replace(/\r?\n/g, "\r\n"), "utf8");
-  const iconPath = makeIcon(stagingDir);
+  // Icon của chính ứng dụng được cài; lấy không được thì rơi về dấu "B" — một cái icon không được
+  // phép chặn cả bản dựng.
+  const iconPath = appIcon(join(appSrc, "Grok Bot.exe"), stagingDir) ?? makeIcon(stagingDir);
+  console.log(`  icon bộ cài: ${iconPath.endsWith("app-icon.ico") ? "lấy từ Grok Bot.exe" : 'dấu "B" của mình'}`);
 
   const iss = join(stagingDir, "setup-full.iss");
   writeFileSync(iss, ISS_FULL({ version, iconPath, outDir: distDir, outName, appSrc }), "utf8");
