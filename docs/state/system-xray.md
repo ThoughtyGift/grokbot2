@@ -359,6 +359,88 @@ ngay lúc chưa có một dòng đo nào là cách nhanh nhất để tự khoá
 Thứ tự này không phải theo độ khó mà theo **cái gì chặn cái gì**: không đo được thì không tính tiền
 được (1); code đỏ càng để càng đắt (2); và mọi việc mở cho nhiều người đều phải qua (3).
 
+## 6c · Test trên một máy thứ hai trước — rồi mới xây tiếp
+
+**Vì sao máy thứ hai lại là bước đầu tiên:** nó là **cái thước đo ranh giới**. Suốt dự án ta vẫn
+đoán "phần này của máy khách, phần kia của VPS". Máy thứ hai trả lời bằng thực nghiệm:
+
+> Cái gì **phải chép tay** sang máy mới → thuộc **bộ cài** hoặc thuộc **VPS**.
+> Cái gì **tự sinh lại được** → đúng là của **máy khách**.
+
+Không cần mua VPS thứ hai. Một cái laptop khác, hoặc một tài khoản Windows khác trên cùng máy, là đủ.
+
+### T0 · Mang gì sang — và cố tình KHÔNG mang gì
+
+| mang sang | dung lượng | vì sao |
+|---|---|---|
+| mã nguồn (git clone) | — | rồi `pnpm install` |
+| `pool-key.txt` | 97 byte | chìa khoá hỏi não |
+| `box-token.txt` | 48 byte | chìa khoá gọi box |
+| `._env.mts` | 862 byte | đặt `CLAUDE_POOL_KEY` · `GROKBOT2_GATEWAY_TOKEN` · `GROKBOT2_JWT_SECRET` · `GROKBOT2_BILLING_WEBHOOK_SECRET` |
+| `~/.ssh/id_ed25519` | — | hầm ssh vào box |
+
+| **cố tình KHÔNG mang** | vì sao |
+|---|---|
+| `.data/` (sổ SQLite + 8 bản `.bak`) | **để trống mới là phép thử** — xem BE có dựng lại từ số 0 được không |
+| thư mục `app/` đã vá | phải vá lại trên máy sạch — chính đó là việc bộ cài sẽ phải làm thay người dùng |
+
+Bốn file bí mật kia cộng lại **chưa tới 1 KB**. Đó đã là câu trả lời sớm cho câu hỏi phân tách: phần
+"bí mật" của hệ thống nhỏ xíu; phần cồng kềnh (537 MB app) thì ai tải cũng được.
+
+### T1 → T6 · Thứ tự chạy, mỗi bước đo một thứ
+
+| # | làm gì | ĐẠT khi | bước này **đo được điều gì** |
+|---|---|---|---|
+| **T1** | `pnpm install` → `pnpm backend`, chưa mở app | `curl /v1/health` → `{"ok":true,…}` · `.data/grokbot.sqlite` **tự sinh**, 0 bot · `register` + `login` trả token | BE có tự dựng từ con số 0 không, hay đang bám vào dữ liệu máy cũ |
+| **T2** | `pnpm web` → chat **một** lượt | có một câu trả lời thật hiện ra | chìa khoá mang sang đã đủ chưa — hay còn thứ gì chỉ máy cũ mới có |
+| **T3** | chạy `box-tunnel.ps1`, bảo bot liệt kê thư mục | bot liệt kê được `/home/box/workspace` · VNC hiện màn hình | **box không thuộc máy khách** — chỉ cần khoá ssh + token là với tới |
+| **T4** | cài app gốc sạch → `patch-client.mjs --apply` → mở bằng shortcut → `check-app.cmd` | đếm được RPC thật về backend local trong 6 giây · có file `app.asar.disabled-by-grokbot2` | bộ vá **tái lập được trên máy sạch** không — đây chính là phần bộ cài phải tự động hoá |
+| **T5** | **máy 1 và máy 2 cùng sai bot mở trình duyệt** | *(xem dưới)* | mức độ đụng nhau khi dùng chung một box |
+| **T6** | đưa BE lên VPS, máy khách trỏ vào | máy 1 và máy 2 thấy **cùng một** dữ liệu | phần nào **thật sự** phải nằm trên VPS |
+
+**T5 là phép đo đáng giá nhất, và tôi đoán trước là nó sẽ ĐỎ.** Hai máy dùng chung một hồ sơ Chrome
+và chung cookie, nên nhiều khả năng bot bên này cướp tab hoặc lẫn phiên đăng nhập của bot bên kia —
+đúng cái lỗi bạn từng gặp với Shopee. Nếu đỏ thật thì việc tách OS user không còn là lý thuyết trong
+tài liệu nữa mà là **bằng chứng hiện trường**. Cứ ghi lại đúng cái gì xảy ra, đừng sửa vội.
+
+**T6 chưa chạy được ngay.** Có hai thứ chặn, đều đo được:
+
+1. `src/index.ts:355` — `server.listen(config.port, "127.0.0.1")` **khoá cứng loopback**. Máy khác
+   không gọi vào được, dù có mở tường lửa.
+2. Ba lỗ đăng nhập ở mục 6b. Còn ở `127.0.0.1` thì vô hại; đưa lên VPS là thành thật.
+
+Nên **T6 phải chạy sau khi vá xong ba lỗ đó**, không phải trước.
+
+### Phân tách — sau khi T1–T4 xác nhận
+
+| nằm ở đâu | gồm những gì | bằng chứng từ test |
+|---|---|---|
+| **Máy khách** (tải về) | app Grok Bot đã vá (537 MB) · 4 biến môi trường lúc khởi động · shortcut | T4: vá lại được trên máy sạch |
+| **VPS / BE** | 4 tiến trình · sổ SQLite · đăng nhập · billing · điều phối box | T1: tự dựng từ 0 · T6: hai máy chung dữ liệu |
+| **Box** | màn hình ảo · Chrome + cookie · workspace · trí nhớ bot | T3: chỉ cần ssh + token, không cần gì của máy khách |
+| **Thuê ngoài** | Claude pool (`admin.halcion.vn`) | T2: một chìa khoá 97 byte là đủ |
+
+Hôm nay **cột "VPS/BE" đang nằm nhầm trên máy bạn**. Toàn bộ việc còn lại của dự án, gói gọn, là
+**dời đúng một cột đó sang VPS** — không phải viết lại hệ thống.
+
+### Thứ tự xây, sau khi test xong
+
+| # | việc | phụ thuộc | xong khi |
+|---|---|---|---|
+| **B1** | Bộ cài gói 4 việc tay (cài app → vá → đặt biến → tạo shortcut) | T4 | máy sạch: bấm một lần là chạy |
+| **B2** | Vá 3 lỗ đăng nhập | — | thu hồi được token · chặn đoán mật khẩu · khoá đăng ký |
+| **B3** | Cho BE nghe ra ngoài: đổi `listen` + CORS + HTTPS | **B2** | T6 chạy được |
+| **B4** | Tách OS user trên box | **T5** đỏ | bot của A đọc file của B bị từ chối |
+| **B5** | `host_settings` theo từng người | B3 | hai máy đặt hai múi giờ khác nhau |
+
+**Chạy song song ngay trên máy 1, không cần chờ:** bật `GROKBOT2_BILLING=warn`. Đó là **một biến môi
+trường**, không phải code, nên không đụng gì tới loạt test trên — mà bảng `usage` cần một tuần dữ
+liệu thật trước khi ai đó dám bật `enforce`.
+
+**Một điều nên nói trước:** T1–T4 nhiều khả năng sẽ lòi ra vài chỗ hardcode đường dẫn máy này mà
+hiện chưa ai thấy. Đó **là mục đích** của bài test, không phải sự cố. Mỗi chỗ như vậy tìm được sớm
+trên máy thứ hai rẻ hơn nhiều so với tìm được sau khi người dùng đầu tiên tải về.
+
 ## 7 · Vấn đề — và **vì sao** nó là vấn đề
 
 Xếp theo mức đau, không theo thứ tự tìm ra.
