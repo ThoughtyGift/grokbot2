@@ -110,7 +110,103 @@ kiểm chữ ký** token đó (đã nghiệm bằng thực nghiệm), nên backe
 **Còn thiếu để mở cho nhiều người:** app desktop hiện chỉ có MỘT token cổng cho cả máy. Muốn nhiều
 người dùng app desktop thì token phải gắn với người, không gắn với máy.
 
-## ② Tải app về và dùng bản local
+## ② Từ website đến app chạy được
+
+### Bản gốc đi thế nào
+
+```mermaid
+flowchart LR
+  W["cursor.com<br/>trang tải"] --> I["installer<br/>Grok Bot.exe"]
+  I --> L["Đăng nhập<br/>tài khoản hãng"]
+  L --> C["Cloud aiserver<br/>EnsureSandBox"]
+  C --> B["Cấp BOX cho người đó<br/>→ gateway_url + gateway_token"]
+  B --> H["Host chạy TRONG box"]
+  H --> A["App nói chuyện với host<br/>qua HTTP"]
+```
+
+Người dùng **chỉ tải FE**. Đăng nhập xong, cloud cấp một box, box chạy host, app nối vào host bằng
+địa chỉ + token mà cloud vừa đưa. **Không đăng nhập thì không có box, không có host, app rỗng.**
+
+### Bản mình đi thế nào
+
+```mermaid
+flowchart LR
+  I["Cài Grok Bot.exe<br/>từ nhà phát hành"] --> P["patch-client.mjs<br/>dời app.asar sang<br/>app.asar.disabled-by-grokbot2"]
+  P --> S["Shortcut start-app.cmd"]
+  S --> E["run.ps1 đặt 4 biến"]
+  E --> R["App nối vào backend<br/>trên CHÍNH máy đó"]
+  X["Bấm thẳng Grok Bot.exe"] -.->|"KHÔNG có biến nào"| V["Nói chuyện với server hãng<br/>+ TỰ CẬP NHẬT, xoá sạch bản vá"]
+  style V fill:#3d1417,stroke:#6e2329
+```
+
+Khác biệt nằm ở hai chỗ, và cả hai đều là hệ quả của việc **mình không phát hành app**:
+
+- **Không có website tải.** Người dùng cài app của hãng rồi mình vá tại chỗ.
+- **Không có cloud cấp box.** Backend chạy sẵn trên máy đó và tự đóng vai host; box là một VPS
+  cấu hình cứng trong `.env`, không phải thứ được cấp lúc đăng nhập.
+
+### Cái nào chạy ở máy khách, cái nào ở box
+
+Đây là bản kiểm kê đo được, không phải sơ đồ ước lệ:
+
+```mermaid
+flowchart TB
+  subgraph CL["MÁY KHÁCH (Windows) — mọi thứ thuộc về người dùng"]
+    direction TB
+    APP["Grok Bot.exe đã patch<br/>renderer + main · CDP :9222"]
+    BE["backend — 4 tiến trình<br/>BFF :8788 · runtime :8789<br/>computer :8790 · ops :8791"]
+    DBX[("SQLite .data/grokbot.sqlite<br/>bot · HỘI THOẠI · routine · đính kèm")]
+    KEY["pool-key.txt · gateway-token.txt · .env"]
+    TUN["đường hầm SSH<br/>9223 + 9301..9304"]
+    APP --> BE --> DBX
+    BE --- KEY
+    BE --> TUN
+  end
+  subgraph BX["BOX / VPS (Linux) — chỗ bot LÀM VIỆC"]
+    direction TB
+    X["Xvfb :77 + fluxbox<br/>x11vnc :5977"]
+    CH["Chrome — CDP 9223<br/>hồ sơ grok-chrome-77 (3.7 GB)<br/>COOKIE đăng nhập"]
+    DMN["exec daemon<br/>API mà backend gọi"]
+    WS["workspace/ (152 MB)<br/>file bot tạo ra"]
+    MEM["grok-memory/ · .claude/skills/"]
+    DRV["/tmp/grokbot2<br/>driver desktop + bộ ghi"]
+  end
+  POOL["Claude pool<br/>admin.halcion.vn — BỘ NÃO"]
+  TUN -->|"CDP"| CH
+  BE -->|"HTTPS exec"| DMN
+  BE -->|"mỗi lượt chat"| POOL
+  DMN --- WS & MEM & DRV
+  X --- CH
+  style CL fill:#0d2818,stroke:#2a6
+  style BX fill:#0d1f2d,stroke:#268
+```
+
+Đọc ra ba điều, và cả ba đều là quyết định chứ không phải tình cờ:
+
+1. **Hội thoại không bao giờ rời máy khách.** SQLite nằm trên Windows. Box mất thì mất *việc đang
+   dở*, không mất lịch sử chat. Bản gốc ngược lại: transcript nằm trong box và đồng bộ lên kho của
+   họ.
+2. **Box không giữ danh tính, giữ CÔNG VIỆC.** File bot viết, trí nhớ, skill, và quan trọng nhất là
+   **cookie đăng nhập Shopee/Facebook** trong hồ sơ Chrome.
+3. **Chỉ một phụ thuộc ngoài duy nhất**: pool. Hỏng pool thì chat chết, mọi thứ khác vẫn sống.
+
+Chi tiết cổng, ai được ghi SQLite, và bốn bất biến vận hành: [../architecture.md](../architecture.md).
+
+### Nếu muốn giống hãng hoàn toàn
+
+Ba mảnh còn thiếu, theo thứ tự khó tăng dần:
+
+| mảnh | việc | khó ở đâu |
+|---|---|---|
+| Trang tải | một trang + file cài | dễ — nhưng **không được phát hành lại app đã patch** (xem [legal.md](../legal.md)); chỉ phát hành bộ vá |
+| Bộ cài tự động | dời `app.asar`, tạo shortcut kèm 4 biến, ghi token | vừa — là chặng B trong tài liệu này |
+| Cloud cấp box | đăng nhập xong mới cấp VPS + phát `gateway_url`/token | khó — cần chỗ cấp máy, và là chặng C |
+
+**Mảnh thứ nhất có ràng buộc pháp lý, không phải kỹ thuật**: Grok Bot là bản đổi thương hiệu của
+Cursor (Anysphere). Phát hành lại một bản đã vá là chuyện khác hẳn với việc tự vá bản mình đã cài.
+Đường an toàn: phát hành **bộ vá + trình cài**, người dùng tự tải app gốc từ nhà phát hành.
+
+## ② bis · Bốn biến môi trường
 
 Đây là phần khác biệt lớn nhất so với hãng: **mình không phát hành app, mình vá app của họ.**
 

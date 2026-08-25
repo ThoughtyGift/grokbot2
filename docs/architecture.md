@@ -175,6 +175,10 @@ Phân vai cố ý: **`computer` giữ *dữ liệu* handoff và biết ai đang 
 và bộ đếm nhả màn hình.** Ghi rõ ở đầu `services/grokbot-computer/src/index.ts`. Trộn hai thứ vào
 một chỗ thì lúc process kia chết sẽ treo vô hạn — `e2e-computer-down.mjs` là bài kiểm cho điều đó.
 
+> Bản kiểm kê **cái nào ở máy khách, cái nào ở box** (kèm hành trình từ lúc tải app) nằm ở
+> [plan/ship-to-users.md](plan/ship-to-users.md#-từ-website-đến-app-chạy-được). Mục dưới đây là
+> chi tiết tiến trình và cổng.
+
 ## Triển khai — process nào nghe cổng nào, ai ghi dữ liệu
 
 ```mermaid
