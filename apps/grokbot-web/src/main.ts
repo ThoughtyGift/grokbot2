@@ -410,6 +410,29 @@ function reactionStrip(e: NativeEntry): HTMLElement {
   return strip;
 }
 
+/**
+ * Menu thả cảm xúc: sáu emoji hay dùng, cộng `＋` mở lưới mở rộng ngay trong menu.
+ *
+ * Tách khỏi `messageActions` vì đó là chỗ **nối dây các nút**, còn đây là **một menu tự chứa** —
+ * và menu này có luật riêng: bấm một emoji thì đóng menu, bấm `＋` thì không.
+ */
+function fillReactionMenu(bar: HTMLElement, e: NativeEntry): HTMLElement {
+  const menu = bar.querySelector<HTMLElement>(".react-menu")!;
+  const addPick = (host: HTMLElement, emoji: string) => {
+    const pick = el(`<button type="button" role="menuitem" aria-label="reaction ${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`);
+    pick.onclick = (ev) => { ev.stopPropagation(); menu.hidden = true; void toggleReaction(e.id, emoji); };
+    host.append(pick);
+  };
+  for (const emoji of REACTIONS) addPick(menu, emoji);
+  // `More emoji` — mục thứ bảy đúng như hộp 246×44 của app; bấm mở lưới mở rộng ngay trong menu.
+  const moreEmoji = el(`<button type="button" role="menuitem" class="more-emoji" aria-label="More emoji">＋</button>`);
+  const grid = el(`<div class="react-grid" hidden></div>`);
+  for (const emoji of MORE_REACTIONS) addPick(grid, emoji);
+  moreEmoji.onclick = (ev) => { ev.stopPropagation(); grid.hidden = !grid.hidden; };
+  menu.append(moreEmoji, grid);
+  return menu;
+}
+
 function messageActions(e: NativeEntry): HTMLElement {
   const at = shortTime(e.timestampMs);
   const who = e.kind === "message" ? "bạn" : (e.author?.name ?? "bot");
@@ -426,19 +449,7 @@ function messageActions(e: NativeEntry): HTMLElement {
     <button type="button" class="act more" aria-label="More message actions" title="Thêm">${icon("dots", 14)}</button>
     <div class="more-menu" hidden role="menu"></div>
   </div>`);
-  const menu = bar.querySelector<HTMLElement>(".react-menu")!;
-  const addPick = (host: HTMLElement, emoji: string) => {
-    const pick = el(`<button type="button" role="menuitem" aria-label="reaction ${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`);
-    pick.onclick = (ev) => { ev.stopPropagation(); menu.hidden = true; void toggleReaction(e.id, emoji); };
-    host.append(pick);
-  };
-  for (const emoji of REACTIONS) addPick(menu, emoji);
-  // `More emoji` — mục thứ bảy đúng như hộp 246×44 của app; bấm mở lưới mở rộng ngay trong menu.
-  const moreEmoji = el(`<button type="button" role="menuitem" class="more-emoji" aria-label="More emoji">＋</button>`);
-  const grid = el(`<div class="react-grid" hidden></div>`);
-  for (const emoji of MORE_REACTIONS) addPick(grid, emoji);
-  moreEmoji.onclick = (ev) => { ev.stopPropagation(); grid.hidden = !grid.hidden; };
-  menu.append(moreEmoji, grid);
+  const menu = fillReactionMenu(bar, e);
   wireMoreMenu(bar, e);
 
   /*
@@ -591,26 +602,36 @@ function renderRuns(entries: NativeEntry[]): HTMLElement[] {
       run = openRun(e, mine, opensBlock);
       out.push(run);
     }
-    const col = run!.querySelector(".run-col")!;
-    const node = renderEntry(e);
-    // Đuôi chỉ ở bubble đầu của một lượt MỞ ĐẦU khối — cùng điều kiện với nhãn tên.
-    if (run!.classList.contains("opens") && col.querySelectorAll(".bubble").length === 0) {
-      node.classList.add("first");
-    }
-    node.dataset.entry = e.id;
-    markSeen(node, e.id);
-    /*
-     * Giờ theo từng hàng — app gốc: `sand-row-timestamp` 12px màu `rgba(252,252,252,.4)`,
-     * `opacity: 0` mặc định, hiện khi hover hàng, đứng ở mép PHẢI của hàng (đo qua CDP).
-     * Phía hiện của mình: lượt của mình thì bubble đã ở mép phải nên giờ đứng mép trái — app
-     * đặt ở đâu cho lượt của mình chưa đo được, đây là suy đoán có ghi lại.
-     */
-    const erow = el(`<div class="erow"></div>`);
-    erow.append(node);
-    if (e.timestampMs) erow.append(el(`<time class="row-time">${escapeHtml(shortTime(e.timestampMs))}</time>`));
-    col.append(erow);
+    appendToRun(run!, e);
   }
   return out;
+}
+
+/**
+ * Thêm một bubble vào lượt đang mở.
+ *
+ * Tách khỏi `renderRuns` vì vòng ngoài lo **ranh giới lượt** còn chỗ này lo **một hàng**; trộn lại
+ * thì hai luật khác nhau (khi nào có đuôi bubble, giờ đặt ở đâu) nằm chung một chỗ.
+ */
+function appendToRun(run: HTMLElement, e: NativeEntry): void {
+  const col = run.querySelector(".run-col")!;
+  const node = renderEntry(e);
+  // Đuôi chỉ ở bubble đầu của một lượt MỞ ĐẦU khối — cùng điều kiện với nhãn tên.
+  if (run.classList.contains("opens") && col.querySelectorAll(".bubble").length === 0) {
+    node.classList.add("first");
+  }
+  node.dataset.entry = e.id;
+  markSeen(node, e.id);
+  /*
+   * Giờ theo từng hàng — app gốc: `sand-row-timestamp` 12px màu `rgba(252,252,252,.4)`,
+   * `opacity: 0` mặc định, hiện khi hover hàng, đứng ở mép PHẢI của hàng (đo qua CDP).
+   * Phía hiện của mình: lượt của mình thì bubble đã ở mép phải nên giờ đứng mép trái — app
+   * đặt ở đâu cho lượt của mình chưa đo được, đây là suy đoán có ghi lại.
+   */
+  const erow = el(`<div class="erow"></div>`);
+  erow.append(node);
+  if (e.timestampMs) erow.append(el(`<time class="row-time">${escapeHtml(shortTime(e.timestampMs))}</time>`));
+  col.append(erow);
 }
 
 /**
@@ -1719,12 +1740,13 @@ async function loadComputer(): Promise<void> {
 }
 
 /** The app itself, once a session exists (multi-tenant Phase 4b). */
-async function bootApp(): Promise<void> {
-  root.textContent = "đang tải…";
-  /*
-   * Nạp bố cục TRƯỚC lần vẽ đầu, không sau: nạp sau thì người dùng thấy sidebar nhảy từ mặc định
-   * sang bề rộng của mình — một cú giật ở mỗi lần mở app.
-   */
+/**
+ * Nạp bố cục đã lưu TRƯỚC lần vẽ đầu, không sau.
+ *
+ * Nạp sau thì người dùng thấy sidebar nhảy từ bề rộng mặc định sang bề rộng của mình — một cú giật
+ * ở mỗi lần mở app. Tách ra để thứ tự đó nhìn thấy được từ `bootApp` thay vì chìm trong `try`.
+ */
+async function restoreLayout(): Promise<void> {
   try {
     const { ui } = await api.hostSettings();
     if (typeof ui.sidebarWidth === "number") state.ui.sidebarWidth = ui.sidebarWidth;
@@ -1733,6 +1755,11 @@ async function bootApp(): Promise<void> {
     if (typeof ui.paneOpen === "boolean") state.paneOpen = ui.paneOpen;
     applyWidths();
   } catch { /* chưa có bố cục đã lưu, hoặc backend cũ: dùng mặc định */ }
+}
+
+async function bootApp(): Promise<void> {
+  root.textContent = "đang tải…";
+  await restoreLayout();
   await refreshRoster();
   await loadTranscript();
   await loadComputer();

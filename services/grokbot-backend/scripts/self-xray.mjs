@@ -309,9 +309,18 @@ console.log("── self-xray ──\n");
       .map((l) => JSON.parse(l)).filter((r) => r.script === "self-xray.mjs");
   } catch { /* chưa có */ }
   const nameOf = (line) => line.replace(/^FAIL\s+/, "").split(" — ")[0].trim();
-  const lastTwo = mine.slice(-2).map((r) => new Set((r.failLines ?? []).map(nameOf)));
+  /*
+   * Luật này KHÔNG được tính chính nó.
+   *
+   * Đo được ngày 25/08: sau khi dọn xong kích thước code và code chết, mục duy nhất còn đỏ là
+   * "không lặp lại" — đỏ vì lượt trước nó đỏ, mà lượt trước nó đỏ vì lượt trước nữa. Một luật tự
+   * quy chiếu thì không bao giờ xanh lại được, và một cổng không bao giờ xanh thì người ta tắt nó.
+   */
+  const SELF = "không lặp lại";
+  const lastTwo = mine.slice(-2)
+    .map((r) => new Set((r.failLines ?? []).map(nameOf).filter((n) => n !== SELF)));
   const repeated = lastTwo.length === 2 ? [...lastTwo[0]].filter((n) => lastTwo[1].has(n)) : [];
-  add("không lặp lại", repeated.length === 0,
+  add(SELF, repeated.length === 0,
       mine.length < 2 ? `chỉ có ${mine.length} lượt trước — chưa đủ để xét`
         : repeated.length ? `LẶP: ${repeated.join(", ")}` : "hai lượt trước không đỏ cùng chỗ",
       "cùng một mục đỏ hai lượt liền: dừng tính năng, sửa cái sinh ra nó");

@@ -24,7 +24,7 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 
 ---
 
-## 2 · Máy đo tự động — 7/9
+## 2 · Máy đo tự động — **9/9** *(25/08, sau chặng 0)*
 
 | mục | trạng thái |
 |---|---|
@@ -60,25 +60,25 @@ Thứ tự ở đây là **cái gì chặn cái gì**, không phải theo độ 
 
 Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 
-### Chặng 0 · Dọn — luật của chính dự án đang đỏ
+### Chặng 0 · Dọn — ✅ **XONG 25/08, cổng 9/9**
 
-| # | việc | kiểm bằng | ĐẠT khi |
+| # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
-| 0.1 | ✅ Tách 6 hàm dài mới thêm | `node scripts/code-size.mjs` | 28 → **22** hàm *(xong 25/08)* |
-| 0.2 | ✅ Sửa 5 bài `store.test` đỏ im lặng | `npx tsx --test src/store.test.ts` | **9/9** *(xong 25/08)* |
-| 0.3 | ⬜ Tách `httpTransport` (182 dòng) | `node scripts/code-size.mjs \| grep httpTransport` | không còn trong danh sách |
-| 0.4 | ⬜ Tách `oauthPortFor` (82) | như trên | không còn trong danh sách |
-| 0.5 | ⬜ `mcp.ts` 936 → dưới 800 | `node scripts/code-size.mjs` | file rời danh sách |
-| 0.6 | ⬜ `bootstrap.ts` 863 → dưới 800 | như trên | file rời danh sách |
-| 0.7 | ⬜ FE: `bootApp` · `messageActions` · `renderRuns` · `mdToHtml` | như trên | 4 hàm rời danh sách |
-| 0.8 | ⬜ Xoá export chết mới thêm | `npx knip --reporter symbols` | `desktop-record`, `displays`, `skills` không còn xuất thừa |
+| 0.1 | ✅ Tách 6 hàm dài (backend) | `node scripts/code-size.mjs` | 28 → 22 |
+| 0.2 | ✅ Sửa 5 bài `store.test` đỏ im lặng | `npx tsx --test src/store.test.ts` | 9/9 |
+| 0.3 | ✅ `httpTransport` 182 → 6 hàm nhỏ | `npx tsx --test src/mcp-http.test.ts` | 28/28 |
+| 0.4 | ✅ `oauthPortFor` → `pendingPort` + `tokenPort` | như trên | 28/28 |
+| 0.5 | ✅ `mcp.ts` 936 → dưới 800 | `node scripts/code-size.mjs` | rời danh sách |
+| 0.6 | ✅ `bootstrap.ts` 862 → dưới 800 | `node scripts/contract-test.mjs` | 46/46 |
+| 0.7 | ✅ FE: `mdToHtml`·`renderRuns`·`messageActions`·`bootApp` | `npx tsx --test src/markdown.test.ts` | 10/10 |
+| 0.8 | ✅ Xoá 3 export chết mới sinh | `npx knip` | về mốc 72 |
+| 0.9 | ✅ **Sửa bẫy tự quy chiếu của cổng** | `node scripts/self-xray.mjs` | **9/9** |
 
-**E2E chốt chặng 0**
-```
-npx tsx --test src/*.test.ts        → 272/272
-node scripts/contract-test.mjs      → 46/46 (hợp đồng client không đổi)
-node scripts/self-xray.mjs          → 9/9 xanh
-```
+**Kết quả chốt chặng:** 3 file > 800 · 16 hàm > 50 — **đúng mốc**. BE 272/272 · FE 16/17 · hợp
+đồng 46/46 · cổng **9/9 xanh**.
+
+> **Một bài FE đỏ, và nó KHÔNG phải do chặng này:** `avatar.test.ts` — "SVG có thân, có hai mắt".
+> Đã kiểm trên cây trước khi sửa: đỏ y hệt. Xếp vào nợ lẻ N8, đừng tính vào chặng 0.
 
 ### Chặng 1 · Đo được tiền *(chạy song song — chỉ một biến môi trường)*
 
@@ -191,6 +191,7 @@ node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 | N5 | ⬜ 6 bot xoá 24/08 — **chờ bạn quyết** cứu hay bỏ | `grokbot.sqlite.7.bak` |
 | N6 | ⬜ `bot.log` in token Telegram | đổi token + xoay log |
 | N7 | ⬜ `publishSkill` cần registry | thuộc hạ tầng |
+| N8 | ⬜ `avatar.test.ts` đỏ từ trước — "SVG có thân, có hai mắt" | `npx tsx --test apps/grokbot-web/src/avatar.test.ts` |
 
 ---
 
