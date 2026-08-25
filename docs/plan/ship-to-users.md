@@ -226,6 +226,13 @@ Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
 | # | mảnh | việc | trạng thái |
 |---|---|---|---|
 | 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](fe-clone-plan.md) |
+> **macOS chưa có, và khoảng cách đo được là ba việc.** Client gốc **có** bản Mac — bundle
+> `main.cjs` có 49 dấu vết `darwin`, 13 nhánh `process.platform === "darwin"`, cả nhánh sandbox
+> và zsh riêng. Thiếu là phía mình: `patch-client.mjs:35` chỉ tìm `%LOCALAPPDATA%\Programs\Grok Bot`
+> (Mac là `/Applications/…app/Contents/Resources`), `patch-client.mjs:206` chặn nhánh áp dụng ở
+> `win32`, và `install.cmd` + `start-bot.cmd` là shell Windows (Mac cần `.command`). Backend thì
+> **đã chạy được** — Node thuần, không có lệnh Windows nào trong đường chạy chính.
+
 | 2 | Trang tải + bộ cài | một trang, một file cài đặt gói sẵn backend | **bản đầu đã chạy** — `/` + `/download/windows` (`src/site.ts`), gói dựng bằng `scripts/build-setup.mjs`. Còn thiếu: gói **chưa mang backend** theo, người tải vẫn phải tự dựng |
 | 3 | Cấp box khi đăng nhập | đăng nhập xong mới cấp VPS + phát token | chưa — chặng C |
 

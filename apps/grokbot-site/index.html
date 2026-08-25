@@ -50,6 +50,36 @@
   .cta .btn{padding:14px 24px;font-size:15px}
   .fine{margin-top:18px;font:400 13px/1.7 var(--mono);color:var(--ink-faint)}
 
+  /* bộ chọn nền tảng — mặc định theo máy đang xem */
+  .os{display:inline-flex;gap:4px;padding:4px;border-radius:11px;border:1px solid var(--line);
+      background:var(--bg-2);margin:34px 0 0}
+  header .cta{margin-top:20px}
+  .os button{appearance:none;border:0;background:none;color:var(--ink-faint);cursor:pointer;
+      font:540 13px/1 var(--sans);padding:9px 16px;border-radius:8px;transition:.15s ease}
+  .os button:hover{color:var(--ink-dim)}
+  .os button[aria-selected="true"]{background:#232329;color:var(--ink)}
+  .os button small{display:block;font:400 10.5px/1 var(--mono);margin-top:5px;color:var(--ink-faint)}
+  .os button[aria-selected="true"] small{color:var(--hot)}
+  .btn[aria-disabled="true"]{background:var(--bg-2);color:var(--ink-faint);border-color:var(--line);
+      cursor:not-allowed}
+  .btn[aria-disabled="true"]:hover{transform:none;background:var(--bg-2)}
+  .soon{margin-top:16px;max-width:52ch;margin-inline:auto;padding:14px 18px;border-radius:11px;
+      border:1px solid var(--line);background:var(--bg-2);font-size:13.5px;color:var(--ink-dim);
+      line-height:1.65;text-align:left}
+  .soon b{color:var(--ink);font-weight:560}
+  .soon ol{margin:9px 0 0 18px;padding:0;color:var(--ink-faint);font-size:13px}
+  .soon li{margin-top:4px}
+  [hidden]{display:none !important}
+
+  /* nav dính 64px — neo phải dừng dưới nó, không chui vào gầm */
+  section,.close{scroll-margin-top:72px}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--hot);outline-offset:3px;border-radius:8px}
+  @media(prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+      transition-duration:.01ms !important}
+  }
+
   /* product mock */
   .stage{margin-top:64px;position:relative}
   .stage::before{content:"";position:absolute;inset:14% 4% -6%;
@@ -144,11 +174,26 @@
   <h1>Bot làm việc trên <em>máy tính của&nbsp;riêng&nbsp;nó</em>.</h1>
   <p class="lede">Giao việc thật, không phải câu hỏi. Bot mở trình duyệt, đăng nhập công cụ của bạn,
      làm xong rồi mang kết quả về. Hội thoại nằm trên ổ cứng của bạn.</p>
-  <div class="cta">
-    <a class="btn btn-hot" href="/download/windows">⊞&nbsp; Tải cho Windows</a>
+  <div class="os" role="tablist" aria-label="Chọn hệ điều hành">
+    <button id="os-win" role="tab" aria-selected="true" aria-controls="tai">Windows<small>SẴN SÀNG</small></button>
+    <button id="os-mac" role="tab" aria-selected="false" aria-controls="tai">macOS<small>ĐANG LÀM</small></button>
+  </div>
+  <div class="cta" id="tai">
+    <a class="btn btn-hot" id="tai-win" href="/download/windows">⊞&nbsp; Tải cho Windows</a>
+    <a class="btn btn-hot" id="tai-mac" href="#mac" aria-disabled="true" hidden>macOS — chưa có</a>
     <a class="btn btn-ghost" href="#chay">Xem cách chạy</a>
   </div>
-  <p class="fine">Windows 10/11 · ~584 MB sau khi cài · cần một VPS Linux cho phần việc tay chân</p>
+  <p class="fine" id="fine-win">Windows 10/11 · ~584 MB sau khi cài · cần một VPS Linux cho phần việc tay chân</p>
+  <div class="soon" id="mac" hidden>
+    <b>macOS chưa chạy được — và đây là chỗ còn thiếu, không phải lời hứa suông.</b>
+    Client desktop vốn có bản Mac; phần chưa có là <b>bộ cài</b> của chúng tôi. Ba việc:
+    <ol>
+      <li>tìm client trong <code>/Applications</code> thay vì thư mục của Windows</li>
+      <li>bộ vá cho <code>.app</code> — hiện chỉ chạy nhánh Windows</li>
+      <li>launcher <code>.command</code> mang 4 biến, thay cho <code>.cmd</code></li>
+    </ol>
+    Backend thì đã chạy được trên Mac sẵn — nó là Node thuần.
+  </div>
 
   <div class="stage"><div class="app">
     <div class="bar"><s></s><s></s><s></s></div>
@@ -261,6 +306,7 @@
     <tr><td>Đổi máy khác</td><td>đăng nhập là có đủ</td><td class="warn">dữ liệu ở một máy — chưa đồng bộ</td></tr>
     <tr><td>Cập nhật app</td><td>tự động</td><td class="warn">phải tắt, không thì mất bản vá</td></tr>
     <tr><td>Sao lưu</td><td>họ lo</td><td class="warn">bạn lo — bộ cài bật sẵn bản sao tự động</td></tr>
+    <tr><td>Nền tảng</td><td>Windows và macOS</td><td class="warn">mới có Windows — bộ cài Mac đang làm</td></tr>
     <tr><td>Chi phí</td><td>trả theo gói</td><td>tiền VPS cộng tiền mô hình, không qua trung gian</td></tr>
   </table>
 </div></section>
@@ -279,6 +325,26 @@
   <p class="note">Bản tự vận hành cho mục đích cá nhân và nghiên cứu. Client desktop thuộc về nhà
      phát hành của nó; bộ cài này chỉ cấu hình bản mà bạn đã tự cài trên máy mình.</p>
 </div></footer>
+
+<script>
+  // Đoán nền tảng để đỡ một cú bấm — nhưng KHÔNG khoá: người dùng Mac vẫn xem được đường Windows,
+  // và người dùng Windows vẫn đọc được vì sao Mac chưa có. `userAgentData` mới, `platform` cũ.
+  (function () {
+    const win = document.getElementById("os-win"), mac = document.getElementById("os-mac");
+    const show = (isMac) => {
+      win.setAttribute("aria-selected", String(!isMac));
+      mac.setAttribute("aria-selected", String(isMac));
+      document.getElementById("tai-win").hidden = isMac;
+      document.getElementById("tai-mac").hidden = !isMac;
+      document.getElementById("fine-win").hidden = isMac;
+      document.getElementById("mac").hidden = !isMac;
+    };
+    win.addEventListener("click", () => show(false));
+    mac.addEventListener("click", () => show(true));
+    const p = navigator.userAgentData?.platform || navigator.platform || "";
+    if (/mac/i.test(p)) show(true);
+  })();
+</script>
 
 </body>
 </html>
