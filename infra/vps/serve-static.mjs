@@ -79,10 +79,20 @@ const server = createServer((req, res) => {
    * Mở trang bằng `/?k=<token>` là mọi nút trên trang tự mang token theo (xem đoạn script cuối
    * index.html), nên trên máy mới chỉ cần dán MỘT đường link.
    */
-  if (path === "/download/windows") {
+  /*
+   * `/download/zip?k=…` — bản giải nén, cho máy bị SmartScreen chặn.
+   *
+   * SmartScreen chặn **bộ cài `.exe` chưa ký số**. Giải nén một `.zip` rồi chạy `start-bot.cmd` thì
+   * không đi qua cửa đó. Đây là lối thoát thật, không phải cách làm đẹp hơn: bản gốc của hãng cũng
+   * phát `.exe`, họ chỉ không bị chặn vì có ký số (xem docs/reverse/spike-findings.md).
+   */
+  if (path === "/download/windows" || path === "/download/zip") {
+    const wantZip = path.endsWith("zip");
     const key = new URL(req.url ?? "/", "http://x").searchParams.get("k") ?? "";
     const dir = /^[A-Za-z0-9]{8,64}$/.test(key) ? join(DIR, "full", key) : null;
-    const file = dir && existsSync(dir) ? readdirSync(dir).find((n) => n.endsWith(".exe")) : undefined;
+    const file = dir && existsSync(dir)
+      ? readdirSync(dir).find((n) => n.endsWith(wantZip ? ".zip" : ".exe"))
+      : undefined;
     if (dir && file) {
       const st = statSync(join(dir, file));
       if (req.method === "HEAD") { res.writeHead(200, { "content-length": String(st.size) }); return res.end(); }

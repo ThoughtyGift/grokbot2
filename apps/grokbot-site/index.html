@@ -357,9 +357,25 @@
     }
     const note = document.getElementById("chon-ban");
     if (note) {
+      /*
+       * Nêu luôn lối thoát SmartScreen ngay đây, không giấu xuống cuối trang.
+       *
+       * Máy lạ chạy một `.exe` chưa ký số thì Windows hiện "Windows protected your PC" và **chỉ bày
+       * ra nút Don't run** — nút "Run anyway" nằm sau chữ "More info", nên rất nhiều người tưởng là
+       * bị chặn hẳn. Bản ZIP không đi qua cửa đó.
+       */
       note.innerHTML = "<b>Bạn đang dùng đường tải đầy đủ.</b> Nút trên phát <b>bản chở cả ứng dụng"
-        + " (118 MB)</b>: máy chưa có gì cũng chạy — không cần cài client, không cần Node.";
+        + " (118 MB)</b>: máy chưa có gì cũng chạy — không cần cài client, không cần Node."
+        + "<ol><li>Windows hiện <b>“Windows protected your PC”</b>? Bấm <b>More info</b> trước —"
+        + " nút <b>Run anyway</b> chỉ hiện sau đó. Cảnh báo này là vì bộ cài chưa ký số, không phải"
+        + " vì file hỏng.</li>"
+        + '<li>Không muốn qua cửa đó: <a id="tai-zip" href="/download/zip"><b>tải bản ZIP (167 MB)</b></a>'
+        + " — giải nén rồi chạy <code>start-bot.cmd</code>, không có bộ cài nên không bị chặn.</li></ol>";
     }
+    // Nút ZIP vừa được tạo trong `note.innerHTML` ở trên, nên vòng gắn token phía trước không thấy
+    // nó — gắn tay ở đây, nếu không bấm vào sẽ rơi xuống 404.
+    const zip = document.getElementById("tai-zip");
+    if (zip) zip.href += "?k=" + encodeURIComponent(k);
     const fine = document.getElementById("fine-win");
     if (fine) fine.textContent = "Windows 10/11 · bộ cài 118 MB · không cần chuẩn bị gì trước";
   })();
