@@ -60,7 +60,15 @@ const DEFAULT_PLANS: PlanRow[] = [
 ];
 
 let seeded = false;
-function seedPlans(): void {
+
+/**
+ * Ghi bảng giá lần đầu. Gọi được nhiều lần: `INSERT OR IGNORE` + cờ `seeded`.
+ *
+ * Xuất ra vì trước đây nó **chưa từng chạy**. Hai nơi gọi nó — `ensureUser` và `getPlan` — thì
+ * không nơi nào ngoài file này gọi tới, nên bảng `plans` rỗng, `getPlan("free")` trả `null`, và
+ * hạn mức không tồn tại. Bật `warn` lúc đó cũng không đo được gì vì không có gì để so.
+ */
+export function seedPlans(): void {
   if (seeded) return;
   withDb((db) => {
     const ins = db.prepare(

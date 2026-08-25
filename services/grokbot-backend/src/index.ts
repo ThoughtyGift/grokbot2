@@ -12,7 +12,11 @@ import { config } from "./config.js";
 import { enableWriting } from "./store.js";
 enableWriting();
 import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
-import { accessVerdict, currentPeriodUsage } from "./billing.js";
+import { accessVerdict, currentPeriodUsage, billingMode, seedPlans } from "./billing.js";
+
+// Bảng giá phải có TRƯỚC lượt chat đầu tiên, không phải lúc ai đó tình cờ hỏi gói.
+// `off` thì không đụng vào sổ: một cài đặt không dùng billing không nên tự mọc thêm bảng.
+if (billingMode() !== "off") seedPlans();
 import { pluginsPortFor } from "./plugins.js";
 import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";

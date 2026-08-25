@@ -82,20 +82,26 @@ Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 > **Một bài FE đỏ, và nó KHÔNG phải do chặng này:** `avatar.test.ts` — "SVG có thân, có hai mắt".
 > Đã kiểm trên cây trước khi sửa: đỏ y hệt. Xếp vào nợ lẻ N8, đừng tính vào chặng 0.
 
-### Chặng 1 · Đo được tiền *(chạy song song — chỉ một biến môi trường)*
+### Chặng 1 · Đo được tiền — ✅ **BẬT XONG 25/08, đã có số thật**
 
-| # | việc | kiểm bằng | ĐẠT khi |
+| # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
-| 1.1 | ⬜ Seed bảng `plans` (đang **rỗng**) | `sqlite: SELECT * FROM plans` | có `free` và `pro` |
-| 1.2 | ⬜ Bật `GROKBOT2_BILLING=warn` | `curl -s localhost:8788/v1/me` | có trường `overQuota` |
-| 1.3 | ⬜ Chạy 1 tuần rồi đọc số | `SELECT COUNT(*) FROM usage` | **> 0 dòng** (nay 0) |
-| 1.4 | ⬜ Chỉ khi 1.3 có số: cân nhắc `enforce` | `GROKBOT2_BILLING=enforce` + gửi 1 tin | vượt hạn thì bị chặn, kèm lý do |
+| 1.1 | ✅ Seed bảng `plans` | `SELECT * FROM plans` | `free cap=100.000` · `pro` không giới hạn |
+| 1.2 | ✅ Bật `GROKBOT2_BILLING=warn` | `curl /v1/me` | `plan:"free"` · `overQuota:false` |
+| 1.3 | ✅ Gửi một lượt thật rồi đọc số | `SELECT * FROM usage` | **`tokens_in=46, tokens_out=2, turns=1`** (trước: 0 dòng) |
+| 1.4 | ⬜ Chỉ khi có đủ số một tuần: cân nhắc `enforce` | `GROKBOT2_BILLING=enforce` | *chưa làm — cố ý* |
 
-**E2E chốt chặng 1**
-```
-node scripts/e2e-native.mjs         → /v1/me và webhook thanh toán còn đúng
-node scripts/e2e-run.mjs            → một lượt chat vẫn chạy khi bật đo
-```
+**E2E chốt chặng:** `e2e-native` **60/60** · unit **272/272** · hợp đồng **4/4 nhóm** · self-xray **9/9**.
+
+**Vì sao bảng `plans` rỗng suốt từ đầu** — `seedPlans()` chỉ được gọi từ `ensureUser()` và
+`getPlan()`, mà **không nơi nào ngoài `billing.ts` gọi hai hàm đó**. Không ai gọi → không seed →
+`getPlan("free")` trả `null` → hạn mức không tồn tại → bật `warn` cũng chẳng có gì để so. Giờ gọi
+thẳng lúc khởi động, và **chỉ khi** `billingMode() !== "off"`: một cài đặt không dùng billing thì
+không nên tự mọc thêm bảng.
+
+> **Bẫy mất 3 phút để tìm:** sửa `.env` xong **không tự nạp lại** — trình theo dõi của `dev` chỉ nhìn
+> `src/`. Đo ra mới thấy: BFF khởi động **10:54:44**, `.env` sửa **10:55:05**. Muốn nạp thì `touch`
+> một file trong `src/`, hoặc khởi động lại `pnpm backend`.
 
 ### Chặng 2 · Vá ba lỗ đăng nhập — bắt buộc trước khi rời `127.0.0.1`
 
