@@ -226,12 +226,21 @@ Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
 | # | mảnh | việc | trạng thái |
 |---|---|---|---|
 | 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](fe-clone-plan.md) |
-> **macOS chưa có, và khoảng cách đo được là ba việc.** Client gốc **có** bản Mac — bundle
-> `main.cjs` có 49 dấu vết `darwin`, 13 nhánh `process.platform === "darwin"`, cả nhánh sandbox
-> và zsh riêng. Thiếu là phía mình: `patch-client.mjs:35` chỉ tìm `%LOCALAPPDATA%\Programs\Grok Bot`
-> (Mac là `/Applications/…app/Contents/Resources`), `patch-client.mjs:206` chặn nhánh áp dụng ở
-> `win32`, và `install.cmd` + `start-bot.cmd` là shell Windows (Mac cần `.command`). Backend thì
-> **đã chạy được** — Node thuần, không có lệnh Windows nào trong đường chạy chính.
+> **macOS: đã có gói, chưa thử trên máy thật.** Client gốc **có** bản Mac — `main.cjs` có 49 dấu vết
+> `darwin`, 13 nhánh `process.platform === "darwin"`, cả nhánh sandbox và zsh riêng. Phía mình giờ
+> cũng có: đường dẫn tách sang [`infra/patches/client-paths.mjs`](../../infra/patches/client-paths.mjs)
+> (`/Applications/Grok Bot.app/Contents/Resources`), chốt "app đang chạy" dùng `pgrep` thay vì chỉ
+> `tasklist`, và `/download/mac` phát gói riêng có `install.command` + `start-bot.command`.
+>
+> Ba điều **chưa** xong, nói thẳng: (1) **chưa ai chạy trên một máy Mac thật** — chỉ có 6 bài kiểm
+> tự động cho phần đường dẫn; (2) zip dựng trên Windows **không giữ cờ `+x`**, nên bước đầu phải
+> `bash install.command`; (3) tên file thực thi trong `Contents/MacOS` lấy bằng `ls | head -1` chứ
+> không đọc `CFBundleExecutable` — đúng trong mọi bó .app một-thực-thi, nhưng là suy đoán.
+>
+> Một sửa lỗi kèm theo, đáng ghi vì nó là lỗi **an toàn**: chốt "đừng vá khi app đang chạy" trước
+> đây bọc trong `if (process.platform === "win32")`. Trên Mac chốt đó **không tồn tại** chứ không
+> phải không cần — vá đè lên client đang mở để lại asar gốc nằm cạnh `resources/app` đã vá, và app
+> boot bản gốc im lặng.
 
 | 2 | Trang tải + bộ cài | một trang, một file cài đặt gói sẵn backend | **bản đầu đã chạy** — `/` + `/download/windows` (`src/site.ts`), gói dựng bằng `scripts/build-setup.mjs`. Còn thiếu: gói **chưa mang backend** theo, người tải vẫn phải tự dựng |
 | 3 | Cấp box khi đăng nhập | đăng nhập xong mới cấp VPS + phát token | chưa — chặng C |

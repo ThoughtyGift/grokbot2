@@ -26,17 +26,26 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { PATCHES } from "../patches/index.mjs";
+import { clientPaths } from "../patches/client-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
 const STATE_FILE = join(REPO, "docs", "state", "client-patch-state.json");
 
-const APP_DIR = process.env.GROKBOT2_CLIENT_DIR
-  ?? join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot");
-const RES = join(APP_DIR, "resources");
-const ASAR = join(RES, "app.asar");
-const ASAR_ASIDE = join(RES, "app.asar.disabled-by-grokbot2");
-const APP_UNPACKED = join(RES, "app");
+// Đường dẫn theo hệ điều hành sống ở ../patches/client-paths.mjs — tách ra để kiểm thử được,
+// vì trên Windows không có cách nào chạy thử nhánh macOS ngoài việc giả lập.
+const PATHS = clientPaths();
+const APP_DIR = PATHS.appDir;
+const RES = PATHS.res;
+const ASAR = PATHS.asar;
+const ASAR_ASIDE = PATHS.asarAside;
+const APP_UNPACKED = PATHS.appUnpacked;
+
+if (!PATHS.supported) {
+  console.error(`chưa biết client nằm đâu trên ${PATHS.platform}.`);
+  console.error("Đặt GROKBOT2_CLIENT_DIR trỏ vào thư mục cài đặt rồi chạy lại.");
+  process.exit(2);
+}
 
 /**
  * `--dry-run` is `--apply` minus the last three steps: it extracts the vendor bundle, applies the
@@ -203,12 +212,20 @@ if (v.fatal) {
 }
 
 // A running client holds the archive open, and every failure mode below starts there.
-if (!DRY && process.platform === "win32") {
-  const ps = spawnSync("tasklist", ["/FI", "IMAGENAME eq Grok Bot.exe", "/NH"], { encoding: "utf8" });
-  if (/Grok Bot\.exe/i.test(ps.stdout ?? "")) {
-    console.error("Grok Bot is running — close it first. It holds app.asar open, and a half-finished");
-    console.error("apply leaves the vendor asar beside a patched resources/app, which boots vendor silently.");
-    process.exit(4);
+//
+// Trước đây chốt này chỉ chạy trên win32 — nghĩa là trên máy Mac nó KHÔNG tồn tại, chứ không phải
+// không cần. Giờ mỗi hệ có lệnh kiểm riêng; hệ nào chưa có thì nói thẳng là không kiểm được.
+if (!DRY) {
+  const probe = PATHS.running;
+  if (!probe) {
+    console.log(`  note không kiểm được client có đang chạy không trên ${PATHS.platform} — tự đóng app trước.`);
+  } else {
+    const ps = spawnSync(probe.cmd, probe.args, { encoding: "utf8" });
+    if (probe.match.test(ps.stdout ?? "")) {
+      console.error("Grok Bot is running — close it first. It holds app.asar open, and a half-finished");
+      console.error("apply leaves the vendor asar beside a patched resources/app, which boots vendor silently.");
+      process.exit(4);
+    }
   }
 }
 

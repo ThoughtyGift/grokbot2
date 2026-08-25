@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-const { handleSite, newestSetup, SETUP_PREFIX } = await import("./site.js");
+const { handleSite, newestSetup, SETUP_PREFIX, SETUP_KINDS } = await import("./site.js");
 
 /** `ServerResponse` giả, chỉ giữ đúng ba thứ bài kiểm cần đọc. */
 function fakeRes(): ServerResponse & { code: number; headers: Record<string, string>; body: string } {
@@ -34,7 +34,9 @@ const GET = { method: "GET" } as IncomingMessage;
 const HEAD = { method: "HEAD" } as IncomingMessage;
 
 test("route lạ trả false — router đi tiếp, không nuốt /v1", async () => {
-  for (const path of ["/v1/login", "/gw/api/listAgents", "/admin", "/downloads", "/download/mac"]) {
+  // /download/linux đứng đây có chủ ý: chưa có bản Linux, nên nó phải rơi xuống 404 của router
+  // chứ không phải một trang tải rỗng.
+  for (const path of ["/v1/login", "/gw/api/listAgents", "/admin", "/downloads", "/download/linux"]) {
     const res = fakeRes();
     assert.equal(await handleSite(path, GET, res), false, `${path} không được nuốt`);
     assert.equal(res.code, 0, `${path} không được trả lời`);
@@ -67,6 +69,25 @@ test("chưa dựng gói thì 503 kèm cách dựng, không phải 404 trống", 
     assert.match(res.headers["content-disposition"], /attachment; filename="/, "phải tải về, không mở trong tab");
     assert.match(res.headers["content-type"], /application\/zip/);
   }
+});
+
+test("/download/mac phát gói Mac, không phải gói Windows", async () => {
+  const res = fakeRes();
+  assert.equal(await handleSite("/download/mac", HEAD, res), true);
+  if (res.code === 200) {
+    assert.match(res.headers["content-disposition"], /bot-noi-bo-setup-mac/,
+      "người dùng Mac tải nhầm gói Windows thì lỗi rất khó hiểu");
+  } else {
+    assert.equal(res.code, 503);
+  }
+});
+
+test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => {
+  const dir = mkdtempSync(join(tmpdir(), "setup2-"));
+  writeFileSync(join(dir, `${SETUP_KINDS.windows}-20260825.zip`), "win");
+  writeFileSync(join(dir, `${SETUP_KINDS.mac}-20260825.zip`), "mac-dai-hon");
+  assert.equal(newestSetup(dir, SETUP_KINDS.windows)?.size, "win".length);
+  assert.equal(newestSetup(dir, SETUP_KINDS.mac)?.size, "mac-dai-hon".length);
 });
 
 test("newestSetup chọn gói mới nhất và bỏ qua file lạ", () => {
