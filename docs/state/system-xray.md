@@ -268,6 +268,97 @@ RA  : trang HTML — "còn cấp thêm được 11 bot", RAM 6.7/21.5 GB, đĩa 
 
 ---
 
+## 6b · Ba mảng bạn hỏi: đăng nhập · trình duyệt/Cloudflare · thanh toán
+
+### A · Đăng nhập / đăng xuất — **CÓ, và đang chạy thật**
+
+Gọi thẳng vào backend đang chạy lúc viết dòng này:
+
+| gọi | trả về |
+|---|---|
+| `POST /v1/register` mật khẩu `"abc"` | **400** · `{"error":"password must be at least 8 characters"}` |
+| `POST /v1/login` sai mật khẩu | **401** · `{"error":"invalid email or password"}` |
+| `GET /v1/me` không token | **401** · `{"error":"unauthorized"}` |
+| `POST /v1/logout` | **204** |
+
+Mật khẩu lưu bằng **scrypt + muối ngẫu nhiên riêng từng người**, so sánh bằng `timingSafeEqual`
+(không thư viện ngoài). Trong sổ hiện có **đúng 1 tài khoản**: `trinhdung3110@gmail.com`, gói `free`.
+
+Lưu ý có **hai đường đăng nhập khác nhau**, dễ nhầm:
+- **App Grok Bot** — không có mật khẩu, dùng một token trong file trên máy.
+- **Web local** — email + mật khẩu như trên.
+
+**Ba lỗ, chỉ lộ khi mở cho nhiều người:**
+
+1. **Đăng xuất không thu hồi gì.** Token sống **365 ngày**; mất token là mất tài khoản trong một năm.
+2. **Không giới hạn số lần đoán mật khẩu** — tìm cả mã nguồn, không có dòng nào chặn.
+3. **`/v1/register` mở cho bất kỳ ai gọi được cổng** — không mã mời, không công tắc tắt.
+
+Hôm nay ba lỗ này **chưa nguy hiểm**, vì cả 4 cổng chỉ nghe `127.0.0.1` (đo bằng `netstat`) — máy
+khác không với tới được. Nhưng đúng ba việc này **phải xong trước khi rời máy cá nhân lên VPS**.
+
+### B · Trình duyệt & Cloudflare — **có trình duyệt thật, KHÔNG có xử lý Cloudflare**
+
+Cái đang có:
+- **16 công cụ trình duyệt**, lái một **Chrome thật** trên box (không phải headless).
+- **Hồ sơ riêng giữ cookie**: `/home/box/.config/grok-chrome-77/Default/Cookies` — đăng nhập Shopee
+  một lần, lần sau vẫn còn.
+
+Cái **không có**: quét toàn bộ mã nguồn, **0 dòng** nhắc tới `cloudflare` · `turnstile` · `captcha` ·
+`stealth`.
+
+Nghĩa thực tế: **gặp trang chặn thì bot không biết mình đang bị chặn.** Nó chỉ thấy một trang lạ rồi
+loay hoay. Cách duy nhất hiện nay là `computer_use` bấm tay vào ô "Tôi không phải robot" — làm được,
+vì đó là Chrome thật trên màn hình thật, nhưng **không có gì tự động**.
+
+**KHÔNG CHẮC CHẮN:** Cloudflare có nhận ra Chrome của mình là máy điều khiển không. Chrome khởi động
+**không** có cờ chống nhận diện, và bật CDP thường làm lộ `navigator.webdriver` — nhưng **tôi chưa
+thử vào một trang có Cloudflare thật**. Phép thử này mất khoảng 5 phút và nên làm trước khi bàn cách
+chống.
+
+> Nếu "CF Browser" ý bạn là **Cloudflare Browser Rendering** (thuê trình duyệt của Cloudflare thay vì
+> Chrome trên box): **chưa có**, và đổi sang nó sẽ **mất phần đáng giá nhất** — màn hình nhìn được
+> qua VNC và cookie đăng nhập giữ lại giữa các phiên.
+
+**Một phát hiện ngoài lề, đo được lúc kiểm tra:** Chrome đang chạy trên box **không phải của
+grokbot2** — nó là `--user-data-dir=/root/flow-vps-profile`, chạy **dưới quyền root**, qua proxy
+`127.0.0.1:8888`, mở `labs.google/fx/flow`. Box đang dùng chung với việc khác của bạn, và tiến trình
+đó **quyền cao hơn bot**.
+
+### C · Thanh toán — **mã có đủ, nhưng chưa từng chạy một lần nào**
+
+Đo trong sổ:
+
+| đo | kết quả |
+|---|---|
+| bảng `usage` (đếm token) | **0 dòng** |
+| bảng `plans` (bảng giá) | **rỗng** |
+| `GROKBOT2_BILLING` | không đặt → **`off`** |
+
+Đã viết xong: đếm token mỗi lượt · hạn mức theo gói (`free` 100.000 token/tháng) · chặn khi vượt ·
+webhook `/v1/billing/webhook` cho nhà thanh toán báo về · ba mức `off | warn | enforce`.
+
+Chưa có: **nút trả tiền trong app**, **trang thanh toán thật**, và **chưa ai bật `warn`**.
+
+Nói thẳng: **billing đang là mã chết** — không phải hỏng, mà là **chưa bật**. Muốn biết nó đúng hay
+sai thì bật `warn` một tuần, xem bảng `usage` có mọc số không, rồi mới dám `enforce`. Bật `enforce`
+ngay lúc chưa có một dòng đo nào là cách nhanh nhất để tự khoá mình ra ngoài.
+
+### Việc tiếp theo — xếp theo thứ tự nên làm
+
+| # | việc | vì sao là bây giờ | xong khi |
+|---|---|---|---|
+| 1 | **Bật billing mức `warn`** | `usage` 0 dòng nghĩa là **chưa từng đo được gì**; không có số thì không có gì để tính tiền | sau 1 tuần bảng `usage` có dòng thật, có cảnh báo khi vượt |
+| 2 | **Dọn code đang ĐỎ** | luật của chính dự án đang đỏ **hai lượt liền** — luật nói dừng thêm tính năng | `self-xray` xanh 9/9 |
+| 3 | **Vá 3 lỗ đăng nhập** | mất một ngày, và **bắt buộc** trước khi rời `127.0.0.1` | token thu hồi được · đoán sai 5 lần bị chặn · đăng ký cần bật mới mở |
+| 4 | **Thử Cloudflare thật** rồi thêm bước nhận biết trang chặn | rẻ, và đang đoán mò | bot **nói được** "tôi đang bị chặn" thay vì loay hoay |
+| 5 | `host_settings` tách theo người | đang **một dòng dùng chung** cho tất cả | mỗi người một dòng cài đặt |
+| 6 | Tách OS user trên box | cookie và trí nhớ đang dùng chung | bot của A đọc file của B **bị từ chối** |
+| 7 | FE routines | mảng trống lớn nhất của giao diện | tạo/sửa routine ngay trên web |
+
+Thứ tự này không phải theo độ khó mà theo **cái gì chặn cái gì**: không đo được thì không tính tiền
+được (1); code đỏ càng để càng đắt (2); và mọi việc mở cho nhiều người đều phải qua (3).
+
 ## 7 · Vấn đề — và **vì sao** nó là vấn đề
 
 Xếp theo mức đau, không theo thứ tự tìm ra.
