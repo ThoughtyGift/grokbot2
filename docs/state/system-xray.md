@@ -70,6 +70,66 @@ Box hỏng thì mất việc đang dở, **không mất lịch sử chat**.
 
 ---
 
+## 2b · Vận hành hàng ngày — khác app gốc chỗ nào
+
+Đây là phần người dùng **cảm nhận được**, không phải phần trong code.
+
+| việc | app gốc | bản này |
+|---|---|---|
+| **Bật app** | bấm đúp là xong | phải **bật backend trước**, rồi mở bằng **shortcut** — bấm đúp thẳng vào app là nó nói chuyện với server hãng |
+| **Ai nuôi backend** | hãng nuôi, nằm trong box của họ | **máy bạn nuôi** — 4 tiến trình, tốn ~2 GB RAM |
+| **Cập nhật app** | tự động, im lặng | **phải TẮT** (`SAND_DISABLE_UPDATES`) — không tắt thì bản vá bị xoá sạch |
+| **Box** | cấp lúc đăng nhập, **ngủ đông khi rảnh** | VPS cố định ghi trong `.env`, **chạy 24/7 và bạn trả tiền cả lúc không dùng** |
+| **Sao lưu** | hãng tự đồng bộ lên kho của họ | `.data/*.bak` trên máy bạn — **đã cứu thật 2 lần trong ngày 25/08** |
+| **Đổi máy** | đăng nhập máy nào cũng có đủ dữ liệu | ❌ **dữ liệu nằm trên MỘT máy** — mở laptop khác là trắng trơn |
+| **Đăng nhập** | tài khoản hãng, có mật khẩu | một chuỗi token trong file trên máy |
+| **Mất mạng** | app rỗng (host nằm ở xa) | lịch sử chat **vẫn đọc được** vì nằm trong SQLite cục bộ; chat và box thì chết |
+
+Ba điều đáng nhớ nhất từ bảng này:
+
+1. **Bạn được cái riêng tư, trả bằng cái tiện.** Dữ liệu không rời máy — nhưng đổi máy là mất, và
+   không ai sao lưu hộ.
+2. **Box tính tiền cả lúc ngủ.** Hãng ngủ đông box khi rảnh (`AdminHibernateSandBox`); bản này chưa
+   có, nên VPS chạy suốt.
+3. **Cập nhật là kẻ thù.** Một lần app tự cập nhật là bản vá biến mất và app quay về server hãng.
+
+**KHÔNG CHẮC CHẮN:** dòng "mất mạng" — lịch sử chắc chắn đọc được vì nó nằm trong SQLite trên máy,
+nhưng **tôi chưa thử rút mạng** để xem app có boot trọn vẹn không.
+
+## 2c · Tải về rồi thì máy bạn giữ những gì
+
+Đo trên chính máy này:
+
+```
+Ổ ĐĨA — khoảng 584 MB
+├── App đã cài .......................... 537 MB
+│   ├── app/ (bản đã vá, đang chạy) ..... 93 MB
+│   ├── app.asar.unpacked ............... 47 MB
+│   └── app.asar.disabled-by-grokbot2 ... 46 MB   ← bản gốc, dời sang một bên, KHÔNG được xoá
+└── .data/ .............................. 47 MB
+    ├── grokbot.sqlite .................. 2.1 MB  ← TOÀN BỘ hội thoại của bạn
+    ├── 8 bản sao lưu .bak .............. ~17 MB  ← thứ đã cứu dữ liệu 2 lần
+    ├── attachments/ .................... 2.5 MB
+    └── secrets/ · oauth/ · mcp/ ........ <1 MB   ← khoá đăng nhập plugin
+
+RAM khi đang chạy — khoảng 2.9 GB
+├── App Grok Bot ........................ 924 MB
+└── Backend (4 tiến trình) .............. ~1.96 GB
+    └── tiến trình lớn nhất 1.030 MB — giữ hội thoại trong bộ nhớ
+```
+
+**Ba file không bao giờ được xoá:**
+
+| file | mất thì sao |
+|---|---|
+| `.data/grokbot.sqlite` | mất sạch bot và hội thoại |
+| `pool-key.txt` | bot không trả lời được nữa (không hỏi được não) |
+| `app.asar.disabled-by-grokbot2` | không gỡ bản vá về được, phải cài lại app |
+
+**Một điều đáng chú ý:** backend ăn **~2 GB RAM** — nhiều hơn cả app. Phần lớn nằm ở tiến trình giữ
+hội thoại trong bộ nhớ. Máy 8 GB chạy được nhưng sẽ thấy chật; đó là cái giá của việc **backend nằm
+trên máy bạn thay vì trên mây**.
+
 ## 3 · Một tin nhắn đi qua đâu
 
 Ví dụ thật: bạn gõ **"Lập hoá đơn cho khách Trần Văn B: 2 hộp nến 120000"**
