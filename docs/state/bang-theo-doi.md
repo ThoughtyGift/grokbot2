@@ -141,7 +141,7 @@ Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
 | 3.1b | ✅ Đăng ký **tự mở cho người đầu tiên** (nhánh không unit-test được) | trên sổ trắng | người đầu **200** · người thứ hai **403** |
 | 3.2 | ⬜ **T2** một lượt chat trên máy khác | — | *chờ máy thứ hai — **rào cản kỹ thuật đã gỡ**, xem dưới* |
 | 3.3 | ⬜ **T3** box qua hầm từ máy khác | — | *chờ máy thứ hai* |
-| 3.4 | ⬜ **T4** `.exe` trên máy sạch | — | *chờ máy sạch* |
+| 3.4 | 🟡 **T4** bộ cài `.exe` chở app | cài im lặng `/DIR=C:\BotNoiBo`, đọc folder | **cài + folder + chạy: xong** · **boot đầy đủ: chờ máy sạch** — xem dưới |
 | 3.5 | ⬜ **T5** hai máy một box | — | *bắt buộc hai máy thật* |
 
 **Bộ cài chở cả app đã có (25/08)** — `build-setup.mjs --with-app` ra một file **118 MB**, gần đúng
@@ -165,6 +165,24 @@ dẫn ghim `.data` mặc định thay vì thư mục đang dùng:
 
 Cả ba giờ đi qua **một nguồn duy nhất**: `store.dataDir()`. Chạy lại: `[]` bot, không dòng
 `restored` nào.
+
+#### T4 (25/08): bộ cài chở app ra đúng folder như hãng, nhưng boot đầy đủ cần máy sạch
+
+**Chứng minh được, đo tận nơi:**
+- Cài im lặng vào `C:\BotNoiBo` → **827 file · 499 MB**, cấu trúc **y hệt app gốc**: `Grok Bot.exe` ·
+  `resources/` · `locales/` · các `.dll` · `resources.pak` … cộng `start-bot.cmd` + `backend.txt` của
+  mình. `resources/app` đã vá, **không còn `app.asar` gốc**. `backend.txt` = `http://localhost:8788`.
+- `Grok Bot.exe` trong folder đó **khởi động được** — CDP lên (Chrome/149).
+
+**Chưa chứng minh được trên máy này, và vì sao:** app vừa cài **khởi động rồi thoát ngay**, 0 lượt
+RPC. Gần như chắc do **Electron single-instance lock** — máy này đã có sẵn bản trong `Programs\Grok Bot`
+và userData dùng chung, hai bản đá nhau. Đúng cái T4 sinh ra để bắt: **"máy chưa từng có app này"**
+không giả lập được trên máy đã có nó. Cần một máy sạch thật.
+
+**Một lỗi của tôi, đã ghi để khỏi lặp:** cài im lặng lần đầu treo 0 file — tôi đoán "đường dẫn dài",
+sai. `install.log` chỉ ra: **Git Bash biến `/VERYSILENT` thành đường dẫn POSIX** (`C:/Program Files/Git/VERYSILENT`),
+bộ cài không nhận cờ nên mở wizard chờ bấm. Chạy đúng: `MSYS_NO_PATHCONV=1`, hoặc qua một file `.cmd`,
+hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Người dùng cuối không gặp lỗi này.
 
 ### Chặng 4 · Đưa BE ra khỏi máy cá nhân *(cần Chặng 2 xong)*
 
