@@ -24,6 +24,8 @@ import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js
 import { oauthAccessToken, recordRefusal, refusalFor, oauthPortFor } from "./mcp-oauth.js";
 import { warmAuthUrl, refreshAccessToken } from "./oauth-client.js";
 import { currentOwner } from "./request-context.js";
+import { MCP_PROTOCOL_VERSION, START_TIMEOUT_MS, CALL_TIMEOUT_MS, type Transport } from "./mcp-shared.js";
+import { httpTransport } from "./mcp-http-transport.js";
 import { DEFAULT_USER } from "./auth.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -58,11 +60,6 @@ function configPathFor(owner: string): string {
  * handshake completes on 2024-11-05, 2025-06-18 and 2026-07-28 alike, so raising it costs nothing
  * there and is required here.
  */
-const MCP_PROTOCOL_VERSION = "2025-06-18";
-
-/** A server that will not answer must not hang the turn behind it. */
-const START_TIMEOUT_MS = 60_000;
-const CALL_TIMEOUT_MS = 60_000;
 
 /**
  * `cwd` matters more than it looks.
@@ -102,14 +99,6 @@ interface McpResource { uri: string; name?: string; description?: string; mimeTy
  * `send` is fire-and-forget: a reply arrives later through `deliver`, exactly as it did when the only
  * transport was a pipe. That is what lets `rpc()` stay unchanged across both.
  */
-interface Transport {
-  kind: "stdio" | "http";
-  send(msg: unknown): void;
-  close(): void;
-  /** null while usable; a human-readable reason once it is not. */
-  dead(): string | null;
-}
-
 interface Live {
   transport: Transport;
   pending: Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>;
@@ -327,211 +316,6 @@ function stdioTransport(
     send: (msg) => { proc.stdin.write(`${JSON.stringify(msg)}\n`); },
     close: () => { proc.kill(); },
     dead: () => (proc.exitCode == null ? null : `Exited with code ${proc.exitCode}`),
-  };
-}
-
-/**
- * MCP over HTTP — Streamable HTTP first, legacy HTTP+SSE when the server is older.
- *
- * The vendor client only ever connects REMOTE http/sse servers for plugins, and this client could
- * only spawn processes, so anything remote needed `npx mcp-remote <url>` as a stdio shim: an extra
- * Node process per server, a download on first run, and its own copy of the auth state.
- *
- * STREAMABLE HTTP (2025-03-26 and later), the default:
- *   - POST with `accept: application/json, text/event-stream`; the server picks which it sends.
- *   - A reply may arrive as one JSON object, or as an SSE stream of them, because a server streams
- *     when it wants to send progress notifications ahead of the result.
- *   - `Mcp-Session-Id` comes back on initialize and must be echoed on every later request.
- *   - A notification (no `id`) is answered with 202 and no body, so nothing is delivered for it.
- *
- * LEGACY HTTP+SSE (2024-11-05): two endpoints. GET the URL, keep that stream open, read a first
- * `event: endpoint` naming a SECOND url; POST there and get 202 back, while the actual replies come
- * down the stream that is still open. Entered when the row says `"type": "sse"`, or on a 404/405 —
- * which is what a legacy server answers when handed a Streamable HTTP POST.
- *
- * 401 is reported as itself. Remote servers advertise OAuth through `WWW-Authenticate`, and repeating
- * that header names the fix; guessing at a token here would only produce a second, vaguer failure.
- */
-function httpTransport(
-  name: string,
-  url: string,
-  headers: Record<string, string>,
-  typeHint: string | undefined,
-  deliver: (msg: any) => void,
-  failAll: (why: string) => void,
-  /** Given the reason on a 401, and given null as soon as a request succeeds. */
-  onAuth: (why: string | null) => void,
-): Transport {
-  let sessionId: string | null = null;
-  let negotiated: string | null = null;
-  let closed: string | null = null;
-  /**
-   * Which HTTP dialect to open with.
-   *
-   * `"type": "sse"` in the row is explicit. Failing that, a path ending in `/sse` is the convention
-   * every legacy server follows (supergateway, mcp-proxy, and the servers written before the
-   * transport was replaced), and guessing from it is worth doing because the 404/405 fallback below
-   * cannot be relied on alone: measured against supergateway, a POST to its `/sse` neither answers
-   * nor refuses — it just hangs, so there is no status to react to.
-   */
-  const looksLegacy = /sse/i.test(typeHint ?? "") || /\/sse\/?$/i.test(new URL(url).pathname);
-  let mode: "unknown" | "streamable" | "legacy" = looksLegacy ? "legacy" : "unknown";
-  let postUrl = url;
-  let legacyReady: Promise<void> | null = null;
-  // The legacy GET stays open for the whole session, so closing has to be able to cut it. Without
-  // this the reader keeps the event loop alive and the process never exits — which is how it was
-  // found: the transport tests passed and then hung until the harness killed them.
-  const legacyAbort = new AbortController();
-
-  const unauthorized = (res: Response): Error => {
-    const how = res.headers.get("www-authenticate");
-    onAuth(how ?? "The server requires authentication (401)");
-    return new Error(
-      `MCP server "${name}" refused the request (401)` +
-      (how ? ` — it wants OAuth: ${how}` : "") +
-      ". Set its credential in the plugin setup, or give it an Authorization header.",
-    );
-  };
-
-  /**
-   * Read an SSE body, handing each complete event to `on`.
-   *
-   * Both modes need this, for different spans: Streamable HTTP uses it for one response, legacy for
-   * the whole session — so the event NAME matters here, where it did not before.
-   */
-  const readSse = async (res: Response, on: (event: string, data: string) => void): Promise<void> => {
-    const reader = res.body?.getReader();
-    if (!reader) return;
-    const dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let sep: number;
-      // Events are separated by a blank line; CRLF is legal too.
-      while ((sep = buf.search(/\r?\n\r?\n/)) !== -1) {
-        const raw = buf.slice(0, sep);
-        buf = buf.slice(sep).replace(/^\r?\n\r?\n/, "");
-        const lines = raw.split(/\r?\n/);
-        const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim() || "message";
-        const data = lines.filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
-        if (data) on(event, data);
-      }
-    }
-  };
-
-  /** Open the legacy stream and resolve once it has named the POST endpoint. */
-  const openLegacyStream = (): Promise<void> => {
-    if (legacyReady) return legacyReady;
-    legacyReady = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`MCP server "${name}" sent no endpoint event`)),
-        START_TIMEOUT_MS,
-      );
-      void (async () => {
-        try {
-          const res = await fetch(url, { headers: { accept: "text/event-stream", ...headers }, signal: legacyAbort.signal });
-          if (res.status === 401) { clearTimeout(timer); reject(unauthorized(res)); return; }
-          if (!res.ok) { clearTimeout(timer); reject(new Error(`MCP server "${name}" answered HTTP ${res.status}`)); return; }
-          // Runs for the life of the session: this stream carries every reply.
-          await readSse(res, (event, data) => {
-            if (event === "endpoint") {
-              // Usually a relative path carrying a session id, so resolve it against the base.
-              postUrl = new URL(data, url).toString();
-              clearTimeout(timer);
-              resolve();
-              return;
-            }
-            try { deliver(JSON.parse(data)); } catch { /* comment or keep-alive */ }
-          });
-          if (!closed) failAll(`MCP server "${name}" closed the stream`);
-        } catch (e) {
-          clearTimeout(timer);
-          reject(e as Error);
-        }
-      })();
-    });
-    return legacyReady;
-  };
-
-  const post = async (msg: any): Promise<void> => {
-    if (mode === "legacy") {
-      await openLegacyStream();
-      const res = await fetch(postUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify(msg),
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-      });
-      if (res.status === 401) throw unauthorized(res);
-      if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
-      return;                                   // the reply comes down the open stream
-    }
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-        ...(negotiated ? { "mcp-protocol-version": negotiated } : {}),
-        ...headers,
-      },
-      body: JSON.stringify(msg),
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-    });
-
-    // A legacy server has no POST route at all. Switch once, then replay this message.
-    if ((res.status === 404 || res.status === 405) && mode === "unknown") {
-      mode = "legacy";
-      return post(msg);
-    }
-    mode = "streamable";
-
-    const sid = res.headers.get("mcp-session-id");
-    if (sid) sessionId = sid;
-
-    if (res.status === 401) throw unauthorized(res);
-    if (res.ok) onAuth(null);   // whatever was wrong with the credential is no longer wrong
-    if (res.status === 202 || res.status === 204) return;   // notification accepted, no body
-    if (!res.ok) throw new Error(`MCP server "${name}" answered HTTP ${res.status}`);
-
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.includes("text/event-stream")) {
-      await readSse(res, (_e, data) => { try { deliver(JSON.parse(data)); } catch { /* keep-alive */ } });
-      return;
-    }
-
-    const text = (await res.text()).trim();
-    if (!text) return;
-    // A server may batch replies into an array.
-    for (const m of ((b) => (Array.isArray(b) ? b : [b]))(JSON.parse(text))) deliver(m);
-  };
-
-  return {
-    kind: "http",
-    send: (msg) => {
-      const method = (msg as { method?: string })?.method;
-      // Fire-and-forget, like the pipe write it replaces. A transport-level failure has to become a
-      // rejection for THIS call, or `rpc` would sit until its timeout with no reason to report.
-      void post(msg).catch((e: Error) => {
-        const id = (msg as { id?: number })?.id;
-        if (id == null) return;                    // a notification: nothing is waiting on it
-        deliver({ id, error: { message: e.message } });
-      });
-      if (method === "initialize") negotiated = MCP_PROTOCOL_VERSION;
-    },
-    close: () => {
-      closed = "Closed";
-      legacyAbort.abort();          // cut the long-lived GET, if this session opened one
-      const sid = sessionId;
-      if (!sid) return;
-      // Best effort: tell the server the session is over so it can free it.
-      void fetch(url, { method: "DELETE", headers: { "mcp-session-id": sid, ...headers } }).catch(() => {});
-      failAll(`MCP server "${name}" closed`);
-    },
-    dead: () => closed,
   };
 }
 
