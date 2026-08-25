@@ -12,6 +12,7 @@ import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDeskto
 import { publish } from "../events.js";
 import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from "../desktop-record.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
+import { startTask, awaitTasks } from "../tasks.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
@@ -1013,8 +1014,20 @@ const desktopParagraph = (info: { width: number; height: number; dpi: number } |
       + "không tự bấm hay gõ gì trên máy: thao tác của bạn cũng bị ghi vào bài dạy của họ."
     : "");
 
+/**
+ * Việc chạy song song.
+ *
+ * Chỉ nói khi thật sự đáng: ba việc độc lập chạy nối đuôi là ba lần chờ, còn một việc thì giao nền
+ * rồi ngồi chờ ngay lập tức lại chậm hơn làm thẳng.
+ */
+const TASK_PROTOCOL =
+  "\n\nVIỆC SONG SONG: khi có NHIỀU việc độc lập nhau, giao từng việc bằng " +
+  'TOOL_CALL: task({"task_description":"…","task_title":"…","async":true}) — mỗi lệnh trả về một mã. ' +
+  'Giao hết rồi gọi TOOL_CALL: await_task({"ids":["task-1","task-2"]}) một lần để lấy tất cả. ' +
+  "Chỉ có MỘT việc thì đừng dùng async: giao nền rồi chờ ngay còn chậm hơn làm thẳng.";
+
 const toolProtocolFor = (owner: string): string =>
-  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + mcpProtocolFor(owner);
+  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
@@ -1130,5 +1143,81 @@ if (desktopRecordConfigured()) {
     return "đã dừng ghi nhưng không lưu được thành routine";
   };
 }
+
+/**
+ * `task` / `await_task` — giao nhiều việc cùng lúc rồi thu kết quả sau.
+ *
+ * `task_v2` ở trên đã giao việc cho subagent nhưng **đứng chờ**, nên ba việc là ba lần chờ nối
+ * đuôi. Hai tool này là nửa còn lại, và hình dạng đối số chép từ hợp đồng của hãng:
+ * `TaskParams{task_description, task_title, async}` và `AwaitTaskParams{ids}` (số nhiều).
+ *
+ * Việc nền vẫn hiện trong khay "đang chạy" của app: nó dùng chung sổ subagent, nên người dùng thấy
+ * bot đang làm gì thay vì thấy bot im lặng.
+ */
+const taskSubagentType = (raw: unknown): string => {
+  const t = String(raw ?? "").trim();
+  return t && SUBAGENT_TYPES[t] ? t : "explore";
+};
+
+TOOLS.task = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { task_description: unquote(arg) }; }
+  const description = String(spec?.task_description ?? spec?.description ?? spec?.prompt ?? spec?.task ?? "").trim();
+  if (!description) {
+    return 'task cần {"task_description":"việc cần làm","task_title":"tên ngắn","async":true}';
+  }
+  const title = String(spec?.task_title ?? spec?.title ?? description.split("\n")[0]).slice(0, 80);
+  const type = taskSubagentType(spec?.subagent_type ?? spec?.type);
+  const isAsync = spec?.async === true || spec?.async === "true";
+
+  const runIt = async (): Promise<string> => {
+    const subagentId = turnHooks.startSubagentRun(ctx.agentId, type, title);
+    try {
+      const out = await runSubagent(type, description, Object.keys(TOOLS), {
+        runTool: async (name, toolArg) => {
+          const fn = TOOLS[name];
+          if (!fn) return `(không có công cụ ${name})`;
+          try { return String(await fn(toolArg, ctx)); } catch (e) { return `lỗi: ${(e as Error).message}`; }
+        },
+        onStep: (text) => ctx.note(text),
+      });
+      turnHooks.finishSubagentRun(ctx.agentId, subagentId, out.startsWith("(") ? "error" : "done");
+      return out;
+    } catch (e) {
+      turnHooks.finishSubagentRun(ctx.agentId, subagentId, "error");
+      throw e;
+    }
+  };
+
+  // Không có `async` thì chạy thẳng và trả kết quả — đúng nhánh `completed_task_result` của hãng.
+  if (!isAsync) return runIt();
+
+  const started = startTask(ctx.agentId, title, description, runIt, (t) => {
+    // Báo vào hội thoại khi xong. Không có dòng này thì một việc nền kết thúc trong im lặng và
+    // người dùng chỉ biết nếu model tình cờ nhớ gọi await_task.
+    ctx.note(t.status === "done" ? `Việc nền "${t.title}" đã xong.` : `Việc nền "${t.title}" hỏng: ${t.result}`);
+  });
+  if ("error" in started) return started.error;
+  return `đã giao việc nền "${title}", mã ${started.id}. Giao tiếp việc khác nếu cần, rồi gọi `
+    + `TOOL_CALL: await_task({"ids":["${started.id}"]}) để lấy kết quả.`;
+};
+
+TOOLS.await_task = async (arg) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { ids: [unquote(arg)] }; }
+  const raw = spec?.ids ?? spec?.id ?? spec?.task_ids;
+  const ids = (Array.isArray(raw) ? raw : [raw]).map((x) => String(x ?? "").trim()).filter(Boolean);
+  if (!ids.length) return 'await_task cần {"ids":["task-1"]}';
+
+  const { results, missing, stillRunning } = await awaitTasks(ids);
+  const lines: string[] = [];
+  for (const t of results) {
+    lines.push(`— ${t.id} "${t.title}" (${t.status === "done" ? "xong" : "hỏng"}):\n${t.result ?? ""}`);
+  }
+  // Ba trạng thái, ba câu khác nhau. Gộp chúng lại là model tưởng một việc chưa chạy đã chạy xong.
+  if (missing.length) lines.push(`— không có mã: ${missing.join(", ")} (kiểm lại mã task trả về lúc giao việc)`);
+  if (stillRunning.length) lines.push(`— vẫn đang chạy: ${stillRunning.join(", ")} — gọi lại await_task sau`);
+  return lines.join("\n\n") || "(không có gì để chờ)";
+};
 
 export { TOOLS, isKnownTool, isParallelSafe, toolProtocolFor };
