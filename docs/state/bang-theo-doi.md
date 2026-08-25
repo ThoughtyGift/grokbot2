@@ -171,6 +171,28 @@ dẫn ghim `.data` mặc định thay vì thư mục đang dùng:
 Cả ba giờ đi qua **một nguồn duy nhất**: `store.dataDir()`. Chạy lại: `[]` bot, không dòng
 `restored` nào.
 
+#### T4 ĐÓNG (26/08) — cài thành công trên máy sạch thật
+
+Chủ máy cài trên **một máy chưa từng có Grok Bot**, qua đúng đường công khai:
+
+```
+http://103.75.186.63:8099/?k=<token>  →  Tải cho Windows  →  bấm đúp  →  app mở lên
+```
+
+Chuỗi đầy đủ đã chạy: tải **118 MB** qua Internet → Chrome giữ file (vì HTTP) → **Keep** →
+SmartScreen chặn → **More info → Run anyway** → cài → **app mở tới màn hình onboarding**, shortcut
+Desktop mang **icon thật của app**.
+
+**Quyết định: giữ `.exe` làm bản chính.** ZIP vẫn còn (`/download/zip?k=…`) nhưng chỉ là lối thoát —
+bấm qua được SmartScreen thì không cần, và `.exe` mới là hình dạng bản gốc dùng.
+
+**Hai cửa người dùng phải tự bấm qua — cả hai là thiếu hạ tầng, không phải lỗi:**
+
+| cửa | vì sao | cách qua | cách bỏ hẳn |
+|---|---|---|---|
+| Chrome giữ file | trang chạy **HTTP** | bấm **Keep** | tên miền + HTTPS ([publish-download-site.md](../plan/publish-download-site.md)) |
+| SmartScreen | bộ cài **chưa ký số** | **More info → Run anyway** | chứng chỉ ký mã EV (~400–600 $/năm) |
+
 #### T4 (25/08): bộ cài chở app ra đúng folder như hãng, nhưng boot đầy đủ cần máy sạch
 
 **Chứng minh được, đo tận nơi:**
