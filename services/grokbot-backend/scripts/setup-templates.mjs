@@ -134,7 +134,11 @@ if exist "%~dp0backend.txt" set /p BE=<"%~dp0backend.txt"
 
 set "CURSOR_API_BASE_URL=%BE%"
 set "SAND_BACKEND_URL=%BE%"
-set "CURSOR_WEBSITE_URL=https://cursor.com"
+REM Tro vao BACKEND, khong phai cursor.com: dang nhap mo
+REM   {CURSOR_WEBSITE_URL}/loginDeepControl?challenge=...&uuid=...
+REM trong trinh duyet. De cursor.com o day thi trinh duyet mo trang cua HANG, dang nhap
+REM khong bao gio xong, va uuid + challenge cua may nay bi giao cho ho.
+set "CURSOR_WEBSITE_URL=%BE%"
 set "SAND_DISABLE_UPDATES=1"
 
 set "APP=%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe"
@@ -231,7 +235,8 @@ BE="http://localhost:8788"
 
 export CURSOR_API_BASE_URL="$BE"
 export SAND_BACKEND_URL="$BE"
-export CURSOR_WEBSITE_URL="https://cursor.com"
+# Tro vao BACKEND, khong phai cursor.com — xem chu thich o ban Windows ben tren.
+export CURSOR_WEBSITE_URL="$BE"
 export SAND_DISABLE_UPDATES=1
 
 APP="\${GROKBOT2_CLIENT_DIR:-/Applications/Grok Bot.app}"

@@ -118,7 +118,13 @@ Start-Sleep -Milliseconds 400
 $env:CURSOR_API_BASE_URL = "http://localhost:$bff"
 $env:SAND_BACKEND_URL = "http://localhost:$bff"
 # Without this the app treats a localhost API base as dev mode and sends login to https://localhost:4443.
-$env:CURSOR_WEBSITE_URL = 'https://cursor.com'
+#
+# Points at OUR backend, not cursor.com — and since 26/08 that matters. Sign-in opens
+# `{CURSOR_WEBSITE_URL}/loginDeepControl?challenge=…&uuid=…` in the browser; with the vendor's site
+# here, the browser lands on THEIR page, our login never completes, and the uuid + challenge of a
+# session on this machine are handed to them. Harmless while `/auth/poll` answered everyone; a real
+# bug now that it does not.
+$env:CURSOR_WEBSITE_URL = "http://localhost:$bff"
 # ROADMAP F6 / risk R1. The app's own kill switch, not a hack: main.cjs decides with
 #   hzn(t) { return t.envDisabled ? "disabled-by-env" : t.isLabBuild ? ... }
 # and `envDisabled` is `process.env.SAND_DISABLE_UPDATES === "1"`, checked FIRST, so it wins over

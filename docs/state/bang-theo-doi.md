@@ -219,7 +219,7 @@ sai. `install.log` chỉ ra: **Git Bash biến `/VERYSILENT` thành đường d�
 bộ cài không nhận cờ nên mở wizard chờ bấm. Chạy đúng: `MSYS_NO_PATHCONV=1`, hoặc qua một file `.cmd`,
 hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Người dùng cuối không gặp lỗi này.
 
-### Chặng 4 · Đưa BE ra khỏi máy cá nhân — 🟡 **code xong 26/08, chờ VPS để chốt T6**
+### Chặng 4 · Đưa BE ra khỏi máy cá nhân — 🟡 **5/7 xong · 4.3 và 4.5 CHƯA**
 
 | # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
@@ -227,8 +227,10 @@ hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Ngư
 | 4.2 | ✅ CORS cho tên miền, từ chối nguồn lạ | `GROKBOT2_ALLOW_ORIGIN=…` + gửi Origin | tên miền khai → trả đúng nó · nguồn lạ → **không** mượn được origin |
 | 4.2b | ✅ Chốt an toàn: mở mà chưa `enforce` thì cảnh báo to | bind 0.0.0.0 với AUTH≠enforce | in `⚠ MỞ RA MẠNG…` |
 | 4.4 | ✅ `host_settings` theo người | `host-settings.test.ts` | hai người hai múi giờ không đè nhau; cài đặt máy vẫn chung |
-| 4.3 | ⬜ HTTPS | `curl -I https://<vps>/` | *Caddy trên VPS — [publish-download-site.md](../plan/publish-download-site.md)* |
-| 4.5 | ⬜ **T6** máy 2 trỏ vào VPS, chung dữ liệu | mở app máy 2 | *chờ VPS + máy 2* |
+| 4.6 | ✅ Bịt lỗ `/oauth/token` + đăng nhập thật | §3b | đo đầu-cuối qua HTTP · 403/403/200/403 |
+| 4.7 | ✅ Sửa lối mở trỏ đăng nhập sang **máy chủ hãng** | `launcher-env.test.ts` | 3/3 — xem ô dưới |
+| 4.3 | ❌ **HTTPS — CHƯA** | `curl -I https://103.75.186.63:8099/` | **000**, không có TLS · cổng 8099 chỉ HTTP |
+| 4.5 | ❌ **T6 — CHƯA** | `curl http://103.75.186.63:8099/v1/health` | **404** — VPS mới chỉ có **trang tải**, chưa có backend |
 
 **Cách mở an toàn (một lệnh):**
 ```
@@ -239,9 +241,50 @@ Mặc định vẫn `127.0.0.1` + `auth off` nên **không đổi hành vi cũ**
 **E2E chốt chặng:** unit **281/281** · hợp đồng **4/4 nhóm** · bind 0.0.0.0 + enforce + CORS đo tận
 nơi qua IP LAN.
 
-> **Còn thiếu để máy 2 CHAT được, không phải code — là hạ tầng:** (1) HTTPS qua Caddy trên một VPS,
-> (2) backend chạy ở nơi máy 2 với tới. Trên LAN thì đã đủ: `GROKBOT2_BIND=0.0.0.0` + IP máy này là
-> máy 2 gọi tới được ngay. Khác mạng thì cần VPS — **tôi không tạo VPS hộ được**, đó là T6.
+> **Một lối mở đang trỏ đăng nhập sang máy chủ của hãng — đã sửa 26/08.** Cả `run.ps1` lẫn hai bộ
+> cài đều đặt `CURSOR_WEBSITE_URL=https://cursor.com`. Vô hại suốt thời gian `/auth/poll` còn cấp
+> token cho mọi lời gọi, vì đăng nhập chỉ là bắt tay giả. Từ khi đăng nhập là thật thì bấm "Sign in"
+> mở `https://cursor.com/loginDeepControl?challenge=…&uuid=…`: trình duyệt vào trang của **họ**, đăng
+> nhập không bao giờ xong, và uuid + challenge của phiên trên máy người dùng bị giao cho họ. Nay cả
+> ba chỗ trỏ vào chính backend, và `launcher-env.test.ts` đọc thẳng các tệp phát ra để khoá lại.
+
+---
+
+## 3c · Muốn E2E trên máy thứ hai thì còn thiếu đúng những gì
+
+Đo ngày 26/08, không phải ước lượng:
+
+| | đo được | |
+|---|---|---|
+| backend nghe ở | `127.0.0.1:8788` | chỉ máy này gọi được |
+| tường lửa cổng 8788 | **không có luật nào** | máy 2 không gõ cửa được |
+| VPS `103.75.186.63:8099` | `/` **200** · `/v1/health` **404** | mới chỉ là **trang tải**, chưa có backend |
+| HTTPS | `https://…:8099` → **000** | chưa có TLS |
+
+### Đường A · Cùng mạng LAN — làm được **hôm nay**, không cần VPS
+
+| # | việc | ai làm | kiểm bằng |
+|---|---|---|---|
+| A1 | `.env`: `GROKBOT2_BIND=0.0.0.0` + `GROKBOT2_AUTH=enforce` — **đổi cùng nhau** | tôi | log in `nghe trên 0.0.0.0:8788` · `mode=enforce` |
+| A2 | Mở cổng 8788 trên tường lửa | **bạn** (cần quyền admin) | `New-NetFirewallRule -DisplayName "grokbot2-be-8788" -Direction Inbound -Protocol TCP -LocalPort 8788 -Action Allow -Profile Private` |
+| A3 | Chuyển quyền 3.524 dòng sang tài khoản email | **bạn quyết** | `node scripts/adopt-legacy-owner.mjs --to <email> --yes` |
+| A4 | Máy 2: `backend.txt` ghi `http://192.168.100.203:8788` | bạn | mở app → không còn "Can't reach your computer" |
+| A5 | Máy 2: bấm Sign in → trình duyệt mở trang đăng nhập **của bạn** | bạn | URL phải là `192.168.100.203:8788/app/?login_uuid=…` |
+
+> **A2 và A3 tôi không làm hộ được:** một cái cần quyền admin, một cái viết lại chủ sở hữu của dữ
+> liệu thật. A1 thì làm được ngay, nhưng bật `enforce` mà chưa làm A3 thì app hiện **0 bot**.
+
+### Đường B · Khác mạng (VPS) — thêm lên trên đường A
+
+| # | việc | ghi chú |
+|---|---|---|
+| B1 | Dựng backend đầy đủ lên VPS | khác hẳn `serve-static.mjs` đang chạy: cần Node, `.data/`, khoá pool |
+| B2 | HTTPS | thêm một server block nginx trỏ `127.0.0.1:<cổng BE>`, **không** sửa block đang có |
+| B3 | Máy 2 trỏ `backend.txt` vào tên miền HTTPS đó | rồi lặp lại A5 |
+
+**Vì sao B1 không phải copy-paste:** VPS đang chạy `admin.halcion.vn`, `foodaymart.vn`,
+`media.halcion.vn`, `convex` — hạ tầng thật của bạn. Backend grokbot2 mang theo SQLite, MCP spawn
+tiến trình con, và khoá pool. Đưa lên đó là một quyết định riêng, không phải một bước của T6.
 
 ---
 
