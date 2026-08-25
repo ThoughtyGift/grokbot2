@@ -115,3 +115,31 @@ test("lịch cron vẫn đi đúng đường cũ", () => {
   assert.match(rec.triggerDescription, /7:30/);
   automations.deleteAgentAutomation({ agentId: "agent-trigger-test", automationId: rec.id });
 });
+
+/**
+ * Payload THẬT của client, bắt được bằng cách tự bấm "Slack message" trong app rồi đọc lại đối số
+ * mà nó gửi xuống `/gw/api/createAgentAutomation`:
+ *
+ *   {"name":"…","prompt":"…","isEnabled":true,
+ *    "trigger":{"type":"slack","channel":"#thu-nghiem","match":{"kind":"keyword","keyword":"hoa don"}}}
+ *
+ * Hai điều nó bác bỏ: trigger KHÔNG đi qua RPC nào của hãng mà đi thẳng đường `/gw` cục bộ, và
+ * `match` là một object chứ không phải chuỗi như hình dạng tôi tự dựng lúc đầu.
+ */
+test("payload Slack thật của client được giữ nguyên, kể cả từ khoá lồng trong match", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-trigger-test",
+    spec: {
+      name: "THU-slack-that", prompt: "kiểm tra", isEnabled: true,
+      trigger: { type: "slack", channel: "#thu-nghiem", match: { kind: "keyword", keyword: "hoa don" } },
+    },
+  });
+  const rec = rows[rows.length - 1];
+  assert.equal(rec.trigger, "slack");
+  assert.equal((rec.triggerSpec?.match as { keyword?: string })?.keyword, "hoa don",
+    "từ khoá nằm trong match, và phải sống sót nguyên vẹn");
+  assert.match(rec.triggerDescription, /#thu-nghiem/);
+  assert.match(rec.triggerDescription, /hoa don/,
+    `mô tả phải nêu từ khoá; bản đầu đọc sai chỗ nên im lặng bỏ mất nó — nhận "${rec.triggerDescription}"`);
+  automations.deleteAgentAutomation({ agentId: "agent-trigger-test", automationId: rec.id });
+});

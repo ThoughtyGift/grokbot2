@@ -230,7 +230,13 @@ function describeStructured(t: Record<string, unknown>): string {
   switch (t.type) {
     case "slack": {
       const where = s("channel") ? ` ở ${s("channel")}` : "";
-      const kw = s("keyword") ? ` chứa "${s("keyword")}"` : "";
+      // Từ khoá nằm TRONG `match`, không nằm cạnh nó. Bắt được từ payload thật của client khi tự
+      // chọn "Slack message" trong app rồi đọc lại đối số:
+      //   {"type":"slack","channel":"#thu-nghiem","match":{"kind":"keyword","keyword":"hoa don"}}
+      // Bản đầu đọc `t.keyword` — hình dạng tôi tự nghĩ ra — nên câu mô tả im lặng bỏ mất từ khoá.
+      const m = (t.match && typeof t.match === "object" ? t.match : {}) as Record<string, unknown>;
+      const kwRaw = typeof m.keyword === "string" ? m.keyword : (typeof t.keyword === "string" ? t.keyword : "");
+      const kw = kwRaw.trim() ? ` chứa "${kwRaw.trim()}"` : "";
       return `khi có tin nhắn Slack${where}${kw}`;
     }
     case "github": {
@@ -347,7 +353,9 @@ function triggerObject(rawTrigger: string, spec?: Record<string, unknown>): Reco
   if (spec && typeof spec.type === "string" && spec.type !== "cron") return spec;
   const p = listenerPlatform(rawTrigger);
   switch (p) {
-    case "slack": return { type: "slack", channel: "", match: "message", keyword: "", emoji: "", bySelf: false };
+    // Hình dạng mặc định lấy theo payload THẬT của client (`match` là object `{kind}`), không phải
+    // theo phỏng đoán. Chỉ dùng khi không có bản gốc người dùng đã chọn.
+    case "slack": return { type: "slack", channel: "", match: { kind: "any" } };
     case "github": return { type: "github", repo: "", events: ["pr-opened"], userAllowlist: "", ciBranch: "" };
     case "microsoftTeams": return { type: "microsoftTeams", tenantId: "", teamIds: "", channelIds: "", messageContains: "", messageContainsIsRegex: false, blockUnauthenticatedTeamsUsers: false };
     case "linear": return { type: "linear", event: "issueCreated", statusIds: "", cycleIds: "", projectIds: "", teamIds: "" };
