@@ -21,11 +21,12 @@ function kindOf(event: string, action?: string): string {
   return event;
 }
 
-async function fireListeners(platform: string, context: string): Promise<number> {
+/** `event` cho backend lọc; `context` cho model đọc. Xem chú thích cùng tên trong slack.ts. */
+async function fireListeners(platform: string, context: string, event?: Record<string, unknown>): Promise<number> {
   const r = await fetch(`${bffBase()}/internal/ops/fire-listeners`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ platform, context }),
+    body: JSON.stringify({ platform, context, event }),
     signal: AbortSignal.timeout(8000),
   });
   const j = await r.json().catch(() => ({})) as { fired?: number };
@@ -48,7 +49,7 @@ export async function handleGitHubEvent(event: string, body: Record<string, any>
     (subject ? `#${subject.number} ${subject.title ?? ""}\n${subject.html_url ?? ""}\n` : "");
 
   try {
-    const fired = await fireListeners("github", context);
+    const fired = await fireListeners("github", context, { repo, kind, sender });
     return { status: 200, body: { ok: true, kind, fired } };
   } catch (err) {
     console.warn("[grokbot-ops] github fire-listeners failed:", (err as Error).message);

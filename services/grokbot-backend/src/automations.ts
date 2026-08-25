@@ -519,14 +519,18 @@ function fire(rec: Automation, trigger: AutomationRun["trigger"], context?: stri
  * only Slack and GitHub, so this is the single path that turns an event-triggered routine from
  * "shown in the panel" into "actually runs". Returns how many fired, so the receiver can report it.
  */
-export function fireListeners(platform: string, context: string): number {
-  let n = 0;
+export function fireListeners(platform: string, context: string, ev?: PlatformEvent): number {
+  let n = 0, skipped = 0;
   for (const rec of all()) {
     if (!rec.isEnabled || !rec.prompt.trim()) continue;
     if (listenerPlatform(rec.trigger) !== platform) continue;
+    if (ev && !matchesEvent(rec, ev)) { skipped += 1; continue; }
     fire(rec, "event", context);
     n += 1;
   }
+  // Nói ra số bị lọc: "0 routine chạy" vì không khớp điều kiện và vì không có routine nào là hai
+  // chuyện khác nhau, và chỉ một trong hai là lỗi cấu hình cần sửa.
+  if (skipped) console.log(`[grokbot2] ${platform}: chạy ${n} routine, bỏ qua ${skipped} vì không khớp điều kiện`);
   return n;
 }
 
@@ -620,4 +624,68 @@ export async function opsHealth(): Promise<string> {
   } catch (e) {
     return `DOWN ${base} (${(e as Error).message})`;
   }
+}
+
+/**
+ * Sự kiện đến từ một nền tảng, dạng có cấu trúc — đủ để đối chiếu với điều kiện người dùng đặt.
+ *
+ * Trước đây ops chỉ gửi xuống một đoạn văn cho model đọc, nên `fireListeners` đánh thức **mọi**
+ * routine của nền tảng đó: chọn kênh `#ke-toan` và từ khoá "hoá đơn" xong vẫn bị gọi dậy vì một
+ * tin nhắn trong `#random`. Điều kiện hiện trên màn hình mà không có tác dụng nào là tệ hơn không
+ * có ô để điền.
+ */
+export interface PlatformEvent {
+  platform: string;
+  /** Slack: id kênh (`C123`) hoặc tên (`#ke-toan`). GitHub: không dùng. */
+  channel?: string;
+  channelName?: string;
+  text?: string;
+  user?: string;
+  /** GitHub: `owner/repo`. */
+  repo?: string;
+  /** GitHub: `pr-opened` | `pr-pushed` | `ci-passed` | `ci-failed` | … */
+  kind?: string;
+  sender?: string;
+}
+
+const norm = (s: unknown): string => String(s ?? "").trim().toLowerCase().replace(/^#/, "");
+
+/**
+ * Routine này có được đánh thức bởi sự kiện này không.
+ *
+ * Nguyên tắc: **điều kiện để trống nghĩa là không lọc**, đúng như bản gốc — ô `#channel` trống ở
+ * giao diện của họ có chữ gợi ý mờ, không phải một bộ lọc rỗng. Và routine kiểu cũ (trigger là một
+ * chuỗi như `"slack_mention"`, không có `triggerSpec`) vẫn nổ như trước: đây là thêm bộ lọc, không
+ * phải đổi luật cho những gì đang chạy.
+ */
+export function matchesEvent(rec: Automation, ev: PlatformEvent): boolean {
+  const spec = rec.triggerSpec;
+  if (!spec) return true;
+
+  if (spec.type === "slack") {
+    const want = norm(spec.channel);
+    if (want) {
+      const got = [norm(ev.channel), norm(ev.channelName)].filter(Boolean);
+      if (got.length && !got.includes(want)) return false;
+    }
+    const match = (spec.match && typeof spec.match === "object" ? spec.match : {}) as Record<string, unknown>;
+    const keyword = typeof match.keyword === "string" ? match.keyword : (typeof spec.keyword === "string" ? spec.keyword : "");
+    if (keyword.trim() && !String(ev.text ?? "").toLowerCase().includes(keyword.trim().toLowerCase())) return false;
+    return true;
+  }
+
+  if (spec.type === "github") {
+    const wantRepo = norm(spec.repo);
+    if (wantRepo && norm(ev.repo) && norm(ev.repo) !== wantRepo) return false;
+    const events = Array.isArray(spec.events) ? (spec.events as unknown[]).map(norm).filter(Boolean) : [];
+    if (events.length && ev.kind && !events.includes(norm(ev.kind))) return false;
+    // Danh sách người được phép: bỏ trống là mọi người. Một tên trong đó mà người gửi không khớp
+    // thì KHÔNG chạy — đây là hàng rào, nên nghi ngờ thì không nổ.
+    const allow = String(spec.userAllowlist ?? "").split(/[,\s]+/).map(norm).filter(Boolean);
+    if (allow.length && ev.sender && !allow.includes(norm(ev.sender))) return false;
+    return true;
+  }
+
+  // Bốn nền tảng còn lại chưa có bộ thu ở đây, nên không có gì để lọc.
+  return true;
 }

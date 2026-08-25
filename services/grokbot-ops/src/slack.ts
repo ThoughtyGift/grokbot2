@@ -9,11 +9,17 @@ const bffBase = (): string => (process.env.GROKBOT2_BFF_URL ?? "http://127.0.0.1
 
 export interface SlackResult { status: number; body: unknown }
 
-async function fireListeners(platform: string, context: string): Promise<number> {
+/**
+ * `event` đi kèm `context` chứ không thay thế nó: đoạn văn là thứ MODEL đọc, còn `event` là thứ
+ * BACKEND đối chiếu với điều kiện người dùng đặt (kênh, từ khoá, repo). Gộp hai vai vào một chuỗi
+ * là lý do bộ lọc trước đây không tồn tại — không ai đi khớp `#ke-toan` bằng cách dò chuỗi trong
+ * một câu tiếng Việt.
+ */
+async function fireListeners(platform: string, context: string, event?: Record<string, unknown>): Promise<number> {
   const r = await fetch(`${bffBase()}/internal/ops/fire-listeners`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ platform, context }),
+    body: JSON.stringify({ platform, context, event }),
     signal: AbortSignal.timeout(8000),
   });
   const j = await r.json().catch(() => ({})) as { fired?: number };
@@ -39,7 +45,15 @@ export async function handleSlackEvent(body: Record<string, unknown>): Promise<S
       (e.user ? `từ: ${e.user}\n` : "") +
       `nội dung: ${e.text ?? ""}`;
     try {
-      const fired = await fireListeners("slack", context);
+      const fired = await fireListeners("slack", context, {
+        channel: typeof e.channel === "string" ? e.channel : undefined,
+        // Slack gửi id kênh (`C123`); tên chỉ có khi app bật `channel_name`. Gửi cả hai và để
+        // backend khớp cái nào có — người dùng gõ `#ke-toan`, Slack nói `C0123`.
+        channelName: typeof (e as { channel_name?: unknown }).channel_name === "string"
+          ? (e as { channel_name?: string }).channel_name : undefined,
+        text: typeof e.text === "string" ? e.text : undefined,
+        user: typeof e.user === "string" ? e.user : undefined,
+      });
       return { status: 200, body: { ok: true, fired } };
     } catch (err) {
       console.warn("[grokbot-ops] slack fire-listeners failed:", (err as Error).message);

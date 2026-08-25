@@ -143,3 +143,72 @@ test("payload Slack thật của client được giữ nguyên, kể cả từ k
     `mô tả phải nêu từ khoá; bản đầu đọc sai chỗ nên im lặng bỏ mất nó — nhận "${rec.triggerDescription}"`);
   automations.deleteAgentAutomation({ agentId: "agent-trigger-test", automationId: rec.id });
 });
+
+/**
+ * Điều kiện trên màn hình phải có tác dụng thật.
+ *
+ * Trước đây `fireListeners` đánh thức MỌI routine của nền tảng: người dùng chọn kênh `#ke-toan` và
+ * từ khoá "hoá đơn" rồi vẫn bị gọi dậy vì một tin trong `#random`. Một ô lọc hiện ra mà không lọc
+ * gì còn tệ hơn không có ô — nó hứa một thứ không tồn tại.
+ */
+test("trigger Slack chỉ khớp đúng kênh và đúng từ khoá", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-match-test",
+    spec: {
+      name: "ke-toan", prompt: "x", isEnabled: true,
+      trigger: { type: "slack", channel: "#ke-toan", match: { kind: "keyword", keyword: "hoá đơn" } },
+    },
+  });
+  const rec = rows[rows.length - 1];
+  const ev = (o: Record<string, unknown>) => ({ platform: "slack", ...o });
+
+  assert.equal(automations.matchesEvent(rec, ev({ channelName: "ke-toan", text: "gửi hoá đơn tháng 8" })), true);
+  assert.equal(automations.matchesEvent(rec, ev({ channelName: "ke-toan", text: "HOÁ ĐƠN viết hoa" })), true,
+    "so từ khoá không phân biệt hoa thường");
+  assert.equal(automations.matchesEvent(rec, ev({ channelName: "random", text: "gửi hoá đơn" })), false,
+    "đúng từ khoá nhưng sai kênh");
+  assert.equal(automations.matchesEvent(rec, ev({ channelName: "ke-toan", text: "chào buổi sáng" })), false,
+    "đúng kênh nhưng không có từ khoá");
+  automations.deleteAgentAutomation({ agentId: "agent-match-test", automationId: rec.id });
+});
+
+test("điều kiện để trống nghĩa là không lọc, không phải lọc rỗng", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-match-test",
+    spec: { name: "moi-tin", prompt: "x", trigger: { type: "slack", channel: "", match: { kind: "any" } } },
+  });
+  const rec = rows[rows.length - 1];
+  assert.equal(automations.matchesEvent(rec, { platform: "slack", channelName: "bat-ky", text: "gì cũng được" }), true);
+  automations.deleteAgentAutomation({ agentId: "agent-match-test", automationId: rec.id });
+});
+
+test("trigger GitHub lọc theo repo, loại sự kiện và người gửi", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-match-test",
+    spec: {
+      name: "gh", prompt: "x",
+      trigger: { type: "github", repo: "ThoughtyGift/grokbot2", events: ["pr-opened"], userAllowlist: "alice, bob" },
+    },
+  });
+  const rec = rows[rows.length - 1];
+  const ev = (o: Record<string, unknown>) => ({ platform: "github", repo: "ThoughtyGift/grokbot2", kind: "pr-opened", sender: "alice", ...o });
+
+  assert.equal(automations.matchesEvent(rec, ev({})), true);
+  assert.equal(automations.matchesEvent(rec, ev({ repo: "ai-do/khac" })), false);
+  assert.equal(automations.matchesEvent(rec, ev({ kind: "ci-failed" })), false);
+  assert.equal(automations.matchesEvent(rec, ev({ sender: "nguoi-la" })), false,
+    "danh sách người được phép là hàng rào: không khớp thì không chạy");
+  automations.deleteAgentAutomation({ agentId: "agent-match-test", automationId: rec.id });
+});
+
+/** Routine kiểu cũ (trigger là chuỗi, không có triggerSpec) phải nổ y như trước khi có bộ lọc. */
+test("routine cũ không có điều kiện thì vẫn nổ như trước", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-match-test",
+    spec: { name: "cu", prompt: "x", trigger: "slack_mention" },
+  });
+  const rec = rows[rows.length - 1];
+  assert.equal(rec.triggerSpec, undefined);
+  assert.equal(automations.matchesEvent(rec, { platform: "slack", channelName: "bat-ky", text: "gì cũng được" }), true);
+  automations.deleteAgentAutomation({ agentId: "agent-match-test", automationId: rec.id });
+});

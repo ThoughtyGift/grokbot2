@@ -220,7 +220,10 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
         return json({ ok: true });
       }
       if (url.startsWith("/internal/ops/fire-listeners") && req.method === "POST") {
-        const n = fireListeners(String(bodyJ.platform ?? ""), String(bodyJ.context ?? ""));
+        const ev = bodyJ.event && typeof bodyJ.event === "object"
+          ? { platform: String(bodyJ.platform ?? ""), ...(bodyJ.event as Record<string, unknown>) }
+          : undefined;
+        const n = fireListeners(String(bodyJ.platform ?? ""), String(bodyJ.context ?? ""), ev);
         return json({ ok: true, fired: n });
       }
       if (url.startsWith("/internal/ops/fire") && req.method === "POST") {
