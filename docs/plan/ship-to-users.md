@@ -12,6 +12,47 @@ Không lặp lại những gì đã có chỗ khác. Bốn tài liệu này là 
 | Mỗi bot một màn hình | [one-display-per-bot.md](one-display-per-bot.md) |
 | Gộp danh tính + ví với cinAPI | [cinapi-merge.md](cinapi-merge.md) |
 
+## BE nằm ở đâu — và vì sao phải viết lại nó
+
+Câu đầu tiên ai cũng hỏi: *app gốc đã có sẵn BE rồi, sao mình phải xây lại?* Trả lời bằng đo, và
+phép đo này lật ngược một câu tôi từng nói sai (rằng host của họ chạy trên máy người dùng).
+
+Bản gốc có **bốn tầng**, không phải hai:
+
+| tầng | chạy ở đâu | chứa gì |
+|---|---|---|
+| FE (renderer) | máy người dùng | giao diện |
+| Lớp mỏng trong Electron main | máy người dùng | cầu IPC, phía client của `/local-exec` và `/webauthn` — tức host **nhờ máy người dùng** làm hộ việc cục bộ |
+| **Host ("box-host")** | **TRONG BOX của hãng** | 120 lệnh gateway, hội thoại, bộ lập lịch |
+| Cloud `aiserver.v1.*` | máy chủ hãng | bộ não, cấp box, lắng nghe trigger, danh mục skill |
+
+Ba bằng chứng, không phải suy đoán:
+
+1. `docs/extracted/box-host-contract.json` — **tên là "box-host"**, và nó phục vụ đúng những
+   đường mà `/gw` của mình phục vụ: `POST /api/<lệnh>`, `GET /events`, `GET /avatars/<id>`,
+   `GET /health`. Health của nó trả `pid`, `startedAt`, `activeAgentId` — một tiến trình máy chủ.
+2. `EnsureSandBoxResponse` trả cho app **`gateway_url` + `gateway_token`** — địa chỉ và giấy tờ để
+   nói chuyện với host **của người đó**. Host có địa chỉ riêng nghĩa là host ở xa.
+3. `GET /local-exec/requests` (auth **required**) — có thứ gì đó **hỏi host xem có việc gì cần chạy
+   trên máy cục bộ không**. Chỉ có nghĩa khi host không nằm trên máy đó.
+
+Nên: **BE không đi kèm bản tải về.** Thứ người dùng tải là FE cộng một lớp mỏng. Host nằm trong
+box, mà box thì cloud của hãng chỉ cấp cho tài khoản trả tiền. **Không có gì để tái dùng.**
+
+Và câu hỏi "vậy cái mình đang xây là Cloud à?" — **là cả hai**. Chính CLAUDE.md mô tả backend này
+đúng như vậy: *"glue server: auth + bootstrap RPC + box gateway + chat bridge"*:
+
+| grokbot2 làm vai gì | tương ứng tầng nào của họ |
+|---|---|
+| `/gw` — 120 lệnh, SQLite hội thoại, lịch, teach | **Host** |
+| protobuf bootstrap (`EnsureSandBox`, `GetSandAccessStatus`, marketplace…) | **Cloud**, phần tối thiểu |
+| trỏ não sang Claude pool | thay `AiService` |
+| thuê một VPS làm màn hình | thay box của họ |
+
+Một hệ quả đáng giá: vì host của họ **vốn đã ở xa** (HTTP + `gateway_token`), đưa backend của mình
+lên VPS **không phải là chống lại thiết kế** — đó chính là thiết kế. Điều đó làm nhẹ đi câu hỏi
+"mỗi người một backend hay chung một backend" ở cuối tài liệu: cả hai đều hợp với hình dạng gốc.
+
 ## Toàn cảnh
 
 ```mermaid
