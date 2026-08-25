@@ -98,12 +98,22 @@ dạ, và vài phiên bản Chrome chặn thẳng không cho giữ.
 
 Cách 2 là đường ngắn nhất tới HTTPS mà **không cần đợi DNS**, vì `*.halcion.vn` đã trỏ về đúng VPS này.
 
-### Hai bản, và ai cần bản nào
+### Hai bản, một đường link
+
+**Máy trắng dùng đường này** — mọi nút trên trang tự mang token, phát bản chở cả app:
+```
+http://103.75.186.63:8099/?k=<token>
+```
+Trang tự đổi chữ thành "bộ cài 118 MB · không cần chuẩn bị gì trước" để người tải khỏi đoán.
+
+Không có token thì trang vẫn mở bình thường và nút phát **bản 2 MB** — bản chỉ cấu hình.
+
+### Ai cần bản nào
 
 | máy nhận | bản | đường tải |
 |---|---|---|
 | **đã có client desktop + Node** | 2 MB (chỉ cấu hình) | công khai: `/download/windows` |
-| **máy trắng, chưa từng cài gì** | **118 MB (chở cả app)** | **sau token**: `/download/full/<token>` |
+| **máy trắng, chưa từng cài gì** | **118 MB (chở cả app)** | mở trang bằng `/?k=<token>` rồi bấm nút; hoặc thẳng `/download/windows?k=<token>` |
 
 Bản 2 MB **không chạy** trên máy trắng — nó vá client bạn đã có chứ không mang app theo; máy trắng
 chạy nó sẽ báo `Chua thay client desktop` rồi dừng. Trang tải nay nói rõ chỗ này ngay dưới nút, vì

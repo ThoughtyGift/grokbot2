@@ -341,6 +341,28 @@
     const p = navigator.userAgentData?.platform || navigator.platform || "";
     if (/mac/i.test(p)) show(true);
   })();
+
+  /*
+   * Mở trang bằng `/?k=<token>` thì mọi nút tải mang token theo — và khi đó máy chủ phát bản CHỞ CẢ
+   * ỨNG DỤNG thay vì bản cấu hình 2 MB.
+   *
+   * Có mặt để máy mới chỉ phải dán MỘT đường link, thay vì nhớ hai địa chỉ khác nhau. Không có token
+   * thì trang chạy y như cũ — đây là thêm, không phải đổi.
+   */
+  (function () {
+    const k = new URLSearchParams(location.search).get("k");
+    if (!k) return;
+    for (const a of document.querySelectorAll('a[href^="/download"]')) {
+      a.href += (a.href.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(k);
+    }
+    const note = document.getElementById("chon-ban");
+    if (note) {
+      note.innerHTML = "<b>Bạn đang dùng đường tải đầy đủ.</b> Nút trên phát <b>bản chở cả ứng dụng"
+        + " (118 MB)</b>: máy chưa có gì cũng chạy — không cần cài client, không cần Node.";
+    }
+    const fine = document.getElementById("fine-win");
+    if (fine) fine.textContent = "Windows 10/11 · bộ cài 118 MB · không cần chuẩn bị gì trước";
+  })();
 </script>
 
 </body>

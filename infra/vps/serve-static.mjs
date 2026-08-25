@@ -67,6 +67,29 @@ const server = createServer((req, res) => {
     return res.end();
   }
 
+  /*
+   * Nút "Tải cho Windows" phát bản NÀO tuỳ người gọi có token hay không.
+   *
+   *   có token  → bản chở cả app (118 MB): máy trắng cắm vào là chạy
+   *   không có  → bản cấu hình 2 MB: chỉ dùng được nếu máy đã có client
+   *
+   * Vì sao không cho công khai bản chở app: nó mang client của nhà phát hành. Ở URL ai cũng mở được
+   * thì đó là phân phối phần mềm của họ; sau một token thì là chép sang máy khác của chính mình.
+   *
+   * Mở trang bằng `/?k=<token>` là mọi nút trên trang tự mang token theo (xem đoạn script cuối
+   * index.html), nên trên máy mới chỉ cần dán MỘT đường link.
+   */
+  if (path === "/download/windows") {
+    const key = new URL(req.url ?? "/", "http://x").searchParams.get("k") ?? "";
+    const dir = /^[A-Za-z0-9]{8,64}$/.test(key) ? join(DIR, "full", key) : null;
+    const file = dir && existsSync(dir) ? readdirSync(dir).find((n) => n.endsWith(".exe")) : undefined;
+    if (dir && file) {
+      const st = statSync(join(dir, file));
+      if (req.method === "HEAD") { res.writeHead(200, { "content-length": String(st.size) }); return res.end(); }
+      return sendFile(res, { name: file, path: join(dir, file), size: st.size });
+    }
+  }
+
   if (path === "/download/windows" || path === "/download/mac") {
     const pkg = newest(path.endsWith("mac") ? ".command" : ".exe");
     if (!pkg) {

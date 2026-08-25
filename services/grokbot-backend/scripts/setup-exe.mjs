@@ -365,3 +365,73 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
   const exe = join(distDir, `${outName}.exe`);
   return existsSync(exe) ? exe : null;
 }
+
+/**
+ * Bản ZIP — giải nén ra là dùng, không cần bộ cài.
+ *
+ * Bản gốc của nhà phát hành phát `.exe` (đo được: `Grok_Bot_0.18.0_Setup.exe`, 120 MB), nên bản
+ * `.exe` mới là thứ bám sát họ. ZIP có mặt vì lý do khác, thực tế hơn cho việc **thử trên máy khác**:
+ *
+ *   - không có bộ cài thì không có cảnh báo "unknown publisher" lúc cài;
+ *   - giải nén ra thấy ngay từng file, không phải tin một cái wizard;
+ *   - chép qua USB cũng dùng được, không cần chạy gì.
+ *
+ * Đổi lại: **to hơn**. ZIP dùng deflate, `.exe` dùng lzma2 — cùng một cây app, zip nặng gần gấp đôi.
+ *
+ * Dùng `bsdtar` (có sẵn trong Windows 10+) chứ không `Compress-Archive`: nhanh hơn nhiều trên 490 MB,
+ * và không ngốn RAM theo kích thước như bản PowerShell.
+ */
+export function buildZip({ distDir, stagingDir, appSrc, outName }) {
+  if (!existsSync(join(appSrc, "Grok Bot.exe"))) {
+    console.error(`Không thấy "Grok Bot.exe" trong ${appSrc}`);
+    return null;
+  }
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(join(stagingDir, outName), { recursive: true });
+  const root = join(stagingDir, outName);
+
+  // Chép cây app, bỏ bản gốc để bên (46 MB chỉ dùng cho --undo).
+  execFileSync("robocopy", [appSrc, root, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
+    "/XF", "app.asar.disabled-by-grokbot2"], { stdio: "pipe" });
+  // Windows doc file .cmd/.txt bang CRLF; ghi LF thi Notepad hien mot dong dai dinh lien.
+  const crlf = (t) => t.split(String.fromCharCode(10)).join(String.fromCharCode(13,10));
+  writeFileSync(join(root, "start-bot.cmd"), crlf(START_BUNDLED), "utf8");
+  writeFileSync(join(root, "backend.txt"), "http://localhost:8788" + String.fromCharCode(13,10), "utf8");
+  writeFileSync(join(root, "DOC-DAY-TRUOC.txt"), crlf(README_ZIP), "utf8");
+
+  const zip = join(distDir, `${outName}.zip`);
+  rmSync(zip, { force: true });
+  // `-a` cho bsdtar tự chọn định dạng theo đuôi `.zip`.
+  execFileSync("tar", ["-a", "-c", "-f", zip, "-C", stagingDir, outName], { stdio: "pipe", maxBuffer: 64 << 20 });
+  rmSync(stagingDir, { recursive: true, force: true });
+  return existsSync(zip) ? zip : null;
+}
+
+const README_ZIP = `BOT NOI BO — ban giai nen (khong can cai dat)
+============================================
+
+CACH DUNG — 3 buoc:
+
+  1. Giai nen ca thu muc nay ra dau cung duoc (vi du C:\BotNoiBo)
+  2. Mo file backend.txt, sua thanh dia chi backend cua ban
+     (mac dinh http://localhost:8788 — neu backend chay o may khac thi doi thanh
+      http://<ip-may-do>:8788)
+  3. Bam dup start-bot.cmd
+
+     LUON mo bang start-bot.cmd, DUNG bam thang "Grok Bot.exe":
+     bam thang vao exe thi thieu 4 bien moi truong, app se noi chuyen voi
+     server cua nha phat hanh thay vi backend cua ban.
+
+TAO LOI TAT (tuy chon):
+  Chuot phai start-bot.cmd → Send to → Desktop (create shortcut)
+
+CO SAN GI TRONG DAY:
+  Grok Bot.exe        ung dung (da va san, khong can cai them gi)
+  resources/app       phan da va
+  start-bot.cmd       lenh mo dung cach — mang 4 bien moi truong
+  backend.txt         dia chi backend, sua bang Notepad
+
+KHONG CAN: Node.js, khong can cai client, khong can quyen admin.
+
+Ban tu van hanh, cho muc dich ca nhan va nghien cuu.
+`;
