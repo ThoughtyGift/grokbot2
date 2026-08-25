@@ -189,3 +189,130 @@ export function buildExe({ distDir, stagingDir, patchSrc, startSrc, version, out
   const exe = join(distDir, `${outName}.exe`);
   return existsSync(exe) ? exe : null;
 }
+
+// ── Bản CHỞ CẢ ỨNG DỤNG ──────────────────────────────────────────────────────
+//
+// Khác bản 2 MB ở đúng một điểm: nó mang theo cây app đã vá (~490 MB), nên người dùng KHÔNG cần cài
+// client trước, và KHÔNG cần Node. Một file, cài, chạy — đúng hình dạng bộ cài của hãng.
+//
+// **Dùng cho máy của chính bạn.** Gói này chứa client desktop của nhà phát hành; nó tồn tại để thử
+// T2–T5 trên máy thứ hai của bạn, không phải để phát ra ngoài. `docs/legal.md` vẫn là ranh giới.
+//
+// Bản gốc `app.asar.disabled-by-grokbot2` bị loại: 46 MB đó chỉ để `--undo`, mà bản chở sẵn thì
+// không có gì phải hoàn lại.
+
+// `String.raw` là bắt buộc ở đây: ISS đầy dấu `\` (đường dẫn, và dấu nối dòng cuối dòng). Trong một
+// template thường, `\B` bị JS nuốt thành `B` — và bản dựng đầu tiên đã hỏng đúng vì thế:
+// `{userdesktop}\Bot Noi Bo` ra thành `{userdesktop}Bot Noi Bo`, Inno báo "Name must include a path".
+const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc }) => String.raw`; Sinh bởi scripts/setup-exe.mjs — đừng sửa tay.
+[Setup]
+AppId={{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBOFULL}
+AppName=Bot Noi Bo
+AppVersion=${version}
+AppPublisher=Bot Noi Bo (ban tu van hanh)
+DefaultDirName={localappdata}\Programs\Bot Noi Bo
+DefaultGroupName=Bot Noi Bo
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+OutputDir=${outDir}
+OutputBaseFilename=${outName}
+SetupIconFile=${iconPath}
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+UninstallDisplayName=Bot Noi Bo
+UninstallDisplayIcon={app}\Grok Bot.exe
+
+[Languages]
+Name: "vi"; MessagesFile: "compiler:Default.isl"
+
+[Files]
+; Ca cay app da va. Bo ban goc de ben: 46 MB do chi de --undo, ban cho san khong can.
+Source: "${appSrc}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Excludes: "app.asar.disabled-by-grokbot2"
+Source: "{#SourceDir}\start-bot.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\icon.ico";      DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+; Tro vao start-bot.cmd, KHONG tro thang vao exe: bon bien moi truong nam trong do.
+Name: "{userdesktop}\Bot Noi Bo"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
+  IconFilename: "{app}\Grok Bot.exe"; IconIndex: 0
+Name: "{group}\Bot Noi Bo"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
+  IconFilename: "{app}\Grok Bot.exe"; IconIndex: 0
+
+[Run]
+Filename: "{app}\start-bot.cmd"; Description: "Mo Bot Noi Bo ngay"; Flags: postinstall nowait skipifsilent
+
+[Code]
+var BackendPage: TInputQueryWizardPage;
+
+procedure InitializeWizard();
+begin
+  BackendPage := CreateInputQueryPage(wpSelectDir,
+    'Backend cua ban', 'App se noi chuyen voi dia chi nao?',
+    'De nguyen neu backend chay ngay tren may nay. Doi duoc sau: sua backend.txt trong thu muc cai dat.');
+  BackendPage.Add('Dia chi backend:', False);
+  BackendPage.Values[0] := 'http://localhost:8788';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SaveStringToFile(ExpandConstant('{app}\backend.txt'), BackendPage.Values[0] + #13#10, False);
+end;
+`;
+
+/** Launcher của bản chở app: exe nằm NGAY CẠNH nó, không phải ở thư mục của hãng. */
+export const START_BUNDLED = `@echo off
+REM Mo Bot Noi Bo. App nam ngay canh file nay — day la ban tu chua, khong can client cua hang.
+REM
+REM Bon bien duoi day la toan bo hop dong voi client, thieu cai nao cung hong theo kieu rieng:
+REM   CURSOR_API_BASE_URL / SAND_BACKEND_URL  -> thieu thi noi voi server nha phat hanh
+REM   CURSOR_WEBSITE_URL                      -> thieu thi dang nhap bi day sang https://localhost:4443
+REM   SAND_DISABLE_UPDATES                    -> thieu thi app TU CAP NHAT va xoa sach ban va
+REM
+REM Dat bang setx thi tien hon nhung KHONG duoc: CURSOR_API_BASE_URL cung duoc Cursor IDE that doc.
+
+setlocal
+set "BE=http://localhost:8788"
+if exist "%~dp0backend.txt" set /p BE=<"%~dp0backend.txt"
+
+set "CURSOR_API_BASE_URL=%BE%"
+set "SAND_BACKEND_URL=%BE%"
+set "CURSOR_WEBSITE_URL=https://cursor.com"
+set "SAND_DISABLE_UPDATES=1"
+
+if not exist "%~dp0Grok Bot.exe" (
+  echo Thieu "%~dp0Grok Bot.exe" — cai dat khong tron. Chay lai bo cai.
+  pause
+  exit /b 1
+)
+start "" "%~dp0Grok Bot.exe" %*
+`;
+
+/**
+ * Dựng bộ cài chở cả app. Trả về đường dẫn, hoặc `null` khi thiếu Inno Setup / thiếu cây app.
+ *
+ * @param {{ distDir: string, stagingDir: string, appSrc: string, version: string, outName: string }} opts
+ */
+export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) {
+  const iscc = isccPath();
+  if (!iscc) return null;
+  if (!existsSync(join(appSrc, "Grok Bot.exe"))) {
+    console.error(`Không thấy "Grok Bot.exe" trong ${appSrc} — không có gì để chở.`);
+    return null;
+  }
+
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(stagingDir, { recursive: true });
+  writeFileSync(join(stagingDir, "start-bot.cmd"), START_BUNDLED.replace(/\r?\n/g, "\r\n"), "utf8");
+  const iconPath = makeIcon(stagingDir);
+
+  const iss = join(stagingDir, "setup-full.iss");
+  writeFileSync(iss, ISS_FULL({ version, iconPath, outDir: distDir, outName, appSrc }), "utf8");
+  // Nén 490 MB bằng lzma2/max mất vài phút — đó là phần lâu nhất của cả bản dựng.
+  execFileSync(iscc, [`/DSourceDir=${stagingDir}`, iss], { stdio: "pipe", maxBuffer: 64 << 20 });
+
+  const exe = join(distDir, `${outName}.exe`);
+  return existsSync(exe) ? exe : null;
+}

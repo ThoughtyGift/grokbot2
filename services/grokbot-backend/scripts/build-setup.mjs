@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { b64, winInstaller, winStart, macInstaller, macStart } from "./setup-templates.mjs";
-import { buildExe, isccPath } from "./setup-exe.mjs";
+import { buildExe, buildFullExe, isccPath } from "./setup-exe.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -108,5 +108,31 @@ if (exe) {
 } else {
   console.log(`  (chưa có Inno Setup nên không dựng .exe — trang tải phát bản .cmd. ISCC: ${isccPath() ?? "không thấy"})`);
 }
+/*
+ * `--with-app` — bản CHỞ CẢ ỨNG DỤNG (~490 MB nén xuống còn khoảng một nửa).
+ *
+ * Không dựng theo mặc định vì nó mất vài phút và ra một file rất to. Dựng khi cần thử trên máy khác:
+ * bản này KHÔNG đòi client cài trước, cũng KHÔNG đòi Node — đúng hình dạng bộ cài của hãng.
+ */
+if (process.argv.includes("--with-app")) {
+  const appSrc = process.env.GROKBOT2_CLIENT_DIR
+    ?? join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot");
+  console.log(`  đang nén cây app từ ${appSrc} — mất vài phút…`);
+  const full = buildFullExe({
+    distDir: DIST,
+    stagingDir: join(DIST, "staging-full"),
+    appSrc,
+    version: stamp.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1.$2.$3"),
+    outName: `Bot-Noi-Bo-Setup-${stamp}`,
+  });
+  if (full) {
+    console.log(`✓ ${full}  (${(statSync(full).size / 1048576).toFixed(0)} MB)  ← chở cả app`);
+    rmSync(join(DIST, "staging-full"), { recursive: true, force: true });
+    console.log("  Gói này chứa client của nhà phát hành: dùng cho máy của chính bạn, đừng phát ra ngoài.");
+  } else {
+    console.log("  không dựng được bản chở app (thiếu Inno Setup hoặc thiếu cây app).");
+  }
+}
+
 console.log("  Thử: curl -sI http://localhost:8788/download/windows · /download/mac");
 console.log("  Chạy thử an toàn: GROKBOT2_SETUP_DRYRUN=1 → bung ra rồi dừng, không vá, không mở app.");
