@@ -43,37 +43,59 @@ cũng được; app vẫn cài và mở lên.
 
 ---
 
-## Đường 2 — VPS + tên miền (cho máy KHÁC MẠNG, ai cũng tải được)
+## Đường 2 — VPS (ĐÃ CHẠY 26/08) · tên miền thêm sau
 
-Khi máy thứ hai không cùng LAN, hoặc muốn một địa chỉ công khai như hãng.
+**Đang sống:** `http://103.75.186.63:8099/` — trang tải + file cài, gọi được từ bất kỳ mạng nào.
 
-**Cần:** một VPS Linux + một tên miền trỏ về IP VPS (bản ghi A).
+### Đã dựng gì
 
-**1. Chép ba thứ lên VPS:**
-- `services/grokbot-backend/.data/dist/Bot-Noi-Bo-Setup-*.exe` (bản chở app)
-- `apps/grokbot-site/index.html`
-- toàn bộ repo (hoặc chỉ phần cần để `serve-site.mjs` chạy — nó import `src/site.js`)
+| | |
+|---|---|
+| Thư mục | `/opt/botnoibo/` — `index.html` · `serve-static.mjs` · `dist/` |
+| Dịch vụ | `botnoibo-site.service` (systemd, `Restart=always`, tự chạy lại sau reboot) |
+| Cổng | **8099** — cổng riêng, **không đụng nginx** |
+| Log | `/var/log/botnoibo-site.log` |
 
-**2. Chạy máy chủ tĩnh trên VPS:**
-```
-PORT=8080 node services/grokbot-backend/scripts/serve-site.mjs
-```
+Lệnh quản: `systemctl status|restart botnoibo-site` · `journalctl -u botnoibo-site`
 
-**3. Đặt reverse proxy + HTTPS trước nó.** Caddy là gọn nhất — một dòng Caddyfile:
-```
-tai.tenmiencuaban.com {
-    reverse_proxy 127.0.0.1:8080
+### Vì sao KHÔNG cài Caddy, KHÔNG sửa nginx
+
+VPS này đang chạy **hạ tầng thật của bạn**: `admin.halcion.vn` (pool Claude), `foodaymart.vn`,
+`api.foodaymart.vn`, `media.halcion.vn`, `convex`… nginx đã giữ 80/443. Cài Caddy vào là hai thứ
+tranh cổng — rủi ro sập cái đang chạy để được một trang tải. Nên: **cổng riêng 8099, không chạm gì
+khác.** Kiểm sau khi dựng: `nginx -t` OK, và `admin.halcion.vn` 200 · `foodaymart.vn` 301 ·
+`media.halcion.vn` 200 — vẫn nguyên.
+
+### Máy chủ dùng ở đây khác `serve-site.mjs`
+
+[`infra/vps/serve-static.mjs`](../../infra/vps/serve-static.mjs) — Node thuần, **không import gì**,
+không `node_modules`. `serve-site.mjs` kéo theo cả backend (store, auth, mcp); đưa khối đó lên một
+VPS đang chạy sản xuất là mang rủi ro vào chỗ không cần.
+
+Bốn đường, không hơn: `/` · `/download/windows` · `/download/mac` · `/healthz`. Đo qua Internet
+(26/08): `/` **200** 19 KB · `/download/windows` **200** đúng tên file · `/v1/me`, `/gw/api/…`,
+`/admin`, `/../etc/passwd` đều **404**.
+
+### Đang phát bản 2 MB, KHÔNG phát bản 118 MB — cố ý
+
+Bản 118 MB chở **client của nhà phát hành**. Để nó sau một URL công khai là **phân phối phần mềm của
+họ**, khác hẳn "dùng trên máy của chính mình". Nên URL công khai chỉ phát **bản cấu hình 2 MB** —
+toàn code của mình. Muốn máy thứ hai lấy bản chở app: chép tay qua USB/SCP, hoặc đặt sau một đường
+dẫn bí mật + xác thực; nói một tiếng là làm.
+
+### Thêm tên miền (bước sau)
+
+1. Trỏ bản ghi **A** của `tai.halcion.vn` → `103.75.186.63`
+2. Thêm một server block nginx (KHÔNG sửa block nào đang có):
+```nginx
+server {
+    listen 80;
+    server_name tai.halcion.vn;
+    location / { proxy_pass http://127.0.0.1:8099; proxy_set_header Host $host; }
 }
 ```
-Caddy tự xin chứng chỉ Let's Encrypt. Xong: `https://tai.tenmiencuaban.com/` là trang tải công khai.
-
-**4. Giữ nó chạy:** `pm2 start scripts/serve-site.mjs`, hoặc một systemd unit (một `ExecStart` gọi `node scripts/serve-site.mjs`, `Restart=always`).
-
-**KHÔNG CHẮC CHẮN / chưa làm được ở đây:** tôi không tạo được VPS hay tên miền hộ. Phần đo được là
-máy chủ tĩnh phát đúng qua IP LAN (25/08: `/` 200, `/download/windows` 118 MB, `/v1`·`/gw`·`/admin`
-đều 404). Bước Caddy + DNS là thao tác trên VPS của bạn.
-
----
+3. `nginx -t && systemctl reload nginx`
+4. HTTPS: `certbot --nginx -d tai.halcion.vn` (nginx đã có sẵn, không cần Caddy)
 
 ## Vì sao chỉ phát trang tải, không phơi cả backend
 
