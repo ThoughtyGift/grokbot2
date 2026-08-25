@@ -26,7 +26,14 @@ const DEFAULT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data")
  * which used to `loadState()` the live file as a side effect. `NODE_TEST_CONTEXT` is set by the
  * test runner; production never has it.
  */
-function dataDir(): string {
+/**
+ * Thư mục dữ liệu ĐANG DÙNG.
+ *
+ * Xuất ra vì `attachments.ts` và `observe.ts` từng tự dựng đường dẫn `../.data` của riêng chúng —
+ * nên một bản chạy trỏ sang thư mục trắng vẫn đọc tệp đính kèm và coverage của máy này (đo ở T1,
+ * 25/08: "restored 64 attachment(s)" trên một sổ vừa tạo). Một nguồn sự thật thì không lệch được.
+ */
+export function dataDir(): string {
   if (process.env.GROKBOT2_STATE_FILE) return dirname(process.env.GROKBOT2_STATE_FILE);
   if (process.env.NODE_TEST_CONTEXT) return join(tmpdir(), "grokbot2-test-store");
   return DEFAULT_DIR;
@@ -35,7 +42,15 @@ function dataDir(): string {
 export const jsonPath = (): string => process.env.GROKBOT2_STATE_FILE ?? join(dataDir(), "state.json");
 export const sqlitePath = (): string => process.env.GROKBOT2_SQLITE_FILE ?? join(dataDir(), "grokbot.sqlite");
 
-const SNAPSHOT = join(DEFAULT_DIR, "snapshot.json");
+/**
+ * Ảnh chụp mồi — đọc theo THƯ MỤC ĐANG DÙNG, không phải thư mục mặc định.
+ *
+ * Trước đây hằng này ghim `DEFAULT_DIR`, nên một bản chạy trỏ `GROKBOT2_STATE_FILE` sang thư mục
+ * trắng vẫn nuốt `snapshot.json` của máy này. Đo được ở T1 (25/08): bản "sạch" khởi động lên với
+ * **4 bot thật** (Claude, E2E Probe, Alpha, Beta) — nghĩa là mọi phép thử "dựng từ số 0" đều đang
+ * thử trên dữ liệu của người dùng mà không ai biết.
+ */
+const snapshotPath = (): string => join(dataDir(), "snapshot.json");
 
 export interface PersistedState {
   agents?: unknown[];
@@ -182,13 +197,36 @@ function migrateOwnerId(database: DatabaseSync): void {
 let db: DatabaseSync | null = null;
 let dbFile = "";
 
+let writingEnabled = process.env.GROKBOT2_ALLOW_WRITE === "1";
+let warned = false;
+
+export function enableWriting(): void { writingEnabled = true; }
+
 function getDb(): DatabaseSync {
   const want = sqlitePath();
   if (db && dbFile === want) return db;
   db?.close();
   mkdirSync(dirname(want), { recursive: true });
+  // Hỏi TRƯỚC khi mở: `new DatabaseSync` tự tạo file, nên hỏi sau thì một sổ vừa sinh ra cũng
+  // "đã tồn tại" — và tiến trình đọc sẽ bỏ qua bước dựng bảng trên một sổ rỗng. Bắt được ở
+  // `e2e-native` (25/08): "no such table: agents".
+  const existedBefore = existsSync(want);
   db = new DatabaseSync(want);
   dbFile = want;
+
+  /*
+   * **Chỉ tiến trình ghi mới được đổi schema.**
+   *
+   * `pnpm backend` chạy BỐN tiến trình, và trước đây cả bốn cùng `exec(SCHEMA)` + `ALTER TABLE` khi
+   * mở sổ. Bốn người cùng xin khoá ghi trên một file WAL thì có lúc một người thua — và ngày 25/08
+   * người thua đó ném lỗi, `loadState` lùi về `snapshot.json` cũ, rồi lần lưu sau cắt sổ 2.036 tin
+   * xuống 6. Migration là việc của người ghi; ba tiến trình đọc chỉ cần mở file ra đọc.
+   *
+   * Sổ chưa tồn tại là chuyện khác: khi đó phải dựng schema, kể cả đang là tiến trình đọc, vì không
+   * có gì để đọc cả.
+   */
+  if (!writingEnabled && existedBefore) return db;
+
   db.exec(SCHEMA);
   db.exec("PRAGMA journal_mode = WAL");
   migrateOwnerId(db);
@@ -230,11 +268,11 @@ function metaSet(database: DatabaseSync, key: string, value: string): void {
 
 /** Read the frozen JSON (or snapshot.json on a first-ever machine). Never throws. */
 function readJsonFile(): PersistedState {
-  for (const f of [jsonPath(), SNAPSHOT]) {
+  for (const f of [jsonPath(), snapshotPath()]) {
     try {
       if (!existsSync(f)) continue;
       const parsed = JSON.parse(readFileSync(f, "utf8")) as PersistedState;
-      if (f === SNAPSHOT) console.log("[grokbot2] imported snapshot.json");
+      if (f === snapshotPath()) console.log("[grokbot2] imported snapshot.json");
       return parsed;
     } catch (e) {
       console.warn(`[grokbot2] could not read ${f}:`, (e as Error).message);
@@ -492,11 +530,30 @@ function loadFromDb(database: DatabaseSync): PersistedState {
   };
 }
 
+/**
+ * Đọc trạng thái. **Có sổ SQLite mà đọc hỏng thì NÉM, không im lặng lùi về JSON.**
+ *
+ * Bản trước lùi về JSON trong mọi trường hợp, và đó là đường dẫn tới lần mất dữ liệu ngày 25/08:
+ * `getDb()` hỏng một lần (nhiều tiến trình cùng chạy migration, SQLite khoá), `readJsonFile()` trả
+ * về `snapshot.json` **từ 16/08 với 4 bot, 0 tin nhắn**, tiến trình chạy tiếp như không có gì, và
+ * lần lưu kế tiếp `writeSnapshot` **cắt tỉa** sổ 2.036 tin xuống còn 6.
+ *
+ * Lùi về JSON chỉ đúng ở MỘT trường hợp: **chưa có sổ nào cả** (máy mới). Còn khi sổ tồn tại mà đọc
+ * không được, thứ đúng đắn duy nhất là dừng ồn ào — chạy tiếp với một trạng thái nghèo hơn là cách
+ * chắc chắn nhất để xoá phần còn thiếu.
+ */
 export function loadState(): PersistedState {
+  const haveDb = existsSync(sqlitePath());
   try {
     return loadFromDb(getDb());
   } catch (e) {
-    console.warn("[grokbot2] sqlite load failed, falling back to JSON:", (e as Error).message);
+    if (haveDb) {
+      console.error("[grokbot2] KHÔNG đọc được sqlite, và sổ ĐANG TỒN TẠI — dừng thay vì chạy tiếp");
+      console.error(`[grokbot2]   ${sqlitePath()}`);
+      console.error("[grokbot2]   Chạy tiếp sẽ lưu đè một trạng thái nghèo hơn lên dữ liệu thật.");
+      throw e;
+    }
+    console.warn("[grokbot2] chưa có sổ — dựng từ JSON:", (e as Error).message);
     return readJsonFile();
   }
 }
@@ -564,10 +621,8 @@ export function jsonWriteCount(): number { return jsonWrites; }
  * Nên quyền ghi phải được BẬT rõ ràng, và chỉ máy chủ thật bật nó (`index.ts`). Mọi tiến trình khác
  * đọc thoải mái và không ghi được gì. Test chạy trên kho riêng nên tự bật bằng biến môi trường.
  */
-let writingEnabled = process.env.GROKBOT2_ALLOW_WRITE === "1";
-let warned = false;
+// (khai báo đã dời lên trên `getDb` — nó là thứ đầu tiên hỏi tới quyền ghi)
 
-export function enableWriting(): void { writingEnabled = true; }
 
 const mayWrite = (): boolean => {
   if (writingEnabled) return true;

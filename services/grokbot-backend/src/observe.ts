@@ -22,9 +22,11 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redact } from "./redact.js";
+import { dataDir } from "./store.js";
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
-const FILE = process.env.GROKBOT2_COVERAGE_FILE ?? join(DIR, "coverage.json");
+/** Theo thư mục dữ liệu đang dùng — bản chạy thử không được đọc coverage của máy thật. */
+const DIR = (): string => dataDir();
+const FILE = process.env.GROKBOT2_COVERAGE_FILE ?? join(DIR(), "coverage.json");
 
 /**
  * `false` (default) = observe only: record the path, still answer `200 {}`.
@@ -94,7 +96,7 @@ function save(): void {
       sse: { opened: sse.opened, closed: sse.closed, lastOpenedMs: sse.lastOpenedMs },
     };
     try {
-      mkdirSync(DIR, { recursive: true });
+      mkdirSync(DIR(), { recursive: true });
       const tmp = `${FILE}.tmp`;
       writeFileSync(tmp, JSON.stringify(out, null, 1));
       renameSync(tmp, FILE);
@@ -115,7 +117,7 @@ export function saveCoverageNow(): void {
     sse: { opened: sse.opened, closed: sse.closed, lastOpenedMs: sse.lastOpenedMs },
   };
   try {
-    mkdirSync(DIR, { recursive: true });
+    mkdirSync(DIR(), { recursive: true });
     writeFileSync(FILE, JSON.stringify(out, null, 1));
   } catch { /* best effort */ }
 }

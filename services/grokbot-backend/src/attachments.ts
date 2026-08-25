@@ -22,12 +22,13 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bindAttachmentCatalog } from "./store.js";
+import { bindAttachmentCatalog, dataDir } from "./store.js";
 
 /** The virtual directory the transcript refers to. Nothing is written here; see DISK. */
 const DIR = "/workspace/attachments";
 /** Where the bytes actually live, beside the rest of the backend's state. */
-const DISK = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "attachments");
+/** Theo thư mục dữ liệu đang dùng, không phải `../.data` ghim cứng — xem dataDir() trong store.ts. */
+const DISK = (): string => join(dataDir(), "attachments");
 /** Bounded so a long browsing session cannot grow without limit. */
 const MAX_ENTRIES = 64;
 
@@ -41,16 +42,16 @@ let seq = 1;
  * "Image unavailable" the moment tsx reloaded, which looks exactly like a broken contract.
  */
 function diskPath(virtual: string): string {
-  return join(DISK, basename(virtual));
+  return join(DISK(), basename(virtual));
 }
 
 {
   try {
-    mkdirSync(DISK, { recursive: true });
-    for (const name of readdirSync(DISK)) {
+    mkdirSync(DISK(), { recursive: true });
+    for (const name of readdirSync(DISK())) {
       const virtual = `${DIR}/${name}`;
       try {
-        const bytes = readFileSync(join(DISK, name));
+        const bytes = readFileSync(join(DISK(), name));
         // Mime comes from the bytes, not from a constant: staging now accepts JPEG/GIF/WebP, and
         // restoring them all as image/png would hand the renderer a data URL it cannot decode.
         // Non-image files (X8) restore too — skipping them meant a restart between staging and
@@ -173,7 +174,7 @@ export function stageImage(dataUrl: string, fileName: string): string | null {
   const path = `${DIR}/${seq++}-${safe}`;
   store.set(path, { bytes, ...size });
   try {
-    mkdirSync(DISK, { recursive: true });
+    mkdirSync(DISK(), { recursive: true });
     writeFileSync(diskPath(path), bytes);
   } catch { /* memory-only for this run */ }
 
@@ -210,7 +211,7 @@ export function stageFile(dataUrl: string, fileName: string, mimeType?: string):
   const path = `${DIR}/${seq++}-${base}`;
   store.set(path, { bytes, mime: declared, width: 0, height: 0 });
   try {
-    mkdirSync(DISK, { recursive: true });
+    mkdirSync(DISK(), { recursive: true });
     writeFileSync(diskPath(path), bytes);
   } catch { /* memory-only for this run */ }
   while (store.size > MAX_ENTRIES) {

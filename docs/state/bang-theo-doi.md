@@ -131,24 +131,36 @@ chết ngay. Không danh sách đen, không phải dọn rác.
 nằm trong bảng `users` — chưa xoá vì **chỉ máy chủ được ghi sổ**, và dựng một người ghi thứ hai để
 xoá một dòng là đúng cái đã gây mất dữ liệu hai lần. Xoá khi có đường quản trị.
 
-### Chặng 3 · Test trên máy thứ hai — cái thước đo ranh giới
+### Chặng 3 · Test trên máy thứ hai — **T1 xong, T2–T5 chờ phần cứng**
 
 Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
 
-| # | việc | kiểm bằng | ĐẠT khi |
+| # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
-| 3.1 | ⬜ **T1** BE tự dựng từ 0 | `pnpm backend` rồi `curl /v1/health` | `ok:true` · `.data/grokbot.sqlite` **tự sinh** · 0 bot |
-| 3.2 | ⬜ **T2** một lượt chat thật | `pnpm web` → gõ một câu | có câu trả lời |
-| 3.3 | ⬜ **T3** box qua hầm | `node scripts/verify-computer.mjs` | liệt kê được `/home/box/workspace` · VNC hiện hình |
-| 3.4 | ⬜ **T4** bộ cài `.exe` trên máy sạch | chạy `Cai-dat-Bot-Noi-Bo-*.exe` | shortcut mang **logo app** · app tự mở · `check-app.cmd` đếm được RPC |
-| 3.5 | ⬜ **T5** hai máy một box | cả hai cùng sai bot mở trình duyệt | *(dự đoán **ĐỎ**)* — ghi lại đúng cái xảy ra, **đừng sửa vội** |
+| 3.1 | ✅ **T1** BE tự dựng từ 0 | chạy `index.ts` với `GROKBOT2_STATE_FILE` trỏ thư mục trắng, cổng 8797 | sổ **tự sinh** · `/v1/agents` trả `[]` · `/v1/health` ok |
+| 3.1b | ✅ Đăng ký **tự mở cho người đầu tiên** (nhánh không unit-test được) | trên sổ trắng | người đầu **200** · người thứ hai **403** |
+| 3.2 | ⬜ **T2** một lượt chat trên máy khác | — | *chờ máy thứ hai* |
+| 3.3 | ⬜ **T3** box qua hầm từ máy khác | — | *chờ máy thứ hai* |
+| 3.4 | ⬜ **T4** `.exe` trên máy sạch | — | *chờ máy sạch* |
+| 3.5 | ⬜ **T5** hai máy một box | — | *bắt buộc hai máy thật* |
 
-**E2E chốt chặng 3**
-```
-node scripts/verify-sqlite.mjs      → sổ mới dựng đúng schema
-node scripts/verify-runtime.mjs     → tiến trình chạy lượt trả lời
-infra\scripts\check-app.cmd         → app nói chuyện với backend local, không phải server hãng
-```
+**T1 chạy được ngay tại đây** bằng thư mục dữ liệu trắng + cổng riêng. Nó **không** thay thế máy thứ
+hai (không chứng minh được "máy chưa từng có repo này"), nhưng nó là chỗ dễ lòi đường dẫn ghim cứng
+nhất — và nó đã lòi ra ba chỗ.
+
+#### T1 tìm ra: "sổ trắng" hoá ra không trắng
+
+Bản chạy sạch đầu tiên khởi động lên với **4 bot thật và 64 tệp đính kèm của máy này**. Ba hằng đường
+dẫn ghim `.data` mặc định thay vì thư mục đang dùng:
+
+| chỗ | hằng cũ | hậu quả |
+|---|---|---|
+| `store.ts` | `SNAPSHOT = join(DEFAULT_DIR, …)` | nuốt `snapshot.json` của máy thật |
+| `attachments.ts` | `DISK = …/../.data/attachments` | "restored 64 attachment(s)" |
+| `observe.ts` | `DIR = …/../.data` | coverage của máy thật |
+
+Cả ba giờ đi qua **một nguồn duy nhất**: `store.dataDir()`. Chạy lại: `[]` bot, không dòng
+`restored` nào.
 
 ### Chặng 4 · Đưa BE ra khỏi máy cá nhân *(cần Chặng 2 xong)*
 
@@ -288,6 +300,35 @@ Còn **58 bộ e2e** khác trong `scripts/`; bảng này chỉ liệt kê nhữn
    Xem §5, và nợ N4.
 
 ---
+
+## 4b · Sự cố 25/08 — mất 2.030 tin nhắn, đã khôi phục, đã sửa gốc
+
+**Chuyện gì:** lúc ~10:58 sổ tụt từ **2.036 tin / 8 bot** xuống **6 tin / 4 bot**. Khôi phục từ
+`grokbot.sqlite.2.bak` (09:20) — đủ **8 bot · 2.036 tin · 64 đính kèm · 4 routine**.
+
+**Cơ chế — hai lỗi cộng lại, cả hai đều có sẵn từ trước:**
+
+1. `pnpm backend` chạy **bốn tiến trình**, và cả bốn cùng `exec(SCHEMA)` + `ALTER TABLE` mỗi lần mở
+   sổ. Bốn người cùng xin khoá ghi trên một file WAL thì có lúc một người thua.
+2. Người thua ném lỗi → `loadState()` **im lặng lùi về JSON** → `snapshot.json` từ **16/08** (4 bot,
+   0 tin) → tiến trình chạy tiếp như không có gì → lần lưu kế tiếp `writeSnapshot` **cắt tỉa** sổ
+   xuống đúng bằng ảnh chụp cũ.
+
+Việc thêm cột `token_version` của chặng 2 là **giọt nước** làm một tiến trình thua khoá, không phải
+nguyên nhân.
+
+**Đã sửa gốc:**
+
+- **Chỉ tiến trình ghi mới chạy migration.** Ba tiến trình đọc chỉ mở file ra đọc.
+- **Có sổ mà đọc hỏng thì NÉM, không lùi.** Lùi về JSON chỉ còn đúng khi **chưa có sổ nào** (máy
+  mới). Dừng ồn ào hơn là chạy tiếp với trạng thái nghèo rồi ghi đè phần còn thiếu.
+
+**Chốt mới này bắt ngay một lỗi của chính tôi:** `e2e-native` đỏ với `no such table: agents` — tôi
+hỏi `existsSync` **sau** `new DatabaseSync`, mà lệnh đó tự tạo file, nên sổ mới toanh trông như đã
+tồn tại và bị bỏ qua bước dựng bảng. Hỏi trước khi mở là xong.
+
+**Sau khi sửa:** 278/278 unit · `e2e-native` 60/60 · hợp đồng 4/4 · sổ vẫn **8 bot / 2.036 tin** sau
+mọi phép thử.
 
 ## 5 · Chưa chắc chắn — và cảnh báo về chính số đo
 
