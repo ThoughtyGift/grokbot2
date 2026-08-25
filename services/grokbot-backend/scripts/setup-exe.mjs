@@ -391,8 +391,17 @@ export function buildZip({ distDir, stagingDir, appSrc, outName }) {
   const root = join(stagingDir, outName);
 
   // Chép cây app, bỏ bản gốc để bên (46 MB chỉ dùng cho --undo).
-  execFileSync("robocopy", [appSrc, root, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
-    "/XF", "app.asar.disabled-by-grokbot2"], { stdio: "pipe" });
+  /*
+   * robocopy tra ma 0-7 la THANH CONG (1 = da chep file, 3 = chep + thua file dich...). Chi tu 8 tro
+   * len moi la loi that. `execFileSync` thi coi moi ma khac 0 la nem — nen bat lai va tu phan xu.
+   */
+  try {
+    execFileSync("robocopy", [appSrc, root, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
+      "/XF", "app.asar.disabled-by-grokbot2"], { stdio: "pipe" });
+  } catch (e) {
+    const code = typeof e.status === "number" ? e.status : 16;
+    if (code >= 8) throw new Error("robocopy that bai, ma " + code);
+  }
   // Windows doc file .cmd/.txt bang CRLF; ghi LF thi Notepad hien mot dong dai dinh lien.
   const crlf = (t) => t.split(String.fromCharCode(10)).join(String.fromCharCode(13,10));
   writeFileSync(join(root, "start-bot.cmd"), crlf(START_BUNDLED), "utf8");
@@ -402,7 +411,17 @@ export function buildZip({ distDir, stagingDir, appSrc, outName }) {
   const zip = join(distDir, `${outName}.zip`);
   rmSync(zip, { force: true });
   // `-a` cho bsdtar tự chọn định dạng theo đuôi `.zip`.
-  execFileSync("tar", ["-a", "-c", "-f", zip, "-C", stagingDir, outName], { stdio: "pipe", maxBuffer: 64 << 20 });
+  /*
+   * Goi THANG bsdtar cua Windows, khong goi "tar" tren PATH.
+   *
+   * Git Bash dat GNU tar truoc trong PATH, ma GNU tar khong hieu co `-a` (tu chon dinh dang theo
+   * duoi file) — no bao loi kho hieu. bsdtar o System32 co tu Windows 10, va no biet ghi .zip.
+   */
+  // Dùng `join` thay vì viết chuỗi có dấu gạch ngược: chuỗi "C:\Windows\System32\tar.exe" trong JS
+  // đọc \W \S \t là ký tự thoát, ra một đường dẫn sai mà nhìn thì vẫn thấy đúng.
+  const bsdtar = join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe");
+  const tarBin = existsSync(bsdtar) ? bsdtar : "tar";
+  execFileSync(tarBin, ["-a", "-c", "-f", zip, "-C", stagingDir, outName], { stdio: "pipe", maxBuffer: 64 << 20 });
   rmSync(stagingDir, { recursive: true, force: true });
   return existsSync(zip) ? zip : null;
 }

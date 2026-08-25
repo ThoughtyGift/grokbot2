@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { b64, winInstaller, winStart, macInstaller, macStart } from "./setup-templates.mjs";
-import { buildExe, buildFullExe, isccPath } from "./setup-exe.mjs";
+import { buildExe, buildFullExe, buildZip, isccPath } from "./setup-exe.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -132,6 +132,26 @@ if (process.argv.includes("--with-app")) {
   } else {
     console.log("  không dựng được bản chở app (thiếu Inno Setup hoặc thiếu cây app).");
   }
+}
+
+/*
+ * `--zip` — bản giải nén, không cần bộ cài.
+ *
+ * Lý do thực tế: bộ cài `.exe` chưa ký số nên SmartScreen chặn "Windows protected your PC" trên máy
+ * lạ (đo được 26/08 trên máy thứ hai của chủ máy). Giải nén rồi chạy `.cmd` thì không qua cửa đó.
+ */
+if (process.argv.includes("--zip")) {
+  const appSrc = process.env.GROKBOT2_CLIENT_DIR
+    ?? join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot");
+  console.log(`  đang nén ZIP từ ${appSrc} — vài phút…`);
+  const zip = buildZip({
+    distDir: DIST,
+    stagingDir: join(DIST, "staging-zip"),
+    appSrc,
+    outName: `Bot-Noi-Bo-${stamp}`,
+  });
+  if (zip) console.log(`✓ ${zip}  (${(statSync(zip).size / 1048576).toFixed(0)} MB)  ← giải nén là chạy`);
+  else console.log("  không dựng được ZIP.");
 }
 
 console.log("  Thử: curl -sI http://localhost:8788/download/windows · /download/mac");
