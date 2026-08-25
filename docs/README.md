@@ -18,6 +18,7 @@ Ba loại tài liệu, đừng lẫn:
 
 | Bạn đang muốn | Đọc |
 |---|---|
+| **Biết còn phải làm gì — mở cái này trước** | [state/bang-theo-doi.md](state/bang-theo-doi.md) |
 | **Ngày đầu làm việc trên repo** | [onboarding.md](onboarding.md) |
 | Hiểu hệ thống trong 10 phút | [architecture.md](architecture.md) |
 | Biết đang làm tới đâu | [../ROADMAP.md](../ROADMAP.md) → [roadmap.md](../ROADMAP.md) |
@@ -28,6 +29,10 @@ Ba loại tài liệu, đừng lẫn:
 | Làm cho hệ thống chuyên nghiệp, scale được | [system-pipeline.md](plan/system-pipeline.md) |
 | Mở cho nhiều người dùng | [multi-tenant-roadmap.md](plan/multi-tenant-roadmap.md) |
 | Gộp grokbot2 với cinAPI thành một sản phẩm | [cinapi-merge.md](plan/cinapi-merge.md) |
+| Giao app cho người khác tải về | [plan/ship-to-users.md](plan/ship-to-users.md) |
+| Tách người dùng trên cùng một box | [plan/per-user-on-one-box.md](plan/per-user-on-one-box.md) |
+| Một màn hình riêng cho mỗi bot | [plan/one-display-per-bot.md](plan/one-display-per-bot.md) |
+| Bot điều khiển máy tính, và dạy việc cho bot | [plan/desktop-computer-use.md](plan/desktop-computer-use.md) |
 
 ## plan/ — ĐANG LÀM
 
