@@ -16,6 +16,7 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const { handleSite, newestSetup, SETUP_KINDS } = await import("./site.js");
+const { registerUser } = await import("./web-auth.js");
 
 /** `ServerResponse` giả, chỉ giữ đúng ba thứ bài kiểm cần đọc. */
 function fakeRes(): ServerResponse & { code: number; headers: Record<string, string>; body: string } {
@@ -116,4 +117,24 @@ test("newestSetup chọn gói mới nhất và bỏ qua file lạ", () => {
 
 test("thư mục trống trả null thay vì ném lỗi", () => {
   assert.equal(newestSetup(join(tmpdir(), "khong-ton-tai-" + process.pid)), null);
+});
+
+/*
+ * Chính sách đăng ký — kiểm qua CỬA CÔNG KHAI (`registerUser`), không qua hàm nội bộ.
+ *
+ * Bài này chỉ khoá nhánh "bật cờ thì mở", vì nhánh "sổ trống thì mở" cần một sổ riêng — nhánh đó đã
+ * được chứng minh trên máy thật ở chặng 2: đóng thì `/v1/register` trả **403**, mở cờ thì **200**.
+ */
+test("bật GROKBOT2_ALLOW_REGISTER=1 thì đăng ký không bị chặn vì lý do chính sách", () => {
+  const before = process.env.GROKBOT2_ALLOW_REGISTER;
+  process.env.GROKBOT2_ALLOW_REGISTER = "1";
+  try {
+    const out = registerUser("khong-phai-email", "mat-khau-du-dai");
+    // Vẫn hỏng — nhưng vì email sai, KHÔNG phải vì chính sách. Đó là điều cần khẳng định.
+    assert.equal(out.ok, false);
+    assert.notEqual(out.error, "registration is closed");
+  } finally {
+    if (before === undefined) delete process.env.GROKBOT2_ALLOW_REGISTER;
+    else process.env.GROKBOT2_ALLOW_REGISTER = before;
+  }
 });

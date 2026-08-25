@@ -195,6 +195,15 @@ function getDb(): DatabaseSync {
   // Phase 4: users carry a password hash for web login (null for the token/desktop identity).
   try { db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT"); }
   catch (e) { if (!String((e as Error).message).toLowerCase().includes("duplicate column")) throw e; }
+  /*
+   * Chặng 2: số hiệu đời của token, để ĐĂNG XUẤT thật sự thu hồi được.
+   *
+   * JWT không trạng thái nên không rút lại được từng cái. Cách rẻ nhất là đánh số đời: token mang
+   * `tv`, đăng xuất thì tăng số trong bảng, mọi token đời cũ hết hiệu lực ngay. Không cần danh sách
+   * đen, không cần dọn rác.
+   */
+  try { db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"); }
+  catch (e) { if (!String((e as Error).message).toLowerCase().includes("duplicate column")) throw e; }
   importJsonIfNeeded(db);
   return db;
 }

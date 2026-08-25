@@ -103,22 +103,33 @@ không nên tự mọc thêm bảng.
 > `src/`. Đo ra mới thấy: BFF khởi động **10:54:44**, `.env` sửa **10:55:05**. Muốn nạp thì `touch`
 > một file trong `src/`, hoặc khởi động lại `pnpm backend`.
 
-### Chặng 2 · Vá ba lỗ đăng nhập — bắt buộc trước khi rời `127.0.0.1`
+### Chặng 2 · Vá ba lỗ đăng nhập — ✅ **XONG 25/08, kiểm trên máy thật**
 
-| # | việc | kiểm bằng | ĐẠT khi |
+| # | việc | kiểm bằng | kết quả đo được |
 |---|---|---|---|
-| 2.1 | ⬜ Thu hồi được token | `POST /v1/logout` rồi gọi lại `/v1/me` bằng token cũ | **401** (nay vẫn 200) |
-| 2.2 | ⬜ Chặn đoán mật khẩu | gọi `POST /v1/login` sai 6 lần | lần thứ 6 bị **429** |
-| 2.3 | ⬜ Khoá `/v1/register` | `POST /v1/register` khi chưa bật cờ mở | **403** |
-| 2.4 | ⬜ Rút hạn JWT (nay **365 ngày**) | đọc `exp` trong token | ≤ 30 ngày |
+| 2.1 | ✅ Thu hồi được token | logout rồi gọi lại `/v1/me` bằng token cũ | 200 → logout **204** → **401** |
+| 2.2 | ✅ Chặn đoán mật khẩu | gọi `/v1/login` sai 6 lần | 401·401·401·401·401 → **429** + `Retry-After` |
+| 2.3 | ✅ Khoá `/v1/register` | gọi khi chưa bật cờ | **403** `registration is closed` |
+| 2.4 | ✅ Rút hạn JWT | giải mã token vừa phát | **30 ngày** (trước: 365) · có `tv` |
 
-**E2E chốt chặng 2**
-```
-npx tsx --test src/auth-cinapi.test.ts src/site.test.ts   → xanh
-node scripts/gw-auth.mjs                                  → app gốc vẫn vào được
-```
-> Cửa của app desktop dùng **token cổng**, không dùng mật khẩu. Sửa đường web mà làm hỏng đường app
-> là kiểu lỗi chỉ lộ ra khi mở app lên — nên `gw-auth.mjs` là bắt buộc, không phải tuỳ chọn.
+**E2E chốt chặng:** unit **278/278** · hợp đồng **4/4 nhóm** (nhóm `auth` 6/6) · `verify-native`
+**8/8** · `e2e-native` **60/60** · self-xray **9/9**.
+
+**Cách thu hồi — số đời token.** JWT không trạng thái nên không rút lại từng cái được. Mỗi người có
+một số đời trong `users.token_version`; token web mang `tv`; đăng xuất thì tăng số, mọi token đời cũ
+chết ngay. Không danh sách đen, không phải dọn rác.
+
+> **Hai đường giấy tờ, và chỉ một đường bị siết.** App desktop vào bằng **token cổng** qua handshake
+> không mật khẩu, và **không biết tự làm mới**. Nên token desktop giữ hạn dài 365 ngày và **không
+> mang `tv`** — token thiếu `tv` vẫn hợp lệ, đúng lối tương thích ngược đã dùng cho `purpose`. Siết
+> cả hai đường thì app chết sau 30 ngày mà người dùng không có nút nào bấm.
+
+> **Đăng ký tự mở cho người đầu tiên.** Sổ trống → mở (không thì backend vừa dựng lên không ai vào
+> được). Có người rồi → đóng, trừ khi bật `GROKBOT2_ALLOW_REGISTER=1`.
+
+**Còn lại một dấu vết:** tài khoản thử `chang2-probe@test.local` (đã đăng xuất, token đã chết) vẫn
+nằm trong bảng `users` — chưa xoá vì **chỉ máy chủ được ghi sổ**, và dựng một người ghi thứ hai để
+xoá một dòng là đúng cái đã gây mất dữ liệu hai lần. Xoá khi có đường quản trị.
 
 ### Chặng 3 · Test trên máy thứ hai — cái thước đo ranh giới
 

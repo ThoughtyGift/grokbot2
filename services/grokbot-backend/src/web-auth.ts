@@ -11,7 +11,8 @@
  */
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { withDb } from "./store.js";
-import { mintJwt } from "./auth.js";
+import { mintJwt, WEB_TOKEN_DAYS } from "./auth.js";
+import { tokenVersionOf } from "./token-version.js";
 
 const N = 16384, r = 8, p = 1, KEYLEN = 32;
 
@@ -41,8 +42,26 @@ export interface AuthResult { ok: boolean; token?: string; email?: string; error
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Đăng ký có mở không.
+ *
+ * **Sổ trống thì mở** — phải có đường cho người đầu tiên vào, nếu không backend vừa dựng lên là
+ * không ai đăng nhập được. **Có người rồi thì đóng**, trừ khi bật `GROKBOT2_ALLOW_REGISTER=1`.
+ *
+ * Trước chặng này route mở cho bất kỳ ai gọi được cổng. Hôm nay vô hại vì cả bốn cổng chỉ nghe
+ * `127.0.0.1`, nhưng ngày đưa lên VPS thì đó là "ai cũng tự tạo tài khoản trên backend của bạn".
+ */
+function registrationOpen(): boolean {
+  if ((process.env.GROKBOT2_ALLOW_REGISTER ?? "").trim() === "1") return true;
+  return withDb((db) => {
+    const row = db.prepare("SELECT COUNT(*) AS n FROM users WHERE password_hash IS NOT NULL").get() as { n: number };
+    return row.n === 0;
+  });
+}
+
 export function registerUser(emailRaw: string, password: string): AuthResult {
   const email = normalizeEmail(emailRaw ?? "");
+  if (!registrationOpen()) return { ok: false, error: "registration is closed" };
   if (!EMAIL_RE.test(email)) return { ok: false, error: "invalid email" };
   if (typeof password !== "string" || password.length < 8) return { ok: false, error: "password must be at least 8 characters" };
   return withDb((db) => {
@@ -52,7 +71,7 @@ export function registerUser(emailRaw: string, password: string): AuthResult {
     db.prepare(
       "INSERT INTO users (auth_id, email, plan, plan_expires_ms, created_at_ms, password_hash) VALUES (?, ?, 'free', NULL, ?, ?)",
     ).run(authId, email, Date.now(), hashPassword(password));
-    return { ok: true, token: mintJwt({ authId, email }), email };
+    return { ok: true, token: mintJwt({ authId, email }, { days: WEB_TOKEN_DAYS, tokenVersion: 0 }), email };
   });
 }
 
@@ -65,6 +84,11 @@ export function loginUser(emailRaw: string, password: string): AuthResult {
     // which, and never short-circuit before a hash so timing does not leak account existence.
     const ok = !!row?.password_hash && verifyPassword(password ?? "", row.password_hash);
     if (!ok || !row) return { ok: false, error: "invalid email or password" };
-    return { ok: true, token: mintJwt({ authId: row.auth_id, email: row.email }), email: row.email };
+    const user = { authId: row.auth_id, email: row.email };
+    return {
+      ok: true,
+      token: mintJwt(user, { days: WEB_TOKEN_DAYS, tokenVersion: tokenVersionOf(row.auth_id) }),
+      email: row.email,
+    };
   });
 }

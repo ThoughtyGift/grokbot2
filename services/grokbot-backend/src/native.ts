@@ -8,6 +8,8 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { ServerResponse } from "node:http";
 import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
 import { registerUser, loginUser } from "./web-auth.js";
+import { loginAllowed, noteLoginFailure, noteLoginSuccess } from "./login-throttle.js";
+import { bumpTokenVersion } from "./token-version.js";
 import { setPlan, getUser, accessVerdict } from "./billing.js";
 import { currentOwner, runWithOwner } from "./request-context.js";
 import { hostSettingsRef, inflight } from "./chat/state.js";
@@ -251,17 +253,48 @@ export async function handleNative(
     const b = parseJson(body);
     if (!b.ok) return json(res, { error: b.error }, 400, origin);
     const out = registerUser(String(b.value.email ?? ""), String(b.value.password ?? ""));
-    return json(res, out.ok ? { token: out.token, email: out.email } : { error: out.error }, out.ok ? 200 : 400, origin);
+    // Đăng ký đóng là 403 chứ không phải 400: người gọi không sai cú pháp, họ chỉ không được phép.
+    const code = out.ok ? 200 : out.error === "registration is closed" ? 403 : 400;
+    return json(res, out.ok ? { token: out.token, email: out.email } : { error: out.error }, code, origin);
   }
   if (pathname === "/v1/login" && verb === "POST") {
     const b = parseJson(body);
     if (!b.ok) return json(res, { error: b.error }, 400, origin);
-    const out = loginUser(String(b.value.email ?? ""), String(b.value.password ?? ""));
+    const email = String(b.value.email ?? "");
+    /*
+     * Ô đếm chia theo email + người gọi. `handleNative` không nhận socket, nên nguồn duy nhất là
+     * `x-forwarded-for` — và đó cũng chính là thứ có thật khi backend đứng sau reverse proxy.
+     * Không có header thì mọi request cùng chung một ô "local": đúng với hôm nay, khi cổng chỉ nghe
+     * `127.0.0.1` và chỉ có một người.
+     *
+     * Header giả được — nhưng nó chỉ dùng để CHIA ô đếm, không dùng để cấp quyền, nên giả nó cùng
+     * lắm là tự tách mình sang một ô khác, vẫn bị đếm.
+     */
+    const ip = String(headers["x-forwarded-for"] ?? "").split(",")[0].trim() || "local";
+    const gate = loginAllowed(email, ip);
+    if (!gate.ok) {
+      res.writeHead(429, {
+        "content-type": "application/json",
+        "retry-after": String(gate.retryAfterSec),
+        ...corsHeaders(origin),
+      });
+      res.end(JSON.stringify({ error: "too many attempts", retryAfterSec: gate.retryAfterSec }));
+      return true;
+    }
+    const out = loginUser(email, String(b.value.password ?? ""));
+    if (out.ok) noteLoginSuccess(email, ip); else noteLoginFailure(email, ip);
     return json(res, out.ok ? { token: out.token, email: out.email } : { error: out.error }, out.ok ? 200 : 401, origin);
   }
   if (pathname === "/v1/logout" && verb === "POST") {
-    // Stateless JWT — the browser drops its token. No server revocation (a blocklist is not needed
-    // at this stage); 204 lets the client clear its session on success.
+    /*
+     * Đăng xuất giờ THU HỒI thật, không chỉ bảo trình duyệt quên.
+     *
+     * Bản trước trả 204 rồi thôi, nên token cũ vẫn mở được `/v1/me` suốt hạn của nó. Tăng số đời là
+     * cắt mọi token đã phát cho người này — kể cả cái đang nằm trên một máy khác.
+     */
+    // Cùng nguồn danh tính với `/v1/me`: index.ts đã đặt phạm vi cho request này rồi, dựng thêm
+    // một đường đọc token thứ hai ở đây là mời hai chỗ bất đồng ý kiến.
+    bumpTokenVersion(currentOwner());
     return empty(res, 204, origin);
   }
 

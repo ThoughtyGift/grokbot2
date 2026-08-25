@@ -1,5 +1,6 @@
 import type { ServerResponse } from "node:http";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { tokenVersionOf } from "./token-version.js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,11 +54,34 @@ export interface TokenUser {
 /** The single identity the backend hands out until multi-user login is wired (see billing.ts). */
 export const DEFAULT_USER: TokenUser = { authId: "auth0|grokbot2-user", email: "user@localhost" };
 
-export function mintJwt(user: TokenUser = DEFAULT_USER): string {
+/**
+ * Hạn dùng mặc định — DÀI, và cố ý.
+ *
+ * Token này cũng là thứ `/oauth/token` trả cho app desktop, mà app thì không biết tự làm mới: hết
+ * hạn là app chết mà người dùng không có nút nào bấm. Đường web ngắn hơn nhiều (`WEB_TOKEN_DAYS`),
+ * vì ở đó có màn hình đăng nhập để lấy token mới.
+ */
+const DESKTOP_TOKEN_DAYS = 365;
+
+/** Đường web: 30 ngày. Mất token thì thiệt hại dừng ở 30 ngày, không phải một năm. */
+export const WEB_TOKEN_DAYS = 30;
+
+export interface MintOptions {
+  /** Số ngày sống. Mặc định là hạn dài của đường desktop. */
+  days?: number;
+  /** Số đời — có nó thì đăng xuất thu hồi được. Đường desktop không có, xem token-version.ts. */
+  tokenVersion?: number;
+}
+
+export function mintJwt(user: TokenUser = DEFAULT_USER, opts: MintOptions = {}): string {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const now = Math.floor(Date.now() / 1000);
   const payload = b64url(
-    JSON.stringify({ sub: user.authId, email: user.email, iat: now, exp: now + 365 * 86400 }),
+    JSON.stringify({
+      sub: user.authId, email: user.email, iat: now,
+      exp: now + (opts.days ?? DESKTOP_TOKEN_DAYS) * 86400,
+      ...(opts.tokenVersion !== undefined ? { tv: opts.tokenVersion } : {}),
+    }),
   );
   // Now a REAL HMAC signature (Phase 4). The desktop app only decodes the payload, so signing does
   // not affect it; `verifyJwt` on the backend is what the signature is for.
@@ -81,8 +105,8 @@ export function verifyJwt(authHeader?: string | string[]): TokenUser | null {
   const got = Buffer.from(s), exp = Buffer.from(expected);
   if (got.length !== exp.length || !timingSafeEqual(got, exp)) return null;
   try {
-    const { sub, email, exp: expSec, purpose } = JSON.parse(Buffer.from(p, "base64url").toString("utf8")) as {
-      sub?: string; email?: string; exp?: number; purpose?: string;
+    const { sub, email, exp: expSec, purpose, tv } = JSON.parse(Buffer.from(p, "base64url").toString("utf8")) as {
+      sub?: string; email?: string; exp?: number; purpose?: string; tv?: number;
     };
     if (!sub) return null;
     if (typeof expSec === "number" && expSec * 1000 < Date.now()) return null;
@@ -98,6 +122,13 @@ export function verifyJwt(authHeader?: string | string[]): TokenUser | null {
      * tương thích ngược thay vì bắt mọi đường cũ phải khai thêm một trường chúng chưa từng có.
      */
     if (typeof purpose === "string" && purpose !== "access") return null;
+    /*
+     * Số đời — đây là chỗ `/v1/logout` thật sự cắt được token đã phát.
+     *
+     * KHÔNG có `tv` thì bỏ qua: token desktop và token e2e chưa từng mang trường này, và bắt chúng
+     * phải có là làm hỏng đường app ngay lập tức. Cùng lối tương thích ngược với `purpose` ở trên.
+     */
+    if (typeof tv === "number" && tv !== tokenVersionOf(sub)) return null;
     return { authId: sub, email: email ?? "" };
   } catch {
     return null;
