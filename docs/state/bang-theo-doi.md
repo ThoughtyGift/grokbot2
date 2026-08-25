@@ -136,7 +136,12 @@ chết ngay. Không danh sách đen, không phải dọn rác.
 nằm trong bảng `users` — chưa xoá vì **chỉ máy chủ được ghi sổ**, và dựng một người ghi thứ hai để
 xoá một dòng là đúng cái đã gây mất dữ liệu hai lần. Xoá khi có đường quản trị.
 
-### Chặng 3 · Test trên máy thứ hai — **T1 xong, T2–T5 chờ phần cứng**
+### Chặng 3 · Test trên máy thứ hai
+
+> **Trước khi chạm vào máy 2, đọc [test-may-thu-hai.md](../plan/test-may-thu-hai.md).** Luồng cài có
+> **bốn màn hình trông như lỗi nhưng bình thường** (Chrome giữ file · SmartScreen · "Setting up…" ·
+> "Can't reach your computer"). Không biết trước thì mỗi cái làm người test dừng lại tưởng hỏng —
+> đúng chuyện đã xảy ra 26/08. — **T1 xong, T2–T5 chờ phần cứng**
 
 Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
 

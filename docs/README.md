@@ -31,6 +31,7 @@ Ba loại tài liệu, đừng lẫn:
 | Gộp grokbot2 với cinAPI thành một sản phẩm | [cinapi-merge.md](plan/cinapi-merge.md) |
 | Giao app cho người khác tải về | [plan/ship-to-users.md](plan/ship-to-users.md) |
 | Đưa trang tải cho máy khác (LAN / VPS) | [plan/publish-download-site.md](plan/publish-download-site.md) |
+| **Test trên máy thứ hai — biết trước sẽ thấy gì** | [plan/test-may-thu-hai.md](plan/test-may-thu-hai.md) |
 | Tách người dùng trên cùng một box | [plan/per-user-on-one-box.md](plan/per-user-on-one-box.md) |
 | Một màn hình riêng cho mỗi bot | [plan/one-display-per-bot.md](plan/one-display-per-bot.md) |
 | Bot điều khiển máy tính, và dạy việc cho bot | [plan/desktop-computer-use.md](plan/desktop-computer-use.md) |
