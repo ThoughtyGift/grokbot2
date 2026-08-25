@@ -129,3 +129,65 @@ quay về nói chuyện với server nhà phát hành.
 
 Muốn lên 0.24.0 thì phải làm theo thứ tự: dò lại 3 bản vá trên bundle mới → `--apply` → đo lại →
 mới đóng gói. Không có đường tắt, vì tên rút gọn đã trôi (xem mục trên).
+
+### Vì sao SmartScreen chặn bộ cài của mình mà không chặn của hãng
+
+Đo bằng `Get-AuthenticodeSignature` trên đúng hai file:
+
+| | `Grok_Bot_0.24.0_Setup.exe` | `Bot-Noi-Bo-Setup-*.exe` |
+|---|---|---|
+| Trạng thái | **Valid** | **NotSigned** |
+| Người ký | `CN="Anysphere, Inc.", O="Anysphere, Inc.", L=San Francisco, C=US` | — |
+| Nhà cấp | `Microsoft ID Verified CS EOC CA 03` | — |
+| Dấu thời gian | có · `Microsoft Public RSA Time Stamping Authority` | — |
+
+**Họ giải quyết bằng cách mua chứng chỉ ký mã và ký từng bản phát hành.** Không có mẹo nào khác:
+SmartScreen tin **danh tính nhà phát hành đã được xác minh**, chứ không tin nội dung file.
+
+Một chi tiết đáng học: chứng chỉ của họ **hết hạn 23/08/2026**, hôm nay 26/08 mà chữ ký vẫn `Valid` —
+nhờ **dấu thời gian**. Timestamp chứng minh "file này được ký khi chứng chỉ còn hạn", nên chữ ký sống
+lâu hơn chứng chỉ. Ai đi con đường ký mã đều phải làm bước này, không thì mỗi năm hết hạn là mọi bản
+đã phát hành hoá chưa ký.
+
+**Bốn lối đi, xếp theo giá:**
+
+| cách | được gì | giá |
+|---|---|---|
+| Bấm **More info → Run anyway** | xong ngay | mỗi máy một lần, người lạ sẽ ngại |
+| Dùng bản **ZIP** rồi chạy `start-bot.cmd` | không qua cửa SmartScreen của bộ cài | file to hơn (167 MB) |
+| Chứng chỉ **OV** | có tên nhà phát hành | ~200–400 $/năm, **vẫn cảnh báo** tới khi đủ lượt tải tạo uy tín |
+| Chứng chỉ **EV** | hết cảnh báo gần như ngay | ~400–600 $/năm + khoá cứng (token/HSM) |
+
+Chứng chỉ tự ký **không giúp gì** — Windows không tin gốc do mình tự tạo.
+
+### Có nên bê tính năng mới của 0.24.0 về app local không
+
+Câu trả lời ngắn: **chưa dùng được, vì client đang cài không biết chúng.** Đo trên chính
+`host-main.cjs` của bản 0.20.0 đang chạy:
+
+| kiểu mới của 0.24.0 | có trong client 0.20.0 |
+|---|---|
+| `GrokBotTemplate` · `CreateGrokBotAgent` | **không** |
+| `KeyringSecret` | **không** |
+| `ScheduleSandBoxUpgrade` | **không** |
+| `GetPrCodeTour` | **không** |
+| `CloudCanvasMetadata` | **không** |
+
+Backend mình đóng vai **host**, và host chỉ trả lời những gì client hỏi. Client 0.20.0 **không bao giờ
+gọi** các RPC đó, nên có cài vào backend cũng không ai gọi tới — code chết ngay ngày viết xong.
+
+**Ba đường, và chỉ đường 3 đáng đi bây giờ:**
+
+1. **Nâng client lên 0.24.0** — phải dò lại cả 3 bản vá trước (tên rút gọn đã trôi). Được tính năng
+   mới, nhưng trả bằng cả một vòng dò bundle, và lần sau hãng ra 0.25 thì lặp lại.
+2. **Cài RPC mới vào backend, giữ client 0.20.0** — vô ích, không ai gọi.
+3. **Lấy Ý TƯỞNG, tự làm theo cách của mình** ← nên chọn. Ba thứ đáng chép:
+   - **mẫu bot dùng lại** (`GrokBotTemplate`) — mình đã có `agents` + prompt riêng, thêm "nhân bản từ
+     mẫu" là việc của backend, không cần client biết kiểu mới;
+   - **kho khoá dùng chung** (`KeyringSecret`) — trùng hướng với `.data/secrets/` đã có, và với chặng
+     5 (tách theo người);
+   - **hẹn lịch nâng box** (`ScheduleSandBoxUpgrade`) — trùng hướng với "thu hồi khi nghỉ" trong
+     [per-user-on-one-box.md](../plan/per-user-on-one-box.md).
+
+Còn `GetPrCodeTour`, `CloudCanvasMetadata`, `BackgroundComposer`, `Admin*` là tính năng của Cursor IDE
+và của đội vận hành hãng — **không thuộc bài toán này**.
