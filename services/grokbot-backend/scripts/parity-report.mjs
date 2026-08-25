@@ -187,7 +187,7 @@ console.log("\n=== WHAT THE ORIGINAL DOES THAT WE STILL DO NOT ===");
 for (const [label, state] of Object.entries({
   "shared rooms": "needs a real relay — faking it creates rooms nobody can join (roadmap F5)",
   "past-conversation search": "DONE 2026-08-21: `search_conversations` tool + `pastConversationExplorer` subagent type. Never was a contract gap — the host offers it as a subagent_type, with no gateway command and no channel. (The old entry named PAST_CONVERSATION_EXPLORER, a string that exists nowhere in the app.)",
-  skills: "skillsCatalog answers [] — CONTRACT-CORRECT: the decl is {args:none, reply:array} and the client itself maps [] to null. Not a gap; having a skills feature at all is a product choice",
+  skills: "DONE 2026-08-25 for the half that matters. Two different things share the word. ON-DISK skills (SKILL.md under .claude/skills, .codex/skills, .agents/skills, .cursor/skills[-cursor], project + user scope) now reach the prompt as <available_skills> with path+description, and a bot reads and follows them — proved live. The MANAGED catalog is the other thing: skillsCatalog lives in the vendor's `managed-setup` extension and fetches from THEIR server with an access token and machine id, so [] stays the correct answer here and publishSkill now refuses with a reason instead of a bare false.",
   "agent memory UI": "NOT A GAP (measured 2026-08-21): getAgentMemories/deleteAgentMemory/clearAgentMemories appear 0 times in the whole renderer — the screen does not exist in this build. They live only in the HOST's 120-command table",
   "live transcript updates": "late, not lost — the client replicates an ordered log and needs events (docs/architecture/transcript-replica.md)",
 })) console.log(`  ${label.padEnd(26)} ${state}`);

@@ -405,7 +405,11 @@ export async function handleNative(
     const mine = new Set(installedIds());
     return catalog().map((p) => ({
       id: p.id, name: p.name, displayName: p.displayName, description: p.description,
-      kind: p.mcp ? "mcp" as const : "skill" as const,
+      // Nhãn phải nói đúng thứ dòng đó LÀ, và trước đây nó nói sai: mọi plugin không phải MCP bị
+      // gắn "skill", nên bộ lọc "Skills" liệt kê cả những plugin chẳng có skill nào. Phần proto
+      // (`bootstrap.ts`) vốn đã đúng — chỉ phát descriptor skill khi có `p.skill` — nên lời nói sai
+      // chỉ nằm ở bề mặt web này. Ba loại, đúng ba nhãn.
+      kind: p.mcp ? ("mcp" as const) : p.skill ? ("skill" as const) : ("plugin" as const),
       installed: mine.has(p.id),
     }));
   };

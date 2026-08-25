@@ -352,7 +352,9 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     runAgentWorkflowNow: () => ({}),
     importAgentWorkflowText: () => ({ ok: false, reason: "workflows not supported by this backend" }),
     importAgentWorkflowUrl: () => ({ ok: false, reason: "workflows not supported by this backend" }),
-    portAgentLocalSkills: () => ({ ok: false, reason: "skills not supported by this backend" }),
+    // Skill trên đĩa CHẠY ở bản này (skills.ts quét và đưa vào prompt); thứ không có là đường
+    // chuyển chúng vào kho của một bot qua lệnh này, vì không có kho đó.
+    portAgentLocalSkills: () => ({ ok: false, reason: "bản này đọc skill thẳng từ đĩa box, không nhập vào kho riêng của bot" }),
 
     // Routines: every mutating call answers with the agent's FULL list, because the FE stores the
     // reply as the new list instead of re-fetching — a `() => []` stub therefore looked like
@@ -375,8 +377,19 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     disconnectChannel: () => channelsView(),
     refreshChannel: () => channelsView(),
     getListenerConnectUrl: () => ({ url: "" }),
+    /**
+     * Xuất bản skill lên registry của đội.
+     *
+     * `skillsCatalog` của bản gốc KHÔNG đọc đĩa: nó nằm trong extension `managed-setup` và gọi lên
+     * máy chủ hãng kèm access token + machine id, rồi `ensureManagedSkill` tải về khi cần. Cả họ
+     * xuất bản, đồng bộ lẫn thu hồi đều nói chuyện với registry đó.
+     *
+     * Bản này không có registry, nên `[]` là câu trả lời ĐÚNG chứ không phải chỗ còn thiếu — và một
+     * lời từ chối phải nói ra lý do, nếu không giao diện chỉ thấy thao tác thất bại mà không biết
+     * vì sao. (Skill trên ĐĨA là chuyện khác và đã chạy: xem skills.ts, chúng vào prompt.)
+     */
     getSkillPublishTargets: () => ({ targets: [] }),
-    publishSkill: () => ({ ok: false }),
+    publishSkill: () => ({ ok: false, reason: "bản này không nối với registry skill nào — skill dùng được là skill nằm trên đĩa box" }),
     resyncPublishedSkill: () => ({ ok: false }),
     unpublishSkill: () => ({ ok: false }),
     getCloudAgentInfo: () => null,
