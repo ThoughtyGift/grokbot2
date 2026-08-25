@@ -13,9 +13,12 @@
  * docs/legal.md đặt ra. Việc của gói là ba thứ tay chân: vá, tạo lối mở mang bốn biến, ghi địa chỉ
  * backend.
  *
- * Vì sao chưa phải `.exe`: `iexpress` — thứ duy nhất có sẵn trên Windows — không gói được thư mục
- * con, và **treo khi chạy không giao diện** (đã thử, hết 3 phút không ra file). Một `.exe` thật có
- * icon riêng cần Inno Setup hoặc NSIS: `winget install JRSoftware.InnoSetup`, rồi thay chỗ này.
+ * Có Inno Setup thì dựng thêm một `.exe` thật (icon riêng, gỡ được từ Apps & features) —
+ * `winget install JRSoftware.InnoSetup`. Không có thì bỏ qua, bản `.cmd` vẫn chạy: một công cụ tuỳ
+ * chọn không được phép chặn bản dựng.
+ *
+ * `iexpress` — thứ duy nhất có sẵn sẵn trên Windows — đã thử và bỏ: không gói được thư mục con, và
+ * treo 3 phút không ra file khi chạy không giao diện.
  */
 import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -23,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { b64, winInstaller, winStart, macInstaller, macStart } from "./setup-templates.mjs";
+import { buildExe, isccPath } from "./setup-exe.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -70,7 +74,8 @@ function bundlePatchClient() {
 // ── dựng ─────────────────────────────────────────────────────────────────────
 mkdirSync(DIST, { recursive: true });
 
-const patchB64 = b64(bundlePatchClient());
+const patchSource = bundlePatchClient();
+const patchB64 = b64(patchSource);
 const built = [
   { name: `Cai-dat-Bot-Noi-Bo-win-${stamp}.cmd`, body: winInstaller({ patchB64, startB64: b64(winStart) }) },
   { name: `Cai-dat-Bot-Noi-Bo-mac-${stamp}.command`, body: macInstaller({ patchB64, startB64: b64(macStart) }) },
@@ -88,6 +93,20 @@ for (const { name, body } of built) {
   // cmd cần CRLF; bash thì không được dính CR nào.
   writeFileSync(path, name.endsWith(".cmd") ? body.replace(/\r?\n/g, "\r\n") : body.replace(/\r/g, ""), "utf8");
   console.log(`✓ ${path}  (${(statSync(path).size / 1024).toFixed(1)} KB)`);
+}
+const exe = buildExe({
+  distDir: DIST,
+  stagingDir: join(DIST, "staging-exe"),
+  patchSrc: patchSource,
+  startSrc: winStart,
+  version: stamp.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1.$2.$3"),
+  outName: `Cai-dat-Bot-Noi-Bo-${stamp}`,
+});
+if (exe) {
+  console.log(`✓ ${exe}  (${(statSync(exe).size / 1024).toFixed(1)} KB)  ← trang tải phát cái này`);
+  rmSync(join(DIST, "staging-exe"), { recursive: true, force: true });
+} else {
+  console.log(`  (chưa có Inno Setup nên không dựng .exe — trang tải phát bản .cmd. ISCC: ${isccPath() ?? "không thấy"})`);
 }
 console.log("  Thử: curl -sI http://localhost:8788/download/windows · /download/mac");
 console.log("  Chạy thử an toàn: GROKBOT2_SETUP_DRYRUN=1 → bung ra rồi dừng, không vá, không mở app.");

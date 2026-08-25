@@ -82,10 +82,21 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
   }
 });
 
+test("có .exe thì phát .exe, không có thì rơi xuống .cmd", () => {
+  const dir = mkdtempSync(join(tmpdir(), "setup3-"));
+  const cmd = SETUP_KINDS.windows.at(-1)!, exe = SETUP_KINDS.windows[0];
+  writeFileSync(join(dir, `${cmd.prefix}-20260825${cmd.ext}`), "ban cmd");
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/, "chưa có .exe thì dùng .cmd");
+  writeFileSync(join(dir, `${exe.prefix}0260825${exe.ext}`), "ban exe");
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.exe$/, "có .exe thì .exe thắng, dù .cmd mới hơn");
+});
+
 test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup2-"));
-  writeFileSync(join(dir, `${SETUP_KINDS.windows.prefix}-20260825.cmd`), "win");
-  writeFileSync(join(dir, `${SETUP_KINDS.mac.prefix}-20260825.command`), "mac-dai-hon");
+  // Lấy dạng cuối của mỗi hệ (.cmd cho Windows) — dạng đầu là .exe, chỉ có khi máy dựng có Inno Setup.
+  const win = SETUP_KINDS.windows.at(-1)!, mac = SETUP_KINDS.mac.at(-1)!;
+  writeFileSync(join(dir, `${win.prefix}-20260825${win.ext}`), "win");
+  writeFileSync(join(dir, `${mac.prefix}-20260825${mac.ext}`), "mac-dai-hon");
   assert.equal(newestSetup(dir, "windows")?.size, "win".length);
   assert.equal(newestSetup(dir, "mac")?.size, "mac-dai-hon".length);
 });
@@ -93,13 +104,13 @@ test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => 
 test("newestSetup chọn gói mới nhất và bỏ qua file lạ", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup-"));
   mkdirSync(dir, { recursive: true });
-  const { prefix } = SETUP_KINDS.windows;
-  writeFileSync(join(dir, `${prefix}-20260101.cmd`), "cu");
+  const { prefix, ext } = SETUP_KINDS.windows.at(-1)!;
+  writeFileSync(join(dir, `${prefix}-20260101${ext}`), "cu");
   writeFileSync(join(dir, "ghi-chu.txt"), "khong phai goi");
-  writeFileSync(join(dir, `${prefix}-20260825.cmd`), "moi hon");
+  writeFileSync(join(dir, `${prefix}-20260825${ext}`), "moi hon");
   const found = newestSetup(dir);
   assert.ok(found, "phải thấy một gói");
-  assert.equal(found.name, `${prefix}-20260825.cmd`);
+  assert.equal(found.name, `${prefix}-20260825${ext}`);
   assert.equal(found.size, "moi hon".length);
 });
 

@@ -31,8 +31,13 @@ const DIST = join(svcRoot, ".data", "dist");
  * trông không giống bộ cài nào. Đuôi khác nhau nên cũng không tải nhầm được cho nhau.
  */
 export const SETUP_KINDS = {
-  windows: { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
-  mac: { prefix: "Cai-dat-Bot-Noi-Bo-mac", ext: ".command" },
+  // Thứ tự có nghĩa: `.exe` trước vì đó là thứ trông giống một bộ cài thật (icon riêng, gỡ được từ
+  // Apps & features). Máy dựng không có Inno Setup thì rơi xuống `.cmd` — vẫn cài được y hệt.
+  windows: [
+    { prefix: "Cai-dat-Bot-Noi-Bo-2", ext: ".exe" },
+    { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
+  ],
+  mac: [{ prefix: "Cai-dat-Bot-Noi-Bo-mac", ext: ".command" }],
 } as const;
 export type SetupKind = keyof typeof SETUP_KINDS;
 
@@ -58,7 +63,14 @@ function landingHtml(): string | null {
 
 /** Gói mới nhất trong `.data/dist`, hoặc null khi chưa ai chạy build-setup. */
 export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
-  const { prefix, ext } = SETUP_KINDS[kind];
+  for (const { prefix, ext } of SETUP_KINDS[kind]) {
+    const hit = newestMatching(dir, prefix, ext);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function newestMatching(dir: string, prefix: string, ext: string): { name: string; path: string; size: number } | null {
   let best: { name: string; path: string; size: number; mtimeMs: number } | null = null;
   let names: string[];
   try { names = readdirSync(dir); } catch { return null; }
@@ -67,7 +79,13 @@ export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: st
     const path = join(dir, name);
     try {
       const st = statSync(path);
-      if (!best || st.mtimeMs > best.mtimeMs) best = { name, path, size: st.size, mtimeMs: st.mtimeMs };
+      // Hoà mtime là chuyện thật, không phải giả định: hai bản dựng liền nhau rơi vào cùng một
+      // mili-giây, và khi đó thứ tự `readdir` quyết định — tức là ngẫu nhiên. Tên có ngày ở trong
+      // nên so tên là mốc phụ ổn định.
+      const newer = !best
+        || st.mtimeMs > best.mtimeMs
+        || (st.mtimeMs === best.mtimeMs && name > best.name);
+      if (newer) best = { name, path, size: st.size, mtimeMs: st.mtimeMs };
     } catch { /* biến mất giữa chừng — bỏ qua */ }
   }
   return best ? { name: best.name, path: best.path, size: best.size } : null;
