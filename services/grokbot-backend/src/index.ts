@@ -35,6 +35,7 @@ import { logSafe } from "./redact.js";
 import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
 import { ensureGatewayToken, authMode } from "./auth-gate.js";
 import { handleAdmin } from "./admin.js";
+import { handleSite } from "./site.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
@@ -188,6 +189,11 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(hostHealth()));
   }
+
+  // ── trang tải + bộ cài (site.ts) — công khai, trước mọi cổng xác thực ──
+  //
+  // Đứng trước /admin và /gw vì nó là cửa cho người CHƯA có gì trong tay: chưa token, chưa app.
+  if (await handleSite(url, req, res)) return;
 
   // ── /admin — bảng theo dõi sức chứa box (admin.ts) ──
   //

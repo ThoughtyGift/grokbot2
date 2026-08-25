@@ -27,6 +27,8 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 | `pnpm dev:app` | F2 launcher: that stack + patched `Grok Bot.exe` on CDP `:9222` |
 | `pnpm web` | fallback Vite UI on `localhost:5173` (proxies `/v1`) |
 | `pnpm phase:gate` | current phase from `docs/parity-runs/phase-current.json`. From **F3**, CDP `:9222` is required (RED if missing). `--phase F3` measures without moving the pointer. |
+| `node services/grokbot-backend/scripts/build-setup.mjs` | dựng gói cài mà trang tải phát ra → `.data/dist/bot-noi-bo-setup-<ngày>.zip`. Gói KHÔNG chứa app: nó vá client người dùng đã tự cài, tạo shortcut mang 4 biến, và ghi địa chỉ backend. |
+| `http://localhost:8788/` | trang tải (`apps/grokbot-site/index.html` qua `src/site.ts`) — công khai, không qua `checkAuth`, vì cửa này dành cho người chưa có token lẫn app |
 | `pnpm typecheck` / `pnpm build` | turbo across workspace |
 | `http://localhost:8788/admin?token=<.data/gateway-token.txt>` | box capacity board — how many more bots fit, and whether RAM or disk binds. Read-only on purpose: six of the Chromes on that box are **not ours** (see [docs/plan/one-display-per-bot.md](docs/plan/one-display-per-bot.md)). |
 | `infra\scripts\start-app.cmd` | double-click launcher (Desktop shortcut "Grok Bot (local)"). **Never double-click the installed `Grok Bot.exe`** — it starts with none of the four env vars, so it talks to the vendor's servers *and* can auto-update over the patch set. |

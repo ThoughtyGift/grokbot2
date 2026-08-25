@@ -427,7 +427,7 @@ Hôm nay **cột "VPS/BE" đang nằm nhầm trên máy bạn**. Toàn bộ vi�
 
 | # | việc | phụ thuộc | xong khi |
 |---|---|---|---|
-| **B1** | Bộ cài gói 4 việc tay (cài app → vá → đặt biến → tạo shortcut) | T4 | máy sạch: bấm một lần là chạy |
+| **B1** | Bộ cài gói 4 việc tay (cài app → vá → đặt biến → tạo shortcut) | T4 | máy sạch: bấm một lần là chạy · **đã có bản đầu**: trang tải `/` + `/download/windows`, gói 8,8 KB dựng bằng `build-setup.mjs` — còn thiếu phần gói backend đi kèm |
 | **B2** | Vá 3 lỗ đăng nhập | — | thu hồi được token · chặn đoán mật khẩu · khoá đăng ký |
 | **B3** | Cho BE nghe ra ngoài: đổi `listen` + CORS + HTTPS | **B2** | T6 chạy được |
 | **B4** | Tách OS user trên box | **T5** đỏ | bot của A đọc file của B bị từ chối |

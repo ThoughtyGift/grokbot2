@@ -226,7 +226,7 @@ Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
 | # | mảnh | việc | trạng thái |
 |---|---|---|---|
 | 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](fe-clone-plan.md) |
-| 2 | Trang tải + bộ cài | một trang, một file cài đặt gói sẵn backend | chưa — chặng B |
+| 2 | Trang tải + bộ cài | một trang, một file cài đặt gói sẵn backend | **bản đầu đã chạy** — `/` + `/download/windows` (`src/site.ts`), gói dựng bằng `scripts/build-setup.mjs`. Còn thiếu: gói **chưa mang backend** theo, người tải vẫn phải tự dựng |
 | 3 | Cấp box khi đăng nhập | đăng nhập xong mới cấp VPS + phát token | chưa — chặng C |
 
 Khi mảnh 1 xong thì mảnh 2 **đơn giản hẳn**: không còn phải dời `app.asar`, không còn bốn biến môi
