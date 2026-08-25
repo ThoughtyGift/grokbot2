@@ -76,6 +76,28 @@ Bốn đường, không hơn: `/` · `/download/windows` · `/download/mac` · `
 (26/08): `/` **200** 19 KB · `/download/windows` **200** đúng tên file · `/v1/me`, `/gw/api/…`,
 `/admin`, `/../etc/passwd` đều **404**.
 
+### Chưa có tên miền thì dùng được không? **Được — trừ một ma sát có thật**
+
+`http://103.75.186.63:8099/` chạy ngay, không cần tên miền. Nhưng **Chrome giữ lại file `.exe` tải
+qua HTTP**. Đo thật (26/08, bấm nút bằng trình duyệt thật):
+
+- file về đủ **2.066.496 byte** nhưng nằm ở dạng `.crdownload`, chờ người bấm **Keep**
+- console nói đúng lý do:
+  `The file at 'http://…/download/windows' was loaded over an insecure connection. This file should be served over HTTPS.`
+
+**Không phải hỏng** — bấm **Keep / Giữ lại** trong thanh tải là có file. Nhưng người dùng lạ sẽ chột
+dạ, và vài phiên bản Chrome chặn thẳng không cho giữ.
+
+**Ba cách, chọn theo mức vội:**
+
+| cách | được gì | mất gì |
+|---|---|---|
+| Dùng luôn `http://…:8099` | chạy ngay, 0 công | phải bấm "Keep" mỗi lần tải |
+| **Mượn tên miền đã có** (`halcion.vn`) — thêm một server block nginx trỏ về `127.0.0.1:8099` | HTTPS ngay, chứng chỉ đã có | phải chạm nginx (thêm block mới, không sửa block cũ) |
+| Tên miền riêng `tai.halcion.vn` + certbot | sạch nhất | chờ DNS |
+
+Cách 2 là đường ngắn nhất tới HTTPS mà **không cần đợi DNS**, vì `*.halcion.vn` đã trỏ về đúng VPS này.
+
 ### Đang phát bản 2 MB, KHÔNG phát bản 118 MB — cố ý
 
 Bản 118 MB chở **client của nhà phát hành**. Để nó sau một URL công khai là **phân phối phần mềm của
