@@ -5,6 +5,8 @@ Viết cho người **không rành kỹ thuật**. Mọi con số dưới đây 
 
 Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 
+> Cần **việc còn lại + E2E** chứ không phải mô tả hệ thống? Xem [bang-theo-doi.md](bang-theo-doi.md).
+
 ---
 
 ## 1 · Hệ thống này là gì
