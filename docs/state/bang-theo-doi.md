@@ -16,12 +16,13 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 | **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
 | **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
 | **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
-| **Kiểm thử** | 29 file unit (**288 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
-| **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1` — **chặng 4 sẽ mở**; đăng nhập đã siết (chặng 2) nên mở ra được |
+| **Kiểm thử** | 31 file unit (**303 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
+| **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1`. **Lỗ `/oauth/token` đã bịt** (26/08) — xem §3b. Còn vướng: dữ liệu cũ chưa đổi chủ sở hữu |
 
 **Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
 🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
-🟡 **4 đưa BE ra ngoài** (code xong, chờ VPS) · ⬜ 5 tách user trên box · ⬜ 6 FE.
+🟡 **4 đưa BE ra ngoài** (đăng nhập thật xong 26/08 — xem §3b; còn chuyển quyền dữ liệu cũ + VPS) ·
+⬜ 5 tách user trên box · ⬜ 6 FE.
 
 **Đọc một dòng nếu chỉ đọc một dòng:** dọn xong, tiền đo được, đăng nhập đã siết, app đóng gói giống
 hãng. Mảnh cuối để máy thứ hai **chat được** (không chỉ tải) là **chặng 4** — đưa backend ra khỏi
@@ -241,6 +242,64 @@ nơi qua IP LAN.
 > **Còn thiếu để máy 2 CHAT được, không phải code — là hạ tầng:** (1) HTTPS qua Caddy trên một VPS,
 > (2) backend chạy ở nơi máy 2 với tới. Trên LAN thì đã đủ: `GROKBOT2_BIND=0.0.0.0` + IP máy này là
 > máy 2 gọi tới được ngay. Khác mạng thì cần VPS — **tôi không tạo VPS hộ được**, đó là T6.
+
+---
+
+## 3b · Cửa cấp token — ✅ **bịt xong 26/08**
+
+Đây là thứ đã chặn chặng 4 suốt hai ngày, và nó **không phải hạ tầng**.
+
+**Lỗ:** `/oauth/token` và `/auth/poll` phát token cho bất kỳ ai gọi. Đo từ máy khác trong LAN:
+`POST /oauth/token` thân **rỗng** → token **199 ký tự**, token đó `GET /v1/agents` được, đọc ra tên
+mọi bot.
+
+**Hợp đồng lấy từ chính bản dựng của client, không đoán:**
+
+| cửa | client dùng để làm gì | nay hỏi gì |
+|---|---|---|
+| `/oauth/token` | `runRefreshAccessToken` gửi `{grant_type:"refresh_token", refresh_token}` | token cũ đó **có phải ta phát không** — `verifyJwt` (chữ ký + số đời) |
+| `/auth/poll` | lần đăng nhập **đầu** trên một máy | đã có người đăng nhập thật và duyệt **đúng phiên** đó chưa |
+| `/loginDeepControl` | trang client mở trong trình duyệt | chuyển hướng vào **giao diện đăng nhập đã có** ở `/app/` |
+
+Luồng đầu là PKCE S256: `challenge = base64url(sha256(verifier))`. `uuid` đi qua thanh địa chỉ trình
+duyệt nên coi như lộ, còn `verifier` **không rời khỏi app** — nên poll phải chứng minh giữ verifier.
+**Đo trên app thật:** challenge app gửi khớp tuyệt đối với hàm của ta.
+
+**Không dựng form đăng nhập thứ hai.** `apps/grokbot-web` đã có sẵn email + mật khẩu + tạo tài khoản
++ đăng xuất; nó chỉ nằm trên Vite `:5173`, nơi app desktop không với tới. Nay backend phát chính bản
+build đó ở `/app/` (xem [`web-app.ts`](../../services/grokbot-backend/src/web-app.ts)).
+
+**Đo đầu-cuối qua HTTP thật:** hỏi vòng trước khi duyệt **403** · sai verifier **403** · duyệt xong
+**200 đúng tài khoản** · hỏi lại lần hai **403**. Từ IP LAN: `POST /oauth/token` **không** ra token,
+`/v1/agents` không token **401**.
+
+**Ba mức như phần còn lại của cổng:** `off`/`warn` vẫn cấp (máy đang chạy không chết giữa chừng),
+`enforce` mới từ chối. Đây là công tắc phải bật **trước khi** mở cổng ra mạng.
+
+### ⚠ Việc còn lại của chặng 4 — chuyển quyền dữ liệu cũ
+
+Trước khi có đăng nhập thật, app dùng chung danh tính vô danh `auth0|grokbot2-user`, và **3.524 dòng
+trên 9 bảng** mang tên nó. Đăng nhập bằng tài khoản email thật thì app thấy **0 bot** — không mất gì,
+nhưng trông y hệt mất sạch.
+
+```
+node scripts/adopt-legacy-owner.mjs                        # chỉ xem, không đổi
+node scripts/adopt-legacy-owner.mjs --to <email> --yes     # sao lưu rồi đổi, một giao dịch
+```
+
+**Trạng thái 26/08:** `.env` đang để `GROKBOT2_AUTH=off` + `GROKBOT2_BIND=127.0.0.1` — hai dòng này
+**phải đổi cùng nhau**, vì `off` + `0.0.0.0` là mở lại đúng lỗ trên ra cả mạng.
+
+### Hai lỗi có sẵn lộ ra khi làm việc này
+
+1. **Di chú chưa từng chạy trên bản cài này.** `index.ts` gọi `enableWriting()` ở dòng 13, nhưng ESM
+   nâng mọi `import` lên trước, mà `host-settings.ts` và `chat/state.ts` gọi `loadState()` ở cấp
+   module — sổ mở dưới danh nghĩa tiến trình đọc, bỏ qua di chú, rồi nhớ luôn kết nối đó. Nên cột
+   `token_version` của **chặng 2 chưa từng tồn tại**, tức `/v1/logout` chưa thu hồi được gì. Nay
+   người ghi tự dựng schema kể cả khi sổ đã mở.
+2. **Ngân sách bundle đang đọc 0 KB và đậu.** `base: "./"` làm index.html trỏ `./assets/…`, biểu thức
+   của máy đo chỉ nhận `/assets/`. Một phép đo luôn ra 0 thì tệ hơn không đo — nay là **109 KB thô /
+   34 KB gzip**.
 
 ### Chặng 5 · Tách người dùng trên box — **ba tầng**
 
