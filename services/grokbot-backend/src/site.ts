@@ -34,6 +34,10 @@ export const SETUP_KINDS = {
   // Thứ tự có nghĩa: `.exe` trước vì đó là thứ trông giống một bộ cài thật (icon riêng, gỡ được từ
   // Apps & features). Máy dựng không có Inno Setup thì rơi xuống `.cmd` — vẫn cài được y hệt.
   windows: [
+    // Bản CHỞ CẢ APP trước: người tải không cần cài client trước, cũng không cần Node — đúng hình
+    // dạng bộ cài của hãng. Dựng bằng `build-setup.mjs --with-app`, không dựng mặc định.
+    { prefix: "Bot-Noi-Bo-Setup", ext: ".exe" },
+    // Bản 2 MB chỉ cấu hình: dùng khi máy đã có client sẵn.
     { prefix: "Cai-dat-Bot-Noi-Bo-2", ext: ".exe" },
     { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
   ],

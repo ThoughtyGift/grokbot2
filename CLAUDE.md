@@ -27,6 +27,7 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 | `pnpm dev:app` | F2 launcher: that stack + patched `Grok Bot.exe` on CDP `:9222` |
 | `pnpm web` | fallback Vite UI on `localhost:5173` (proxies `/v1`) |
 | `pnpm phase:gate` | current phase from `docs/parity-runs/phase-current.json`. From **F3**, CDP `:9222` is required (RED if missing). `--phase F3` measures without moving the pointer. |
+| `node services/grokbot-backend/scripts/build-setup.mjs --with-app` | dựng bộ cài **chở cả ứng dụng** (~118 MB, mất vài phút). Máy nhận **không cần** client cài trước, **không cần** Node — đúng hình dạng bộ cài của hãng. Gói này chứa client của nhà phát hành: dùng cho máy của chính bạn. |
 | `node services/grokbot-backend/scripts/build-setup.mjs` | dựng **hai** gói cài mà trang tải phát ra → `.data/dist/bot-noi-bo-setup-{win,mac}-<ngày>.zip`. Gói KHÔNG chứa app: nó vá client người dùng đã tự cài, tạo lối mở mang 4 biến, và ghi địa chỉ backend. Bản Mac **chưa chạy thử trên máy Mac thật**. |
 | `http://localhost:8788/` | trang tải (`apps/grokbot-site/index.html` qua `src/site.ts`) — công khai, không qua `checkAuth`, vì cửa này dành cho người chưa có token lẫn app |
 | `pnpm typecheck` / `pnpm build` | turbo across workspace |

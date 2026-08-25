@@ -139,10 +139,14 @@ Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
 |---|---|---|---|
 | 3.1 | ✅ **T1** BE tự dựng từ 0 | chạy `index.ts` với `GROKBOT2_STATE_FILE` trỏ thư mục trắng, cổng 8797 | sổ **tự sinh** · `/v1/agents` trả `[]` · `/v1/health` ok |
 | 3.1b | ✅ Đăng ký **tự mở cho người đầu tiên** (nhánh không unit-test được) | trên sổ trắng | người đầu **200** · người thứ hai **403** |
-| 3.2 | ⬜ **T2** một lượt chat trên máy khác | — | *chờ máy thứ hai* |
+| 3.2 | ⬜ **T2** một lượt chat trên máy khác | — | *chờ máy thứ hai — **rào cản kỹ thuật đã gỡ**, xem dưới* |
 | 3.3 | ⬜ **T3** box qua hầm từ máy khác | — | *chờ máy thứ hai* |
 | 3.4 | ⬜ **T4** `.exe` trên máy sạch | — | *chờ máy sạch* |
 | 3.5 | ⬜ **T5** hai máy một box | — | *bắt buộc hai máy thật* |
+
+**Bộ cài chở cả app đã có (25/08)** — `build-setup.mjs --with-app` ra một file **118 MB**, gần đúng
+bằng bộ cài của hãng (120 MB). Máy nhận **không cần client cài trước, không cần Node**: cắm vào là
+chạy. Trước đó T2–T5 vướng ở chỗ máy thứ hai phải tự cài client rồi cài Node; giờ chỉ còn cần **máy**.
 
 **T1 chạy được ngay tại đây** bằng thư mục dữ liệu trắng + cổng riêng. Nó **không** thay thế máy thứ
 hai (không chứng minh được "máy chưa từng có repo này"), nhưng nó là chỗ dễ lòi đường dẫn ghim cứng

@@ -83,13 +83,18 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
   }
 });
 
-test("có .exe thì phát .exe, không có thì rơi xuống .cmd", () => {
+test("thứ tự ưu tiên: bản chở app → bản cấu hình → .cmd", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup3-"));
-  const cmd = SETUP_KINDS.windows.at(-1)!, exe = SETUP_KINDS.windows[0];
+  const [full, cfg, cmd] = SETUP_KINDS.windows;
+  // Chỉ có .cmd: phải dùng nó, không được trả null.
   writeFileSync(join(dir, `${cmd.prefix}-20260825${cmd.ext}`), "ban cmd");
   assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/, "chưa có .exe thì dùng .cmd");
-  writeFileSync(join(dir, `${exe.prefix}0260825${exe.ext}`), "ban exe");
-  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.exe$/, "có .exe thì .exe thắng, dù .cmd mới hơn");
+  // Thêm bản cấu hình: .exe thắng .cmd dù .cmd mới hơn — dạng quan trọng hơn thời gian.
+  writeFileSync(join(dir, `${cfg.prefix}0260825${cfg.ext}`), "ban cau hinh");
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Cai-dat-Bot-Noi-Bo-2/, "có bản .exe cấu hình thì dùng nó");
+  // Thêm bản chở app: nó phải thắng cả hai, vì nó là bản người tải về không cần chuẩn bị gì.
+  writeFileSync(join(dir, `${full.prefix}-20260825${full.ext}`), "ban cho app");
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Bot-Noi-Bo-Setup/, "bản chở app phải thắng");
 });
 
 test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => {
