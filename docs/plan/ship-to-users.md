@@ -219,6 +219,31 @@ mới) — mảng lớn nhất còn trống là **Routines**.
 Nói thẳng cái con số 40/40 KHÔNG nói: nó đúng cho **19 vùng đã dựng**, không nói gì về vùng chưa
 dựng. Muốn biết còn bao xa thì đọc nhóm B và C trong tài liệu đó, đừng đọc con số này.
 
+### Vì sao bộ cài của mình 2 MB còn của hãng 120 MB
+
+Câu hỏi hay gặp khi nhìn hai file cạnh nhau trong Downloads. **Cùng hình dạng, khác ruột.**
+
+| | `Grok_Bot_0.18.0_Setup.exe` (hãng) | `Cai-dat-Bot-Noi-Bo.exe` (mình) |
+|---|---|---|
+| Dung lượng | **120 MB** | **2 MB** |
+| Bên trong | **cả ứng dụng**: Electron, renderer, host, deps | **không có ứng dụng nào** |
+| Bung ra | **537 MB** vào `Programs\Grok Bot` | 2 file (~19 KB) vào `%LOCALAPPDATA%\Bot Noi Bo` |
+| Việc nó làm | cài app | **vá** app bạn đã có, tạo lối mở mang 4 biến, ghi địa chỉ backend |
+| Cần gì trước | không | **client đã cài** + Node 20 |
+
+Cả hai đều là bộ cài `.exe` bình thường — có màn hình cài, có mục trong Apps & features, có shortcut.
+Khác nhau ở **thứ được chở**: họ chở ứng dụng, mình chở **cấu hình**.
+
+**Vì sao không chở luôn ứng dụng:** app đó là của nhà phát hành. Phát hành lại một bản đã sửa là
+phân phối phần mềm của họ — đúng ranh giới [legal.md](../legal.md) đặt ra ngay từ đầu. Nên người
+dùng tự cài client từ nguồn của nó, rồi chạy bộ cài của mình.
+
+**Cái giá:** người dùng làm **hai bước** thay vì một.
+
+**Khi nào thành một bước:** khi **mảnh 1 — FE riêng** xong. Lúc đó bộ cài chở app **của mình**, và
+nó giống hệt hình dạng của hãng: một file, tải về, cài, xong. Không còn `app.asar` phải dời, không
+còn bốn biến môi trường, không còn cái bẫy `CURSOR_API_BASE_URL` đè lên Cursor IDE.
+
 ### Ba mảnh của một sản phẩm phát hành được
 
 Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
