@@ -676,6 +676,30 @@ TOOLS.task_v2 = async (arg, ctx) => {
  * NOT install: it answers with the names, so the model asks the person instead of installing
  * something that cannot work.
  */
+/**
+ * Đọc đối số của `setup_plugin`, vốn tới theo hai dạng.
+ *
+ * Mô hình gọi kiểu nào cũng có: `{"plugin":"lark","values":{…}}` khi nó biết cần gì, và trần
+ * `"lark"` khi chỉ muốn xem plugin đó cần gì. Tách phần đọc ra khỏi phần cài để `setupPlugin` chỉ
+ * còn một mạch quyết định, thay vì mở đầu bằng hai nhánh phân tích chuỗi.
+ */
+function parseSetupArg(arg: string): { want: string; values: Record<string, string> } | { error: string } {
+  const raw = arg.trim();
+  if (!raw.startsWith("{")) return { want: raw.replace(/^["']|["']$/g, ""), values: {} };
+
+  let d: { plugin?: unknown; name?: unknown; id?: unknown; values?: unknown };
+  try { d = JSON.parse(raw) as typeof d; } catch {
+    return { error: 'setup_plugin cần JSON, ví dụ {"plugin":"lark","values":{"LARK_APP_ID":"…","LARK_APP_SECRET":"…"}}' };
+  }
+  const values: Record<string, string> = {};
+  if (d.values && typeof d.values === "object") {
+    for (const [k, v] of Object.entries(d.values as Record<string, unknown>)) {
+      if (typeof v === "string") values[k] = v;
+    }
+  }
+  return { want: String(d.plugin ?? d.name ?? d.id ?? "").trim(), values };
+}
+
 function setupPlugin(arg: string, owner: string): string {
   const rows = catalog();
   const needs = (r: (typeof rows)[number]): { key: string; required: boolean }[] =>
@@ -691,24 +715,9 @@ function setupPlugin(arg: string, owner: string): string {
       (n.length ? ` — cần: ${n.map((c) => c.key + (c.required ? "*" : "")).join(", ")}` : " — không cần gì");
   };
 
-  const raw = arg.trim();
-  let want = "";
-  let values: Record<string, string> = {};
-  if (raw.startsWith("{")) {
-    try {
-      const d = JSON.parse(raw) as { plugin?: unknown; name?: unknown; id?: unknown; values?: unknown };
-      want = String(d.plugin ?? d.name ?? d.id ?? "").trim();
-      if (d.values && typeof d.values === "object") {
-        for (const [k, v] of Object.entries(d.values as Record<string, unknown>)) {
-          if (typeof v === "string") values[k] = v;
-        }
-      }
-    } catch {
-      return 'setup_plugin cần JSON, ví dụ {"plugin":"lark","values":{"LARK_APP_ID":"…","LARK_APP_SECRET":"…"}}';
-    }
-  } else {
-    want = raw.replace(/^["']|["']$/g, "");
-  }
+  const parsed = parseSetupArg(arg);
+  if ("error" in parsed) return parsed.error;
+  const { want, values } = parsed;
 
   if (!want) {
     return "Plugin cài được (dấu * = bắt buộc):\n" + rows.map(describe).join("\n") +

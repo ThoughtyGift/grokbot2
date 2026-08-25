@@ -44,34 +44,8 @@ async function payload(): Promise<AdminPayload> {
 const bar = (pct: number, tone: string): string =>
   `<div class="bar"><i style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%;background:${tone}"></i></div>`;
 
-function page(p: AdminPayload): string {
-  const ramPct = p.ram.totalMb ? ((p.ram.totalMb - p.ram.availableMb) / p.ram.totalMb) * 100 : 0;
-  const bind = p.headroom.limit === "ram" ? "RAM" : "đĩa";
-  const ours = p.displays.filter((d) => d.profiles.some((x) => /grok/i.test(x)));
-  const oursMb = ours.reduce((s, d) => s + d.rssMb, 0);
-  const idle = p.displays.filter((d) => d.idle);
-
-  const rows = p.displays.map((d) => `<tr class="${d.idle ? "dim" : ""}">
-    <td class="k">${esc(d.display)}${d.profiles.some((x) => /grok/i.test(x)) ? '<span class="tag">của mình</span>' : ""}</td>
-    <td class="n">${mb(d.rssMb)}</td>
-    <td class="n s">${d.xvfbMb || ""}</td>
-    <td class="n s">${d.chromeMb || ""}</td>
-    <td class="n s">${d.vncMb || ""}</td>
-    <td class="n s">${d.procs}</td>
-    <td class="s">${esc(d.geometry ?? "")}${d.vncPort ? ` · vnc ${d.vncPort}` : ""}</td>
-    <td class="s">${d.idle ? "trống" : esc(d.profiles.map((x) => x.split("/").pop()).join(", "))}</td>
-  </tr>`).join("");
-
-  const profs = p.chromeProfiles.slice(0, 10).map((c, i) => `<tr>
-    <td class="n">${mb(c.rssMb)}</td>
-    <td class="n s">${c.procs}</td>
-    <td class="k s">${esc(c.display ?? "—")}</td>
-    <td class="s ${i === 0 ? "hot" : ""}">${esc(c.profile)}</td>
-  </tr>`).join("");
-
-  return `<!doctype html><meta charset="utf-8"><title>box · grokbot2</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
+/** CSS của trang — hằng, nên nằm ngoài hàm dựng trang; trộn vào thì `page` dài gấp ba mà không thêm gì. */
+const STYLE = `<style>
   :root{--bg:#0d1117;--panel:#151b23;--line:#232b36;--ink:#e6edf3;--dim:#7d8590;--hot:#ff7b72;--ok:#3fb950;--warn:#d29922;--acc:#58a6ff}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
@@ -106,24 +80,43 @@ function page(p: AdminPayload): string {
   section{margin-bottom:26px}
   .err{background:#3d1417;border:1px solid #6e2329;color:#ffb4ab;padding:12px 16px;border-radius:8px}
 </style>
-<div class="wrap">
-<header>
-  <h1>Box · sức chứa</h1>
-  <span class="when">${p.ok ? new Date(p.atMs).toISOString().replace("T", " ").slice(0, 19) : "không đọc được"} · tự làm mới 15s</span>
-</header>
+`;
 
-${p.ok ? "" : `<div class="err">Không đọc được box: ${esc(p.error ?? "không rõ")}</div>`}
+/** Một hàng cho mỗi màn hình. Hàng mờ đi = màn hình trống. */
+function displayRows(p: AdminPayload): string {
+  return p.displays.map((d) => `<tr class="${d.idle ? "dim" : ""}">
+    <td class="k">${esc(d.display)}${d.profiles.some((x) => /grok/i.test(x)) ? '<span class="tag">của mình</span>' : ""}</td>
+    <td class="n">${mb(d.rssMb)}</td>
+    <td class="n s">${d.xvfbMb || ""}</td>
+    <td class="n s">${d.chromeMb || ""}</td>
+    <td class="n s">${d.vncMb || ""}</td>
+    <td class="n s">${d.procs}</td>
+    <td class="s">${esc(d.geometry ?? "")}${d.vncPort ? ` · vnc ${d.vncPort}` : ""}</td>
+    <td class="s">${d.idle ? "trống" : esc(d.profiles.map((x) => x.split("/").pop()).join(", "))}</td>
+  </tr>`).join("");
+}
 
-<div class="hero">
-  <div class="big">${p.headroom.bots}<small>bot cấp thêm được</small></div>
-  <div class="why">
-    <b>${bind}</b> đang là chỗ chặn.
-    Theo RAM: <b>${p.headroom.byRamBots}</b> bot · theo đĩa: <b>${p.headroom.byDiskBots}</b> bot.
-    <div class="sub">Tính theo ${mb(p.cost.perBotMb)} RAM và ${mb(p.cost.profileMb)} đĩa cho mỗi màn hình riêng, chừa lại 1 GB.</div>
-  </div>
-</div>
+/** Mười hồ sơ Chrome nặng nhất — đủ để thấy ai đang ăn RAM, không đủ để thành một bãi chữ. */
+function profileRows(p: AdminPayload): string {
+  return p.chromeProfiles.slice(0, 10).map((c, i) => `<tr>
+    <td class="n">${mb(c.rssMb)}</td>
+    <td class="n s">${c.procs}</td>
+    <td class="k s">${esc(c.display ?? "—")}</td>
+    <td class="s ${i === 0 ? "hot" : ""}">${esc(c.profile)}</td>
+  </tr>`).join("");
+}
 
-<div class="grid">
+/**
+ * Bốn thẻ tóm tắt: RAM · đĩa · phần của mình · màn hình dùng chung.
+ *
+ * Tách vì đây là chỗ duy nhất trong trang có **ngưỡng màu** — đỏ/vàng/xanh theo phần trăm. Ngưỡng
+ * lẫn trong một khối HTML 80 dòng thì không ai thấy để sửa.
+ */
+function cards(p: AdminPayload): string {
+  const ramPct = p.ram.totalMb ? ((p.ram.totalMb - p.ram.availableMb) / p.ram.totalMb) * 100 : 0;
+  const ours = p.displays.filter((d) => d.profiles.some((x) => /grok/i.test(x)));
+  const oursMb = ours.reduce((s, d) => s + d.rssMb, 0);
+  return `<div class="grid">
   <div class="card">
     <h2>RAM</h2>
     <div class="num">${mb(p.ram.availableMb)}<span class="sub"> khả dụng / ${mb(p.ram.totalMb)}</span></div>
@@ -147,7 +140,53 @@ ${p.ok ? "" : `<div class="err">Không đọc được box: ${esc(p.error ?? "kh
     <div class="sub">${p.desktop.recording ? `đang ghi bài dạy cho ${esc(p.desktop.recording)}` : "không ai đang ghi"}</div>
   </div>
 </div>
+`;
+}
 
+/**
+ * Vì sao trang này không có nút nào.
+ *
+ * Để cuối trang và tách riêng vì nó là một **quyết định**, không phải dữ liệu: sáu Chrome trên box
+ * không thuộc grokbot2, nên một nút "thu hồi" ở đây là nút giết tiến trình của phần mềm khác.
+ */
+function whyReadOnly(p: AdminPayload): string {
+  const idle = p.displays.filter((d) => d.idle);
+  return `<p class="note">
+  <b>Trang này chỉ đọc.</b> Không có nút thu hồi, và đó là cố ý: sáu trong số các Chrome trên box
+  này không thuộc grokbot2 (${mb(p.chromeProfiles.filter((c) => !/grok/i.test(c.profile)).reduce((s, c) => s + c.rssMb, 0))}),
+  nên một nút "giết" ở đây là nút giết tiến trình của người khác. Bảng phải chứng minh nó nhận
+  đúng chủ trước đã.
+  ${idle.length ? `Hiện có ${idle.length} màn hình trống: ${idle.map((d) => esc(d.display)).join(", ")}.` : ""}
+</p>
+`;
+}
+
+function page(p: AdminPayload): string {
+  const bind = p.headroom.limit === "ram" ? "RAM" : "đĩa";
+
+  const rows = displayRows(p);
+  const profs = profileRows(p);
+
+  return `<!doctype html><meta charset="utf-8"><title>box · grokbot2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+${STYLE}<div class="wrap">
+<header>
+  <h1>Box · sức chứa</h1>
+  <span class="when">${p.ok ? new Date(p.atMs).toISOString().replace("T", " ").slice(0, 19) : "không đọc được"} · tự làm mới 15s</span>
+</header>
+
+${p.ok ? "" : `<div class="err">Không đọc được box: ${esc(p.error ?? "không rõ")}</div>`}
+
+<div class="hero">
+  <div class="big">${p.headroom.bots}<small>bot cấp thêm được</small></div>
+  <div class="why">
+    <b>${bind}</b> đang là chỗ chặn.
+    Theo RAM: <b>${p.headroom.byRamBots}</b> bot · theo đĩa: <b>${p.headroom.byDiskBots}</b> bot.
+    <div class="sub">Tính theo ${mb(p.cost.perBotMb)} RAM và ${mb(p.cost.profileMb)} đĩa cho mỗi màn hình riêng, chừa lại 1 GB.</div>
+  </div>
+</div>
+
+${cards(p)}
 <section>
   <table>
     <caption>Từng màn hình</caption>
@@ -164,14 +203,7 @@ ${p.ok ? "" : `<div class="err">Không đọc được box: ${esc(p.error ?? "kh
   </table>
 </section>
 
-<p class="note">
-  <b>Trang này chỉ đọc.</b> Không có nút thu hồi, và đó là cố ý: sáu trong số các Chrome trên box
-  này không thuộc grokbot2 (${mb(p.chromeProfiles.filter((c) => !/grok/i.test(c.profile)).reduce((s, c) => s + c.rssMb, 0))}),
-  nên một nút "giết" ở đây là nút giết tiến trình của người khác. Bảng phải chứng minh nó nhận
-  đúng chủ trước đã.
-  ${idle.length ? `Hiện có ${idle.length} màn hình trống: ${idle.map((d) => esc(d.display)).join(", ")}.` : ""}
-</p>
-</div>
+${whyReadOnly(p)}</div>
 <script>setTimeout(function(){location.reload()},15000)</script>`;
 }
 

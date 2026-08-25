@@ -11,8 +11,18 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
 import {
-  loadState, saveNow, _resetForTest, jsonPath, sqlitePath, jsonWriteCount, type PersistedState,
+  loadState, saveNow, _resetForTest, jsonPath, sqlitePath, jsonWriteCount, enableWriting,
+  type PersistedState,
 } from "./store.js";
+
+/*
+ * Bài kiểm này LÀ một người ghi, nên phải tự khai.
+ *
+ * `store.ts` mặc định khoá ghi từ sau hai lần mất dữ liệu do script phụ nạp trạng thái cũ rồi lưu
+ * đè. Chốt đó đúng — nhưng nó cũng làm `saveNow()` ở đây thành không-làm-gì, và **năm bài kiểm đỏ
+ * im lặng** cho tới khi có người chạy cả bộ. Khai một dòng ở đây rẻ hơn nhiều so với nới chốt.
+ */
+enableWriting();
 
 function isolate(): { dir: string; json: string; sqlite: string } {
   const dir = mkdtempSync(join(tmpdir(), "grokbot2-p3-"));

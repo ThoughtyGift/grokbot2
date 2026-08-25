@@ -51,6 +51,27 @@ function failAll(reason: string): void {
   }
 }
 
+interface SttMessage { ready?: boolean; text?: string; ms?: number; error?: string }
+
+/**
+ * Cắt buffer thành từng dòng JSON trọn vẹn, trả lại phần dư.
+ *
+ * Tách ra vì đây là chỗ duy nhất trong file có một bất biến riêng: **một lần ghi dở không bao giờ
+ * được đọc như một câu trả lời trọn**. Nằm lẫn trong `start` thì bất biến đó chìm giữa việc dựng
+ * tiến trình và việc bắt lỗi.
+ */
+function drainLines(buf: string, onMessage: (msg: SttMessage) => void): string {
+  for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
+    const line = buf.slice(0, nl).trim();
+    buf = buf.slice(nl + 1);
+    if (!line) continue;
+    let msg: SttMessage;
+    try { msg = JSON.parse(line) as SttMessage; } catch { continue; }
+    onMessage(msg);
+  }
+  return buf;
+}
+
 function start(): Promise<void> {
   if (ready) return ready;
   ready = new Promise<void>((resolve, reject) => {
@@ -61,26 +82,19 @@ function start(): Promise<void> {
     let started = false;
 
     child.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
-      // Line-delimited: a partial write must never be read as a whole answer.
-      for (let nl = buffer.indexOf("\n"); nl >= 0; nl = buffer.indexOf("\n")) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (!line) continue;
-        let msg: { ready?: boolean; text?: string; ms?: number; error?: string };
-        try { msg = JSON.parse(line); } catch { continue; }
+      buffer = drainLines(buffer + chunk.toString("utf8"), (msg) => {
         if (msg.ready) {
           started = true;
           clearTimeout(readyTimer);
           resolve();
-          continue;
+          return;
         }
         const p = queue.shift();
-        if (!p) continue;
+        if (!p) return;
         clearTimeout(p.timer);
         if (msg.error) p.reject(new Error(msg.error));
         else p.resolve({ text: msg.text ?? "", ms: msg.ms ?? 0 });
-      }
+      });
     });
 
     // The model download prints progress here; it is the only place to see a cold first run.
@@ -89,20 +103,16 @@ function start(): Promise<void> {
       if (line) console.log(`[grokbot2] ${line.split("\n").slice(-1)[0]}`);
     });
 
-    child.on("exit", (code) => {
+    // Chết và không sinh ra được là hai đường vào cùng một trạng thái: quên tiến trình, dừng đồng
+    // hồ, và trả lời mọi thứ đang chờ. Gộp lại để không có đường nào quên một bước.
+    const died = (why: string, err?: Error) => {
       proc = null; ready = null; buffer = "";
       clearTimeout(readyTimer);
-      const why = `the transcriber exited (code ${code ?? "?"})`;
-      if (!started) reject(new Error(why));
+      if (!started) reject(err ?? new Error(why));
       failAll(why);
-    });
-
-    child.on("error", (e) => {
-      proc = null; ready = null;
-      clearTimeout(readyTimer);
-      reject(e);
-      failAll(e.message);
-    });
+    };
+    child.on("exit", (code) => died(`the transcriber exited (code ${code ?? "?"})`));
+    child.on("error", (e) => died(e.message, e));
   }).catch((e: Error) => {
     // A failed start must not be remembered as a permanent one: the next press tries again.
     ready = null;

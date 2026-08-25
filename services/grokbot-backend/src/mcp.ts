@@ -869,6 +869,30 @@ function handleRefusal(name: string, url: string, why: string, owner: string): v
  * URL, and nothing here can produce one for a stdio server — the button would only fail. A missing
  * credential is reported as `error` naming the variable, which is what it is and what fixes it.
  */
+/**
+ * `needsAuth` — hoặc `null` khi server không đòi đăng nhập.
+ *
+ * Tách khỏi `mcpServerStatus` vì đây là chỗ có thứ tự **bắt buộc** riêng, và đặt sai thứ tự đã gây
+ * lỗi thật một lần: một connector vừa đăng nhập xong vẫn hiện `needsAuth`, vì lần từ chối cũ chỉ
+ * mất đi sau một request thành công, mà pane thì không có lý do gì để gửi request nữa.
+ *
+ * Chỉ báo `needsAuth` khi **server đã từ chối**, không bao giờ đoán từ cấu hình trông có vẻ thiếu:
+ * một nút Đăng nhập trên server không dùng OAuth thì bấm vào chỉ có hỏng, mà nút hỏng còn tệ hơn
+ * không có nút.
+ */
+function authVerdict(name: string, url: string | undefined, owner: string):
+  { status: "needsAuth"; detail: string; toolCount: number } | null {
+  const signedIn = Boolean(url && oauthAccessToken(url, owner));
+  const refused = signedIn ? null : (authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner));
+  if (signedIn) recordRefusal(name, null, owner);
+  if (!refused) return null;
+  // Lần từ chối có thể vừa đọc lên từ đĩa sau một lần khởi động lại — khi đó chưa có probe nào chạy
+  // và chưa ai dựng URL đăng nhập. Hâm nóng ở đây luôn: cú bấm hỏi URL hai lần trong cùng một khoảnh
+  // khắc rồi thôi, nên URL phải có sẵn trước khi nút được bấm.
+  if (url) warmAuthUrl(url, owner);
+  return { status: "needsAuth", detail: refused, toolCount: 0 };
+}
+
 export function mcpServerStatus(name: string, owner: string = currentOwner()): {
   status: "connected" | "initializing" | "needsAuth" | "error" | "disconnected";
   detail: string;
@@ -884,23 +908,8 @@ export function mcpServerStatus(name: string, owner: string = currentOwner()): {
     return { status: "error", detail: `Needs ${blocking.join(", ")} — set it in ${where}`, toolCount: 0 };
   }
 
-  // A server that answered 401 gets the client's own `needsAuth`, which is what renders the
-  // Authenticate button. Only ever reported because the SERVER refused, never guessed from a config
-  // that merely looks incomplete — an Authenticate button on a server that does not want OAuth would
-  // just fail, and a button that fails is worse than no button.
-  // A stored sign-in makes an older refusal stale evidence, so it must not outvote it. Getting this
-  // order wrong kept a freshly signed-in connector reading needsAuth: the refusal only clears on a
-  // successful request, and the pane never showed a reason to make one.
-  const signedIn = Boolean(spec.url && oauthAccessToken(spec.url, owner));
-  const refused = signedIn ? null : (authRefused.get(`${owner}::${name}`) ?? refusalFor(name, owner));
-  if (signedIn) recordRefusal(name, null, owner);
-  if (refused) {
-    // The refusal may have come off disk after a restart, in which case no probe ran and nothing has
-    // built the sign-in URL yet. Warm it here too: the click asks for the URL twice in the same
-    // instant and never comes back, so it has to exist before the button is pressed.
-    if (spec.url) warmAuthUrl(spec.url, owner);
-    return { status: "needsAuth", detail: refused, toolCount: 0 };
-  }
+  const needsAuth = authVerdict(name, spec.url, owner);
+  if (needsAuth) return needsAuth;
 
   const s = live.get(`${owner}::${name}`);
   if (s && s.transport.dead() == null) {

@@ -121,23 +121,24 @@ export function displayFromProfile(profile: string, known: Map<string, unknown> 
  * nên hồ sơ mới là chìa khoá gom, không phải display. Nếu một hồ sơ có tên chứa số display (cách
  * `displays.ts` sẽ đặt tên) thì nối được về màn hình; không thì nó vào `looseChromeMb`.
  */
-export function parsePs(lines: string[]): { displays: DisplayRow[]; looseChromeMb: number; chromeProfiles: ChromeProfileRow[] } {
-  const profileRows = new Map<string, ChromeProfileRow>();
-  const byDisplay = new Map<string, DisplayRow>();
-  const row = (display: string): DisplayRow => {
-    let r = byDisplay.get(display);
-    if (!r) {
-      r = { display, rssMb: 0, xvfbMb: 0, chromeMb: 0, vncMb: 0, wmMb: 0, procs: 0, profiles: [], idle: true };
-      byDisplay.set(display, r);
-    }
-    return r;
-  };
-  const profileToDisplay = new Map<string, string>();
-  let loose = 0;
+/** Một dòng `ps`: pid, RSS (KB), phần còn lại là dòng lệnh. Không khớp thì không phải dòng của ta. */
+const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(.*)$/;
 
-  // Vòng một: Xvfb khai ra các màn hình có thật, và x11vnc nói cổng của chúng.
+const blankRow = (display: string): DisplayRow =>
+  ({ display, rssMb: 0, xvfbMb: 0, chromeMb: 0, vncMb: 0, wmMb: 0, procs: 0, profiles: [], idle: true });
+
+/**
+ * Vòng một: **màn hình nào có thật**.
+ *
+ * Phải đi trước vòng Chrome, và đó là lý do tách: `Xvfb` là thứ duy nhất khai ra một màn hình tồn
+ * tại, còn Chrome thì chỉ *nối vào* một màn hình có sẵn. Gộp hai vòng vào một thì một tiến trình
+ * Chrome đọc trước `Xvfb` của nó sẽ bị tính là "bơ vơ".
+ */
+function scanDisplays(lines: string[]): Map<string, DisplayRow> {
+  const byDisplay = new Map<string, DisplayRow>();
+  const row = (d: string) => byDisplay.get(d) ?? byDisplay.set(d, blankRow(d)).get(d)!;
   for (const raw of lines) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(raw);
+    const m = PS_LINE.exec(raw);
     if (!m) continue;
     const [, , rssKb, args] = m;
     const mb = num(rssKb) / 1024;
@@ -155,9 +156,30 @@ export function parsePs(lines: string[]): { displays: DisplayRow[]; looseChromeM
       r.vncMb += mb; r.rssMb += mb; r.procs++;
       const port = /-rfbport\s+(\d+)/.exec(args);
       if (port) r.vncPort = num(port[1]);
-      continue;
     }
   }
+  return byDisplay;
+}
+
+/** Làm tròn + gắn nhãn "bỏ rơi", sau khi cả hai vòng đã cộng xong. */
+function finishDisplays(byDisplay: Map<string, DisplayRow>): DisplayRow[] {
+  const displays = [...byDisplay.values()].sort((a, b) => b.rssMb - a.rssMb);
+  for (const d of displays) {
+    // "Bỏ rơi" = không Chrome, không VNC. Cẩn thận với chữ này: sáu màn hình từng bị gắn nhãn đó
+    // chỉ vì tên hồ sơ Chrome của chúng không khớp phép nối ở vòng hai.
+    d.idle = d.chromeMb < 1 && d.vncMb < 1;
+    d.rssMb = Math.round(d.rssMb); d.xvfbMb = Math.round(d.xvfbMb);
+    d.chromeMb = Math.round(d.chromeMb); d.vncMb = Math.round(d.vncMb); d.wmMb = Math.round(d.wmMb);
+  }
+  return displays;
+}
+
+export function parsePs(lines: string[]): { displays: DisplayRow[]; looseChromeMb: number; chromeProfiles: ChromeProfileRow[] } {
+  const profileRows = new Map<string, ChromeProfileRow>();
+  const byDisplay = scanDisplays(lines);
+  const row = (d: string) => byDisplay.get(d) ?? byDisplay.set(d, blankRow(d)).get(d)!;
+  const profileToDisplay = new Map<string, string>();
+  let loose = 0;
 
   // Vòng hai: Chrome và window manager. Hồ sơ có dạng …/disp<N>/… hoặc …-<N> thì nối về màn hình.
   for (const raw of lines) {
@@ -194,14 +216,7 @@ export function parsePs(lines: string[]): { displays: DisplayRow[]; looseChromeM
     }
   }
 
-  const displays = [...byDisplay.values()].sort((a, b) => b.rssMb - a.rssMb);
-  for (const d of displays) {
-    // "Bỏ rơi" = không Chrome, không VNC. Cẩn thận với chữ này: sáu màn hình từng bị gắn nhãn đó
-    // chỉ vì tên hồ sơ Chrome của chúng không khớp phép nối ở trên.
-    d.idle = d.chromeMb < 1 && d.vncMb < 1;
-    d.rssMb = Math.round(d.rssMb); d.xvfbMb = Math.round(d.xvfbMb);
-    d.chromeMb = Math.round(d.chromeMb); d.vncMb = Math.round(d.vncMb); d.wmMb = Math.round(d.wmMb);
-  }
+  const displays = finishDisplays(byDisplay);
   const chromeProfiles = [...profileRows.values()]
     .map((p) => ({ ...p, rssMb: Math.round(p.rssMb) }))
     .sort((a, b) => b.rssMb - a.rssMb);

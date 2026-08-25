@@ -57,9 +57,14 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
  * `GetAvailableMcpServers` hands the ids out, `GetMcpConfig` maps names to them, and the account
  * RPCs arrive carrying one. Building the list twice was how those could silently disagree.
  */
-function mcpPorts(owner: string) {
-  const configured = mcpServersFor(owner);
-  const real = Object.entries(configured).map(([name, spec]) => {
+/**
+ * Một hàng cho mỗi MCP server đã cấu hình, đủ thứ pane cần để vẽ.
+ *
+ * Tách khỏi `mcpPorts` vì hai việc khác nhau: đây là *dựng hàng*, còn dưới kia là *ghép cổng cho
+ * client gọi*. Trộn lại thì mỗi lần thêm một cột phải đọc cả hàm.
+ */
+function mcpRows(owner: string, configured: Record<string, { command?: string; args?: string[]; url?: string }>) {
+  return Object.entries(configured).map(([name, spec]) => {
     const url = (spec as { url?: string }).url;
     return {
       name, command: spec.command, args: spec.args, url,
@@ -73,10 +78,14 @@ function mcpPorts(owner: string) {
       accounts: socialAccounts(name, owner),
     };
   });
+}
+
+function mcpPorts(owner: string) {
+  const configured = mcpServersFor(owner);
   // Plus a row each platform plugin can own, so its own pane has the sign-in button. Answer-only:
   // they are not in the MCP config, so no extra connection and no repeated tools — see aliasServers.
   const rows = [
-    ...real,
+    ...mcpRows(owner, configured),
     ...aliasServers(
       owner,
       (n) => mcpServerStatus(n, owner).status,
