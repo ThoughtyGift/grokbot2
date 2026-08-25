@@ -5,7 +5,7 @@
 import { extname } from "node:path";
 import { stageImage } from "../attachments.js";
 import { ME } from "../identity/index.js";
-import { persist, onUpdate, tail, authorOf, nextId, nextEntryId, EPOCH, acceptance, transcripts, ownsAgent } from "../chat/state.js";
+import { persist, onUpdate, tail, authorOf, nextEntryId, EPOCH, acceptance, transcripts, ownsAgent } from "../chat/state.js";
 import { ensureSeq as stampSeq, isToolEcho, textOf } from "./seq.js";
 import type { Entry, LastEntry, WidgetOption, TranscriptEvent } from "./types.js";
 
@@ -205,7 +205,7 @@ export function pushListenerConnect(agentId: string, platform: string, reason = 
   const t = transcripts.get(agentId);
   if (!t) return;
   t.push({
-    id: nextId(), kind: "send-message", author: authorOf(agentId),
+    id: nextEntryId(), kind: "send-message", author: authorOf(agentId),
     message: { type: "listener-connect", platform, reason }, timestampMs: Date.now(),
   });
   persist();
@@ -216,7 +216,7 @@ export function postAttachment(agentId: string, dataUrl: string, fileName: strin
   const path = stageImage(dataUrl, fileName);
   if (path == null) return;
   tail(agentId).push({
-    id: nextId(),
+    id: nextEntryId(),
     kind: "send-message",
     author: authorOf(agentId),
     message: { type: "attachment", url: path, file_name: fileName, alt },
@@ -227,7 +227,7 @@ export function postAttachment(agentId: string, dataUrl: string, fileName: strin
 
 export function postFileAttachment(agentId: string, path: string, fileName: string, alt: string): void {
   tail(agentId).push({
-    id: nextId(),
+    id: nextEntryId(),
     kind: "send-message",
     author: authorOf(agentId),
     message: { type: "attachment", url: path, file_name: fileName, alt },
@@ -244,7 +244,7 @@ export function postWidget(
 ): string | null {
   const options = widget.options.filter((o) => typeof o?.label === "string" && o.label.trim().length > 0).slice(0, MAX_WIDGET_OPTIONS);
   if (widget.prompt.trim().length === 0 || options.length === 0) return null;
-  const id = nextId();
+  const id = nextEntryId();
   tail(agentId).push({
     id,
     kind: "send-message",

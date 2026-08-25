@@ -16,10 +16,10 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 | **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
 | **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
 | **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
-| **Kiểm thử** | 28 file unit (**278 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** |
+| **Kiểm thử** | 29 file unit (**288 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
 | **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1` — **chặng 4 sẽ mở**; đăng nhập đã siết (chặng 2) nên mở ra được |
 
-**Tiến độ theo chặng (25/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
+**Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
 🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
 🟡 **4 đưa BE ra ngoài** (code xong, chờ VPS) · ⬜ 5 tách user trên box · ⬜ 6 FE.
 
@@ -29,32 +29,34 @@ hãng. Mảnh cuối để máy thứ hai **chat được** (không chỉ tải)
 
 ---
 
-## 2 · Máy đo tự động — **9/9** *(25/08, sau chặng 0)*
+## 2 · Máy đo tự động — **9/9** *(26/08, đo lại sau bản vá plugin)*
 
 | mục | trạng thái |
 |---|---|
-| code chết (knip) | ok · 72 phát hiện (đúng mốc) |
-| **kích thước code** | **ĐỎ** · 5 file > 800 dòng · 28 hàm > 50 dòng — **tăng** từ 3/16 |
+| code chết (knip) | ok · 72 phát hiện (đúng mốc) — xem ô dưới về lượt đỏ 73 |
+| kích thước code | ok · 3 file > 800 dòng · 16 hàm > 50 dòng (đúng mốc) |
 | ranh giới tầng | ok · 7 luật đạt |
 | ngân sách bundle | ok · 95 KB thô / 31 KB gzip |
 | hợp đồng client | ok · khớp bản đã trích |
 | spec `/v1` | ok · 29 route · 32 schema |
 | docs | ok · 0 link chết · 0 mồ côi |
 | nhật ký e2e | ok · 98 lượt — *xem cảnh báo §5* |
-| **không lặp lại** | **ĐỎ** · cùng mục đỏ hai lượt liền → **dừng tính năng, sửa cái sinh ra nó** |
+| không lặp lại | ok · hai lượt trước không đỏ cùng chỗ |
 
-Năm file quá dài, theo thứ tự nên tách:
+**Lượt 26/08 đỏ hai mục rồi xanh lại — đây là cái gì:**
 
-```
-1840  apps/grokbot-web/src/main.ts
-1224  services/grokbot-backend/src/runtime/tools.ts
-1195  services/grokbot-backend/src/runtime/turn.ts
- 936  services/grokbot-backend/src/mcp.ts
- 863  packages/grokbot-proto/src/bootstrap.ts
-```
+`code chết` báo **73/72**, và `không lặp lại` đỏ theo. Truy ra: `+1` là
+[`infra/vps/serve-static.mjs`](../../infra/vps/serve-static.mjs) — máy chủ đứng một mình do systemd
+chạy trên VPS, **không ai import nên knip coi là rác**. Khai nó là điểm vào trong `knip.json`
+(`infra/vps/*.mjs`) → về 72, và `không lặp lại` tự xanh ở lượt sau.
 
-Bốn hàm dài nhất: `handleNative` **564** · `buildCommands` **408** · `createGatewayRouter` **270** ·
-`runTurn` **251**.
+Cùng lượt đó `chat/state.ts` có hai bí danh export trùng (`nextId`→`nextEntryId`,
+`persistState`→`persist`). Đã gộp về một tên; 20 chỗ gọi được đổi theo.
+
+**Đã vá luôn một điểm mù của chính máy đo:** phát hiện loại *"file không ai import"* nằm trong từng
+issue dưới cờ `files`, nhưng `keys` chỉ khoá `j.files` — khoá mà knip 6 luôn để rỗng. Nên loại này
+không bao giờ vào danh sách khoá: **số tăng mà dòng delta vẫn nói "thêm: không"**, phải chạy knip
+bằng tay mới truy ra. Đúng cái bẫy mà chú thích ngay trên đó nói là muốn tránh. Nay đã khoá cả hai.
 
 ---
 
@@ -329,11 +331,13 @@ chỉ là sai runner. Tìm ra được cũng vì chạy thật (25/08).
 
 | bộ | lệnh | phủ | lần chạy gần nhất |
 |---|---|---|---|
-| **Unit backend** | `npx tsx --test src/*.test.ts` | 272 bài · store, auth, mcp, site, đường dẫn client | ✅ 272/272 · 25/08 |
+| **Unit backend** | `node scripts/run-tests.mjs` | 288 bài · store, auth, mcp, site, đường dẫn client, **trạng thái MCP gửi cho client** | ✅ 288/288 · 26/08 |
 | **Unit FE** | `cd apps/grokbot-web && npx tsx --test src/*.test.ts` | markdown, avatar | ⚠️ 16/17 — **N8 đỏ từ trước** |
 | **Hợp đồng client** | `node scripts/contract-test.mjs` | 46 · routes·auth·commands·channels | ✅ 46/46 · 25/08 |
 | **`/v1` đầu-cuối** | `node scripts/e2e-native.mjs` | 60 · roster CRUD·gửi·ngắt·SSE·đính kèm | ✅ 60/60 · 25/08 |
-| **MCP** | `npx tsx scripts/e2e-mcp.mjs` | liệt kê tool·gọi tool·lỗi tool·args hỏng | ✅ · 25/08 |
+| **MCP** | `npx tsx scripts/e2e-mcp.mjs` | liệt kê tool·gọi tool·lỗi tool·args hỏng | ✅ · 26/08 — 4 server spawn thật, trả tool thật |
+| **Plugin qua agent** | `npx tsx scripts/e2e-mcp-plugin.mjs` | agent có **dùng** được tool của plugin không | ⚠️ **1/3 · 26/08** — kẹt ở pool, xem ô dưới |
+| **App đầu-cuối** | `node scripts/e2e-app-full.mjs` | 16 bước qua UI thật: tạo bot·mở·gửi·trả lời·avatar·xoá | ⚠️ **12/16 · 26/08** — hai đỏ cùng một nguyên nhân pool |
 | **Cổng tiến trình** | `node scripts/verify-native.mjs`<br>`node scripts/verify-runtime.mjs`<br>`node scripts/verify-ops.mjs` | BFF·runtime·ops còn đúng vai | ✅ cả ba · 25/08 |
 | **Điều khiển máy tính** | `node scripts/e2e-desktop.mjs` | 29 · chuột·phím·dạy việc | 27–29/29 · *chập chờn 10–20%* |
 | **Việc song song** | `node scripts/e2e-tasks.mjs` | 14 · `task`/`await_task` | ✅ 14/14 |
@@ -354,6 +358,22 @@ Còn **58 bộ e2e** khác trong `scripts/`; bảng này chỉ liệt kê nhữn
 | **4 · Ra ngoài** | `e2e-native` + `contract-test` |
 | **5 · Tách user** | `e2e-box-tools` + `e2e-desktop` + `test-real-box` |
 | **6 · FE** | `e2e-routine-ui` + `e2e-routines` |
+
+### ⚠ Chặn thật hiện nay: **pool trả về "Your group's usage limit is set to $0"**
+
+Mọi bài E2E cần **agent trả lời** đều dừng ở đây, không phải lỗi code. Đo 26/08:
+
+| bài | kết quả | bước đỏ |
+|---|---|---|
+| `e2e-app-full` | 12/16 | *"the reply RENDERS"* · *"a tool actually ran against the box"* — cả hai in ra chính câu trên |
+| `e2e-mcp-plugin` | 1/3 | agent không gọi được tool — cùng câu đó |
+
+Chuỗi `"Your group's usage limit is set to $0"` **không có trong kho này** (đã tìm) — nó do
+`admin.halcion.vn` trả về. Tức là hạn mức của nhóm trên pool đang là **0 đô** — việc của tài khoản,
+không sửa được bằng commit. **Nâng hạn mức xong mới đóng được các bước đó.**
+
+Phần **không** cần model thì xanh hết: tạo bot · hiện lên thanh bên 269 ms · mở bằng chuột ·
+gõ vào ô soạn · lời nhắn tới backend · avatar HTTP 200 · pane máy tính có trạng thái.
 
 ### Ba cái bẫy đã trả giá
 

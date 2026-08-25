@@ -40,8 +40,6 @@ export const nextAgentId = (): string => `agent-${agentSeq++}`;
 export const nextEntryId = (): string => `e${entrySeq++}`;
 export const nextReqId = (): string => `req-${reqSeq++}`;
 export const nextToolId = (): string => `tc-${toolSeq++}`;
-/** @deprecated use nextEntryId — kept as the historical name inside the turn loop. */
-export const nextId = nextEntryId;
 
 export const acceptance = new Map<string, AcceptanceRecord>();
 
@@ -94,7 +92,6 @@ export function bindAutomationCleanup(fn: (agentId: string) => void): void { aut
 export { automationCleanupRef };
 
 export const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
-export const persistState = persist;
 
 function migrate(e: any, agentName: string): Entry | null {
   if (!e || typeof e !== "object") return null;

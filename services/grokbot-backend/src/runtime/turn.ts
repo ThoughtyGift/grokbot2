@@ -21,7 +21,7 @@ import { loadMemory, renderMemory } from "../memory.js";
 import type { Entry, SendArgs, SubagentRow, ToolCtx } from "../conversation/types.js";
 import {
   agents, transcripts, inflight, compaction, persist, park, unpark, pending,
-  nextId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef, ownsAgent,
+  nextEntryId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef, ownsAgent,
 } from "../chat/state.js";
 import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
@@ -66,7 +66,7 @@ setHandBackSink((agentId, outcome) => {
  */
 function postBoxHandoffCard(agentId: string, handoff: BoxHandoff): void {
   tail(agentId).push({
-    id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+    id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
     message: { type: "text", content: "" },
     boxRequestId: handoff.requestId,
     boxInstruction: handoff.instruction,
@@ -294,14 +294,14 @@ const pendingVision = new Map<string, string>();
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   agentId,
   draft: (message) => {
-    tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message, timestampMs: Date.now() });
+    tail(agentId).push({ id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message, timestampMs: Date.now() });
     onUpdate(agentId);
   },
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   see: (dataUrl) => { pendingVision.set(agentId, dataUrl); },
   ask: (widget) => postWidget(agentId, widget),
   note: (text) => {
-    tail(agentId).push({ id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
+    tail(agentId).push({ id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
     onUpdate(agentId);
   },
   requestBoxHelp: (instruction) => {
@@ -493,7 +493,7 @@ export function respondToWidget(a: any) {
 
   // Echo the answer as a user turn so the transcript reads like a conversation, then let the
   // model continue from the question it asked.
-  tail(owner).push({ id: nextId(), kind: "message", role: "user", content: value, timestampMs: Date.now() });
+  tail(owner).push({ id: nextEntryId(), kind: "message", role: "user", content: value, timestampMs: Date.now() });
   onUpdate(owner);
 
   const waiting = unpark("widget", owner);
@@ -556,7 +556,7 @@ export function messageAgent(fromId: string, target: string, content: string): s
 
   const now = Date.now();
   // Outbound on the sender's side: the renderer labels this "Messaged <name>".
-  tail(fromId).push({ id: nextId(), kind: "message", role: "assistant", content, timestampMs: now,
+  tail(fromId).push({ id: nextEntryId(), kind: "message", role: "assistant", content, timestampMs: now,
     toAgent: { id: to.id, name: to.name, kind: "agent" } });
   onUpdate(fromId);
 
@@ -601,7 +601,7 @@ export function sendPrompt(args: SendArgs) {
     }
   }
 
-  const userEntry: Entry = { id: nextId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
+  const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   t.push(userEntry);
 
   // Show what the user attached, instead of only the text they typed alongside it.
@@ -615,7 +615,7 @@ export function sendPrompt(args: SendArgs) {
   const freshAttIds = new Set<string>();
   for (const att of attachmentsOf(args)) {
     if (!att.path) continue;
-    const attId = nextId();
+    const attId = nextEntryId();
     freshAttIds.add(attId);
     t.push({
       id: attId, kind: "message", role: "user",
@@ -650,7 +650,7 @@ export function sendPrompt(args: SendArgs) {
   const m = text.match(/^\/tool\s+(.+)/i);
   if (m) { injectTool(agentId, m[1]); return { accepted: true, entryId: userEntry.id, agentId }; }
 
-  const bubble: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble);
   onUpdate(agentId);
 
@@ -723,7 +723,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   const known = lower in TOOLS;
   // `summary` is the client's own one-line description of a tool step — the outline panel
   // reads it (`n.summary != null ? firstLine(n.summary) : ""`) and shows nothing without it.
-  t.push({ id: nextId(), kind: "tool-call", toolCallId, name, rawArgs: JSON.stringify({ arg }), summary: `${name}(${arg})`.slice(0, 160), status: "pending", timestampMs: Date.now() });
+  t.push({ id: nextEntryId(), kind: "tool-call", toolCallId, name, rawArgs: JSON.stringify({ arg }), summary: `${name}(${arg})`.slice(0, 160), status: "pending", timestampMs: Date.now() });
 
   // Read-only tools and questions run straight away. `isAutoApproved` existed but nothing
   // called it, so every harmless read still made the user click Allow.
@@ -751,7 +751,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     ? "ask"
     : String((hostSettingsRef() as { localToolPermission?: unknown }).localToolPermission ?? "ask");
   if (known && standing === "never") {
-    const denied: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+    const denied: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
       message: { type: "local-tool-permission", ask: { status: "denied", target: `${name}(${arg})`, requestId } } };
     t.push(denied);
     const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
@@ -765,7 +765,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     return;
   }
 
-  const card: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+  const card: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
     message: { type: "local-tool-permission", ask: { status: known ? "pending" : "denied", target: `${name}(${arg})`, requestId } } };
   t.push(card);
   if (known) pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: lower, arg, history });
@@ -994,7 +994,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         onUpdate(agentId);
         const key2 = loadPoolKey();
         if (key2) {
-          const b: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+          const b: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
           tail(agentId).push(b); onUpdate(agentId);
           const c = new AbortController(); inflight.set(agentId, c);
           void runTurn(agentId, b, history, key2, c);
@@ -1105,7 +1105,7 @@ function runToolBatch(agentId: string, calls: { name: string; arg: string }[], h
   const started = calls.map((c) => {
     const toolCallId = nextToolId();
     t.push({
-      id: nextId(), kind: "tool-call", toolCallId, name: c.name, rawArgs: JSON.stringify({ arg: c.arg }),
+      id: nextEntryId(), kind: "tool-call", toolCallId, name: c.name, rawArgs: JSON.stringify({ arg: c.arg }),
       summary: `${c.name}(${c.arg})`.slice(0, 160), status: "pending", timestampMs: Date.now(),
     });
     return { ...c, toolCallId };
@@ -1134,7 +1134,7 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   toolSteps.set(agentId, step);
   const last = step >= MAX_TOOL_STEPS;
 
-  const bubble: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
@@ -1161,7 +1161,7 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   toolSteps.set(agentId, step);
   const last = step >= MAX_TOOL_STEPS;
 
-  const bubble: Entry = { id: nextId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);

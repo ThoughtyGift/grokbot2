@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { agentExists, sendPrompt, persistState, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { agentExists, sendPrompt, persist, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -297,7 +297,7 @@ bindAutomationCreate((agentId, spec) => {
   return list[list.length - 1]?.triggerDescription ?? null;
 });
 // And drop an agent's routines when the agent is deleted, so the scheduler stops trying to fire them.
-bindAutomationCleanup((agentId) => { if (byAgent.delete(agentId)) persistState(); });
+bindAutomationCleanup((agentId) => { if (byAgent.delete(agentId)) persist(); });
 
 const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;
@@ -409,7 +409,7 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
     ...(structured ? { triggerSpec: structured } : {}),
   };
   listFor(agentId).push(rec);
-  persistState();
+  persist();
   console.log(`[grokbot2] routine created "${rec.name}" (${rec.triggerDescription})`);
   // The original writes the change into the bot's own transcript, and then — 10ms later, measured —
   // a card saying the routine cannot fire until its platform is connected. Both are copied from its
@@ -450,7 +450,7 @@ export function updateAgentAutomation(a: { id?: string; agentId?: string; automa
   const rec = listFor(agentId).find((x) => x.id === a?.automationId);
   if (rec) {
     applySpec(rec, a?.spec ?? {});
-    persistState();
+    persist();
     pushTranscriptEvent(agentId, {
       type: "automation-changed", action: "updated", automationId: rec.id, automationName: rec.name,
     });
@@ -463,14 +463,14 @@ export function deleteAgentAutomation(a: { id?: string; agentId?: string; automa
   const agentId = agentIdOf(a);
   const l = listFor(agentId);
   const i = l.findIndex((x) => x.id === a?.automationId);
-  if (i >= 0) { l.splice(i, 1); persistState(); automationsChanged(agentId); }
+  if (i >= 0) { l.splice(i, 1); persist(); automationsChanged(agentId); }
   return l;
 }
 
 export function setAgentAutomationEnabled(a: { id?: string; agentId?: string; automationId?: string; isEnabled?: boolean; enabled?: boolean }): Automation[] {
   const agentId = agentIdOf(a);
   const rec = listFor(agentId).find((x) => x.id === a?.automationId);
-  if (rec) { rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled; persistState(); automationsChanged(agentId); }
+  if (rec) { rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled; persist(); automationsChanged(agentId); }
   return listFor(agentId);
 }
 
@@ -494,7 +494,7 @@ function fire(rec: Automation, trigger: AutomationRun["trigger"], context?: stri
     rec.runs.unshift(run);
     rec.runs.length = Math.min(rec.runs.length, MAX_RUNS);
     console.warn(`[grokbot2] routine "${rec.name}" points at ${rec.agentId}, which no longer exists — not firing`);
-    persistState();
+    persist();
     return;
   }
   rec.runs.unshift(run);
@@ -507,7 +507,7 @@ function fire(rec: Automation, trigger: AutomationRun["trigger"], context?: stri
     run.status = "failed";
     console.warn(`[grokbot2] routine "${rec.name}" failed:`, (e as Error).message);
   }
-  persistState();
+  persist();
   automationsChanged(rec.agentId);   // Run history is part of the panel; a new run should show live.
 }
 
@@ -547,7 +547,7 @@ function settleRuns(): void {
       changed = true;
     }
   }
-  if (changed) persistState();
+  if (changed) persist();
 }
 
 export function runAgentAutomationNow(a: { id?: string; agentId?: string; automationId?: string }): Record<string, never> {

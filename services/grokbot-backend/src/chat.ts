@@ -22,7 +22,7 @@ export type {
 } from "./conversation/types.js";
 export {
   chatSnapshot,
-  persistState,
+  persist,
   bindHostSettings,
   bindAutomationsSnapshot,
   bindAutomationCreate,

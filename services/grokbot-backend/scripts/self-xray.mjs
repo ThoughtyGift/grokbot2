@@ -85,7 +85,16 @@ console.log("── self-xray ──\n");
       return acc;
     }, {});
     n = files + Object.values(issues).reduce((a, b) => a + b, 0);
+    /*
+     * File không ai import nằm trong TỪNG issue dưới cờ `files` — đúng chỗ `n` đếm ở trên.
+     *
+     * Bản trước chỉ khoá `j.files`, khoá cấp cao mà knip 6 luôn để rỗng. Nên một phát hiện loại này
+     * không bao giờ vào `keys`: con số tăng, dòng delta vẫn nói "thêm: không", và phải chạy knip
+     * bằng tay mới truy ra. Đúng cái bẫy mà khối chú thích ngay trên nói là muốn tránh — ngày
+     * 2026-08-26 `infra/vps/serve-static.mjs` làm nó +1 và tốn một vòng đo để tìm.
+     */
     for (const f of j.files ?? []) keys.push(`${f}|file|`);
+    for (const i of j.issues ?? []) for (const f of i.files ?? []) keys.push(`${i.file}|file|${f?.name ?? f}`);
     for (const i of j.issues ?? []) {
       for (const k of ["exports", "types", "dependencies", "unlisted", "unresolved"]) {
         for (const x of i[k] ?? []) keys.push(`${i.file}|${k}|${x?.name ?? x}`);
