@@ -223,6 +223,8 @@ node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 | N6 | ⬜ `bot.log` in token Telegram | đổi token + xoay log |
 | N7 | ⬜ `publishSkill` cần registry | thuộc hạ tầng |
 | N8 | ⬜ `avatar.test.ts` đỏ từ trước — "SVG có thân, có hai mắt" | `npx tsx --test apps/grokbot-web/src/avatar.test.ts` |
+| N9 | ⬜ App hiện "Couldn't render this" ở cuối transcript · console: `TypeError: Cannot read properties of undefined (reading 'find')` trong `ms()` của renderer | mở app, bấm một bot, đọc console qua CDP 9222 |
+| N10 | ⬜ Ảnh cũ trong transcript hiện "Image unavailable" | **đã giải thích, không phải lỗi**: kho đính kèm giữ 64 file mới nhất (857–920), tin cũ trỏ tới `369-*` đã bị dọn. Cần quyết: giữ nhiều hơn, hay vẽ "ảnh đã hết hạn" thay vì "không có" |
 
 ---
 
