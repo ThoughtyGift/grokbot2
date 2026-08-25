@@ -190,7 +190,11 @@ export type DomainEvent =
   | { type: "transcript.append"; agentId: string }
   | { type: "agent.upserted"; agentId?: string }
   | { type: "computer.status"; agentId: string }
-  | { type: "automations.changed"; agentId: string };
+  | { type: "automations.changed"; agentId: string }
+  /** Một hành động của bot trên màn hình máy tính — kênh `computer-action`. */
+  | { type: "computer.action"; agentId: string; action: Record<string, unknown> }
+  /** Trạng thái ghi bài dạy — kênh `teach-recording`. Payload CHÍNH LÀ trạng thái, không bọc. */
+  | { type: "teach.recording"; state: Record<string, unknown> };
 
 export interface EventsPort {
   subscribe(fn: (e: DomainEvent) => void): () => void;

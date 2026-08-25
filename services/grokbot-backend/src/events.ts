@@ -23,7 +23,14 @@ export type DomainEvent =
   /** An agent's computer went from off to running, or back. */
   | { type: "computer.status"; agentId: string }
   /** An agent's routines were created, edited, deleted, toggled or run. */
-  | { type: "automations.changed"; agentId: string };
+  | { type: "automations.changed"; agentId: string }
+  /**
+   * Bot vừa chạm vào màn hình máy tính. Payload là chính hành động đó, đúng như host gốc phát:
+   * `{channel:"computer-action", payload:{agentId, ...action}}`.
+   */
+  | { type: "computer.action"; agentId: string; action: Record<string, unknown> }
+  /** Trạng thái ghi bài dạy đổi — bật, tắt, hoặc hết giờ. */
+  | { type: "teach.recording"; state: Record<string, unknown> };
 
 export type DomainEventType = DomainEvent["type"];
 

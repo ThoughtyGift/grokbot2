@@ -9,6 +9,7 @@ import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
+import { publish } from "../events.js";
 import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from "../desktop-record.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
@@ -1079,6 +1080,10 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
 
   const r = await desktopAct(parsed);
   if (!r.ok) return `computer_use ${parsed.action} lỗi: ${r.error ?? "không rõ"}`;
+
+  // Kênh `computer-action` của client: host gốc phát mỗi hành động ra đó, phẳng cạnh agentId.
+  // Phát SAU khi biết nó thành công — báo một cú bấm chưa xảy ra thì pane kể một câu chuyện sai.
+  publish({ type: "computer.action", agentId: ctx.agentId, action: { ...parsed } as Record<string, unknown> });
 
   // Into the transcript for the person AND in front of the model for the next turn. Only the first
   // half existed at first, and it made the whole feature a mime show: the bot clicked by

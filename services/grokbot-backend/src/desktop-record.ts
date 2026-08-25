@@ -16,6 +16,7 @@ import { sq, boxRoot, claimDesktop, releaseDesktop, desktopHeldBy } from "./desk
 import { callPool } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { automationCreateRef } from "./chat/state.js";
+import { publish } from "./events.js";
 import { screenInfo } from "./desktop.js";
 
 /** Một bước đã ghi. `crop` là tên file mẩu ảnh trong thư mục phiên, chỉ có ở bước bấm. */
@@ -270,6 +271,9 @@ export async function startDesktopRecording(agentId: string): Promise<DesktopRec
     command: `mkdir -p ${sq(dir)}; nohup setsid python3 ${REMOTE} ${sq(dir)} ${MAX_MS / 1000} ${MAX_STEPS} > ${sq(`${dir}/log`)} 2>&1 < /dev/null & echo started`,
   });
   current = { agentId, dir, startedAtMs: Date.now() };
+  // Cùng kênh `teach-recording` với bản ghi trình duyệt: với client chỉ có MỘT phiên dạy, và hai
+  // bộ ghi bên mình loại trừ nhau, nên hai nguồn cùng một kênh là đúng chứ không phải trùng lặp.
+  publish({ type: "teach.recording", state: desktopRecordingState() as unknown as Record<string, unknown> });
   return desktopRecordingState();
 }
 
@@ -279,6 +283,7 @@ export async function stopDesktopRecording(): Promise<{ steps: DesktopStep[]; di
   current = null;
   if (!s) return null;
   releaseDesktop(s.agentId);
+  publish({ type: "teach.recording", state: desktopRecordingState() as unknown as Record<string, unknown> });
   await boxCall<ExecResult>("exec", { command: `kill $(cat ${sq(`${s.dir}/pid`)}) 2>/dev/null; sleep 0.4; echo done` });
   const steps = await readSteps(s.dir);
   return { steps, dir: s.dir, agentId: s.agentId };

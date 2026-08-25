@@ -36,6 +36,7 @@ export type WireChannel = (typeof WIRE_CHANNELS)[number];
 export const PUSHED_CHANNELS = [
   "transcript", "agents", "agent-upserted", "forever-box", "automations",
   "subagents", "outline", "host-settings", "mcp-servers", "async-tasks",
+  "teach-recording", "computer-action",
 ] as const satisfies readonly WireChannel[];
 
 /**
@@ -60,8 +61,8 @@ export const NO_DATA_CHANNELS = [
 ] as const satisfies readonly WireChannel[];
 
 /**
- * Channels whose feature NOW EXISTS here but which nothing broadcasts yet — a real gap, and the
- * only two on this wire.
+ * Channels whose feature exists here but which nothing broadcasts yet. Empty since 25/08/2026 —
+ * `teach-recording` and `computer-action` were the last two and are now wired.
  *
  * Both sat in NO_DATA_CHANNELS with a comment saying the feature did not exist. That was true when
  * it was written and stopped being true on 24/08/2026, which is the failure mode this whole file
@@ -73,9 +74,7 @@ export const NO_DATA_CHANNELS = [
  *   computer-action   `computer_use` acts on the box every turn; the host emits
  *                     `{channel:"computer-action", payload:{agentId, ...action}}` for it
  */
-export const PENDING_CHANNELS = [
-  "teach-recording", "computer-action",
-] as const satisfies readonly WireChannel[];
+export const PENDING_CHANNELS = [] as const satisfies readonly WireChannel[];
 
 export interface SseHub {
   /** `targetOwner` routes to one tenant's connections (multi-tenant Phase 3); omitted = every client
@@ -284,6 +283,20 @@ export function createSseHub(ports: AclPorts): SseHub {
       case "agent.upserted": return onAgentUpserted(e.agentId);
       case "computer.status": return onComputerStatus(e.agentId);
       case "automations.changed": return onAutomationsChanged(e.agentId);
+      /**
+       * Hai kênh này từng nằm trong "không có gì để gửi" vì tính năng chưa có. Giờ có rồi.
+       *
+       * `computer-action` gửi đúng hình dạng host gốc gửi — hành động được trải phẳng cạnh
+       * `agentId`, không bọc thêm một lớp: `payload:{agentId, ...action}`.
+       *
+       * `teach-recording` gửi nguyên trạng thái, vì ở client **câu trả lời CHÍNH LÀ trạng thái**
+       * (`{state, agentId, startedAtMs, maxDurationMs}`); bọc thêm là renderer không có nhánh nào
+       * khớp và pane đứng im ở chỗ mặc định.
+       */
+      case "computer.action":
+        return broadcast("computer-action", { agentId: e.agentId, ...e.action }, ownerFor(e.agentId));
+      case "teach.recording":
+        return broadcast("teach-recording", e.state);
     }
   });
 

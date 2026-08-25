@@ -22,6 +22,7 @@
  */
 import { cdpForAgent, onCdpEvent } from "./browser.js";
 import { automationCreateRef } from "./chat/state.js";
+import { publish } from "./events.js";
 
 /** The client's own limit (`600 * 1e3` in the bundle). Sending a different one desynchronises its countdown. */
 const MAX_DURATION_MS = 600_000;
@@ -128,6 +129,14 @@ const RECORDER = `(() => {
 })()`;
 
 /** Begin recording in the bot's own tab. Returns the state the client will adopt verbatim. */
+/**
+ * Kênh `teach-recording` — pane của client sống bằng nó.
+ *
+ * Phát ở MỌI chỗ trạng thái đổi, kể cả khi hết giờ hay bị đóng lúc tắt máy: pane đọc luồng, nên
+ * một lần đổi không phát là pane đứng nguyên ở "đang ghi" trong khi máy đã dừng từ lâu.
+ */
+const pushState = (): void => { publish({ type: "teach.recording", state: recordingState() as unknown as Record<string, unknown> }); };
+
 export async function startTeach(agentId: string): Promise<TeachState> {
   if (active) return recordingState();
   const id = agentId || "default";
@@ -159,6 +168,7 @@ export async function startTeach(agentId: string): Promise<TeachState> {
   const timer = setTimeout(() => { void stopTeach(id, false); }, MAX_DURATION_MS + 30_000);
   active = { agentId: id, startedAtMs: Date.now(), timer, steps, off };
   console.log(`[grokbot2] [teach] recording for ${id}`);
+  pushState();
   return recordingState();
 }
 
@@ -230,7 +240,7 @@ export function stepsToPrompt(steps: Step[]): string {
 export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number }> {
   const id = active?.agentId ?? agentId ?? "default";
   const run = active;
-  if (run) { clearTimeout(run.timer); run.off(); active = null; }
+  if (run) { clearTimeout(run.timer); run.off(); active = null; pushState(); }
   if (!run) return IDLE;
 
   const steps = run.steps;

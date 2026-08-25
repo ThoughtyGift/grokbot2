@@ -73,7 +73,10 @@ subscribe((e: DomainEvent) => {
   if (inflight.size > 0) lastBusyAtMs = Date.now();
   // Route per owner. The subscriber runs detached from any request, so the event's owner is the
   // AGENT's owner (ownerOf), never currentOwner(); a roster-wide event (no agentId) goes to all.
-  const eventOwner = e.agentId ? ownerOf(e.agentId) : undefined;
+  // `teach.recording` là sự kiện DUY NHẤT không mang agentId ở cấp ngoài (trạng thái ghi tự mang
+  // agentId bên trong), nên đọc thẳng `e.agentId` làm cả nhánh này không biên dịch được.
+  const eventAgentId = "agentId" in e ? e.agentId : undefined;
+  const eventOwner = eventAgentId ? ownerOf(eventAgentId) : undefined;
   for (const [res, owner] of sseClients) {
     if (eventOwner !== undefined && eventOwner !== owner) continue;   // another tenant's event
     // Build the payload AS that owner so agentById/listAllAgents scope to them.
@@ -81,6 +84,11 @@ subscribe((e: DomainEvent) => {
       if (e.type === "agent.upserted") {
         const agent = e.agentId ? agentById(e.agentId) : undefined;
         sseFrame(res, e.type, agent ? { agentId: e.agentId, agent: toNativeAgent(agent) } : { agents: listAllAgents().map(toNativeAgent) });
+      } else if (e.type === "teach.recording") {
+        // Trạng thái ghi đi nguyên khối: nó tự mang agentId bên trong.
+        sseFrame(res, e.type, e.state);
+      } else if (e.type === "computer.action") {
+        sseFrame(res, e.type, { agentId: e.agentId, ...e.action });
       } else {
         sseFrame(res, e.type, { agentId: e.agentId });
       }
