@@ -53,15 +53,28 @@ export const PUSHED_CHANNELS = [
  *   tray               the `trays` array in commands.ts is read/dismissed/cleared, never written
  *   workflows          `LOCAL_WORKFLOWS`, a constant stub row
  *   sharing            `{rooms: []}` — no relay exists (roadmap F5 decides relay vs honest refusal)
- *   teach-recording    `{isRecording: false}` — the feature does not exist here
  *   box-disk-pressure  no producer anywhere in the repo
- *   computer-action    no producer anywhere in the repo
- *
- * Each becomes pushable the day its feature does something. Until then the honest report is
- * "nothing to send", not a silent empty frame.
  */
 export const NO_DATA_CHANNELS = [
-  "tray", "workflows", "sharing", "teach-recording", "box-disk-pressure", "computer-action",
+  "tray", "workflows", "sharing", "box-disk-pressure",
+] as const satisfies readonly WireChannel[];
+
+/**
+ * Channels whose feature NOW EXISTS here but which nothing broadcasts yet — a real gap, and the
+ * only two on this wire.
+ *
+ * Both sat in NO_DATA_CHANNELS with a comment saying the feature did not exist. That was true when
+ * it was written and stopped being true on 24/08/2026, which is the failure mode this whole file
+ * argues against: a stale reason reads exactly like a measured one, and the parity report kept
+ * printing "real gaps: none" over two features that had shipped.
+ *
+ *   teach-recording   teach.ts and desktop-record.ts both record; the client has a whole host
+ *                     module for this channel (`id:"teach-recording"`), so the pane is real
+ *   computer-action   `computer_use` acts on the box every turn; the host emits
+ *                     `{channel:"computer-action", payload:{agentId, ...action}}` for it
+ */
+export const PENDING_CHANNELS = [
+  "teach-recording", "computer-action",
 ] as const satisfies readonly WireChannel[];
 
 export interface SseHub {

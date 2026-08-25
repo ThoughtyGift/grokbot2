@@ -17,7 +17,7 @@ import type { AclPorts } from "./ports.js";
 export * from "./ports.js";
 /** `buildCommands` is exported for the contract tests: enumerating the table beats grepping it. */
 export { SHARED_ROOM_COMMANDS, buildCommands } from "./commands.js";
-export { WIRE_CHANNELS, PUSHED_CHANNELS, NO_DATA_CHANNELS, type WireChannel } from "./sse.js";
+export { WIRE_CHANNELS, PUSHED_CHANNELS, NO_DATA_CHANNELS, PENDING_CHANNELS, type WireChannel } from "./sse.js";
 export { RPC_PATH, type RpcReply } from "./bootstrap.js";
 
 export interface CursorAcl {
