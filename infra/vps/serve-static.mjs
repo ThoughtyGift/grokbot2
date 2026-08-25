@@ -77,6 +77,27 @@ const server = createServer((req, res) => {
     return sendFile(res, pkg);
   }
 
+  /*
+   * Bản CHỞ CẢ APP — sau một đường bí mật, KHÔNG công khai.
+   *
+   * Bản này mang client của nhà phát hành. Để nó ở một URL ai cũng đoán được là **phân phối phần
+   * mềm của họ**; để sau một token 24 ký tự thì nó là "chép sang máy khác của chính mình", đúng thứ
+   * `docs/legal.md` cho phép. Token nằm ở tên thư mục: `/opt/botnoibo/full/<token>/*.exe`.
+   *
+   * `/download/full/<token>` — sai token thì 404 y như mọi đường lạ, không nói "sai token" (nói ra
+   * là xác nhận có thứ gì đó ở đây để đoán tiếp).
+   */
+  const full = /^\/download\/full\/([A-Za-z0-9]{8,64})\/?$/.exec(path);
+  if (full) {
+    const dir = join(DIR, "full", full[1]);
+    const file = existsSync(dir) ? readdirSync(dir).find((n) => n.endsWith(".exe")) : undefined;
+    if (file) {
+      const st = statSync(join(dir, file));
+      if (req.method === "HEAD") { res.writeHead(200, { "content-length": String(st.size) }); return res.end(); }
+      return sendFile(res, { name: file, path: join(dir, file), size: st.size });
+    }
+  }
+
   // Kiem tra song: de biet dich vu con chay ma khong phai tai ca trang.
   if (path === "/healthz") {
     const win = newest(".exe"), mac = newest(".command");

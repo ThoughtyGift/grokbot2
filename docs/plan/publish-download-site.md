@@ -98,12 +98,29 @@ dạ, và vài phiên bản Chrome chặn thẳng không cho giữ.
 
 Cách 2 là đường ngắn nhất tới HTTPS mà **không cần đợi DNS**, vì `*.halcion.vn` đã trỏ về đúng VPS này.
 
-### Đang phát bản 2 MB, KHÔNG phát bản 118 MB — cố ý
+### Hai bản, và ai cần bản nào
 
-Bản 118 MB chở **client của nhà phát hành**. Để nó sau một URL công khai là **phân phối phần mềm của
-họ**, khác hẳn "dùng trên máy của chính mình". Nên URL công khai chỉ phát **bản cấu hình 2 MB** —
-toàn code của mình. Muốn máy thứ hai lấy bản chở app: chép tay qua USB/SCP, hoặc đặt sau một đường
-dẫn bí mật + xác thực; nói một tiếng là làm.
+| máy nhận | bản | đường tải |
+|---|---|---|
+| **đã có client desktop + Node** | 2 MB (chỉ cấu hình) | công khai: `/download/windows` |
+| **máy trắng, chưa từng cài gì** | **118 MB (chở cả app)** | **sau token**: `/download/full/<token>` |
+
+Bản 2 MB **không chạy** trên máy trắng — nó vá client bạn đã có chứ không mang app theo; máy trắng
+chạy nó sẽ báo `Chua thay client desktop` rồi dừng. Trang tải nay nói rõ chỗ này ngay dưới nút, vì
+đó chính là chỗ đã gây nhầm khi thử trên máy thứ hai (26/08).
+
+**Vì sao bản 118 MB nằm sau token, không công khai:** nó mang **client của nhà phát hành**. Ở một URL
+ai cũng đoán được thì đó là **phân phối phần mềm của họ**; sau một token 24 ký tự thì nó là "chép
+sang máy khác của chính mình" — đúng ranh giới [legal.md](../legal.md).
+
+Token nằm ở **tên thư mục** trên VPS (`/opt/botnoibo/full/<token>/`), và bản sao ở
+`services/grokbot-backend/.data/full-download-token.txt` (thư mục này **gitignore**, token không vào
+kho). Sai token trả **404** giống hệt mọi đường lạ — không báo "sai token", vì báo ra là xác nhận có
+thứ đáng đoán.
+
+Đổi token: đổi tên thư mục trên VPS, không cần sửa code.
+
+
 
 ### Thêm tên miền (bước sau)
 
