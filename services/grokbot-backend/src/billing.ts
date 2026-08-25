@@ -1,10 +1,15 @@
 /**
  * Billing state — users, per-day usage, and plan definitions.
  *
- * INERT until wired. Nothing here changes a response yet: `GetSandAccessStatus` still returns a
- * constant GRANTED in `@grokbot2/proto` bootstrap.ts, and no turn reads these tables. This module
- * owns only the storage and the queries the access gate (step ④) and usage meter (step ⑤) will read
- * once the request path threads a user through (step ③). Adding it changes no observable behaviour.
+ * ĐÃ NỐI (25/08/2026) — chú thích cũ ở đây nói "INERT until wired" và điều đó thôi đúng từ lâu:
+ * `index.ts` truyền `access: accessVerdict(rpcUser)` và `usage: currentPeriodUsage(rpcUser)` vào
+ * ctx, `bootstrap.ts` trả `payment_required` theo `ctx.access`, và `turn.ts` chặn lượt khi
+ * `billingMode() === "enforce"`. Một chú thích nói tính năng chưa tồn tại trong khi nó đang chạy
+ * còn nguy hiểm hơn không có chú thích: người đọc tin nó và bỏ qua cả đường tiền.
+ *
+ * Thứ CHƯA nối là lối thoát: `plans.checkout_url` đã có chỗ trong bảng nhưng chưa gắn vào phán
+ * quyết, nên người bị chặn thấy màn hình chặn mà không có nút trả tiền. Xem
+ * docs/plan/ship-to-users.md chặng D.
  *
  * Rollout mirrors auth-gate.ts: `GROKBOT2_BILLING` = off | warn | enforce. `off` (default) never
  * calls in here at all; `warn` records usage and logs the verdict but still grants; `enforce` lets

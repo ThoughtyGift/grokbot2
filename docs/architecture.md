@@ -4,6 +4,10 @@ Sơ đồ theo **C4** (Simon Brown), chỉ mức 1 và 2 — mức 3 khi cần, 
 trong file này chứ không dùng công cụ vẽ ngoài: sơ đồ rẻ để dựng lại thì mới không mục. Quyết định
 *vì sao* nằm ở [adr/](adr/README.md).
 
+> Đường đi của một NGƯỜI DÙNG — vào bằng cửa nào, cài ra sao, tiền tính thế nào, dữ liệu ở đâu —
+> nằm ở [plan/ship-to-users.md](plan/ship-to-users.md). Tài liệu này là cấu trúc hệ thống; tài liệu
+> kia là hành trình người dùng và kế hoạch A→Z.
+
 ## C4 mức 1 — System Context
 
 Ai dùng hệ thống, và hệ thống dựa vào cái gì bên ngoài.
