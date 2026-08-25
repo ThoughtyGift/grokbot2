@@ -63,6 +63,25 @@ async function credential(path: "/v1/login" | "/v1/register", email: string, pas
 export const loginAccount = (email: string, password: string) => credential("/v1/login", email, password);
 export const registerAccount = (email: string, password: string) => credential("/v1/register", email, password);
 
+/**
+ * Nối phiên vừa đăng nhập với ứng dụng desktop đang chờ.
+ *
+ * App desktop mở trình duyệt tới `/loginDeepControl?uuid=…`, backend ghi nhận rồi chuyển hướng vào
+ * đây kèm `?login_uuid=`. Gọi cửa này là bảo backend: lượt chờ mang mã đó thuộc về tài khoản này.
+ * Sau đó app — vốn đang hỏi vòng `/auth/poll` — nhận được token và tự vào.
+ *
+ * Gửi kèm token trong THÂN chứ không chỉ dựa vào header: backend ưu tiên thân, để một phiên trình
+ * duyệt khác đang mở cùng máy không vô tình duyệt hộ.
+ */
+export async function approveDeviceLogin(uuid: string): Promise<void> {
+  const r = await fetch("/auth/approve", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ uuid, token }),
+  });
+  await parse<{ ok: boolean }>(r);
+}
+
 export async function logout(): Promise<void> {
   try { await fetch("/v1/logout", { method: "POST", headers: headers() }); } catch { /* stateless — clearing locally is enough */ }
   clearSession();

@@ -39,18 +39,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redact } from "./redact.js";
 import { verifyJwt, cinapiCookieUser } from "./auth.js";
+// Mức siết sống ở `auth-mode.ts` — `auth.ts` cũng cần nó, và nhập từ đây sẽ thành vòng tròn.
+import { authMode } from "./auth-mode.js";
 
 const TOKEN_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 /** Where operator tools read the per-boot token from. Inside the gitignored state directory. */
 export const TOKEN_FILE = join(TOKEN_DIR, "gateway-token.txt");
 
-export type AuthMode = "off" | "warn" | "enforce";
-
-/** Read per call so the mode can be changed by editing `.env` and letting tsx reload. */
-export const authMode = (): AuthMode => {
-  const raw = (process.env.GROKBOT2_AUTH ?? "off").trim().toLowerCase();
-  return raw === "warn" || raw === "enforce" ? raw : "off";
-};
 
 /**
  * The token we handed the client in the box descriptor â€” generated fresh each boot.

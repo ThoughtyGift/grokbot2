@@ -200,7 +200,26 @@ let dbFile = "";
 let writingEnabled = process.env.GROKBOT2_ALLOW_WRITE === "1";
 let warned = false;
 
-export function enableWriting(): void { writingEnabled = true; }
+/**
+ * Tiến trình này là người ghi — và nếu sổ đã mở rồi thì phải dựng schema **ngay bây giờ**.
+ *
+ * Nửa sau mới là chỗ đã âm thầm sai. `index.ts` gọi hàm này ở dòng 13, ngay sau `config`, với ý
+ * "mọi module nạp sau đó đều ghi được". Nhưng ESM **nâng toàn bộ `import` lên chạy trước mọi câu
+ * lệnh** của file — nên `host-settings.ts` và `chat/state.ts`, vốn gọi `loadState()` ở cấp module,
+ * chạy TRƯỚC dòng 13. Sổ mở dưới danh nghĩa tiến trình đọc, `getDb` bỏ qua migration đúng như nó
+ * được bảo, rồi nhớ luôn kết nối đó — nên migration không bao giờ chạy nữa trong cả tiến trình.
+ *
+ * Hậu quả đo được ngày 26/08: cột `token_version` của chặng 2 **chưa từng tồn tại** trên bản cài
+ * này, tức `/v1/logout` không thu hồi được gì suốt từ đó. Không có lỗi nào hiện ra, vì không ai đọc
+ * cột đó cho tới khi `/oauth/token` cần nó.
+ *
+ * Sửa ở đây chứ không phải ở `index.ts`: bảo người ta "nhớ đừng đọc kho lúc nạp module" là một luật
+ * không ai kiểm được và sẽ hỏng lại lần sau. Người ghi tự dựng schema thì đúng dù thứ tự nạp thế nào.
+ */
+export function enableWriting(): void {
+  writingEnabled = true;
+  if (db) applySchema(db);
+}
 
 function getDb(): DatabaseSync {
   const want = sqlitePath();
@@ -213,6 +232,15 @@ function getDb(): DatabaseSync {
   const existedBefore = existsSync(want);
   db = new DatabaseSync(want);
   dbFile = want;
+  /*
+   * Chờ khoá thay vì bỏ cuộc ngay — đặt cho MỌI kết nối, đọc lẫn ghi.
+   *
+   * WAL cho nhiều người đọc cùng lúc nhưng chỉ một người ghi, và mặc định SQLite ném "database is
+   * locked" NGAY chứ không đợi. Bốn tiến trình của `pnpm backend`, và bộ test chạy song song theo
+   * file, thì thỉnh thoảng sẽ có người thua — trong khi người thắng chỉ giữ khoá vài mili giây.
+   * Chờ năm giây rồi mới kêu là đúng hình dạng của việc này.
+   */
+  db.exec("PRAGMA busy_timeout = 5000");
 
   /*
    * **Chỉ tiến trình ghi mới được đổi schema.**
@@ -227,6 +255,18 @@ function getDb(): DatabaseSync {
    */
   if (!writingEnabled && existedBefore) return db;
 
+  applySchema(db);
+  return db;
+}
+
+/**
+ * Dựng bảng và chạy mọi di chú — **chỉ tiến trình ghi gọi**.
+ *
+ * Tách khỏi `getDb` vì có hai lối vào: lần mở đầu tiên của người ghi, và `enableWriting()` khi sổ đã
+ * lỡ được một lượt đọc mở trước (xem chú thích ở đó — đó là lỗi đã giấu mất cột `token_version`).
+ * Gọi lại nhiều lần không sao: mỗi câu đều `IF NOT EXISTS` hoặc bắt lỗi "duplicate column".
+ */
+function applySchema(db: DatabaseSync): void {
   db.exec(SCHEMA);
   db.exec("PRAGMA journal_mode = WAL");
   migrateOwnerId(db);
@@ -243,7 +283,6 @@ function getDb(): DatabaseSync {
   try { db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"); }
   catch (e) { if (!String((e as Error).message).toLowerCase().includes("duplicate column")) throw e; }
   importJsonIfNeeded(db);
-  return db;
 }
 
 /**

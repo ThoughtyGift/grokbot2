@@ -247,7 +247,15 @@ console.log("── self-xray ──\n");
      * rác. Lọc theo `index.html` vẫn đúng về nguyên tắc, nhưng nó không phải lý do con số là 66.
      */
     const html = readFileSync(join(REPO, "apps", "grokbot-web", "dist", "index.html"), "utf8");
-    const used = [...html.matchAll(/(?:src|href)="\/?assets\/([^"]+)"/g)].map((m) => m[1]);
+    /*
+     * `\.?\/?` chứ không chỉ `\/?` — và đây là một phép đo suýt nói dối.
+     *
+     * Từ 26/08 `vite.config.ts` dùng `base: "./"`, để backend phát được cùng một bản build ở `/app/`
+     * (chỗ `/loginDeepControl` đưa người dùng tới). Nên index.html trỏ `./assets/…`, biểu thức cũ
+     * không khớp gì cả, `used` rỗng, và mục này báo **0 KB — đậu**. Đúng cái mà khối chú thích ngay
+     * trên nói: một phép đo luôn ra 0 thì tệ hơn không có phép đo.
+     */
+    const used = [...html.matchAll(/(?:src|href)="\.?\/?assets\/([^"]+)"/g)].map((m) => m[1]);
     let raw = 0, gz = 0;
     for (const f of used) {
       const p = join(dist, f);

@@ -1,6 +1,16 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  /*
+   * Đường dẫn tài nguyên TƯƠNG ĐỐI, để một bản build chạy được ở hai gốc.
+   *
+   * Dev thì trang này ở `/` trên :5173. Nhưng backend cũng phát chính bản build này ở `/app/`
+   * — đó là nơi app desktop được đưa tới để đăng nhập (xem `/loginDeepControl`). Với `base`
+   * mặc định `/`, index.html trỏ `/assets/…`, và ở `/app/` thì hai file đó 404: trang trắng,
+   * không lỗi nào nói vì sao.
+   */
+  base: "./",
+
   server: {
     /**
      * Nghe trên IPv4 loopback, không để mặc định.

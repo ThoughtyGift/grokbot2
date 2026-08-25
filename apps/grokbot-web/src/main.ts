@@ -1843,7 +1843,7 @@ function renderLogin(err = ""): void {
     try {
       if (act === "register") await api.registerAccount(email(), pass());
       else await api.loginAccount(email(), pass());
-      await bootApp();
+      await afterSignIn();
     } catch (e) {
       renderLogin(e instanceof Error ? e.message : String(e));
     }
@@ -1852,10 +1852,38 @@ function renderLogin(err = ""): void {
   form.querySelector('[data-act="register"]')?.addEventListener("click", () => void submit("register"));
 }
 
+/**
+ * Mã của lượt đăng nhập mà ứng dụng desktop đang chờ, nếu trang này được mở vì lý do đó.
+ *
+ * `/loginDeepControl` trên backend ghi nhận cặp uuid/challenge rồi chuyển hướng vào đây kèm
+ * `?login_uuid=`. Khi có mã này, trang không mở cả ứng dụng — việc của nó là nối phiên vừa đăng
+ * nhập với app rồi bảo người dùng quay lại app.
+ */
+const deviceLoginUuid = new URLSearchParams(location.search).get("login_uuid") ?? "";
+
+/** Đăng nhập xong rồi thì đi đâu: duyệt cho app desktop, hoặc mở ứng dụng như thường. */
+async function afterSignIn(): Promise<void> {
+  if (!deviceLoginUuid) { await bootApp(); return; }
+  await api.approveDeviceLogin(deviceLoginUuid);
+  renderDeviceApproved();
+}
+
+function renderDeviceApproved(): void {
+  document.getElementById("gb2-logout")?.remove();
+  root.innerHTML = `
+    <div class="login">
+      <div class="login__card">
+        <h1>Xong</h1>
+        <p class="login__sub">Quay lại ứng dụng Grok Bot — nó sẽ tự vào trong vài giây.</p>
+        <p class="login__sub">Đang dùng tài khoản <b>${escapeHtml(api.currentEmail())}</b>.</p>
+      </div>
+    </div>`;
+}
+
 async function boot(): Promise<void> {
   if (!api.hasSession()) { renderLogin(); return; }
   try {
-    await bootApp();
+    await afterSignIn();
   } catch (e) {
     // A stale/rejected token lands here — drop it and show the login gate rather than a dead app.
     if (e instanceof Error && /401|unauthorized/i.test(e.message)) { await api.logout(); renderLogin("Phiên hết hạn — đăng nhập lại."); return; }

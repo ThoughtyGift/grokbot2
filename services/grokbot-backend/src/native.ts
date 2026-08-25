@@ -6,7 +6,8 @@
  */
 import type { IncomingHttpHeaders } from "node:http";
 import type { ServerResponse } from "node:http";
-import { checkAuth, noteAuth, ensureGatewayToken, authMode } from "./auth-gate.js";
+import { checkAuth, noteAuth, ensureGatewayToken } from "./auth-gate.js";
+import { authMode } from "./auth-mode.js";
 import { registerUser, loginUser } from "./web-auth.js";
 import { loginAllowed, noteLoginFailure, noteLoginSuccess } from "./login-throttle.js";
 import { bumpTokenVersion } from "./token-version.js";

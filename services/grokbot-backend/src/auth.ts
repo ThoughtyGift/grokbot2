@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { tokenVersionOf } from "./token-version.js";
+import { authMode } from "./auth-mode.js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -213,20 +214,72 @@ export function userFromToken(authHeader?: string | string[]): TokenUser | null 
   }
 }
 
-/** Handle /oauth/token, /auth/* — always hand back a fresh token so login completes. */
-export function handleAuth(res: ServerResponse): void {
-  const jwt = mintJwt();
+/** Gói token đúng hình dạng app đọc — cả hai lối viết tên, vì client đọc cả hai. */
+export function tokenPayload(user: TokenUser, days = DESKTOP_TOKEN_DAYS): string {
+  const jwt = mintJwt(user, { days, tokenVersion: tokenVersionOf(user.authId) });
+  return JSON.stringify({
+    access_token: jwt,
+    refresh_token: jwt,
+    id_token: jwt,
+    token_type: "Bearer",
+    expires_in: days * 86400,
+    accessToken: jwt,
+    refreshToken: jwt,
+    authId: user.authId,
+  });
+}
+
+/**
+ * `/oauth/token`, `/auth/*` — **cửa cấp token**, và cho tới hôm nay nó không hỏi gì cả.
+ *
+ * Bản trước gọi `mintJwt()` rồi trả về, không cần thân request, không cần thông tin đăng nhập, không
+ * cần gì. Đo thật ngày 25/08 từ một máy khác trong LAN: `POST /oauth/token` với thân **rỗng** trả về
+ * token 199 ký tự, và token đó `GET /v1/agents` được — đọc ra tên các bot. Đây là thứ khiến backend
+ * không được rời `127.0.0.1`, tức là thứ đang chặn chặng 4.
+ *
+ * Client dùng đường này cho **một** việc, và bản dựng của nó nói rõ (`runRefreshAccessToken`):
+ *
+ *   POST /oauth/token  {client_id, grant_type:"refresh_token", refresh_token:<token cũ>}
+ *
+ * Nên câu hỏi đúng để hỏi là: *token cũ đó có phải do ta phát không.* `verifyJwt` trả lời được —
+ * nó kiểm chữ ký thật và cả số đời, nên token đã bị đăng xuất cũng không làm mới được nữa. Ai không
+ * có token thì không có gì để làm mới, và câu trả lời đúng là 401 chứ không phải một token mới.
+ *
+ * Lần đăng nhập ĐẦU không đi qua đây — nó đi `/auth/poll`, xem `device-login.ts`.
+ *
+ * Vẫn giữ ba mức của `GROKBOT2_AUTH` như phần còn lại của cổng: `off`/`warn` vẫn cấp như cũ để máy
+ * đang chạy không chết giữa chừng, `enforce` mới từ chối. Cùng một khớp nối, cùng một lý do: chỗ
+ * siết phải bật được sau khi đã đo, chứ không phải bật mù.
+ */
+export function handleAuth(res: ServerResponse, body?: Buffer | string): void {
+  const mode = authMode();
+  const asked = parseGrant(body);
+  const user = asked.refreshToken ? verifyJwt(asked.refreshToken) : null;
+
+  if (!user) {
+    if (mode === "enforce") {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "refresh token missing or not issued here" }));
+      return;
+    }
+    if (mode === "warn") {
+      console.warn(`[auth] /oauth/token cấp KHÔNG kiểm — ${asked.refreshToken ? "token không hợp lệ" : "không có refresh_token"}; enforce sẽ trả 401`);
+    }
+  }
+
   res.writeHead(200, { "content-type": "application/json" });
-  res.end(
-    JSON.stringify({
-      access_token: jwt,
-      refresh_token: jwt,
-      id_token: jwt,
-      token_type: "Bearer",
-      expires_in: 365 * 86400,
-      accessToken: jwt,
-      refreshToken: jwt,
-      authId: "auth0|grokbot2-user",
-    }),
-  );
+  res.end(tokenPayload(user ?? DEFAULT_USER));
+}
+
+/** Đọc `refresh_token` từ thân, chấp cả JSON lẫn form — hai lối một cửa OAuth có thể nhận. */
+function parseGrant(body?: Buffer | string): { refreshToken: string | null } {
+  const text = (typeof body === "string" ? body : body?.toString("utf8") ?? "").trim();
+  if (!text) return { refreshToken: null };
+  try {
+    const j = JSON.parse(text) as { refresh_token?: unknown; refreshToken?: unknown };
+    const t = j.refresh_token ?? j.refreshToken;
+    if (typeof t === "string" && t) return { refreshToken: t };
+  } catch { /* không phải JSON — thử dạng form bên dưới */ }
+  const t = new URLSearchParams(text).get("refresh_token");
+  return { refreshToken: t || null };
 }

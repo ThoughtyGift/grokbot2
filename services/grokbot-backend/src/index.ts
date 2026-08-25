@@ -12,6 +12,8 @@ import { config } from "./config.js";
 import { enableWriting } from "./store.js";
 enableWriting();
 import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
+import { handleLoginPage, handleAuthPoll, handleAuthApprove } from "./login-page.js";
+import { handleWebApp } from "./web-app.js";
 import { accessVerdict, currentPeriodUsage, billingMode, seedPlans } from "./billing.js";
 
 // Bảng giá phải có TRƯỚC lượt chat đầu tiên, không phải lúc ai đó tình cờ hỏi gói.
@@ -37,7 +39,8 @@ import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
 import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
-import { ensureGatewayToken, authMode } from "./auth-gate.js";
+import { ensureGatewayToken } from "./auth-gate.js";
+import { authMode } from "./auth-mode.js";
 import { handleAdmin } from "./admin.js";
 import { handleSite } from "./site.js";
 import { reportModelToolSupport } from "./model-probe.js";
@@ -152,9 +155,26 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // for anyone debugging with GROKBOT2_LOG — the exact audience most likely to paste a log.
   if (process.env.GROKBOT2_LOG) logSafe(`${req.method} ${url} (${ct.split(";")[0]})`);
 
-  // ── auth ──
+  /*
+   * ── auth ──
+   *
+   * Ba cửa, và cho tới hôm nay cả ba trả về cùng một thứ: một token, cho bất kỳ ai hỏi. Nay tách ra
+   * vì chúng là ba việc khác nhau, và chỉ một trong ba được phép cấp token từ con số không.
+   *
+   *   /loginDeepControl  trang người dùng đăng nhập — trình duyệt mở, không phải app
+   *   /auth/poll         app hỏi "xong chưa" — chỉ trả token SAU khi có người duyệt
+   *   /oauth/token       app làm mới token cũ — phải có token cũ hợp lệ
+   *
+   * Thứ tự quan trọng: `/auth/poll` và `/loginDeepControl` phải đứng TRƯỚC cửa chung bên dưới, vì
+   * cửa đó bắt cả `url.includes("/auth/")`.
+   */
+  // Giao diện web ở `/app/` — nơi `/loginDeepControl` đưa người dùng tới để đăng nhập.
+  if (handleWebApp(url, res)) return;
+  if (url.startsWith("/loginDeepControl")) return handleLoginPage(url, res);
+  if (url.startsWith("/auth/poll")) return handleAuthPoll(url, res);
+  if (url.startsWith("/auth/approve")) return handleAuthApprove(body, req.headers as Record<string, unknown>, res);
   if (url.startsWith("/oauth/token") || url.includes("/auth/") || url.endsWith("/token")) {
-    return handleAuth(res);
+    return handleAuth(res, body);
   }
   // ── local exec daemon credential ──
   if (url.includes("local-exec-daemon-credential")) {
