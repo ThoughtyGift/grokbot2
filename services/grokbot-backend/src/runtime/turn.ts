@@ -8,6 +8,7 @@ import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
 import { isAutoApproved, unquote } from "../tools.js";
 import { isDesktopLook, releaseDesktop } from "../desktop.js";
+import { cachedSkillsSection, warmSkills } from "../skills.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
@@ -806,11 +807,16 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // anything else per-turn goes last. See prompt.ts.
   // Per-owner: the MCP paragraph names THIS account's servers, and picks up a plugin installed
   // since boot. Was a module-level constant built from the default owner's config at import time.
+  // Quét lại ở nền nếu bộ nhớ đệm đã cũ; lượt này vẫn dùng bản cũ.
+  warmSkills();
   const system = buildSystemPrompt(toolProtocolFor(ownerOf(agentId) ?? DEFAULT_USER.authId), {
     memory: renderMemory(await loadMemory(agentId)),
     agentName: agents.get(agentId)?.name,
     boxOn: boxConfigured(),
     browserOn: isBrowserConfigured(),
+    // Lấy bản đã có sẵn, không chờ mạng: prompt dựng đồng bộ, và một lượt chat không nên đứng lại
+    // vì một lần `find` trên box. `warmSkills()` lo phần làm mới ở nền.
+    skills: cachedSkillsSection(),
     timeZone: (hostSettingsRef() as { userTimeZone?: string }).userTimeZone,
   });
   // 2048 (the pool default) truncates a big tool call: an `ask_question` with several options runs

@@ -29,6 +29,13 @@ export interface PromptContext {
   now?: Date;
   /** What this bot has learned about the user, already rendered. */
   memory?: string;
+  /**
+   * Lát `<available_skills>` — danh sách SOP trên đĩa box, đã dựng sẵn (xem skills.ts).
+   *
+   * Nằm ở tầng NGỮ CẢNH chứ không ở tầng ổn định: skill đổi khi người dùng thêm file, không đổi
+   * theo từng lượt. Bản gốc cũng xếp `skills` thành một lát riêng, ngay sau `rules` và trước `mcp`.
+   */
+  skills?: string;
 }
 
 /** Tier 1 — identity, behaviour and the tool contract. Cacheable. */
@@ -72,6 +79,8 @@ export function contextTier(ctx: PromptContext): string {
   // behind the cacheable prefix and ahead of the timestamp. Injecting it every turn is the
   // point: a memory the agent has to remember to go and read is one it usually does not read.
   if (ctx.memory?.trim()) lines.push("", ctx.memory.trim());
+  // Skill đứng SAU trí nhớ và trước dấu thời gian, cùng lý do: nó đổi theo đĩa chứ không theo lượt.
+  if (ctx.skills?.trim()) lines.push("", ctx.skills.trim());
   return lines.join("\n");
 }
 
