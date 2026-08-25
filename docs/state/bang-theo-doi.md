@@ -73,9 +73,11 @@ Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 | 0.7 | ✅ FE: `mdToHtml`·`renderRuns`·`messageActions`·`bootApp` | `npx tsx --test src/markdown.test.ts` | 10/10 |
 | 0.8 | ✅ Xoá 3 export chết mới sinh | `npx knip` | về mốc 72 |
 | 0.9 | ✅ **Sửa bẫy tự quy chiếu của cổng** | `node scripts/self-xray.mjs` | **9/9** |
+| 0.10 | ✅ **Chạy E2E thật, không chỉ unit** | `e2e-native` · `e2e-mcp` · 3× `verify-*` | 60/60 · MCP xanh · 3/3 |
+| 0.11 | ✅ Sửa bài kiểm ôm hợp đồng cũ (X8) | `node scripts/e2e-native.mjs` | 58/1 → **60/0** |
 
 **Kết quả chốt chặng:** 3 file > 800 · 16 hàm > 50 — **đúng mốc**. BE 272/272 · FE 16/17 · hợp
-đồng 46/46 · cổng **9/9 xanh**.
+đồng 46/46 · `/v1` đầu-cuối **60/60** · MCP xanh · ba cổng tiến trình xanh · self-xray **9/9**.
 
 > **Một bài FE đỏ, và nó KHÔNG phải do chặng này:** `avatar.test.ts` — "SVG có thân, có hai mắt".
 > Đã kiểm trên cây trước khi sửa: đỏ y hệt. Xếp vào nợ lẻ N8, đừng tính vào chặng 0.
@@ -195,23 +197,78 @@ node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 
 ---
 
-## 4 · E2E — chạy gì, khi nào
+## 4 · E2E — quy trình và danh sách
 
-**58 bộ** trong `services/grokbot-backend/scripts/`. Bốn bộ hay dùng nhất:
+### Quy trình (bắt buộc theo thứ tự)
 
-| bộ | lệnh | phủ gì |
-|---|---|---|
-| Desktop | `node scripts/e2e-desktop.mjs` | 29 mục · điều khiển máy tính + dạy việc |
-| Task | `node scripts/e2e-tasks.mjs` | 14 mục · `task` / `await_task` |
-| Hợp đồng | `node scripts/contract-test.mjs` | 46 mục · shape trả về cho client |
-| Unit | `npx tsx --test src/*.test.ts` | 26 file |
+```
+1. Kiểm bot có rảnh      curl -s localhost:8788/v1/health   → isBusy phải là false
+2. Chạy bộ của chặng     (bảng dưới)
+3. ĐỎ?  → sửa NGAY tại gốc, không ghi nợ, không bỏ qua
+         → trước khi sửa: bài kiểm sai hay code sai?  (xem ô dưới)
+4. Chạy lại tới khi XANH
+5. Xanh rồi mới cập nhật docs + commit
+```
 
-Trước khi làm tiếp, nên chạy: **unit → hợp đồng → desktop**. Nhóm dựa vào thị giác chập chờn
-**10–20%** (5 lượt đo: 29/29 · 27/29 · 28/29 · 29/29 · 28/29) — lỗi rơi vào **chỗ khác nhau mỗi
-lần**, đó là hình dạng của việc bấm không toạ độ, không phải một lỗi sửa bằng một commit.
+> **Bài kiểm sai hay code sai?** Mặc định là **code sai**. Chỉ kết luận bài kiểm sai khi tìm được
+> chỗ hợp đồng đã cố ý đổi, kèm lý do — và khi sửa bài kiểm thì phải kiểm **chặt hơn** trước, đừng
+> chỉ nới cho qua.
+>
+> Ví dụ thật (25/08): `e2e-native` đỏ ở "POST non-image is 400" nhưng nhận 201. Route đã đổi ở X8 —
+> app gốc đính kèm được **mọi loại tệp**, nên `400` mới là hợp đồng sai. Sửa bài kiểm, và thêm một
+> khẳng định nữa: **tệp phải giữ đúng tên**, vì chỉ so mã 201 thì một lần âm thầm lưu nhầm thành
+> ảnh vẫn lọt.
 
-**Luôn kiểm trước khi chạy bộ có đụng màn hình:** `curl -s localhost:8788/v1/health` → `isBusy`
-phải là `false`. Cắt ngang một bot đang làm việc thật là hỏng việc của người dùng.
+### Runner: `node` hay `npx tsx`?
+
+**61 bộ chạy bằng `node`. Bốn bộ này BẮT BUỘC `npx tsx`** vì chúng import thẳng `src/*.ts`:
+
+```
+npx tsx scripts/e2e-mcp.mjs        npx tsx scripts/e2e-browser.mjs
+npx tsx scripts/e2e-attachment.mjs npx tsx scripts/e2e-drafts-todo.mjs
+```
+
+Chạy nhầm bằng `node` thì lỗi là `ERR_UNKNOWN_FILE_EXTENSION ".ts"` — trông như hỏng code, thực ra
+chỉ là sai runner. Tìm ra được cũng vì chạy thật (25/08).
+
+### Danh sách — bộ nào phủ cái gì
+
+| bộ | lệnh | phủ | lần chạy gần nhất |
+|---|---|---|---|
+| **Unit backend** | `npx tsx --test src/*.test.ts` | 272 bài · store, auth, mcp, site, đường dẫn client | ✅ 272/272 · 25/08 |
+| **Unit FE** | `cd apps/grokbot-web && npx tsx --test src/*.test.ts` | markdown, avatar | ⚠️ 16/17 — **N8 đỏ từ trước** |
+| **Hợp đồng client** | `node scripts/contract-test.mjs` | 46 · routes·auth·commands·channels | ✅ 46/46 · 25/08 |
+| **`/v1` đầu-cuối** | `node scripts/e2e-native.mjs` | 60 · roster CRUD·gửi·ngắt·SSE·đính kèm | ✅ 60/60 · 25/08 |
+| **MCP** | `npx tsx scripts/e2e-mcp.mjs` | liệt kê tool·gọi tool·lỗi tool·args hỏng | ✅ · 25/08 |
+| **Cổng tiến trình** | `node scripts/verify-native.mjs`<br>`node scripts/verify-runtime.mjs`<br>`node scripts/verify-ops.mjs` | BFF·runtime·ops còn đúng vai | ✅ cả ba · 25/08 |
+| **Điều khiển máy tính** | `node scripts/e2e-desktop.mjs` | 29 · chuột·phím·dạy việc | 27–29/29 · *chập chờn 10–20%* |
+| **Việc song song** | `node scripts/e2e-tasks.mjs` | 14 · `task`/`await_task` | ✅ 14/14 |
+| **Routine** | `node scripts/e2e-routines.mjs` | nổ đúng điều kiện·bộ lọc | — |
+| **Trình duyệt** | `npx tsx scripts/e2e-browser.mjs` | 16 công cụ trình duyệt | — |
+| **Box** | `node scripts/e2e-box-tools.mjs` | chạy lệnh·đọc/ghi file trên box | — |
+
+Còn **58 bộ e2e** khác trong `scripts/`; bảng này chỉ liệt kê những bộ **đã dùng để chốt một chặng**.
+
+### Bộ nào chạy cho chặng nào
+
+| chặng | chạy tối thiểu |
+|---|---|
+| **0 · Dọn** | unit BE + unit FE + hợp đồng + `e2e-native` + `e2e-mcp` + ba `verify-*` |
+| **1 · Đo tiền** | `e2e-native` + `e2e-run` |
+| **2 · Đăng nhập** | `auth-cinapi.test` + `site.test` + `gw-auth` |
+| **3 · Máy thứ hai** | `verify-sqlite` + `verify-runtime` + `check-app.cmd` |
+| **4 · Ra ngoài** | `e2e-native` + `contract-test` |
+| **5 · Tách user** | `e2e-box-tools` + `e2e-desktop` + `test-real-box` |
+| **6 · FE** | `e2e-routine-ui` + `e2e-routines` |
+
+### Ba cái bẫy đã trả giá
+
+1. **Đừng chạy bộ đụng màn hình khi `isBusy` là `true`** — cắt ngang một bot đang làm việc thật.
+2. **Nhóm dựa vào thị giác chập chờn 10–20%** (đo 5 lượt: 29·27·28·29·28). Đỏ một lượt ở **chỗ khác
+   nhau mỗi lần** là hình dạng của bài toán, không phải một lỗi sửa bằng một commit. Đỏ **cùng một
+   chỗ** hai lượt mới là lỗi thật.
+3. **Số "x/20 lượt gần nhất đỏ" đang bị nhiễu** — `self-xray` ghi chính nó vào `e2e-history.jsonl`.
+   Xem §5, và nợ N4.
 
 ---
 

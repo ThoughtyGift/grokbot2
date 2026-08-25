@@ -48,7 +48,7 @@ const quote: Block = (lines, i) => {
 export const BLOCKS: Block[] = [fence, listWith(UL_RE, "ul"), listWith(OL_RE, "ol"), heading, quote];
 
 /** Một dòng có mở đầu khối khác không — dùng để biết đoạn văn phải dừng ở đâu. */
-export const startsBlock = (line: string): boolean =>
+const startsBlock = (line: string): boolean =>
   /^```/.test(line) || UL_RE.test(line) || OL_RE.test(line) || H_RE.test(line) || QUOTE_RE.test(line);
 
 /** Đoạn văn: chạy tới dòng trống, hoặc tới khi một khối khác bắt đầu. */

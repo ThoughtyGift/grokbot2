@@ -156,7 +156,17 @@ try {
   const notImage = await fetch(`${API}/v1/attachments`, {
     method: "POST", headers: h, body: JSON.stringify({ filename: "x.txt", bytesBase64: Buffer.from("hello").toString("base64") }),
   });
-  check("POST non-image is 400", notImage.status === 400, `HTTP ${notImage.status}`);
+  /*
+   * Tệp thường được NHẬN, không bị từ chối — bài kiểm này từng khẳng định ngược lại.
+   *
+   * Route đổi ở X8 vì app gốc đính kèm được mọi loại tệp (đường box-upload), nên `400 not an image`
+   * là hợp đồng sai chứ không phải code sai. Kiểm luôn cả tên tệp giữ nguyên: chỉ so mã 201 thì một
+   * lần âm thầm lưu nhầm thành ảnh vẫn lọt.
+   */
+  const staged2 = notImage.ok ? await notImage.json() : {};
+  check("POST tệp thường được nhận (201)", notImage.status === 201, `HTTP ${notImage.status}`);
+  check("tệp giữ đúng tên, không bị coi là ảnh",
+    typeof staged2.path === "string" && staged2.path.endsWith("x.txt"), String(staged2.path));
 
   const picTurn = await fetch(`${API}/v1/agents/${agentId}/turns`, {
     method: "POST", headers: h,
