@@ -53,81 +53,144 @@ Bốn hàm dài nhất: `handleNative` **564** · `buildCommands` **408** · `cr
 
 ---
 
-## 3 · Việc còn lại — một danh sách, theo thứ tự
+## 3 · Việc còn lại — mỗi việc kèm cách kiểm
 
-Thứ tự ở đây là **cái gì chặn cái gì**, không phải theo độ khó.
+Thứ tự ở đây là **cái gì chặn cái gì**, không phải theo độ khó. Mỗi việc có một dòng **kiểm** — chạy
+được, ra kết quả nhìn thấy. Không có dòng kiểm thì không tính là xong.
+
+Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 
 ### Chặng 0 · Dọn — luật của chính dự án đang đỏ
 
-- [ ] Tách `main.ts` (1840) — nặng nhất, và là FE nên ít rủi ro nhất
-- [ ] Tách `tools.ts` + `turn.ts` — nhóm theo họ công cụ, không cắt ngang một lượt chat
-- [ ] Tách `handleNative` (564 dòng) thành bảng route
-- [ ] Xoá export chết vừa tạo hôm nay (`describeCrops`, `readCrop`, `leasesSnapshot`…)
-- **Xong khi:** `self-xray` **9/9 xanh**
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 0.1 | ✅ Tách 6 hàm dài mới thêm | `node scripts/code-size.mjs` | 28 → **22** hàm *(xong 25/08)* |
+| 0.2 | ✅ Sửa 5 bài `store.test` đỏ im lặng | `npx tsx --test src/store.test.ts` | **9/9** *(xong 25/08)* |
+| 0.3 | ⬜ Tách `httpTransport` (182 dòng) | `node scripts/code-size.mjs \| grep httpTransport` | không còn trong danh sách |
+| 0.4 | ⬜ Tách `oauthPortFor` (82) | như trên | không còn trong danh sách |
+| 0.5 | ⬜ `mcp.ts` 936 → dưới 800 | `node scripts/code-size.mjs` | file rời danh sách |
+| 0.6 | ⬜ `bootstrap.ts` 863 → dưới 800 | như trên | file rời danh sách |
+| 0.7 | ⬜ FE: `bootApp` · `messageActions` · `renderRuns` · `mdToHtml` | như trên | 4 hàm rời danh sách |
+| 0.8 | ⬜ Xoá export chết mới thêm | `npx knip --reporter symbols` | `desktop-record`, `displays`, `skills` không còn xuất thừa |
 
-> Thành thật: phần **tăng** từ 3/16 lên 5/28 là do việc của tôi hôm nay (`admin.ts:page`, các
-> export chưa ai dùng). Luật "không lặp lại" đỏ chính vì để nó qua hai lượt.
+**E2E chốt chặng 0**
+```
+npx tsx --test src/*.test.ts        → 272/272
+node scripts/contract-test.mjs      → 46/46 (hợp đồng client không đổi)
+node scripts/self-xray.mjs          → 9/9 xanh
+```
 
 ### Chặng 1 · Đo được tiền *(chạy song song — chỉ một biến môi trường)*
 
-- [ ] Bật `GROKBOT2_BILLING=warn`, để một tuần
-- [ ] Bảng `plans` đang **rỗng** — chạy seed
-- **Xong khi:** bảng `usage` có dòng thật (hiện **0 dòng** — chưa từng đo được gì)
-- **Đừng** bật `enforce` khi chưa có số: đó là cách nhanh nhất tự khoá mình ra ngoài
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 1.1 | ⬜ Seed bảng `plans` (đang **rỗng**) | `sqlite: SELECT * FROM plans` | có `free` và `pro` |
+| 1.2 | ⬜ Bật `GROKBOT2_BILLING=warn` | `curl -s localhost:8788/v1/me` | có trường `overQuota` |
+| 1.3 | ⬜ Chạy 1 tuần rồi đọc số | `SELECT COUNT(*) FROM usage` | **> 0 dòng** (nay 0) |
+| 1.4 | ⬜ Chỉ khi 1.3 có số: cân nhắc `enforce` | `GROKBOT2_BILLING=enforce` + gửi 1 tin | vượt hạn thì bị chặn, kèm lý do |
+
+**E2E chốt chặng 1**
+```
+node scripts/e2e-native.mjs         → /v1/me và webhook thanh toán còn đúng
+node scripts/e2e-run.mjs            → một lượt chat vẫn chạy khi bật đo
+```
 
 ### Chặng 2 · Vá ba lỗ đăng nhập — bắt buộc trước khi rời `127.0.0.1`
 
-- [ ] Thu hồi token được (hiện `logout` **không thu hồi gì**, JWT sống **365 ngày**)
-- [ ] Chặn đoán mật khẩu (hiện **không có** giới hạn nào)
-- [ ] Khoá `/v1/register` sau người đầu (hiện **mở cho bất kỳ ai** gọi được cổng)
-- **Xong khi:** đoán sai 5 lần bị chặn · token cũ hết hiệu lực sau logout · đăng ký cần bật mới mở
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 2.1 | ⬜ Thu hồi được token | `POST /v1/logout` rồi gọi lại `/v1/me` bằng token cũ | **401** (nay vẫn 200) |
+| 2.2 | ⬜ Chặn đoán mật khẩu | gọi `POST /v1/login` sai 6 lần | lần thứ 6 bị **429** |
+| 2.3 | ⬜ Khoá `/v1/register` | `POST /v1/register` khi chưa bật cờ mở | **403** |
+| 2.4 | ⬜ Rút hạn JWT (nay **365 ngày**) | đọc `exp` trong token | ≤ 30 ngày |
+
+**E2E chốt chặng 2**
+```
+npx tsx --test src/auth-cinapi.test.ts src/site.test.ts   → xanh
+node scripts/gw-auth.mjs                                  → app gốc vẫn vào được
+```
+> Cửa của app desktop dùng **token cổng**, không dùng mật khẩu. Sửa đường web mà làm hỏng đường app
+> là kiểu lỗi chỉ lộ ra khi mở app lên — nên `gw-auth.mjs` là bắt buộc, không phải tuỳ chọn.
 
 ### Chặng 3 · Test trên máy thứ hai — cái thước đo ranh giới
 
-Chi tiết + tiêu chí từng bước: [system-xray.md §6c](system-xray.md).
+Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
 
-- [ ] **T1** `pnpm backend` trên máy sạch → `/v1/health` ok · `.data/grokbot.sqlite` **tự sinh**
-- [ ] **T2** một lượt chat thật (chỉ mang 4 file bí mật < 1 KB)
-- [ ] **T3** box qua `box-tunnel.ps1` → bot liệt kê được `/home/box/workspace`
-- [ ] **T4** chạy **.exe** trên máy sạch → có shortcut mang logo, app mở lên
-- [ ] **T5** hai máy cùng một box → *dự đoán **ĐỎ***; nếu đỏ thật thì đó là **bằng chứng hiện
-      trường** cho Chặng 5, đừng sửa vội, ghi lại đúng cái xảy ra
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 3.1 | ⬜ **T1** BE tự dựng từ 0 | `pnpm backend` rồi `curl /v1/health` | `ok:true` · `.data/grokbot.sqlite` **tự sinh** · 0 bot |
+| 3.2 | ⬜ **T2** một lượt chat thật | `pnpm web` → gõ một câu | có câu trả lời |
+| 3.3 | ⬜ **T3** box qua hầm | `node scripts/verify-computer.mjs` | liệt kê được `/home/box/workspace` · VNC hiện hình |
+| 3.4 | ⬜ **T4** bộ cài `.exe` trên máy sạch | chạy `Cai-dat-Bot-Noi-Bo-*.exe` | shortcut mang **logo app** · app tự mở · `check-app.cmd` đếm được RPC |
+| 3.5 | ⬜ **T5** hai máy một box | cả hai cùng sai bot mở trình duyệt | *(dự đoán **ĐỎ**)* — ghi lại đúng cái xảy ra, **đừng sửa vội** |
+
+**E2E chốt chặng 3**
+```
+node scripts/verify-sqlite.mjs      → sổ mới dựng đúng schema
+node scripts/verify-runtime.mjs     → tiến trình chạy lượt trả lời
+infra\scripts\check-app.cmd         → app nói chuyện với backend local, không phải server hãng
+```
 
 ### Chặng 4 · Đưa BE ra khỏi máy cá nhân *(cần Chặng 2 xong)*
 
-- [ ] Đổi `server.listen(config.port, "127.0.0.1")` — [index.ts:355](../../services/grokbot-backend/src/index.ts#L355)
-- [ ] CORS + HTTPS
-- [ ] `host_settings` theo từng người (hiện **một dòng dùng chung cho tất cả**)
-- **Xong khi:** **T6** — máy 1 và máy 2 thấy **cùng một** dữ liệu
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 4.1 | ⬜ Đổi `listen(port, "127.0.0.1")` | `netstat -ano \| findstr 8788` | nghe `0.0.0.0` |
+| 4.2 | ⬜ CORS cho đúng nguồn | `curl -H "Origin: https://…" /v1/me` | header CORS đúng, không phải `*` |
+| 4.3 | ⬜ HTTPS | `curl -I https://<vps>/` | 200, chứng chỉ hợp lệ |
+| 4.4 | ⬜ `host_settings` theo người | hai tài khoản đặt hai múi giờ | không đè nhau (nay **một dòng chung**) |
+| 4.5 | ⬜ **T6** máy khách trỏ vào VPS | mở app trên máy 2 | máy 1 và máy 2 thấy **cùng** dữ liệu |
 
-### Chặng 5 · Tách người dùng trên box — **ba tầng**, không phải hai
+**E2E chốt chặng 4**
+```
+node scripts/e2e-native.mjs         → 29 route còn đúng qua mạng
+node scripts/contract-test.mjs      → hợp đồng không đổi khi đổi chỗ đứng
+```
+
+### Chặng 5 · Tách người dùng trên box — **ba tầng**
 
 Kế hoạch đầy đủ: [per-user-on-one-box.md](../plan/per-user-on-one-box.md).
 
-- [ ] Bước root một lần (`useradd` + sudoers) — **chỗ chặn duy nhất cần người quản trị VPS**
-- [ ] Chuyển từng mặt hàng sang home của user (Chrome profile · grok-memory · workspace)
-- [ ] Thu hồi khi nghỉ — chỗ quyết định chi phí
-- [ ] Mượn **hình dạng** `SandboxPolicy` của hãng (allowlist đường dẫn + `NetworkPolicy`), tự làm
-      phần cưỡng chế
-- **Xong khi:** bot của A đọc file của B **bị kernel từ chối**
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 5.1 | ⬜ Bước root một lần (`useradd` + sudoers) | `sudo -n -l` trên box | daemon chạy được lệnh dưới `gb2u*` |
+| 5.2 | ⬜ Chuyển Chrome profile sang home user | `ls -ld /home/gb2u001/.config` | chủ sở hữu là `gb2u001` |
+| 5.3 | ⬜ Chuyển `grok-memory` + `workspace` | như trên | như trên |
+| 5.4 | ⬜ **Thử rò**: bot của A đọc file của B | `run_terminal_command_v2` đọc chéo | **Permission denied** |
+| 5.5 | ⬜ Thu hồi khi nghỉ | để idle quá ngưỡng | tiến trình bị thu, đĩa giảm |
+| 5.6 | ⬜ Mượn hình dạng `SandboxPolicy` | policy có `additional_readwrite_paths` | lệnh ngoài allowlist bị từ chối |
 
-> Đã sửa một giả định sai: **hãng không giải bài này** — ranh giới giữa người với người của họ chính
-> là **cái box**, mỗi người một cái. Trong bundle không có lời giải để chép.
+**E2E chốt chặng 5**
+```
+node scripts/e2e-box-tools.mjs      → công cụ box còn chạy sau khi đổi user
+node scripts/e2e-desktop.mjs        → 29 mục · điều khiển máy tính không vỡ
+node scripts/test-real-box.mjs      → box thật, không phải giả lập
+```
 
 ### Chặng 6 · FE riêng
 
-- [ ] **Routines** — mảng trống lớn nhất ([fe-clone-plan.md](../plan/fe-clone-plan.md))
+| # | việc | kiểm bằng | ĐẠT khi |
+|---|---|---|---|
+| 6.1 | ⬜ Routines: danh sách + tạo + sửa | `node scripts/e2e-routine-ui.mjs` | tạo được routine ngay trên web |
+| 6.2 | ⬜ Đối chiếu với app gốc | `node scripts/ui-diff.mjs` | không lệch vùng đã dựng |
+
+**E2E chốt chặng 6**
+```
+node scripts/e2e-routines.mjs       → routine nổ đúng điều kiện
+node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
+```
 
 ### Nợ lẻ — không chặn ai, nhưng đừng quên
 
-- [ ] **Cloudflare:** thử một trang có chặn thật (5 phút), rồi thêm bước để bot **biết mình đang bị
-      chặn** thay vì loay hoay. Hiện **0 dòng** mã nhắc tới cloudflare/captcha
-- [ ] Bộ cài **macOS chưa chạy trên máy Mac thật** — chỉ có bài kiểm đường dẫn
-- [ ] **.exe mới dựng, chưa cài thử** — cần một máy sạch, hoặc chấp nhận cài đè lên máy này
-- [ ] `self-xray` **tự ghi chính nó vào nhật ký e2e** → làm hỏng chỉ số (xem §5)
-- [ ] 6 bot xoá 04:16–04:42 ngày 24/08 **vẫn cứu được** từ `grokbot.sqlite.7.bak` — **chờ bạn quyết**
-- [ ] `bot.log` trên box **in token Telegram ra log** → đổi token + xoay log
-- [ ] `publishSkill` cần một registry — thuộc hạ tầng, không thuộc client
+| # | việc | kiểm bằng |
+|---|---|---|
+| N1 | ⬜ Thử Cloudflare thật rồi thêm bước nhận biết trang chặn | mở một trang có CF, xem bot nói gì |
+| N2 | ⬜ Bộ cài macOS chạy trên máy Mac thật | `bash Cai-dat-Bot-Noi-Bo-mac-*.command` |
+| N3 | ⬜ `.exe` cài thử trên máy sạch | chạy file, xem Apps & features có mục |
+| N4 | ⬜ `self-xray` **tự ghi mình vào nhật ký e2e** → làm hỏng chỉ số | sửa chỗ ghi log, xem §5 |
+| N5 | ⬜ 6 bot xoá 24/08 — **chờ bạn quyết** cứu hay bỏ | `grokbot.sqlite.7.bak` |
+| N6 | ⬜ `bot.log` in token Telegram | đổi token + xoay log |
+| N7 | ⬜ `publishSkill` cần registry | thuộc hạ tầng |
 
 ---
 
