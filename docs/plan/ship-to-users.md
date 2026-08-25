@@ -192,19 +192,46 @@ flowchart TB
 
 Chi tiết cổng, ai được ghi SQLite, và bốn bất biến vận hành: [../architecture.md](../architecture.md).
 
-### Nếu muốn giống hãng hoàn toàn
+### Đích: đi đúng đường app gốc, nhưng bằng FE của mình
 
-Ba mảnh còn thiếu, theo thứ tự khó tăng dần:
+Muốn giống hãng hoàn toàn — **trang tải riêng, app riêng, backend làm host** — thì mảnh quyết định
+không phải trang web hay bộ cài. Là **client**.
 
-| mảnh | việc | khó ở đâu |
+Hai đường, và chỉ một đường đi tới đích:
+
+| | Đường A — client đã vá | **Đường B — FE của mình** |
 |---|---|---|
-| Trang tải | một trang + file cài | dễ — nhưng **không được phát hành lại app đã patch** (xem [legal.md](../legal.md)); chỉ phát hành bộ vá |
-| Bộ cài tự động | dời `app.asar`, tạo shortcut kèm 4 biến, ghi token | vừa — là chặng B trong tài liệu này |
-| Cloud cấp box | đăng nhập xong mới cấp VPS + phát `gateway_url`/token | khó — cần chỗ cấp máy, và là chặng C |
+| Máy của bạn | ✅ đang chạy, dùng tốt | ✅ |
+| Giao cho người khác tải | ❌ phải phát hành lại app của Anysphere đã sửa | ✅ app của mình, phát hành thoải mái |
+| Vỡ khi hãng cập nhật | ✅ vỡ — mỗi bản mới phải dò lại bản vá | ✅ không liên quan |
+| Đổi giao diện theo ý mình | ❌ phải dò trong bundle đã minify | ✅ |
+| Công còn lại | 0 | phần đang dở ở `apps/grokbot-web` |
 
-**Mảnh thứ nhất có ràng buộc pháp lý, không phải kỹ thuật**: Grok Bot là bản đổi thương hiệu của
-Cursor (Anysphere). Phát hành lại một bản đã vá là chuyện khác hẳn với việc tự vá bản mình đã cài.
-Đường an toàn: phát hành **bộ vá + trình cài**, người dùng tự tải app gốc từ nhà phát hành.
+Đường A là **công cụ để làm việc và để đo**, không phải sản phẩm để giao: nó là bản đổi thương hiệu
+của Cursor (Anysphere), nên phát hành lại một bản đã sửa là phân phối phần mềm của họ. Nó cũng vỡ
+mỗi lần hãng ra bản mới — đã đo, và đó là lý do `SAND_DISABLE_UPDATES` phải có.
+
+**Đường B đã đi được nửa đường rồi**, và số liệu có sẵn: `apps/grokbot-web` — 3.849 dòng, `ui-diff`
+báo **khớp 40/40 trên 19 vùng đã dựng**. Kế hoạch chi tiết ở [fe-clone-plan.md](fe-clone-plan.md),
+đã chia việc theo API (nhóm A chỉ cần sửa FE · nhóm B cần route `/v1` mới · nhóm C cần hợp đồng
+mới) — mảng lớn nhất còn trống là **Routines**.
+
+Nói thẳng cái con số 40/40 KHÔNG nói: nó đúng cho **19 vùng đã dựng**, không nói gì về vùng chưa
+dựng. Muốn biết còn bao xa thì đọc nhóm B và C trong tài liệu đó, đừng đọc con số này.
+
+### Ba mảnh của một sản phẩm phát hành được
+
+Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
+
+| # | mảnh | việc | trạng thái |
+|---|---|---|---|
+| 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](fe-clone-plan.md) |
+| 2 | Trang tải + bộ cài | một trang, một file cài đặt gói sẵn backend | chưa — chặng B |
+| 3 | Cấp box khi đăng nhập | đăng nhập xong mới cấp VPS + phát token | chưa — chặng C |
+
+Khi mảnh 1 xong thì mảnh 2 **đơn giản hẳn**: không còn phải dời `app.asar`, không còn bốn biến môi
+trường, không còn cái bẫy `CURSOR_API_BASE_URL` đè lên Cursor IDE. Bộ cài chỉ còn là **app của mình
++ backend**, đúng hình dạng mà hãng phát hành.
 
 ## ② bis · Bốn biến môi trường
 
