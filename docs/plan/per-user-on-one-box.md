@@ -28,6 +28,76 @@ Box thì chưa. Nên: **một người dùng thì ổn; người thứ hai là r
 
 Và cái khoá `claimDesktop` không cứu được chuyện này — nó chỉ ngăn hai bot bấm chuột cùng lúc.
 
+## Bản gốc cô lập kiểu gì — đọc từ host của họ
+
+Thêm 25/08/2026, sau khi đọc `dist/host/` trong bundle client. **Phần này sửa một giả định của
+chính tài liệu này**: mục "Mô hình" bên dưới từng nói hai tầng là "đúng như bản gốc làm". Nói vậy
+là chưa đúng — hãng không tách theo OS user ở đâu cả.
+
+### Đo được gì
+
+Bundle client **có chứa host của hãng**: `dist/host/host-main.cjs` — **11,9 MB**, có `express` +
+`sqlite`, phục vụ `createAgentTurn` / `EnsureSandBox`. Bên trong nó có một hợp đồng cô lập đầy đủ:
+
+| kiểu `agent.v1` | các trường |
+|---|---|
+| **`SandboxPolicy`** | `type` · `network_access` · `additional_readwrite_paths` · `additional_readonly_paths` · `disable_tmp_write` · `allowlist_escalated` · `enable_shared_build_cache` · `network_policy` · `network_policy_strict` |
+| **`NetworkPolicy`** | `version` · `default_action` · `deny` · `allow` · `logging` |
+| từ chối theo năng lực | `ShellPermissionDenied` · `EditReadPermissionDenied` · `EditWritePermissionDenied` · `DeletePermissionDenied` · `McpPermissionDenied` · `DiagnosticsPermissionDenied` |
+| khi không cô lập được | `ShellSandboxUnsupported` |
+
+Kiểu chính sách thấy trong mã: `workspace_readwrite` · `workspace_readonly` · `readonly` ·
+`insecure_none`.
+
+**Cưỡng chế bằng một tiến trình phụ**, gọi đúng dạng này (rút từ `electron-main/main.cjs`):
+
+```
+<helper> --policy <base64 JSON> --preflight-only -- /bin/true
+```
+
+Và họ **thử trước rồi mới tin** — `isSandboxHelperSupported` chạy preflight thật trên Linux. Phán
+quyết theo hệ, ghi thẳng trong log của họ:
+
+| hệ | kết quả |
+|---|---|
+| Windows | `proxy-only, no filesystem sandbox` → **false**, tự nhận không cô lập được file |
+| macOS | có, nếu binary có mặt |
+| Linux | chạy preflight thật, đúng thì mới bật |
+
+`dist/host/agent-isolation/` hoá ra **không** phải cô lập người dùng: hai worker
+`agent-store-worker` (bảng `blobs`) + `transcript-mirror-worker` — tức là **tách dữ liệu theo
+agent**.
+
+### Kết luận — và chỗ tài liệu này từng sai
+
+**Hãng không cô lập người dùng bên trong box. Ranh giới giữa người với người của họ CHÍNH LÀ cái
+box** — cloud cấp mỗi người một cái. Sandbox trong box bảo vệ **box khỏi chính con bot**, không bảo
+vệ người A khỏi người B.
+
+Ba hệ quả cho kế hoạch này:
+
+1. **Không có đường tắt nào để mượn.** Bài toán "nhiều người chung một box" là bài toán hãng không
+   có, nên trong bundle không có lời giải. Phần tách OS user ở dưới **vẫn phải tự làm**, đúng như
+   đã viết.
+2. **Nhưng hợp đồng thì mượn được, và nên mượn.** `additional_readwrite_paths` chính là allowlist
+   theo người mà kế hoạch này phác ra; `NetworkPolicy` là phần chặn đường ra. Dùng lại **hình dạng**
+   của họ đáng giá vì client đã nói `agent.v1` sẵn — và vì một hợp đồng đã chạy thật ngoài đời thì
+   hơn một hợp đồng mình vừa nghĩ ra.
+3. **Phần cưỡng chế thì không mượn được.** Binary helper **không nằm trong bộ cài** — đã tìm khắp
+   thư mục cài, không có file nào. Trên Linux nhiều khả năng do ảnh box của họ cung cấp.
+
+Nên hình dạng đúng là **ba tầng**, không phải hai:
+
+| tầng | ai lo | chống được gì |
+|---|---|---|
+| **OS user** (`gb2u001`…) | mình tự làm — phần còn lại của tài liệu này | người A đọc file người B |
+| **Chính sách theo lệnh** (`SandboxPolicy`) | mượn hình dạng của hãng, tự cưỡng chế | bot tự phá box, hoặc đi ra ngoài chỗ không nên |
+| **Kho dữ liệu theo agent** | đã có (`owner_id` trong SQLite) | bot này đọc hội thoại bot kia |
+
+**KHÔNG CHẮC CHẮN:** tên và nguồn của binary helper — hàm trả về đường dẫn đã bị minify thành một
+biến chưa truy ra. Muốn dùng lại đúng cách thì phải truy tiếp, hoặc tự viết phần cưỡng chế bằng
+`bwrap`/`landlock` và chỉ giữ lại hình dạng chính sách.
+
 ## Đã tách tới đâu rồi — đo trên kho thật
 
 Trước khi bàn tách thêm, phải biết cái gì **đã** tách. Đo bằng schema SQLite và bằng số lần code
@@ -109,8 +179,10 @@ dòng đó và tạo sẵn một dải user (`gb2u001`…`gb2u100`) bằng tay; 
 
 ## Mô hình
 
-Hai tầng, đúng như bản gốc làm (xem [one-display-per-bot.md](one-display-per-bot.md) — họ có
-`ensureWindow(boxId, windowIndex)` với `ownerToken` riêng từng cửa sổ):
+Hai tầng dưới đây là **của mình**, không phải bắt chước hãng — xem mục trên: hãng lấy chính cái
+box làm ranh giới giữa người với người, nên phần này không có bản mẫu để chép. Thứ mượn được của họ
+là `ensureWindow(boxId, windowIndex)` với `ownerToken` riêng từng cửa sổ (xem
+[one-display-per-bot.md](one-display-per-bot.md)) — đó là tách **bot**, không phải tách **người**:
 
 ```
 box (một VPS)

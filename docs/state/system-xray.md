@@ -452,6 +452,9 @@ Xếp theo mức đau, không theo thứ tự tìm ra.
 - **Ví dụ đời thường:** mười nhân viên dùng chung một máy tính, chung một tài khoản, không khoá màn
   hình.
 - **Đã có kế hoạch:** [../plan/per-user-on-one-box.md](../plan/per-user-on-one-box.md)
+- **Mới biết (25/08):** hãng **không** giải bài này — ranh giới giữa người với người của họ chính
+  là **cái box**, mỗi người một cái. Trong bundle không có lời giải để chép; thứ mượn được chỉ là
+  hình dạng `SandboxPolicy` (allowlist đường dẫn + chính sách mạng).
 
 ### 🔴 2. Cài đặt dùng chung (`host_settings` một dòng)
 - **Vì sao đau:** người này đổi múi giờ thì người kia chịu.
