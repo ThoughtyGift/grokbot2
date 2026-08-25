@@ -35,6 +35,19 @@ export interface Automation {
    * (The box host always sends it; `nextRunAt` and `filePath` it also sends are never read.)
    */
   runs: AutomationRun[];
+  /**
+   * Trigger phi-cron, giữ nguyên hình dạng client gửi.
+   *
+   * Trước đây không có trường này, và hậu quả im lặng: `normaliseTrigger` chỉ hiểu các khoá kiểu
+   * cron, nên một trigger `{type:"slack",channel:"#general",keyword:"hoá đơn"}` rơi vào nhánh mặc
+   * định và được lưu thành `"0 9 * * *"`. Người dùng chọn "Slack message", bảng hiện "9:00 daily",
+   * và cái routine đó chạy mỗi sáng chín giờ thay vì khi có tin nhắn. Đo được đúng như vậy.
+   *
+   * Tệ hơn nữa: `listenerPlatform` đọc chuỗi trigger để biết routine nghe nền tảng nào, nên sau khi
+   * bị hạ cấp thành cron thì **không routine nào khớp Slack hay GitHub được** — hai receiver bên
+   * ops có chạy cũng không đánh thức nổi ai.
+   */
+  triggerSpec?: Record<string, unknown>;
 }
 
 /**
@@ -197,6 +210,41 @@ export function matches(s: Schedule, at: Date): boolean {
 
 const ORDINAL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/**
+ * Trigger có cấu trúc của client, hoặc null nếu đây là một lịch cron.
+ *
+ * Nhận diện bằng `type`, đúng thứ editor của client đặt ra (`MOi` của nó: mỗi nhánh trả về
+ * `{type, …trường riêng}`). Không đoán theo khoá nào khác — đoán sai ở đây là im lặng.
+ */
+function structuredTrigger(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const type = typeof o.type === "string" ? o.type : "";
+  if (!type || type === "cron") return null;
+  return { ...o, type };
+}
+
+/** Câu mô tả cho một trigger phi-cron — FE dùng chính chuỗi này làm từ khoá tìm kiếm. */
+function describeStructured(t: Record<string, unknown>): string {
+  const s = (k: string): string => (typeof t[k] === "string" ? (t[k] as string).trim() : "");
+  switch (t.type) {
+    case "slack": {
+      const where = s("channel") ? ` ở ${s("channel")}` : "";
+      const kw = s("keyword") ? ` chứa "${s("keyword")}"` : "";
+      return `khi có tin nhắn Slack${where}${kw}`;
+    }
+    case "github": {
+      const evs = Array.isArray(t.events) ? (t.events as unknown[]).join(", ") : "";
+      return `khi có sự kiện GitHub${evs ? ` (${evs})` : ""}${s("repo") ? ` ở ${s("repo")}` : ""}`;
+    }
+    case "microsoftTeams": return "khi có tin nhắn Teams";
+    case "linear": return `khi Linear ${s("event") || "có thay đổi"}`;
+    case "sentry": return `khi Sentry ${s("event") || "có sự kiện"}`;
+    case "pagerduty": return `khi PagerDuty ${s("event") || "có sự cố"}`;
+    default: return String(t.type);
+  }
+}
+
 /** Short human summary — the FE indexes this as a search keyword. */
 export function describe(trigger: string): string {
   const s = parseCron(trigger);
@@ -249,8 +297,18 @@ const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;
   if (typeof spec?.prompt === "string") target.prompt = spec.prompt;
   if (spec?.trigger !== undefined) {
-    target.trigger = normaliseTrigger(spec.trigger);
-    target.triggerDescription = describe(target.trigger);
+    const structured = structuredTrigger(spec.trigger);
+    if (structured) {
+      target.triggerSpec = structured;
+      // `trigger` vẫn là chuỗi vì cả `listenerPlatform` lẫn bộ lập lịch đọc nó. Chuỗi giờ mang tên
+      // nền tảng, nên một routine Slack thật sự khớp được với sự kiện Slack.
+      target.trigger = String(structured.type ?? "");
+      target.triggerDescription = describeStructured(structured);
+    } else {
+      delete target.triggerSpec;
+      target.trigger = normaliseTrigger(spec.trigger);
+      target.triggerDescription = describe(target.trigger);
+    }
   }
   if (typeof spec?.isEnabled === "boolean") target.isEnabled = spec.isEnabled;
   return target;
@@ -283,7 +341,10 @@ export function getAgentAutomations(a: { id?: string; agentId?: string }): Autom
  * one of the seven trigger types the "Add another" menu offers gets its full default shape here, even
  * the ones we cannot yet FIRE — the display must not crash regardless of whether a receiver exists.
  */
-function triggerObject(rawTrigger: string): Record<string, unknown> {
+function triggerObject(rawTrigger: string, spec?: Record<string, unknown>): Record<string, unknown> {
+  // Trigger người dùng đã chọn thì trả lại đúng nó — kể cả kênh, từ khoá, repo. Trả về hình dạng
+  // rỗng ở đây nghĩa là mở lại routine thì mọi ô lọc trống trơn, và người dùng phải gõ lại.
+  if (spec && typeof spec.type === "string" && spec.type !== "cron") return spec;
   const p = listenerPlatform(rawTrigger);
   switch (p) {
     case "slack": return { type: "slack", channel: "", match: "message", keyword: "", emoji: "", bySelf: false };
@@ -297,7 +358,7 @@ function triggerObject(rawTrigger: string): Record<string, unknown> {
 }
 
 export function toClientAutomation(rec: Automation): Record<string, unknown> {
-  const trigger = triggerObject(rec.trigger);
+  const trigger = triggerObject(rec.trigger, rec.triggerSpec);
   return {
     ...rec,
     trigger,
@@ -322,7 +383,10 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   const agentId = agentIdOf(a);
   if (!agentId) return [];
   const spec = a?.spec ?? {};
-  const trigger = normaliseTrigger(spec.trigger);
+  // Cùng một phép đọc trigger với `applySpec`. Bản đầu tạo và sửa dùng hai đường khác nhau, nên
+  // sửa một đường là còn nguyên lỗi ở đường kia — và đường "tạo" mới là đường người dùng đi.
+  const structured = structuredTrigger(spec.trigger);
+  const trigger = structured ? String(structured.type ?? "") : normaliseTrigger(spec.trigger);
   const rec: Automation = {
     id: `automation-${seq++}`,
     agentId,
@@ -332,8 +396,9 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
     isEnabled: spec.isEnabled ?? true,
     createdAt: Date.now(),
     lastRunAt: null,
-    triggerDescription: describe(trigger),
+    triggerDescription: structured ? describeStructured(structured) : describe(trigger),
     runs: [],
+    ...(structured ? { triggerSpec: structured } : {}),
   };
   listFor(agentId).push(rec);
   persistState();

@@ -67,3 +67,51 @@ test("a routine on a bot that exists still fires normally", () => {
   const after = automations.listAllAutomations().find((r) => r.id === routine.id);
   assert.notEqual(after?.runs[0]?.status, "failed", "this is the path the guard must not break");
 });
+
+/**
+ * Trigger phi-cron phải sống sót qua lúc lưu.
+ *
+ * Đây là lỗi im lặng nhất từng gặp ở phần routine: người dùng chọn "Slack message" trong menu
+ * "When to run", điền kênh và từ khoá, bấm lưu — và cái routine đó chạy **9 giờ sáng mỗi ngày**.
+ * Không có lỗi nào hiện ra, chỉ có một dòng "9:00 daily" ở chỗ đáng lẽ ghi "khi có tin nhắn Slack".
+ *
+ * Hậu quả thứ hai còn kín hơn: `listenerPlatform` đọc chuỗi trigger để biết routine nghe nền tảng
+ * nào. Bị hạ cấp thành cron thì không routine nào khớp Slack hay GitHub, nên hai receiver đang chạy
+ * ở tiến trình ops có nhận webhook cũng không đánh thức được ai.
+ */
+test("trigger Slack không bị hạ cấp thành cron", () => {
+  const before = automations.listAllAutomations().length;
+  const rows = automations.createAgentAutomation({
+    id: "agent-trigger-test",
+    spec: {
+      name: "slack-thu", prompt: "trả lời", isEnabled: true,
+      trigger: { type: "slack", channel: "#general", match: "message", keyword: "hoá đơn", bySelf: false },
+    },
+  });
+  const rec = rows[rows.length - 1];
+  assert.equal(rec.trigger, "slack", "chuỗi trigger phải mang tên nền tảng, vì listenerPlatform đọc nó");
+  assert.equal(rec.triggerSpec?.channel, "#general", "kênh người dùng chọn phải còn nguyên");
+  assert.equal(rec.triggerSpec?.keyword, "hoá đơn");
+  assert.match(rec.triggerDescription, /Slack/, `mô tả phải nói Slack, nhận "${rec.triggerDescription}"`);
+  assert.ok(!/9:00|daily/.test(rec.triggerDescription), "và tuyệt đối không được là một lịch cron");
+
+  // Client mở lại routine thì phải thấy đúng lựa chọn cũ, không phải các ô lọc trống.
+  const client = automations.toClientAutomation(rec) as { trigger: Record<string, unknown> };
+  assert.equal(client.trigger.type, "slack");
+  assert.equal(client.trigger.channel, "#general");
+
+  automations.deleteAgentAutomation({ agentId: "agent-trigger-test", automationId: rec.id });
+  assert.equal(automations.listAllAutomations().length, before);
+});
+
+test("lịch cron vẫn đi đúng đường cũ", () => {
+  const rows = automations.createAgentAutomation({
+    id: "agent-trigger-test",
+    spec: { name: "cron-thu", prompt: "chạy", trigger: { type: "cron", schedule: "30 7 * * *" } },
+  });
+  const rec = rows[rows.length - 1];
+  assert.equal(rec.trigger, "30 7 * * *");
+  assert.equal(rec.triggerSpec, undefined, "cron không cần bản sao có cấu trúc");
+  assert.match(rec.triggerDescription, /7:30/);
+  automations.deleteAgentAutomation({ agentId: "agent-trigger-test", automationId: rec.id });
+});
