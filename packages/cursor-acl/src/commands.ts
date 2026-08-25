@@ -89,6 +89,30 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
    * so it keys the map on `serverIdentifier` and stores the whole object. Pushing bare names — as
    * this did until the renderer was actually read — gives every entry the key `undefined`.
    */
+  /**
+   * The four words the client actually knows — and why `disconnected` cost us a bug report.
+   *
+   * electron-main maps a row's status through one switch (`j7n` in `dist/electron-main/main.cjs`):
+   * `connected`, `needsAuth`, `loading`, `error`. Everything else falls into its `default` branch,
+   * which is not "unknown" — it is **`{status:"error", statusDetail:"Not reported by Grok Bot's
+   * computer"}`**. So the pane drew a red Error beside memory, CinAI and toolbox while all three
+   * were configured and fine, and it did it again after every restart, because a restart drops the
+   * live children and `mcp.ts` goes back to saying `disconnected`. Read as "my plugins vanish every
+   * time I open the app" — which is what it looks like, and nothing was ever lost.
+   *
+   * `mcp.ts` keeps its own vocabulary: `disconnected` is a true and useful thing to say inside this
+   * backend. The translation belongs here, at the edge that speaks to the client.
+   *
+   * A stdio server we have not spawned yet is not broken and not loading — it is one tool call away
+   * from running, so `connected` is the honest answer to "can this be used". The one exception is a
+   * remote probe still in flight, which really is loading; `mcp.ts` marks it with that detail.
+   */
+  const wireStatus = (status: string, detail: string): string => {
+    if (status === "connected" || status === "needsAuth" || status === "error") return status;
+    if (status === "initializing" || /^Checking with/.test(detail)) return "loading";
+    return "connected";
+  };
+
   const mcpServerRows = (want: string[] = []) =>
     Object.entries(extensions.mcpServers()).flatMap(([name, spec], i) => {
       if (want.length && !want.includes(name)) return [];
@@ -112,8 +136,8 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         ...(() => {
           const st = extensions.mcpServerStatus?.(name);
           return st
-            ? { status: st.status, statusDetail: st.detail, toolCount: st.toolCount }
-            : { status: "disconnected", statusDetail: "Runs on Grok Bot's computer", toolCount: 0 };
+            ? { status: wireStatus(st.status, st.detail), statusDetail: st.detail, toolCount: st.toolCount }
+            : { status: "loading", statusDetail: "Runs on Grok Bot's computer", toolCount: 0 };
         })(),
         isTeamServer: false,
       }];
