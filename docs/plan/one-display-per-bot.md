@@ -3,6 +3,12 @@
 Trạng thái: **bước 0–2 đã làm** (25/08/2026), sau cờ `GROKBOT2_PER_BOT_DISPLAY=on` (mặc định tắt).
 Bước 3–5 chưa.
 
+> Tách theo NGƯỜI DÙNG là tầng trên của tài liệu này và nằm ở
+> [per-user-on-one-box.md](per-user-on-one-box.md). Bản gốc có cả hai tầng: một box mỗi người dùng
+> (`EnsureSandBoxRequest` không có trường nào — danh tính nằm trong token), và trong box đó mỗi bot
+> một **cửa sổ** (`ensureWindow(boxId, windowIndex)` với `ownerToken` riêng, và số cửa sổ chính là
+> số X display). Tài liệu này là tầng cửa sổ; tách người dùng phải làm ở tầng trên.
+
 ## Vì sao
 
 Bên mình một box dùng chung cho mọi bot: một X display, một Chrome, một màn hình. `browser_*` chịu
