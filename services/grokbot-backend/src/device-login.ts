@@ -112,12 +112,6 @@ export function claimLogin(uuid: string, verifier: string): ClaimResult {
   return { state: "ready", user: p.user };
 }
 
-/** Cho bài kiểm: số phiên đang chờ. Không dùng ở đường chạy thật. */
-export function pendingCount(): number {
-  sweep(Date.now());
-  return pending.size;
-}
-
 /** Cho bài kiểm: xoá sạch giữa hai bài. */
 export function resetDeviceLogins(): void {
   pending.clear();
