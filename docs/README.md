@@ -89,7 +89,7 @@ X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm
 | `extracted/` | `extract-*.mjs`, `x-ray.mjs`, `ui-diff.mjs` | số đo từ app gốc: [ui-design-spec.md](extracted/ui-design-spec.md), `ui-xray.json`, `gateway-commands.json`, `proto-*.json`, `tool-catalog.json` |
 | `parity-runs/` | `phase-gate.mjs`, `e2e-*`, `soak-day.mjs` | kết quả từng lượt gate; `e2e-history.jsonl` + `gateB-history.jsonl` là nhật ký nối thêm (`pnpm e2e:history`) |
 | `api/` | **máy sinh** từ `packages/api-contract` (`pnpm api:gen`) | [api/grokbot2-v1.yaml](api/grokbot2-v1.yaml) — OpenAPI `/v1`. Lý do thiết kế: [api/README.md](api/README.md) |
-| `state/` | `phase-gate.mjs`, `patch-client.mjs`, `self-xray.mjs` | `phase-state.json` (con trỏ phase, bản người đọc) · `client-patch-state.json` (version + sha `app.asar` gốc do `--apply` ghi) |
+| `state/` | `phase-gate.mjs`, `patch-client.mjs`, `self-xray.mjs` | `phase-state.json` (con trỏ phase, bản người đọc) · `client-patch-state.json` (version + sha `app.asar` gốc do `--apply` ghi) · [`system-xray.md`](state/system-xray.md) — **x-quang toàn hệ, viết cho người không rành kỹ thuật** |
 
 ## Lịch sử — đã đóng, giữ để tra
 
