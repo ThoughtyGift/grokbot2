@@ -539,7 +539,39 @@ let jsonWrites = 0;
 
 export function jsonWriteCount(): number { return jsonWrites; }
 
+/**
+ * Chỉ MỘT tiến trình được phép ghi vào kho.
+ *
+ * Cách lưu ở đây là **ghi đè toàn bộ ảnh chụp trong bộ nhớ**. Nên một tiến trình thứ hai nạp
+ * `chat/state.ts` — kể cả chỉ để đọc — rồi lưu vì bất kỳ lý do gì sẽ ghi cái nhìn CŨ của nó đè lên
+ * dữ liệu mới của máy chủ. Không có xung đột, không có lỗi: chỉ là dữ liệu biến mất.
+ *
+ * Đã xảy ra hai lần trong một ngày, và lần thứ hai xoá **2 bot cùng 1790 entry** của người dùng.
+ * Thủ phạm là một script nháp `npx tsx` chỉ định nhập `runtime/tools.ts` để đếm tool — nó kéo theo
+ * `chat/state.ts`, nạp một ảnh chụp cũ hơn (máy chủ còn dữ liệu mới trong WAL chưa đọc được), rồi
+ * ghi lại. Dòng log của chính nó là bằng chứng: "restored 6 agent(s), 158 transcript entries" —
+ * đúng bằng những gì còn sót lại sau đó.
+ *
+ * Nên quyền ghi phải được BẬT rõ ràng, và chỉ máy chủ thật bật nó (`index.ts`). Mọi tiến trình khác
+ * đọc thoải mái và không ghi được gì. Test chạy trên kho riêng nên tự bật bằng biến môi trường.
+ */
+let writingEnabled = process.env.GROKBOT2_ALLOW_WRITE === "1";
+let warned = false;
+
+export function enableWriting(): void { writingEnabled = true; }
+
+const mayWrite = (): boolean => {
+  if (writingEnabled) return true;
+  if (!warned) {
+    warned = true;
+    console.warn("[grokbot2] [store] tiến trình này KHÔNG có quyền ghi kho — bỏ qua lệnh lưu."
+      + " Chỉ máy chủ mới ghi; script phụ chỉ được đọc (xem enableWriting trong store.ts).");
+  }
+  return false;
+};
+
 export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): void {
+  if (!mayWrite()) return;
   latest = snapshot;
   if (pending) return;
   pending = setTimeout(() => {
@@ -551,6 +583,7 @@ export function scheduleSave(snapshot: () => PersistedState, delayMs = 400): voi
 }
 
 export function saveNow(snapshot: () => PersistedState): void {
+  if (!mayWrite()) return;
   persistNow(snapshot);
 }
 

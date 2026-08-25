@@ -7,6 +7,10 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
+// Đây là tiến trình máy chủ, và chỉ nó được ghi kho. Đặt NGAY sau config để mọi module nạp sau
+// đó — kể cả những module lưu lúc khởi động — đều lưu được. Xem enableWriting trong store.ts.
+import { enableWriting } from "./store.js";
+enableWriting();
 import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { accessVerdict, currentPeriodUsage } from "./billing.js";
 import { pluginsPortFor } from "./plugins.js";

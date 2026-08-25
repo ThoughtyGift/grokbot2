@@ -36,6 +36,10 @@ const child = spawn(
       // used to ignore the two variables above entirely — which is how a test deleted a REAL OAuth
       // sign-in. This is the variable they all read now.
       GROKBOT2_DATA_DIR: join(dir, "data"),
+      // Kho ở đây là kho vứt đi, nên test được ghi. Máy chủ tự bật quyền này trong index.ts; mọi
+      // tiến trình khác không có nó thì đọc được mà không ghi được — xem enableWriting trong
+      // store.ts và lý do nó tồn tại.
+      GROKBOT2_ALLOW_WRITE: "1",
     },
   },
 );
