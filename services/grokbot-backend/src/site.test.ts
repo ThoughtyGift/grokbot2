@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-const { handleSite, newestSetup, SETUP_PREFIX, SETUP_KINDS } = await import("./site.js");
+const { handleSite, newestSetup, SETUP_KINDS } = await import("./site.js");
 
 /** `ServerResponse` giả, chỉ giữ đúng ba thứ bài kiểm cần đọc. */
 function fakeRes(): ServerResponse & { code: number; headers: Record<string, string>; body: string } {
@@ -67,7 +67,7 @@ test("chưa dựng gói thì 503 kèm cách dựng, không phải 404 trống", 
   else {
     assert.equal(res.code, 200);
     assert.match(res.headers["content-disposition"], /attachment; filename="/, "phải tải về, không mở trong tab");
-    assert.match(res.headers["content-type"], /application\/zip/);
+    assert.match(res.headers["content-type"], /octet-stream/);
   }
 });
 
@@ -75,7 +75,7 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
   const res = fakeRes();
   assert.equal(await handleSite("/download/mac", HEAD, res), true);
   if (res.code === 200) {
-    assert.match(res.headers["content-disposition"], /bot-noi-bo-setup-mac/,
+    assert.match(res.headers["content-disposition"], /Cai-dat-Bot-Noi-Bo-mac.*\.command/,
       "người dùng Mac tải nhầm gói Windows thì lỗi rất khó hiểu");
   } else {
     assert.equal(res.code, 503);
@@ -84,21 +84,22 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
 
 test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup2-"));
-  writeFileSync(join(dir, `${SETUP_KINDS.windows}-20260825.zip`), "win");
-  writeFileSync(join(dir, `${SETUP_KINDS.mac}-20260825.zip`), "mac-dai-hon");
-  assert.equal(newestSetup(dir, SETUP_KINDS.windows)?.size, "win".length);
-  assert.equal(newestSetup(dir, SETUP_KINDS.mac)?.size, "mac-dai-hon".length);
+  writeFileSync(join(dir, `${SETUP_KINDS.windows.prefix}-20260825.cmd`), "win");
+  writeFileSync(join(dir, `${SETUP_KINDS.mac.prefix}-20260825.command`), "mac-dai-hon");
+  assert.equal(newestSetup(dir, "windows")?.size, "win".length);
+  assert.equal(newestSetup(dir, "mac")?.size, "mac-dai-hon".length);
 });
 
 test("newestSetup chọn gói mới nhất và bỏ qua file lạ", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup-"));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${SETUP_PREFIX}-20260101.zip`), "cu");
+  const { prefix } = SETUP_KINDS.windows;
+  writeFileSync(join(dir, `${prefix}-20260101.cmd`), "cu");
   writeFileSync(join(dir, "ghi-chu.txt"), "khong phai goi");
-  writeFileSync(join(dir, `${SETUP_PREFIX}-20260825.zip`), "moi hon");
+  writeFileSync(join(dir, `${prefix}-20260825.cmd`), "moi hon");
   const found = newestSetup(dir);
   assert.ok(found, "phải thấy một gói");
-  assert.equal(found.name, `${SETUP_PREFIX}-20260825.zip`);
+  assert.equal(found.name, `${prefix}-20260825.cmd`);
   assert.equal(found.size, "moi hon".length);
 });
 

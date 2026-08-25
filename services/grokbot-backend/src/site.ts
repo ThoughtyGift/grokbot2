@@ -26,10 +26,14 @@ const DIST = join(svcRoot, ".data", "dist");
 
 /**
  * Tên gói phải khớp với scripts/build-setup.mjs — một hằng, không phải hai chỗ đoán nhau.
- * Mỗi hệ một tiền tố riêng: người dùng Mac tải nhầm gói Windows thì lỗi rất khó hiểu.
+ *
+ * Mỗi hệ **một file duy nhất**, không phải zip: bản zip đầu tiên giải nén ra 6 mục lộn xộn và
+ * trông không giống bộ cài nào. Đuôi khác nhau nên cũng không tải nhầm được cho nhau.
  */
-export const SETUP_PREFIX = "bot-noi-bo-setup";
-export const SETUP_KINDS = { windows: `${SETUP_PREFIX}-win`, mac: `${SETUP_PREFIX}-mac` } as const;
+export const SETUP_KINDS = {
+  windows: { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
+  mac: { prefix: "Cai-dat-Bot-Noi-Bo-mac", ext: ".command" },
+} as const;
 export type SetupKind = keyof typeof SETUP_KINDS;
 
 /**
@@ -53,12 +57,13 @@ function landingHtml(): string | null {
 }
 
 /** Gói mới nhất trong `.data/dist`, hoặc null khi chưa ai chạy build-setup. */
-export function newestSetup(dir = DIST, prefix = SETUP_PREFIX): { name: string; path: string; size: number } | null {
+export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
+  const { prefix, ext } = SETUP_KINDS[kind];
   let best: { name: string; path: string; size: number; mtimeMs: number } | null = null;
   let names: string[];
   try { names = readdirSync(dir); } catch { return null; }
   for (const name of names) {
-    if (!name.startsWith(prefix) || !name.endsWith(".zip")) continue;
+    if (!name.startsWith(prefix) || !name.endsWith(ext)) continue;
     const path = join(dir, name);
     try {
       const st = statSync(path);
@@ -94,7 +99,7 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
   const kind: SetupKind | null =
     path === "/download/windows" ? "windows" : path === "/download/mac" ? "mac" : null;
   if (kind) {
-    const pkg = newestSetup(DIST, SETUP_KINDS[kind]);
+    const pkg = newestSetup(DIST, kind);
     if (!pkg) {
       res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
       res.end(
@@ -103,7 +108,8 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
       return true;
     }
     res.writeHead(200, {
-      "content-type": "application/zip",
+      // Không phải zip nữa: một script cài. `octet-stream` để trình duyệt tải về thay vì mở ra đọc.
+      "content-type": "application/octet-stream",
       "content-length": String(pkg.size),
       "content-disposition": `attachment; filename="${pkg.name}"`,
     });
