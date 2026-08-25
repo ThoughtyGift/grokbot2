@@ -89,3 +89,43 @@ báo đỏ** thay vì vá nhầm vào chỗ trông giống. Không có nó thì 
    lý do Đường B (FE riêng) tồn tại.
 3. **Đừng chạy bộ cài 0.24.0 trên máy này**: nó sẽ thay bản 0.20.0 đã vá, và bộ vá chưa dò lại được.
 
+### 0.24.0 có gì mới so với 0.20.0 (đo 26/08/2026)
+
+Bung cả hai bundle rồi đếm kiểu message — cách đọc "họ vừa làm gì" mà không cần source.
+
+| mặt | 0.20.0 | 0.24.0 | chênh |
+|---|---|---|---|
+| `agent.v1` (giao thức agent) | 969 | 975 | **+6** |
+| `aiserver.v1` (giao thức với cloud) | 3.579 | 3.692 | **+113** |
+| `host-main.cjs` | 11,3 MB | 11,6 MB | +0,3 MB |
+
+**Không có kiểu nào bị bỏ** — họ chỉ thêm. Nghĩa là hợp đồng cũ vẫn còn, phần mình đã map không mục nát.
+
+#### Sáu kiểu mới ở `agent.v1` — đúng một tính năng
+
+`GetPrCodeTour{Args,Error,Result,Success,ToolCall}` + `PrCodeTourRevisionSnapshot` — một **công cụ
+mới cho bot**: dẫn người đọc đi qua thay đổi của một pull request. Đây là tính năng duy nhất chạm
+tới tầng agent.
+
+#### 113 kiểu mới ở `aiserver.v1` — gom theo chủ đề
+
+| nhóm | số | là gì |
+|---|---|---|
+| **GrokBot*** | 27 | `GrokBotTemplate`, `CreateGrokBotAgent`, `GetPublicGrokBotTemplate`… — **mẫu bot dùng lại/chia sẻ được**, và transcript commit lên cloud |
+| **BackgroundComposer** | 16 | chạy nền + `Admin*KillAll*` để quản trị dừng hàng loạt |
+| **Secret / Keyring** | 13 | `KeyringSecret`, `CopyTeamSecretsToKeyring` — **kho khoá dùng chung cho cả đội** |
+| **SandBox upgrade** | 9 | `ScheduleSandBoxUpgrade`, `RescheduleSandBoxUpgrade` — **hẹn lịch nâng cấp box**, hoãn được |
+| **Canvas** | 7 | `CloudCanvasMetadata`, `GetCanvasPayload` |
+| **Admin** | 8 | công cụ quản trị nội bộ |
+
+**Đọc ra hướng đi của họ:** đội nhóm (mẫu bot chia sẻ, khoá dùng chung cho team) và vận hành nhiều
+bot ở quy mô lớn (dừng hàng loạt, hẹn lịch nâng box). Không phải tính năng cho một người dùng lẻ.
+
+#### App local có tự cập nhật lên 0.24.0 không
+
+**Không, và cố ý.** Launcher đặt `SAND_DISABLE_UPDATES=1` ở mọi đường (`run.ps1`, `start-bot.cmd` cả
+hai bản). Bỏ biến đó thì app **tự cập nhật và xoá sạch `resources/app`** — tức là mất cả ba bản vá,
+quay về nói chuyện với server nhà phát hành.
+
+Muốn lên 0.24.0 thì phải làm theo thứ tự: dò lại 3 bản vá trên bundle mới → `--apply` → đo lại →
+mới đóng gói. Không có đường tắt, vì tên rút gọn đã trôi (xem mục trên).

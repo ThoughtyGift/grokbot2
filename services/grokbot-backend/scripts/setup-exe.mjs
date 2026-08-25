@@ -397,7 +397,8 @@ export function buildZip({ distDir, stagingDir, appSrc, outName }) {
    */
   try {
     execFileSync("robocopy", [appSrc, root, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
-      "/XF", "app.asar.disabled-by-grokbot2"], { stdio: "pipe" });
+      // debug.log la rac cua lan chay truoc tren may dung — dong goi kem thi nguoi nhan tuong la loi.
+      "/XF", "app.asar.disabled-by-grokbot2", "debug.log"], { stdio: "pipe" });
   } catch (e) {
     const code = typeof e.status === "number" ? e.status : 16;
     if (code >= 8) throw new Error("robocopy that bai, ma " + code);
