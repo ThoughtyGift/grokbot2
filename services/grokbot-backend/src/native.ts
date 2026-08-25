@@ -49,9 +49,17 @@ const STARTED_AT = Date.now();
 let lastBusyAtMs = 0;
 
 const AGENT_ID = /^agent-\d+$/;
+/*
+ * Nguồn được phép gọi có kèm giấy tờ. localhost cho lúc dev; thêm tên miền thật qua
+ * `GROKBOT2_ALLOW_ORIGIN` (phẩy để nhiều cái) khi đưa BFF ra ngoài ở chặng 4.
+ *
+ * KHÔNG bao giờ trả `*` cùng `allow-credentials: true` — trình duyệt cấm, và nếu lách được thì đó là
+ * cho mọi trang web trên đời mượn phiên đăng nhập của người dùng. Nên chỉ những nguồn khai rõ ở đây.
+ */
 const CORS_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  ...(process.env.GROKBOT2_ALLOW_ORIGIN ?? "").split(",").map((o) => o.trim()).filter(Boolean),
 ]);
 
 /**

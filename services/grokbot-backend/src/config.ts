@@ -40,6 +40,12 @@ const LANGUAGE_RULE = [
 export const config = {
   port: Number(process.env.GROKBOT2_PORT ?? process.env.PORT ?? 8788),
   /**
+   * Địa chỉ BFF nghe. Mặc định `127.0.0.1` — CỐ Ý: chỉ máy này gọi được, đó là thứ giữ an toàn khi
+   * đăng nhập chưa siết. Đặt `GROKBOT2_BIND=0.0.0.0` để mở cho máy khác (chặng 4) — nhưng chỉ nên mở
+   * khi `GROKBOT2_AUTH=enforce`, index.ts sẽ cảnh báo to nếu mở mà chưa siết.
+   */
+  bindHost: process.env.GROKBOT2_BIND ?? "127.0.0.1",
+  /**
    * S5 brain process. Unset ⇒ in-process pool (e2e that spawn only this backend).
    * `scripts/dev-bff.mjs` sets `http://127.0.0.1:8789` when `pnpm backend` starts both.
    * Read live so tests can point it at a dead port without re-importing this module.

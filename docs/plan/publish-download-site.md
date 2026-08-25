@@ -67,8 +67,7 @@ tai.tenmiencuaban.com {
 ```
 Caddy tự xin chứng chỉ Let's Encrypt. Xong: `https://tai.tenmiencuaban.com/` là trang tải công khai.
 
-**4. Giữ nó chạy:** `pm2 start`, hoặc một systemd unit — mẫu ở
-[`infra/grokbot2.service`](../../infra) (đơn vị cho backend; sửa lại `ExecStart` cho `serve-site.mjs`).
+**4. Giữ nó chạy:** `pm2 start scripts/serve-site.mjs`, hoặc một systemd unit (một `ExecStart` gọi `node scripts/serve-site.mjs`, `Restart=always`).
 
 **KHÔNG CHẮC CHẮN / chưa làm được ở đây:** tôi không tạo được VPS hay tên miền hộ. Phần đo được là
 máy chủ tĩnh phát đúng qua IP LAN (25/08: `/` 200, `/download/windows` 118 MB, `/v1`·`/gw`·`/admin`

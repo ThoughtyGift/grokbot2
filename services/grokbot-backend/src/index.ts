@@ -371,7 +371,18 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => { saveNow(chatSnapshot); saveCoverageNow(); closeMcp(); closeStt(); closeTeach(); process.exit(0); });
 }
 
-server.listen(config.port, "127.0.0.1", () => {
+/*
+ * Chặng 4: BFF nghe địa chỉ cấu hình được, KHÔNG ghim cứng loopback nữa.
+ *
+ * Mặc định vẫn `127.0.0.1` nên không đổi hành vi cũ. Mở ra `0.0.0.0` mà đăng nhập chưa `enforce` là
+ * mời cả mạng vào backend có dữ liệu — nên cảnh báo to, không im lặng cho qua.
+ */
+if (config.bindHost !== "127.0.0.1" && authMode() !== "enforce") {
+  console.warn("[grokbot2] ⚠ MỞ RA MẠNG mà GROKBOT2_AUTH chưa 'enforce' — mọi máy gọi được backend có dữ liệu.");
+  console.warn("[grokbot2]   Đặt GROKBOT2_AUTH=enforce trước khi mở, hoặc để GROKBOT2_BIND=127.0.0.1.");
+}
+server.listen(config.port, config.bindHost, () => {
+  logSafe(`[grokbot2] BFF nghe trên ${config.bindHost}:${config.port}`);
   if (config.opsUrl) {
     logSafe(`[grokbot2] ops process ${config.opsUrl} owns scheduler + public webhooks (in-process cron off)`);
     void opsHealth().then((s) => logSafe(`[grokbot2] ops: ${s}`));

@@ -15,12 +15,17 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 | **Backend** | 4 tiến trình · 15.687 dòng TS · 29 route `/v1` · 120 lệnh cổng (103 đã gọi thật) |
 | **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
 | **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
-| **Trang tải** | `/` + `/download/windows` (**.exe 2 MB**) + `/download/mac` (.command 27 KB) |
-| **Kiểm thử** | 26 file unit · 58 bộ e2e · máy đo tự động **7/9 xanh** |
-| **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1` — đó là thứ đang giữ an toàn, không phải xác thực |
+| **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
+| **Kiểm thử** | 28 file unit (**278 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** |
+| **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1` — **chặng 4 sẽ mở**; đăng nhập đã siết (chặng 2) nên mở ra được |
 
-**Đọc một dòng nếu chỉ đọc một dòng:** phần khó nhất (bot làm việc thật) đã chạy; phần còn lại là
-**dọn nhà và mở cửa cho người thứ hai**.
+**Tiến độ theo chặng (25/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
+🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
+🟡 **4 đưa BE ra ngoài** (code xong, chờ VPS) · ⬜ 5 tách user trên box · ⬜ 6 FE.
+
+**Đọc một dòng nếu chỉ đọc một dòng:** dọn xong, tiền đo được, đăng nhập đã siết, app đóng gói giống
+hãng. Mảnh cuối để máy thứ hai **chat được** (không chỉ tải) là **chặng 4** — đưa backend ra khỏi
+`127.0.0.1`.
 
 ---
 
@@ -184,21 +189,29 @@ sai. `install.log` chỉ ra: **Git Bash biến `/VERYSILENT` thành đường d�
 bộ cài không nhận cờ nên mở wizard chờ bấm. Chạy đúng: `MSYS_NO_PATHCONV=1`, hoặc qua một file `.cmd`,
 hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Người dùng cuối không gặp lỗi này.
 
-### Chặng 4 · Đưa BE ra khỏi máy cá nhân *(cần Chặng 2 xong)*
+### Chặng 4 · Đưa BE ra khỏi máy cá nhân — 🟡 **code xong 26/08, chờ VPS để chốt T6**
 
-| # | việc | kiểm bằng | ĐẠT khi |
+| # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
-| 4.1 | ⬜ Đổi `listen(port, "127.0.0.1")` | `netstat -ano \| findstr 8788` | nghe `0.0.0.0` |
-| 4.2 | ⬜ CORS cho đúng nguồn | `curl -H "Origin: https://…" /v1/me` | header CORS đúng, không phải `*` |
-| 4.3 | ⬜ HTTPS | `curl -I https://<vps>/` | 200, chứng chỉ hợp lệ |
-| 4.4 | ⬜ `host_settings` theo người | hai tài khoản đặt hai múi giờ | không đè nhau (nay **một dòng chung**) |
-| 4.5 | ⬜ **T6** máy khách trỏ vào VPS | mở app trên máy 2 | máy 1 và máy 2 thấy **cùng** dữ liệu |
+| 4.1 | ✅ Bỏ ghim cứng `127.0.0.1` | `GROKBOT2_BIND=0.0.0.0` rồi gọi qua IP LAN | `BFF nghe trên 0.0.0.0:8796` · `/v1/health` **200** qua `192.168.100.203` |
+| 4.2 | ✅ CORS cho tên miền, từ chối nguồn lạ | `GROKBOT2_ALLOW_ORIGIN=…` + gửi Origin | tên miền khai → trả đúng nó · nguồn lạ → **không** mượn được origin |
+| 4.2b | ✅ Chốt an toàn: mở mà chưa `enforce` thì cảnh báo to | bind 0.0.0.0 với AUTH≠enforce | in `⚠ MỞ RA MẠNG…` |
+| 4.4 | ✅ `host_settings` theo người | `host-settings.test.ts` | hai người hai múi giờ không đè nhau; cài đặt máy vẫn chung |
+| 4.3 | ⬜ HTTPS | `curl -I https://<vps>/` | *Caddy trên VPS — [publish-download-site.md](../plan/publish-download-site.md)* |
+| 4.5 | ⬜ **T6** máy 2 trỏ vào VPS, chung dữ liệu | mở app máy 2 | *chờ VPS + máy 2* |
 
-**E2E chốt chặng 4**
+**Cách mở an toàn (một lệnh):**
 ```
-node scripts/e2e-native.mjs         → 29 route còn đúng qua mạng
-node scripts/contract-test.mjs      → hợp đồng không đổi khi đổi chỗ đứng
+GROKBOT2_BIND=0.0.0.0 GROKBOT2_AUTH=enforce GROKBOT2_ALLOW_ORIGIN=https://tai.tenmiencuaban.com pnpm backend
 ```
+Mặc định vẫn `127.0.0.1` + `auth off` nên **không đổi hành vi cũ**; phải khai rõ mới mở.
+
+**E2E chốt chặng:** unit **281/281** · hợp đồng **4/4 nhóm** · bind 0.0.0.0 + enforce + CORS đo tận
+nơi qua IP LAN.
+
+> **Còn thiếu để máy 2 CHAT được, không phải code — là hạ tầng:** (1) HTTPS qua Caddy trên một VPS,
+> (2) backend chạy ở nơi máy 2 với tới. Trên LAN thì đã đủ: `GROKBOT2_BIND=0.0.0.0` + IP máy này là
+> máy 2 gọi tới được ngay. Khác mạng thì cần VPS — **tôi không tạo VPS hộ được**, đó là T6.
 
 ### Chặng 5 · Tách người dùng trên box — **ba tầng**
 

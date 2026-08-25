@@ -53,8 +53,3 @@ export function bumpTokenVersion(authId: string): number {
   cache.set(authId, next);
   return next;
 }
-
-/** Chỉ dùng cho bài kiểm: quên hết những gì đã đệm. */
-export function _resetTokenVersionCache(): void {
-  cache.clear();
-}

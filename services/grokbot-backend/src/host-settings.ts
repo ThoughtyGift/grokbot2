@@ -7,6 +7,18 @@
  */
 import { loadState, scheduleSave } from "./store.js";
 import { bindHostSettings, chatSnapshot } from "./chat/state.js";
+import { currentOwner } from "./request-context.js";
+
+/**
+ * Khoá thuộc về NGƯỜI, không thuộc về máy — chặng 4.
+ *
+ * Khi hai tài khoản dùng chung một backend, múi giờ là của từng người (họ ngồi ở hai nơi), và bật
+ * thông báo cũng vậy. Để chung thì người này đổi, người kia chịu. Mọi khoá KHÁC (danh sách MCP,
+ * quyền tool…) là cài đặt của cái máy và đúng là dùng chung.
+ *
+ * Lưu dưới `byOwner[ownerId]` trong cùng blob JSON đã có — khỏi đổi bảng, cùng lối với `uiByOwner`.
+ */
+const PER_USER_KEYS = new Set(["userTimeZone", "notifications"]);
 
 const settings: Record<string, unknown> = {
   notifications: { isEnabled: false },
@@ -21,20 +33,44 @@ const settings: Record<string, unknown> = {
   sidebarSections: [],
   hasSeenOnboarding: true,
   uiByOwner: {},   // bố cục theo từng chủ sở hữu — xem `patchUiPrefs` ở cuối file
+  byOwner: {},     // khoá theo người (múi giờ, thông báo) — xem PER_USER_KEYS
   ...(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults
 };
 
 bindHostSettings(() => settings);   // so settings save alongside agents/transcripts
 
-export const hostSettings = (): Record<string, unknown> => settings;
+/** Phần theo người của một chủ sở hữu, hoặc rỗng. */
+function ownerSlice(ownerId: string): Record<string, unknown> {
+  const all = settings.byOwner;
+  const mine = all && typeof all === "object" ? (all as Record<string, unknown>)[ownerId] : undefined;
+  return mine && typeof mine === "object" ? (mine as Record<string, unknown>) : {};
+}
+
+/**
+ * Cài đặt như người gọi HIỆN TẠI thấy: nền dùng chung, phủ khoá-the-người của họ lên trên.
+ *
+ * Gọi không tham số (gateway dùng `getHostSettings: hostSettings`) vẫn đúng: `currentOwner()` ngoài
+ * một request trả về danh tính mặc định.
+ */
+export const hostSettings = (): Record<string, unknown> => ({ ...settings, ...ownerSlice(currentOwner()) });
 
 /** The FE sends partial patches ({notifications:{…}}, {userTimeZone:…}) — merge, don't discard. */
 export function patchHostSettings(patch: unknown): Record<string, unknown> {
   if (patch && typeof patch === "object") {
-    for (const [k, v] of Object.entries(patch)) if (v !== undefined) settings[k] = v;
+    const owner = currentOwner();
+    const mine = { ...ownerSlice(owner) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) continue;
+      if (PER_USER_KEYS.has(k)) mine[k] = v;   // của người này thôi
+      else settings[k] = v;                    // cài đặt máy, dùng chung
+    }
+    const all = (settings.byOwner && typeof settings.byOwner === "object"
+      ? { ...(settings.byOwner as Record<string, unknown>) } : {});
+    all[owner] = mine;
+    settings.byOwner = all;
   }
   scheduleSave(() => ({ ...chatSnapshot(), hostSettings: settings }));
-  return settings;
+  return hostSettings();
 }
 
 /**
