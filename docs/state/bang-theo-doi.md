@@ -16,13 +16,14 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 | **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
 | **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
 | **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
-| **Kiểm thử** | 34 file unit (**310 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
+| **Kiểm thử** | 34 file unit (**310 bài**) · e2e chặng 4 **28/28** · thử rò box **7/8** · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
 | **Đã ra Internet** | `https://cinai.app/agent/` — BE chạy trên VPS sau nginx, **không phơi cổng nào**. Máy này vẫn chạy bản riêng ở `127.0.0.1` |
 
 **Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
 🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
 ✅ **4 đưa BE ra ngoài** (26/08: đăng nhập thật §3b · BE trên VPS qua HTTPS §3d) ·
-⬜ 5 tách user trên box · ⬜ 6 FE.
+🟡 **5 tách user trên box** (bước 0 ✅ · tầng 1 ✅ **7/8 kín** · thu hồi ✅ · **còn: bật thật**) ·
+⬜ 6 FE.
 
 **Đọc một dòng nếu chỉ đọc một dòng:** backend đã sống trên Internet tại `https://cinai.app/agent/`
 với đăng nhập thật. Việc còn lại để máy thứ hai dùng được là **cài app trên máy đó** và trỏ vào địa
@@ -422,18 +423,20 @@ node scripts/adopt-legacy-owner.mjs --to <email> --yes     # sao lưu rồi đ�
    của máy đo chỉ nhận `/assets/`. Một phép đo luôn ra 0 thì tệ hơn không đo — nay là **109 KB thô /
    34 KB gzip**.
 
-### Chặng 5 · Tách người dùng trên box — 🟡 **đã có mốc đo, 26/08**
+### Chặng 5 · Tách người dùng trên box — 🟡 **7/8 chỗ kín · còn đúng một việc: bật thật**
 
-**Mốc: `0/6 chỗ kín.`** Chạy `npx tsx scripts/e2e-box-leak.mjs --moc` trên box thật:
+**Mốc đầu `0/7` → nay `7/8`.** `npx tsx scripts/e2e-box-leak.mjs` chạy trên box thật:
 
-| thử | kết quả hôm nay |
-|---|---|
-| B đọc file của A | **đọc ra đúng nội dung bí mật** |
-| B thấy file của A khi liệt kê | **có** |
-| B `cat` file của A | **được** |
-| B **ghi đè** file của A | **được** — nội dung của A bị thay |
-| mỗi người một hồ sơ Chrome | **không** — chung `/home/box/.config/grok-chrome-77` |
-| hai tài khoản hệ điều hành khác nhau | **không** — cả hai đều là `box` |
+| thử | mốc 26/08 | sau tầng 1 |
+|---|---|---|
+| A và B dùng chung thư mục gốc | chung | **riêng** — `/home/gb2u001` ≠ `/home/gb2u002` |
+| B đọc file của A | đọc ra bí mật | **chặn** — đi ra ngoài gốc |
+| B thấy file của A khi liệt kê | thấy | **chặn** |
+| B `cat` file của A | được | **`Permission denied`** — kernel nói |
+| B **ghi đè** file của A | được | **chặn** |
+| B đọc cookie của Chrome dùng chung | — | **`Permission denied`** |
+| mỗi bot một trình duyệt riêng | — | ❌ **còn rò** — xem dưới |
+| hai tài khoản hệ điều hành khác nhau | cả hai là `box` | **`gb2u001` ≠ `gb2u002`** |
 
 Đo trước khi sửa là cố ý: không có mốc thì sau này một bài xanh cũng không nói được gì — nó có thể
 vẫn xanh từ đầu.
@@ -455,6 +458,70 @@ không phải "đọc trộm dữ liệu" mà là "dùng luôn danh tính".
 > **Mặc định là nghiêm:** còn rò thì thoát khác 0. Hôm nay phải gõ `--moc` mới cho qua — một bài kiểm
 > không hỏng được là một bài kiểm không kiểm gì.
 
+### Hình dạng đã chọn: **một daemon mỗi người**, không phải một daemon đổi danh tính
+
+Bản thử đầu cho daemon tự đổi uid theo từng request. Nó chạy được phần shell rồi vấp đúng chỗ đáng
+lẽ phải thấy trước: **tám handler còn dùng `fs` trực tiếp**, tiến trình vẫn là `box`, kernel từ chối
+— **ghi file hỏng hẳn**. Đi tiếp nghĩa là viết lại cả tám.
+
+Nên đổi hình. Daemon **không biết gì** về người dùng (đã trả về đúng bản gốc từng byte);
+[`exec-router.mjs`](../../infra/vps/exec-router.mjs) đứng trước và bật **một daemon riêng cho mỗi
+người**, chạy dưới tài khoản của họ. Kết quả: tám handler kia không sửa một dòng, và cách ly do
+**tiến trình khác uid** lo chứ không do một hàm kiểm đường dẫn lo. Đây cũng là cách hãng làm — họ lấy
+chính cái box làm ranh giới giữa người với người.
+
+Hợp đồng nhìn từ ngoài **không đổi**: vẫn cổng 1337, vẫn `Bearer`, vẫn `POST /<op>`. Backend chỉ thêm
+header `x-grokbot2-owner`.
+
+> **Header, không phải một trường trong thân.** Thân là *tham số của công cụ*, do model điền. Nhét
+> danh tính vào đó thì một ngày model sẽ điền nó — mà "tự chọn mình là ai" đúng là thứ tầng này tồn
+> tại để ngăn.
+
+> **Sổ ghép, không phải băm owner ra số.** Hai người trùng ô băm sẽ dùng chung một tài khoản — hỏng
+> cách ly mà không có dấu hiệu nào. Hết dải thì **ném lỗi**, không lùi về tài khoản chung: lùi về là
+> im lặng bỏ cách ly đúng lúc cần nó nhất.
+
+### Năm cái bẫy đã trả giá — cả năm đều **im lặng**
+
+| # | bẫy | vì sao không ai thấy |
+|---|---|---|
+| 1 | `sudo` **xoá sạch môi trường** | daemon con chết vì thiếu token, nhìn ngoài chỉ thấy "không lên" |
+| 2 | `kill` vào `sudo` | `sudo` fork rồi chờ `node` → `node` **mồ côi vẫn ôm cổng**, log vẫn in "đã thu" |
+| 3 | `kill(-pid)` cả nhóm | cây tiến trình đúng, nhưng `box` **không có quyền** giết tiến trình của `root`/`gb2uNNN` — EPERM cho không ai đọc |
+| 4 | bài kiểm so `[object Object]` | đúng kết quả hôm đó, và sẽ **vẫn báo rò sau khi đã kín** |
+| 5 | `head -c 40` cắt mất chữ `Permission denied` | một đường đã kín bị báo là rò — cắt là việc của lúc **in**, không phải lúc **đo** |
+
+Bẫy 2 và 3 chỉ lộ ra vì **soi cây tiến trình sau khi log nói "đã thu"**. Tin dòng log đó thì cả hai
+nằm im tới ngày box hết RAM.
+
+### Chỗ rò cuối, và nó là một **công tắc** chứ không phải code
+
+Bài kiểm ban đầu đi tìm thư mục hồ sơ Chrome dùng chung — **hỏi sai câu**. Đo lại: hồ sơ chung nằm ở
+`/home/box/.config/grok-chrome-77` mode **700 của box**, `gb2u002` bị `Permission denied`. Đường file
+đã kín từ trước.
+
+Cái rò thật là **điểm CDP**: mọi bot của mọi người nói với **cùng một con Chrome qua cùng một cổng**,
+nên cookie dùng chung mà chẳng cần đọc file nào. Nếu A đăng nhập một trang trong trình duyệt của bot
+mình thì bot của B duyệt web **với tư cách A** — không phải đọc trộm dữ liệu, mà là dùng luôn danh tính.
+
+`displays.ts` **đã có sẵn** phần chữa: mỗi bot một display, một cổng CDP, một hồ sơ riêng, kèm thu hồi
+10 phút. Nó chỉ nằm sau cờ `GROKBOT2_PER_BOT_DISPLAY`, và cờ đó chưa bật ở đâu cả.
+
+### Bật thật cần đúng ba dòng — và một quyết định
+
+```
+grok-exec.service   ExecStart → exec-router.mjs
+grok-exec.env       GROKBOT2_PER_USER=1
+.env của backend    GROKBOT2_PER_BOT_DISPLAY=on
+```
+
+Đây là bước duy nhất **chạm vào box đang chạy**. Nó đổi chỗ làm việc của bot từ `/home/box/workspace`
+sang `/home/gb2uNNN/workspace`, nên **9 bot hiện có sẽ thấy thư mục làm việc trống** — file cũ vẫn ở
+chỗ cũ, không mất, nhưng bot không còn thấy.
+
+**Chờ bạn quyết:** chép `/home/box/workspace` sang thư mục của chủ sở hữu hiện tại, hay để bot bắt
+đầu với thư mục trống?
+
 ### Sáu việc
 
 
@@ -463,11 +530,12 @@ Kế hoạch đầy đủ: [per-user-on-one-box.md](../plan/per-user-on-one-box.
 
 | # | việc | kiểm bằng | ĐẠT khi |
 |---|---|---|---|
-| 5.1 | ⬜ Bước root một lần (`useradd` + sudoers) | `sudo -n -l` trên box | daemon chạy được lệnh dưới `gb2u*` |
-| 5.2 | ⬜ Chuyển Chrome profile sang home user | `ls -ld /home/gb2u001/.config` | chủ sở hữu là `gb2u001` |
-| 5.3 | ⬜ Chuyển `grok-memory` + `workspace` | như trên | như trên |
-| 5.4 | ⬜ **Thử rò**: bot của A đọc file của B | `run_terminal_command_v2` đọc chéo | **Permission denied** |
-| 5.5 | ⬜ Thu hồi khi nghỉ | để idle quá ngưỡng | tiến trình bị thu, đĩa giảm |
+| 5.1 | ✅ **Bước 0: root một lần** (`groupadd` + 5 user + sudoers) | `sudo -u box sudo -n -l` | `(%gb2users) NOPASSWD: ALL` · làm root thì **bị từ chối** |
+| 5.2 | ✅ **Một daemon mỗi người** ([`exec-router.mjs`](../../infra/vps/exec-router.mjs)) | `e2e-box-leak.mjs` | `A→gb2u001` · `B→gb2u002`, hai gốc, hai uid |
+| 5.3 | ✅ `workspace` + `grok-memory` riêng từng người | như trên | `/home/gb2uNNN/{workspace,grok-memory}`, mode 700 |
+| 5.4 | ✅ **Thử rò** — bài kiểm viết TRƯỚC khi sửa | `npx tsx scripts/e2e-box-leak.mjs` | **0/7 → 7/8** · `Permission denied` từ kernel |
+| 5.5 | ✅ Thu hồi khi nghỉ (10 phút, quét mỗi phút) | nghỉ quá ngưỡng rồi soi cổng | cổng ngừng trả lời, gọi lại bật pid **khác** |
+| 5.7 | ❌ **Bật thật** — đổi `grok-exec` sang router + hai cờ | `e2e-box-leak.mjs` (không `--moc`) | **8/8**, và app vẫn chạy |
 | 5.6 | ⬜ Mượn hình dạng `SandboxPolicy` | policy có `additional_readwrite_paths` | lệnh ngoài allowlist bị từ chối |
 
 **E2E chốt chặng 5**
