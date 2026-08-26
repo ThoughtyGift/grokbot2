@@ -159,14 +159,14 @@
 <body>
 
 <nav><div class="wrap">
-  <a class="mark" href="/"><i>B</i> Bot Nội Bộ</a>
+  <a class="mark" href="./"><i>B</i> Bot Nội Bộ</a>
   <ul>
     <li><a href="#lam-gi">Làm được gì</a></li>
     <li><a href="#chay">Cách chạy</a></li>
     <li><a href="#o-dau">Cái gì ở đâu</a></li>
     <li><a href="#that">Khác gì bản hãng</a></li>
   </ul>
-  <a class="btn btn-hot" href="/download/windows">Tải xuống</a>
+  <a class="btn btn-hot" href="download/windows">Tải xuống</a>
 </div></nav>
 
 <header><div class="wrap">
@@ -179,8 +179,8 @@
     <button id="os-mac" role="tab" aria-selected="false" aria-controls="tai">macOS<small>BETA</small></button>
   </div>
   <div class="cta" id="tai">
-    <a class="btn btn-hot" id="tai-win" href="/download/windows">⊞&nbsp; Tải cho Windows</a>
-    <a class="btn btn-hot" id="tai-mac" href="/download/mac" hidden>Tải cho macOS</a>
+    <a class="btn btn-hot" id="tai-win" href="download/windows">⊞&nbsp; Tải cho Windows</a>
+    <a class="btn btn-hot" id="tai-mac" href="download/mac" hidden>Tải cho macOS</a>
     <a class="btn btn-ghost" href="#chay">Xem cách chạy</a>
   </div>
   <p class="fine" id="fine-win">Windows 10/11 · bộ cài 2 MB · <b>máy phải có sẵn client desktop + Node.js</b></p>
@@ -310,7 +310,7 @@
 <div class="close"><div class="wrap">
   <h2>Cái máy tính đó đang chờ người giao việc.</h2>
   <div class="cta">
-    <a class="btn btn-hot" href="/download/windows">⊞&nbsp; Tải cho Windows</a>
+    <a class="btn btn-hot" href="download/windows">⊞&nbsp; Tải cho Windows</a>
     <a class="btn btn-ghost" href="#o-dau">Cần chuẩn bị gì</a>
   </div>
 </div></div>
@@ -352,7 +352,15 @@
   (function () {
     const k = new URLSearchParams(location.search).get("k");
     if (!k) return;
-    for (const a of document.querySelectorAll('a[href^="/download"]')) {
+    /*
+     * Khớp theo THUỘC TÍNH, mà thuộc tính nay là `download/windows` — không còn gạch chéo đầu.
+     *
+     * Link đổi sang tương đối để trang chạy được ở cả `/` (IP:8099) lẫn `/tai/` (cinai.app). Bộ chọn
+     * cũ là `a[href^="/download"]`, khớp theo chuỗi thuộc tính chứ không theo `a.href` đã phân giải —
+     * nên sau khi đổi link, nó không khớp cái nào và **token lặng lẽ không được gắn**: nút vẫn bấm
+     * được, chỉ là phát nhầm bản 2 MB.
+     */
+    for (const a of document.querySelectorAll('a[href^="download/"]')) {
       a.href += (a.href.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(k);
     }
     const note = document.getElementById("chon-ban");
@@ -369,7 +377,7 @@
         + "<ol><li>Windows hiện <b>“Windows protected your PC”</b>? Bấm <b>More info</b> trước —"
         + " nút <b>Run anyway</b> chỉ hiện sau đó. Cảnh báo này là vì bộ cài chưa ký số, không phải"
         + " vì file hỏng.</li>"
-        + '<li>Không muốn qua cửa đó: <a id="tai-zip" href="/download/zip"><b>tải bản ZIP (167 MB)</b></a>'
+        + '<li>Không muốn qua cửa đó: <a id="tai-zip" href="download/zip"><b>tải bản ZIP (167 MB)</b></a>'
         + " — giải nén rồi chạy <code>start-bot.cmd</code>, không có bộ cài nên không bị chặn.</li></ol>";
     }
     // Nút ZIP vừa được tạo trong `note.innerHTML` ở trên, nên vòng gắn token phía trước không thấy

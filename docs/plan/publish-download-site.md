@@ -45,7 +45,17 @@ cũng được; app vẫn cài và mở lên.
 
 ## Đường 2 — VPS (ĐÃ CHẠY 26/08) · tên miền thêm sau
 
-**Đang sống:** `http://103.75.186.63:8099/` — trang tải + file cài, gọi được từ bất kỳ mạng nào.
+**Đang sống, HAI đường:**
+
+| đường | dùng khi nào |
+|---|---|
+| **`https://cinai.app/tai/`** ← nên dùng | HTTPS thật, **không còn** cửa "Keep" của Chrome |
+| `http://103.75.186.63:8099/` | vẫn chạy; giữ lại làm đường dự phòng khi nginx/tunnel có việc |
+
+Từ 26/08 trang tải đi qua nginx của `cinai.app` (`location /tai/` → `127.0.0.1:8099`), nên **ma sát
+HTTP ở mục dưới không còn áp dụng cho đường mới**. Link trong trang đã đổi sang **tương đối** để một
+bản HTML chạy được ở cả hai gốc. Có `X-Robots-Tag: noindex` — bản 118 MB mang client của nhà phát
+hành, nó phải nằm sau token và không được đánh chỉ mục dưới một tên miền có thương hiệu.
 
 ### Đã dựng gì
 
