@@ -69,11 +69,32 @@ chưa có app. Kiểm lại link.
 
 ## T3 · Mở app và đăng nhập
 
-1. Mở app bằng **lối tắt trên Desktop** ("Grok Bot (local)" hoặc tên tương đương).
+1. Mở app bằng lối tắt trên Desktop tên đúng là **`Bot Noi Bo`**.
 
-> ❗ **Đừng bấm đúp thẳng vào `Grok Bot.exe`.** Mở kiểu đó thì ứng dụng khởi động mà **không có bốn
-> biến môi trường**, nên nó nói chuyện với máy chủ của hãng — và còn có thể tự cập nhật, xoá sạch bản
-> vá. Lối tắt là thứ đặt đủ bốn biến.
+> ❗ **Trên Desktop có thể có HAI icon, và chỉ một cái đúng.**
+>
+> | icon | của ai | mở nó thì |
+> |---|---|---|
+> | **`Bot Noi Bo`** | **của ta** — bộ cài chỉ tạo cái này | đặt đủ bốn biến, nói với backend của bạn |
+> | `Grok Bot` | của hãng, sót lại từ lần cài trước | **không có biến nào** → nói với máy chủ của hãng |
+>
+> Mở nhầm cái thứ hai thì ra đúng màn hình **"Grok Bot couldn't finish setting up · Can't reach your
+> computer"** — không phải vì backend hỏng, mà vì app đang gọi sang chỗ khác. Hai cửa sổ **trông y
+> như nhau**, nên không phân biệt được sau khi đã mở.
+>
+> Nó cũng có thể **tự cập nhật** và xoá sạch bản vá, nên đừng mở.
+
+**Kiểm chắc app đang trỏ đâu — chạy trong Command Prompt trên máy 2:**
+
+```
+cd /d "%LOCALAPPDATA%\Programs\Bot Noi Bo"
+type backend.txt
+curl -s -o nul -w "backend tra ve: %%{http_code}
+" "%BE%v1/health"
+```
+
+`backend.txt` phải là `https://cinai.app/agent/`, và dòng cuối phải in **200**. Thư mục không tồn tại
+nghĩa là bộ cài chưa chạy xong — cài lại từ T2.
 
 **Sẽ thấy:**
 
@@ -147,7 +168,7 @@ Câu này **không có trong mã nguồn dự án** — `admin.halcion.vn` trả
 | thấy gì | nguyên nhân | cách chữa |
 |---|---|---|
 | File tải về chỉ ~2 MB | Link mất phần `?k=…` | Dán lại link đầy đủ |
-| App báo **"couldn't finish setting up · Can't reach your computer"** | `backend.txt` trỏ sai chỗ. *(Trước 26/08 còn do thiếu gạch chéo cuối — nay nginx nhận cả hai dạng, không còn là nguyên nhân)* | Sửa thành `https://cinai.app/agent/` rồi mở lại app |
+| App báo **"couldn't finish setting up · Can't reach your computer"** | **Hay gặp nhất: mở nhầm icon `Grok Bot` của hãng thay vì `Bot Noi Bo`.** Hoặc `backend.txt` trỏ sai chỗ. *(Trước 26/08 còn do thiếu gạch chéo cuối — nay nginx nhận cả hai dạng, không còn là nguyên nhân)* | Sửa thành `https://cinai.app/agent/` rồi mở lại app |
 | Bấm Sign in mà trình duyệt mở **cursor.com** | Bộ cài dựng trước 26/08 06:00 | Tải lại từ T1 |
 | Đăng nhập xong mà app vẫn ở màn hình Sign in | Phiên đăng nhập quá 10 phút | Bấm Sign in lại, làm lại T3–T4 |
 | Trang đăng nhập **trắng** | Giao diện web trên VPS chưa dựng | Báo lại — cần `pnpm --filter @grokbot2/web build` trên VPS |
