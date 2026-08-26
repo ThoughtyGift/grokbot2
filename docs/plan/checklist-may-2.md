@@ -87,14 +87,15 @@ chưa có app. Kiểm lại link.
 **Kiểm chắc app đang trỏ đâu — chạy trong Command Prompt trên máy 2:**
 
 ```
-cd /d "%LOCALAPPDATA%\Programs\Bot Noi Bo"
-type backend.txt
-curl -s -o nul -w "backend tra ve: %%{http_code}
-" "%BE%v1/health"
+type "%LOCALAPPDATA%\Programs\Bot Noi Bo\backend.txt"
+curl -s -o nul -w "%%{http_code}" https://cinai.app/agent/v1/health
 ```
 
-`backend.txt` phải là `https://cinai.app/agent/`, và dòng cuối phải in **200**. Thư mục không tồn tại
-nghĩa là bộ cài chưa chạy xong — cài lại từ T2.
+- Dòng đầu phải in **`https://cinai.app/agent/`**
+- Dòng sau phải in **`200`**
+
+Không thấy thư mục đó thì thử `%LOCALAPPDATA%\Bot Noi Bo` (bản cài 2 MB dùng đường khác). Không có
+cả hai nghĩa là bộ cài chưa chạy xong — làm lại T2.
 
 **Sẽ thấy:**
 
