@@ -321,6 +321,9 @@ mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện gi
 
 ## 3c · Máy thứ hai — nay chỉ còn việc trên chính máy đó
 
+> **Bản in ra để cầm khi ngồi trước máy 2:** [checklist-may-2.md](../plan/checklist-may-2.md)
+> — từng bước, kèm *sẽ thấy gì*, và bảng phân biệt "trông như lỗi" với "hỏng thật".
+
 Đường LAN và đường VPS đã gộp làm một: **không còn hạ tầng nào phải dựng**. Đo 26/08:
 
 | | |
