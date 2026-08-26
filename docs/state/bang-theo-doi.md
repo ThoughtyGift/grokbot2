@@ -337,6 +337,42 @@ mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện gi
 
 ---
 
+## 3g · VPS đã đủ tính năng — 27/08
+
+Máy 2 thiếu tính năng **không phải vì lỗi**: backend tự nói ra đủ 5 chỗ chưa khai, và tôi cố ý để
+trống vì 2 trong số đó là bí mật. Nay khai đủ:
+
+| trước | sau |
+|---|---|
+| `[model] no pool key, tool support unknown` | `[model] claude-opus-5 **honours TOOL_CALL** — tools available` |
+| `[box] chưa cấu hình` | `[box] **OK** https://admin.halcion.vn/grok-exec` |
+| `[browser] CDP not set — browser_* tools are off` | `[browser] 127.0.0.1:9223 — **reachable**, 1 tab` |
+| `[box] VNC_URL not set — pane sẽ trống` | VNC đã khai |
+| `ALLOW_PLUGIN_INSTALL=0` | **`=1`** — mở lại được vì chặng 5 đã bật |
+
+**Khoá pool RIÊNG cho VPS.** Tạo key `Grokbot2-VPS` trong trang admin thay vì dùng chung key
+`Grokbot2` của máy cá nhân — lộ thì thu hồi đúng cái đó, máy này vẫn chạy. Đã nghiệm: gọi pool bằng
+key mới trả `success:true · keyName:"Grokbot2-VPS"`. File `.env` là `-rw------- root:root`.
+
+**Vì sao dám mở lại `ALLOW_PLUGIN_INSTALL`:** hai lớp, không phải một.
+1. Chặng 5 đã bật — bot chạy dưới `gb2uNNN` riêng, plugin độc hại không với tới file người khác.
+2. `childEnv()` chỉ cho plugin thấy **26 biến vô hại**. Đo: `CLAUDE_POOL_KEY`, `GROKBOT2_JWT_SECRET`,
+   `GROKBOT2_EXEC_TOKEN`, `GROKBOT2_GATEWAY_TOKEN`, `GROKBOT2_BILLING_WEBHOOK_SECRET`, `NODE_OPTIONS`
+   — **không cái nào tới được plugin**.
+
+> **Một chỗ đáng biết, không phải lỗi:** MCP server chạy **trong tiến trình backend**, không chạy
+> trên box — nên chặng 5 KHÔNG che nó. Thứ che nó là allowlist môi trường ở trên. Hai cơ chế khác
+> nhau cho hai loại tiến trình khác nhau.
+
+> **Và một hệ quả của `DEFAULT_USER`:** cả máy này lẫn VPS, khi **chưa đăng nhập**, đều mang danh
+> tính `auth0|grokbot2-user` → cùng rơi vào ô `gb2u003`. Người dùng **đã đăng nhập** thì có danh tính
+> riêng (`local|<email>`) và ô riêng — đo được: `authId local|e2e-chang4-…`. Nên tách chỉ có hiệu lực
+> **sau khi đăng nhập**, đúng như thiết kế.
+
+**E2E chặng 4 chạy lại sau khi đổi: 28/28 đậu.**
+
+---
+
 ## 3f · Khoá pool có lộ được không — đo 27/08
 
 Câu hỏi: *"máy khác tải app về có nhìn thấy khoá không?"* Ba đường một khoá có thể lộ, đo cả ba.
