@@ -319,43 +319,32 @@ mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện gi
 
 ---
 
-## 3c · Muốn E2E trên máy thứ hai thì còn thiếu đúng những gì
+## 3c · Máy thứ hai — nay chỉ còn việc trên chính máy đó
 
-Đo ngày 26/08, không phải ước lượng:
+Đường LAN và đường VPS đã gộp làm một: **không còn hạ tầng nào phải dựng**. Đo 26/08:
 
-| | đo được | |
+| | |
+|---|---|
+| Trang tải | `https://cinai.app/tai/` — HTTPS, không còn cửa "Keep" của Chrome |
+| Backend | `https://cinai.app/agent/` — `/v1/health` **200** qua Internet |
+| Đăng nhập | luồng thiết bị **9/9 bước** qua Internet, xem §3d |
+
+### Các bước trên máy 2
+
+| # | việc | kiểm bằng |
 |---|---|---|
-| backend nghe ở | `127.0.0.1:8788` | chỉ máy này gọi được |
-| tường lửa cổng 8788 | **không có luật nào** | máy 2 không gõ cửa được |
-| VPS `103.75.186.63:8099` | `/` **200** · `/v1/health` **404** | mới chỉ là **trang tải**, chưa có backend |
-| HTTPS | `https://…:8099` → **000** | chưa có TLS |
+| T1 | Mở `https://cinai.app/tai/?k=<token>` → bấm **Tải cho Windows** | file **118 MB**, tải thẳng không phải bấm "Keep" |
+| T2 | Bấm đúp `.exe`, điền địa chỉ backend | **`https://cinai.app/agent/`** — có gạch chéo cuối |
+| T3 | Mở app → bấm **Sign in** | trình duyệt mở `https://cinai.app/agent/app/?login_uuid=…` |
+| T4 | Tạo tài khoản (người đầu tiên tự mở) rồi đăng nhập | app tự vào sau vài giây |
+| T5 | Tạo một bot, gửi một câu | *chờ khoá pool — xem "chưa khai" ở §3d* |
 
-### Đường A · Cùng mạng LAN — làm được **hôm nay**, không cần VPS
+> **Gạch chéo cuối ở T2 không phải chi tiết làm đẹp.** Thiếu nó thì client ghép URL tương đối làm
+> **rụng mất `/agent`**, mọi RPC bay ra gốc tên miền và rơi vào Next.js của cinAPI. Đo trên app thật:
+> có gạch chéo → `/agent/aiserver.v1…`; không có → `/aiserver.v1…`.
 
-| # | việc | ai làm | kiểm bằng |
-|---|---|---|---|
-| A1 | `.env`: `GROKBOT2_BIND=0.0.0.0` + `GROKBOT2_AUTH=enforce` — **đổi cùng nhau** | tôi | log in `nghe trên 0.0.0.0:8788` · `mode=enforce` |
-| A2 | Mở cổng 8788 trên tường lửa | **bạn** (cần quyền admin) | `New-NetFirewallRule -DisplayName "grokbot2-be-8788" -Direction Inbound -Protocol TCP -LocalPort 8788 -Action Allow -Profile Private` |
-| A3 | Chuyển quyền 3.524 dòng sang tài khoản email | **bạn quyết** | `node scripts/adopt-legacy-owner.mjs --to <email> --yes` |
-| A4 | Máy 2: `backend.txt` ghi `http://192.168.100.203:8788` | bạn | mở app → không còn "Can't reach your computer" |
-| A5 | Máy 2: bấm Sign in → trình duyệt mở trang đăng nhập **của bạn** | bạn | URL phải là `192.168.100.203:8788/app/?login_uuid=…` |
-
-> **A2 và A3 tôi không làm hộ được:** một cái cần quyền admin, một cái viết lại chủ sở hữu của dữ
-> liệu thật. A1 thì làm được ngay, nhưng bật `enforce` mà chưa làm A3 thì app hiện **0 bot**.
-
-### Đường B · Khác mạng (VPS) — thêm lên trên đường A
-
-| # | việc | ghi chú |
-|---|---|---|
-| B1 | Dựng backend đầy đủ lên VPS | khác hẳn `serve-static.mjs` đang chạy: cần Node, `.data/`, khoá pool |
-| B2 | HTTPS | thêm một server block nginx trỏ `127.0.0.1:<cổng BE>`, **không** sửa block đang có |
-| B3 | Máy 2 trỏ `backend.txt` vào tên miền HTTPS đó | rồi lặp lại A5 |
-
-**Vì sao B1 không phải copy-paste:** VPS đang chạy `admin.halcion.vn`, `foodaymart.vn`,
-`media.halcion.vn`, `convex` — hạ tầng thật của bạn. Backend grokbot2 mang theo SQLite, MCP spawn
-tiến trình con, và khoá pool. Đưa lên đó là một quyết định riêng, không phải một bước của T6.
-
----
+> **T5 chưa chạy được**, và không phải vì code: hạn mức nhóm trên pool đang là **0 đô**, và khoá pool
+> cố ý chưa đặt lên VPS.
 
 ## 3b · Cửa cấp token — ✅ **bịt xong 26/08**
 
