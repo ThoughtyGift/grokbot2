@@ -337,6 +337,41 @@ mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện gi
 
 ---
 
+## 3e · Lỗ danh tính bịa — ✅ **bịt 27/08**
+
+Máy 2 vào thẳng app không qua đăng nhập. Đo ra thì **không phải cổng hở**: `/auth/poll` trả 403,
+`/oauth/token` trả 401, `/v1/agents` không token trả 401 — tất cả đang siết đúng.
+
+Thứ hở là **một nguồn danh tính thứ hai**. Trong bảng `users` trên VPS có một dòng không ai tạo:
+
+```
+google-oauth2|user_01M04VTMSC6RPVPT20TKXBBBS8   không mật khẩu   26/08 22:44
+```
+
+Backend **chưa từng chạy ngoài `enforce`** (đếm trong journal: 8 lượt khởi động, tất cả `enforce`),
+nên nó không đến từ một lúc cổng mở. Nó đến từ `userFromToken` — hàm chỉ base64 giải mã payload rồi
+trả `sub`, **không kiểm chữ ký**:
+
+| | |
+|---|---|
+| `verifyJwt("<h>.<p>.chu-ky-rac")` | `null` |
+| `userFromToken("<h>.<p>.chu-ky-rac")` | `google-oauth2|user_TU_BIA` |
+
+Và giá trị đó chảy thẳng vào `accessVerdict` → `ensureUser`, tức **tạo hẳn một dòng người dùng** cho
+danh tính bịa. Chỉ **một** chỗ gọi nó, mà ngay cạnh `ownerFromAuth` đã kiểm chữ ký đàng hoàng từ đầu
+— một cửa sau bỏ quên nằm cạnh một cửa đã khoá.
+
+**Đã xoá hẳn hàm đó**, không sửa: một nguồn danh tính, không phải hai.
+
+> **Bài kiểm đọc MÃ NGUỒN, không chỉ đọc hành vi** (`forged-identity.test.ts`, 5/5). Vì lỗi này không
+> phải một nhánh sai mà là **một hàm thứ hai tồn tại song song** với hàm đúng — kiểm hành vi của
+> `verifyJwt` không bao giờ bắt được. Đã nghiệm bằng cách dựng lại lỗ: bài đỏ; gỡ đi: xanh.
+
+**Đo lại trên VPS đang chạy:** gọi RPC bằng token bịa → tài khoản `KIEM_TRA_27_08` **không** được
+tạo. Dòng giả cũ đã xoá.
+
+---
+
 ## 3c · Máy thứ hai — nay chỉ còn việc trên chính máy đó
 
 > **Bản in ra để cầm khi ngồi trước máy 2:** [checklist-may-2.md](../plan/checklist-may-2.md)
