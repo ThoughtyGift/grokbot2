@@ -81,6 +81,24 @@ $bmp.Dispose()
   return ico;
 }
 
+/**
+ * Địa chỉ backend **điền sẵn** trong bộ cài.
+ *
+ * Đây là chỗ đã làm mất một buổi trên máy thứ hai. Bản trước điền sẵn `http://localhost:8788` kèm
+ * dòng chữ "Để nguyên nếu backend chạy ngay trên máy này" — nghe hợp lý, nhưng `localhost` là giá
+ * trị **chắc chắn sai** trên mọi máy không phải máy dev. Người cài bấm Next như với mọi bộ cài khác,
+ * rồi app báo *"Can't reach your computer"*: không phải backend hỏng, mà app đang gọi vào chính máy
+ * vừa cài.
+ *
+ * Nên địa chỉ được **nướng vào lúc dựng**: bộ cài phát cho ai thì mang sẵn địa chỉ của người đó, và
+ * bấm Next là đúng. Dựng cho máy mình, không khai gì, thì vẫn là `localhost` như trước.
+ *
+ * Luôn có gạch chéo cuối: thiếu nó thì client làm rụng tiền tố đường dẫn (đo 26/08). nginx nay nhận
+ * cả hai dạng, nhưng phát ra dạng đúng thì không phải trông vào bản vá đó.
+ */
+const defaultBackend = () =>
+  `${(process.env.GROKBOT2_PUBLIC_BACKEND ?? "http://localhost:8788").trim().replace(/\/+$/, "")}/`;
+
 const ISS = ({ version, iconPath, outDir, outName }) => `; Sinh bởi scripts/setup-exe.mjs — đừng sửa tay, sửa ở đó.
 [Setup]
 AppId={{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBO01}
@@ -147,9 +165,9 @@ procedure InitializeWizard();
 begin
   BackendPage := CreateInputQueryPage(wpSelectDir,
     'Backend cua ban', 'App se noi chuyen voi dia chi nao?',
-    'De nguyen neu backend chay ngay tren may nay.');
+    'Bo cai nay da dien san dung dia chi. Doi duoc sau: sua backend.txt trong thu muc cai dat.');
   BackendPage.Add('Dia chi backend:', False);
-  BackendPage.Values[0] := 'http://localhost:8788';
+  BackendPage.Values[0] := '${defaultBackend()}';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -296,9 +314,9 @@ procedure InitializeWizard();
 begin
   BackendPage := CreateInputQueryPage(wpSelectDir,
     'Backend cua ban', 'App se noi chuyen voi dia chi nao?',
-    'De nguyen neu backend chay ngay tren may nay. Doi duoc sau: sua backend.txt trong thu muc cai dat.');
+    'Bo cai nay da dien san dung dia chi. Doi duoc sau: sua backend.txt trong thu muc cai dat.');
   BackendPage.Add('Dia chi backend:', False);
-  BackendPage.Values[0] := 'http://localhost:8788';
+  BackendPage.Values[0] := '${defaultBackend()}';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
