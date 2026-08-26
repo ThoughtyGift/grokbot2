@@ -10,7 +10,65 @@ Mỗi bước ghi rõ **sẽ thấy gì** — vì bốn màn hình dưới đây
 
 ---
 
-## Trước khi bắt đầu
+## Máy 2 đang ở tình huống nào?
+
+Hai lối, chọn theo **máy đã cài bản cũ chưa**. Cả hai ra cùng kết quả.
+
+| tình huống | làm gì | vì sao |
+|---|---|---|
+| **Máy sạch, hoặc muốn làm lại từ đầu** | **Lối A** — tải bản mới rồi Next → Next | Bản trên trang (dựng 26/08 20:03) đã **nướng sẵn địa chỉ** — giống app gốc, không sửa file nào |
+| **Đã cài bản CŨ, không muốn tải lại 118 MB** | **Lối B** — sửa 2 file bằng PowerShell | Nhanh hơn, nhưng chỉ vá bản đã lỡ cài |
+
+> **Vì sao bản cũ cần vá:** nó tải trước 26/08 20:03, nên ghi ra `backend.txt = http://localhost:8788`
+> (bấm Next là dính) và mở đăng nhập sang `cursor.com`. Bản mới đã sửa cả hai ở gốc — xem
+> [đây](#lối-a--tải-bản-mới-giống-app-gốc). Đo bằng code: `GROKBOT2_PUBLIC_BACKEND` được nướng vào
+> lúc dựng nên bộ cài mang sẵn đúng địa chỉ.
+
+---
+
+## Lối A — tải bản mới (giống app gốc)
+
+Đây là đường **giống app gốc nhất**: tải về, bấm đúp, Next tới hết.
+
+1. Mở `https://cinai.app/tai/?k=1bab09366834373317dc8ecb` → **⊞ Tải cho Windows** (làm theo **T1** bên dưới)
+2. Bấm đúp `.exe` → qua màn hình SmartScreen (**T2**)
+3. Màn "Backend của bạn" **đã điền sẵn `https://cinai.app/agent/`** → **cứ bấm Next**, không sửa gì
+4. Mở app bằng icon **`Bot Noi Bo`** → Sign in (**T3–T4**)
+
+Chỉ còn **một** chỗ khác app gốc: màn **"Windows protected your PC"** (bộ cài chưa ký số). Bấm
+**More info → Run anyway** một lần. Xem T2.
+
+---
+
+## Lối B — vá bản đã cài cũ (không tải lại)
+
+Chỉ dùng khi máy 2 **đã cài bản cũ**. Dán vào **PowerShell** (không cần quyền admin):
+
+```powershell
+$d = @("$env:LOCALAPPDATA\Programs\Bot Noi Bo", "$env:LOCALAPPDATA\Bot Noi Bo") |
+     Where-Object { Test-Path "$_\backend.txt" } | Select-Object -First 1
+if (-not $d) { "Khong thay ban cai — dung Loi A (tai ban moi)."; return }
+Set-Content "$d\backend.txt" 'https://cinai.app/agent/'
+$c = "$d\start-bot.cmd"
+if (Test-Path $c) { (Get-Content $c -Raw) -replace 'CURSOR_WEBSITE_URL=https://cursor\.com','CURSOR_WEBSITE_URL=%BE%' | Set-Content $c }
+"Da sua: $d"
+"  backend.txt -> " + (Get-Content "$d\backend.txt")
+"  dang nhap   -> " + ((Get-Content $c) | Select-String 'WEBSITE')
+```
+
+Kết quả đúng phải in:
+
+```
+backend.txt -> https://cinai.app/agent/
+dang nhap   -> set "CURSOR_WEBSITE_URL=%BE%"
+```
+
+In **"Khong thay ban cai"** → bộ cài chưa chạy xong, chuyển sang Lối A. Xong thì đóng app, mở lại
+bằng icon **`Bot Noi Bo`**.
+
+---
+
+## Trước khi bắt đầu (dùng cho cả hai lối)
 
 | cần | giá trị |
 |---|---|
