@@ -405,7 +405,42 @@ node scripts/adopt-legacy-owner.mjs --to <email> --yes     # sao lưu rồi đ�
    của máy đo chỉ nhận `/assets/`. Một phép đo luôn ra 0 thì tệ hơn không đo — nay là **109 KB thô /
    34 KB gzip**.
 
-### Chặng 5 · Tách người dùng trên box — **ba tầng**
+### Chặng 5 · Tách người dùng trên box — 🟡 **đã có mốc đo, 26/08**
+
+**Mốc: `0/6 chỗ kín.`** Chạy `npx tsx scripts/e2e-box-leak.mjs --moc` trên box thật:
+
+| thử | kết quả hôm nay |
+|---|---|
+| B đọc file của A | **đọc ra đúng nội dung bí mật** |
+| B thấy file của A khi liệt kê | **có** |
+| B `cat` file của A | **được** |
+| B **ghi đè** file của A | **được** — nội dung của A bị thay |
+| mỗi người một hồ sơ Chrome | **không** — chung `/home/box/.config/grok-chrome-77` |
+| hai tài khoản hệ điều hành khác nhau | **không** — cả hai đều là `box` |
+
+Đo trước khi sửa là cố ý: không có mốc thì sau này một bài xanh cũng không nói được gì — nó có thể
+vẫn xanh từ đầu.
+
+**Chỗ sắc nhất là hồ sơ Chrome dùng chung (2,9 GB).** Chung hồ sơ nghĩa là **chung cookie**: nếu A
+đăng nhập một trang trong trình duyệt của bot mình thì bot của B duyệt web **với tư cách A**. Đây
+không phải "đọc trộm dữ liệu" mà là "dùng luôn danh tính".
+
+> **Chỗ tắc hôm 25/08 đã gỡ.** Kế hoạch ghi *"không thể tách theo OS user từ bên trong daemon — công
+> cụ có đủ, quyền thì không"*: daemon chạy `uid=1001(box)`, không sudo, `/home` là `755 root`. Nay
+> backend nằm trên **chính VPS đó** và có đường root, nên **Bước 0** làm được.
+
+> **Hai lần bài kiểm suýt nói dối, và cả hai đều đã bịt:**
+> 1. `exec` trả về object, đem so trực tiếp thì thành `"[object Object]" === "[object Object]"` —
+>    đúng kết quả hôm nay nhưng **sau khi tách xong vẫn báo rò**. Nay đọc `.stdout`.
+> 2. Một lỗi của **chính bài kiểm** rơi vào `catch` và được đọc là "box từ chối", làm bài **tự xanh
+>    lên 4/6**. Nay `attempt()` phân biệt hai thứ đó và ném lỗi thay vì tính điểm.
+
+> **Mặc định là nghiêm:** còn rò thì thoát khác 0. Hôm nay phải gõ `--moc` mới cho qua — một bài kiểm
+> không hỏng được là một bài kiểm không kiểm gì.
+
+### Sáu việc
+
+
 
 Kế hoạch đầy đủ: [per-user-on-one-box.md](../plan/per-user-on-one-box.md).
 
