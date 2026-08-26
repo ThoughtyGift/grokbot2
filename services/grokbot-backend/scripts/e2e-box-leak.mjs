@@ -130,14 +130,36 @@ try {
   check("B KHÔNG ghi đè được file của A", !overwrote,
         overwrote ? "nội dung của A đã bị thay" : wr.out.slice(0, 60));
 
-  // ── hồ sơ Chrome: chung hồ sơ là chung COOKIE ──────────────────────────────
-  // Chỗ sắc nhất: không phải "đọc trộm dữ liệu" mà là "dùng luôn danh tính" — nếu A đăng nhập một
-  // trang trong trình duyệt của bot mình thì bot của B duyệt web với tư cách A.
-  const pr = await attempt(() => as(B, "exec", { command: "ls -d /home/*/.config/grok-chrome-* 2>/dev/null | head -5" }));
-  const profiles = pr.out.trim();
-  const oneProfile = !pr.refused && profiles !== "" && profiles.split("\n").filter(Boolean).length <= 1;
-  check("mỗi người một hồ sơ Chrome riêng", !oneProfile,
-        oneProfile ? `chỉ có một hồ sơ dùng chung: ${profiles.split("\n")[0]}` : profiles.slice(0, 60) || "không thấy hồ sơ nào");
+  /*
+   * ── Trình duyệt: chỗ sắc nhất, và chỗ bài này từng đo SAI ──────────────────
+   *
+   * Mối nguy không phải "đọc trộm dữ liệu" mà là "dùng luôn danh tính": nếu A đăng nhập một trang
+   * trong trình duyệt của bot mình thì bot của B duyệt web **với tư cách A**.
+   *
+   * Bản đầu đi tìm thư mục hồ sơ dùng chung. Đo lại 26/08 mới thấy là hỏi sai chỗ: hồ sơ chung nằm ở
+   * `/home/box/.config/grok-chrome-77`, mode **700 của box**, và `gb2u002` **không đọc được** —
+   * đường file đã kín từ trước. Cái rò thật là **điểm CDP**: mọi bot của mọi người nói với CÙNG một
+   * con Chrome qua cùng một cổng, nên cookie dùng chung mà chẳng cần đọc file nào.
+   *
+   * `displays.ts` đã có sẵn phần chữa — mỗi bot một display, một cổng CDP, một hồ sơ riêng — nhưng
+   * nó nằm sau cờ `GROKBOT2_PER_BOT_DISPLAY`. Nên câu đúng để hỏi là: cờ đó bật chưa.
+   */
+  const perBot = (process.env.GROKBOT2_PER_BOT_DISPLAY ?? "").trim() === "on";
+  check("mỗi bot một trình duyệt riêng (không chung cổng CDP)", perBot,
+        perBot ? "" : "GROKBOT2_PER_BOT_DISPLAY chưa bật — mọi bot dùng chung Chrome ở :9223");
+
+  /*
+   * Mặt còn lại của cùng mối nguy: cookie qua đường file.
+   *
+   * KHÔNG `head -c` trước khi so. Bản đầu cắt ở 40 ký tự, nên câu `cat: /home/box/.config/…: Permission
+   * denied` bị mất đúng hai chữ cuối — chữ duy nhất nói lên kết quả — và bài báo RÒ trong khi đường
+   * đó đã kín. Cắt là việc của lúc IN RA, không phải lúc đo.
+   */
+  const pr = await attempt(() => as(B, "exec", {
+    command: "cat /home/box/.config/grok-chrome-77/Default/Cookies 2>&1 | tail -c 200",
+  }));
+  const refused = /denied|No such file|not found|escapes root/i.test(pr.out);
+  check("B KHÔNG đọc được cookie của con Chrome dùng chung", refused, pr.out.trim().slice(-70));
 
   // ── hai tài khoản hệ điều hành khác nhau ───────────────────────────────────
   const whoA = (await attempt(() => as(A, "exec", { command: "id -un" }))).out.trim();
