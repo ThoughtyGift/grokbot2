@@ -22,7 +22,7 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 **Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
 🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
 ✅ **4 đưa BE ra ngoài** (26/08: đăng nhập thật §3b · BE trên VPS qua HTTPS §3d) ·
-🟡 **5 tách user trên box** (bước 0 ✅ · tầng 1 ✅ **7/8 kín** · thu hồi ✅ · **còn: bật thật**) ·
+🟡 **5 tách user trên box** (**đã BẬT trên box thật 27/08 · 7/8 kín** · còn cờ trình duyệt) ·
 ⬜ 6 FE.
 
 **Đọc một dòng nếu chỉ đọc một dòng:** backend đã sống trên Internet tại `https://cinai.app/agent/`
@@ -603,7 +603,8 @@ Kế hoạch đầy đủ: [per-user-on-one-box.md](../plan/per-user-on-one-box.
 | 5.3 | ✅ `workspace` + `grok-memory` riêng từng người | như trên | `/home/gb2uNNN/{workspace,grok-memory}`, mode 700 |
 | 5.4 | ✅ **Thử rò** — bài kiểm viết TRƯỚC khi sửa | `npx tsx scripts/e2e-box-leak.mjs` | **0/7 → 7/8** · `Permission denied` từ kernel |
 | 5.5 | ✅ Thu hồi khi nghỉ (10 phút, quét mỗi phút) | nghỉ quá ngưỡng rồi soi cổng | cổng ngừng trả lời, gọi lại bật pid **khác** |
-| 5.7 | ❌ **Bật thật** — đổi `grok-exec` sang router + hai cờ | `e2e-box-leak.mjs` (không `--moc`) | **8/8**, và app vẫn chạy |
+| 5.7 | 🟡 **Đã bật trên box thật 27/08** — router + `PER_USER=1` | `e2e-box-leak.mjs` | **7/8** · 8 thao tác file/shell nguyên vẹn · app chạy bình thường |
+| 5.8 | ⬜ Bật `GROKBOT2_PER_BOT_DISPLAY=on` — chỗ rò cuối | như trên | **8/8** |
 | 5.6 | ⬜ Mượn hình dạng `SandboxPolicy` | policy có `additional_readwrite_paths` | lệnh ngoài allowlist bị từ chối |
 
 **E2E chốt chặng 5**
