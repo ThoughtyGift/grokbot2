@@ -295,6 +295,23 @@ Và trang đăng nhập mở được **trong trình duyệt thật** ở `https
    mọi request như ở gốc, và nó trả `302 → /app/…` — trình duyệt đi thẳng vào Next.js của cinAPI,
    **không lỗi nào nói vì sao**. `GROKBOT2_PUBLIC_PATH` là chỗ backend được *bảo* nó đứng ở đâu.
 
+### Lỗi máy 2 gặp thật — và nó không phải đăng nhập
+
+Máy 2 dừng ở **"Grok Bot couldn't finish setting up · Can't reach your computer right now."**
+
+Truy: `backend.txt` thiếu **dấu gạch chéo cuối**. Client ghép URL tương đối, nên base
+`https://cinai.app/agent` (thiếu một ký tự) làm rụng `/agent`, và `EnsureSandBox` bay ra gốc tên
+miền. Đo được: `/agent/aiserver.v1.…/EnsureSandBox` → **200**, `/aiserver.v1.…/EnsureSandBox` → **404**.
+
+Đã bỏ hẳn cái bẫy thay vì ghi vào tài liệu — thêm một `location` nhận cả dạng thiếu gạch chéo:
+
+```nginx
+location ^~ /aiserver.v1. { proxy_pass http://127.0.0.1:8788; … }
+```
+
+`^~` để nó thắng cả khối regex lẫn catch-all. **Đo lại trên app thật với base thiếu gạch chéo:** qua
+được bước cài đặt, hiện "No saved Bots yet" — đúng với kho rỗng trên VPS.
+
 ### Vì sao cấu hình nginx lại hẹp đến thế
 
 Client ghép URL bằng **ba kiểu khác nhau**. Đo trên app thật:

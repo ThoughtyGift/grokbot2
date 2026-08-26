@@ -17,10 +17,14 @@ Mỗi bước ghi rõ **sẽ thấy gì** — vì bốn màn hình dưới đây
 | Đường tải | `https://cinai.app/tai/?k=1bab09366834373317dc8ecb` |
 | Địa chỉ backend | `https://cinai.app/agent/` |
 
-> **Dấu gạch chéo cuối trong địa chỉ backend là bắt buộc.** Không phải để cho đẹp: thiếu nó, ứng dụng
-> ghép địa chỉ theo kiểu tương đối sẽ **làm rụng mất `/agent`**, mọi lời gọi bay ra gốc tên miền và
-> rơi vào trang web của cinAPI. Đo trên ứng dụng thật rồi: có gạch chéo → `/agent/aiserver.v1…`;
-> không có → `/aiserver.v1…`.
+> **Gạch chéo cuối: nên có, nhưng thiếu cũng không sao nữa (sửa 26/08).**
+>
+> Ứng dụng ghép địa chỉ tương đối, nên base thiếu gạch chéo làm **rụng mất `/agent`** và mọi lời gọi
+> bay ra gốc tên miền. Đó chính là màn hình **"Grok Bot couldn't finish setting up · Can't reach your
+> computer"** mà máy 2 gặp: đo được `EnsureSandBox` trả **404**.
+>
+> Bảo người dùng "nhớ gõ dấu gạch chéo" là một cái bẫy chờ nổ lại, nên nginx nay **nhận cả hai
+> dạng**. Đo lại: có gạch chéo **200**, thiếu gạch chéo **200**.
 
 ---
 
@@ -143,7 +147,7 @@ Câu này **không có trong mã nguồn dự án** — `admin.halcion.vn` trả
 | thấy gì | nguyên nhân | cách chữa |
 |---|---|---|
 | File tải về chỉ ~2 MB | Link mất phần `?k=…` | Dán lại link đầy đủ |
-| App báo **"Can't reach your computer"** | `backend.txt` sai | Sửa thành `https://cinai.app/agent/` — **có gạch chéo cuối** |
+| App báo **"couldn't finish setting up · Can't reach your computer"** | `backend.txt` trỏ sai chỗ. *(Trước 26/08 còn do thiếu gạch chéo cuối — nay nginx nhận cả hai dạng, không còn là nguyên nhân)* | Sửa thành `https://cinai.app/agent/` rồi mở lại app |
 | Bấm Sign in mà trình duyệt mở **cursor.com** | Bộ cài dựng trước 26/08 06:00 | Tải lại từ T1 |
 | Đăng nhập xong mà app vẫn ở màn hình Sign in | Phiên đăng nhập quá 10 phút | Bấm Sign in lại, làm lại T3–T4 |
 | Trang đăng nhập **trắng** | Giao diện web trên VPS chưa dựng | Báo lại — cần `pnpm --filter @grokbot2/web build` trên VPS |
