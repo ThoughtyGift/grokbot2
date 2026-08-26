@@ -70,7 +70,7 @@ export const BOOTSTRAP_GATE_METHODS = [
  * Per-request context handed to every bootstrap builder.
  *
  * `user` is decoded from the request's `Authorization` header by the backend (auth.ts
- * `userFromToken`); it is `null` for an unauthenticated call. Threaded but not yet consumed —
+ * `verifyJwt`); it is `null` for an unauthenticated call. Threaded but not yet consumed —
  * builders still return constants (GRANTED, the fixed GetMe). Step ④ is where GetSandAccessStatus
  * reads `ctx.user` to gate on a plan. NOTE for ④: the fixed GetMe returns auth_id `"grokbot2-user"`
  * while a token's `sub` is `"auth0|grokbot2-user"` — the two are NOT interchangeable, so switching

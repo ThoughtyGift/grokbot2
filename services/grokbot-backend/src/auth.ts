@@ -92,9 +92,13 @@ export function mintJwt(user: TokenUser = DEFAULT_USER, opts: MintOptions = {}):
 /**
  * Verify a Bearer JWT's signature and expiry, returning the trusted user or null.
  *
- * This is the ONLY safe source of identity for a shared backend: `userFromToken` merely decodes and
- * would trust a forged `sub`. Owner derivation (index.ts) uses `ownerFromAuth`, which is built on
- * this. A non-JWT bearer (the /gw gateway ticket) fails here and falls back to the default identity.
+ * This is the ONLY source of identity for a shared backend, and it must stay the only one. A second
+ * one existed until 27/08 — `userFromToken`, which merely base64-decoded the payload and therefore
+ * believed whatever `sub` the caller wrote. It was removed after a forged row turned up in the live
+ * users table on the VPS.
+ *
+ * Owner derivation (index.ts) uses `ownerFromAuth`, built on this. A non-JWT bearer (the /gw gateway
+ * ticket) fails here and falls back to the default identity.
  */
 export function verifyJwt(authHeader?: string | string[]): TokenUser | null {
   const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
@@ -191,28 +195,6 @@ export function ownerFromAuth(authHeader?: string | string[]): string {
   return verifyJwt(authHeader)?.authId ?? DEFAULT_USER.authId;
 }
 
-/**
- * Who a request belongs to, from its `Authorization: Bearer <jwt>` header.
- *
- * The payload is READ, not verified — this backend minted the token and the client never checks the
- * signature either (see mintJwt), so decoding `sub`/`email` is all the identity there is. Returns
- * null on anything malformed so a caller can fall back to DEFAULT_USER rather than throw.
- */
-export function userFromToken(authHeader?: string | string[]): TokenUser | null {
-  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  const jwt = raw?.replace(/^Bearer\s+/i, "").trim();
-  const part = jwt?.split(".")[1];
-  if (!part) return null;
-  try {
-    const { sub, email } = JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as {
-      sub?: string;
-      email?: string;
-    };
-    return sub ? { authId: sub, email: email ?? "" } : null;
-  } catch {
-    return null;
-  }
-}
 
 /** Gói token đúng hình dạng app đọc — cả hai lối viết tên, vì client đọc cả hai. */
 export function tokenPayload(user: TokenUser, days = DESKTOP_TOKEN_DAYS): string {

@@ -11,7 +11,7 @@ import { config } from "./config.js";
 // đó — kể cả những module lưu lúc khởi động — đều lưu được. Xem enableWriting trong store.ts.
 import { enableWriting } from "./store.js";
 enableWriting();
-import { handleAuth, userFromToken, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
+import { handleAuth, verifyJwt, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { handleLoginPage, handleAuthPoll, handleAuthApprove } from "./login-page.js";
 import { handleWebApp } from "./web-app.js";
 import { accessVerdict, currentPeriodUsage, billingMode, seedPlans } from "./billing.js";
@@ -297,9 +297,24 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   // Framing and payloads are the ACL's business; this shell only carries bytes. The content type
   // is passed through because it decides the framing — a `connect+` stream has to be answered as
   // one, and the response echoes the request's own type.
-  // Resolve the caller (falling back to the single default identity) so the access gate has a user.
-  // Under GROKBOT2_BILLING off/warn, accessVerdict is always "granted" — this stays inert.
-  const rpcUser = userFromToken(req.headers.authorization) ?? DEFAULT_USER;
+  /*
+   * Danh tính của lượt gọi — **kiểm chữ ký**, không chỉ giải mã.
+   *
+   * Bản trước dùng `userFromToken`, mà hàm đó chỉ base64-decode phần payload: ai gửi lên một JWT bịa
+   * với chữ ký rác cũng được nhận là người mà họ tự khai. Đo trên máy thật 27/08:
+   *
+   *     verifyJwt("...chu-ky-rac")     → từ chối
+   *     userFromToken("...chu-ky-rac") → google-oauth2|user_TU_BIA
+   *
+   * Và `rpcUser` đi thẳng vào `accessVerdict` → `ensureUser`, tức **tạo hẳn một dòng người dùng** cho
+   * danh tính bịa đó. Trên VPS đã có một dòng như thế (`google-oauth2|user_01M04…`, không mật khẩu),
+   * sinh ra lúc 22:44 ngày 26/08 — trong khi backend chưa từng chạy ngoài `enforce`.
+   *
+   * `ownerFromAuth` ngay dưới đây đã kiểm chữ ký từ đầu, nên chỗ này chỉ là một cửa sau bị bỏ quên.
+   * Dùng chung một nguồn danh tính: sai một chỗ thì hỏng cả hai, chứ không phải một chỗ siết một chỗ
+   * mở.
+   */
+  const rpcUser = verifyJwt(req.headers.authorization) ?? DEFAULT_USER;
   const rpc = await runWithOwner(ownerFromAuth(req.headers.authorization), () => handleBootstrapRpc(url, ct, {
     user: rpcUser,
     access: accessVerdict(rpcUser),
