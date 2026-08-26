@@ -91,6 +91,56 @@ function osUserFor(owner) {
 /** Daemon con đang sống, khoá theo tài khoản hệ điều hành. */
 const children = new Map();
 
+/**
+ * Nghỉ lâu hơn mức này thì thu daemon con lại.
+ *
+ * Mỗi con là một tiến trình Node — không lớn, nhưng năm người ngồi không thì vẫn là năm tiến trình
+ * nằm ăn RAM trên một máy chủ đang chạy 17 site khác. Cùng con số và cùng lý lẽ với `IDLE_MS` của
+ * `displays.ts`: mười phút.
+ *
+ * Thu là **an toàn**: lượt gọi sau tự bật lại, và thư mục của người đó vẫn nguyên trên đĩa — chỉ
+ * tiến trình bị thu, không phải dữ liệu.
+ */
+const IDLE_MS = Number(process.env.GROKBOT2_CHILD_IDLE_MS ?? 600_000);
+const SWEEP_MS = Number(process.env.GROKBOT2_CHILD_SWEEP_MS ?? 60_000);
+
+/**
+ * Dừng một daemon con — **qua chính tài khoản của người đó**.
+ *
+ * Hai lần sai trước khi đúng, và cả hai đều im lặng:
+ *
+ * 1. `kill` vào tiến trình `sudo`. Nhưng `sudo` **fork** rồi chờ `node`, nên chỉ một tiến trình chết
+ *    và `node` **mồ côi vẫn ôm cổng**. Log in "đã thu", RAM không trả lại, lượt gọi sau bật daemon
+ *    mới trên cổng đã bị chiếm rồi trả về rỗng — cơ chế thu hồi làm đúng cái ngược với việc của nó.
+ * 2. `detached: true` + `kill(-pid)` để hạ cả nhóm. Cây tiến trình đúng như mong đợi, mà vẫn không
+ *    chết: router chạy dưới `box`, còn `sudo` là của `root` và `node` là của `gb2uNNN`. **`box` không
+ *    có quyền gửi tín hiệu cho tiến trình của người khác** — `kill` trả EPERM và không ai đọc.
+ *
+ * Nên giết qua đúng cái quyền ta có: chạy `pkill` **dưới danh nghĩa người đó**. Khoá theo cả user và
+ * cổng, để không bao giờ chạm vào daemon của người khác.
+ */
+function stopChild(user, c, why) {
+  console.log(`[router] thu daemon ${user} (${why})`);
+  try {
+    execFileSync("sudo", ["-n", "-u", user, "pkill", "-u", user, "-f", `exec-daemon.mjs ${c.port}`],
+                 { stdio: "pipe" });
+  } catch {
+    // `pkill` trả mã 1 khi không khớp gì — tức nó đã chết rồi. Không phải lỗi.
+  }
+  children.delete(user);
+}
+
+/** Thu những daemon nghỉ quá lâu. Nói ra tên, để log trả lời được "sao lượt đó chậm". */
+function reapIdle(now = Date.now()) {
+  for (const [user, c] of [...children]) {
+    if (now - c.lastUsedMs < IDLE_MS) continue;
+    stopChild(user, c, `nghỉ ${Math.round((now - c.lastUsedMs) / 1000)}s`);
+  }
+}
+
+// `unref` để cái hẹn giờ này không giữ tiến trình sống khi mọi thứ khác đã xong.
+setInterval(() => reapIdle(), SWEEP_MS).unref();
+
 const waitPort = (port, ms = 8000) => new Promise((res, rej) => {
   const t0 = Date.now();
   const tick = () => {
@@ -110,7 +160,11 @@ const waitPort = (port, ms = 8000) => new Promise((res, rej) => {
  */
 async function daemonFor(user) {
   const live = children.get(user);
-  if (live && !live.proc.killed && live.proc.exitCode === null) return live.port;
+  if (live && !live.proc.killed && live.proc.exitCode === null) {
+    // Chạm vào mỗi lần dùng, nếu không thì một người đang làm việc liên tục vẫn bị thu sau mười phút.
+    live.lastUsedMs = Date.now();
+    return live.port;
+  }
 
   const port = BASE_PORT + POOL.indexOf(user);
   const home = join("/home", user);
@@ -137,12 +191,14 @@ async function daemonFor(user) {
   ], {
     env: { ...process.env, GROKBOT2_EXEC_TOKEN: TOKEN, GROKBOT2_MEMORY_DIR: memory },
     stdio: ["ignore", "inherit", "inherit"],
+    // Trưởng nhóm riêng, để `kill(-pid)` hạ được cả `sudo` lẫn `node` — xem `stopChild`.
+    detached: true,
   });
   proc.on("exit", (code) => {
     console.log(`[router] daemon ${user} thoát (${code})`);
     children.delete(user);
   });
-  children.set(user, { proc, port });
+  children.set(user, { proc, port, lastUsedMs: Date.now() });
 
   await waitPort(port);
   console.log(`[router] daemon ${user} sẵn sàng ở 127.0.0.1:${port} root=${root}`);
@@ -205,7 +261,7 @@ server.listen(PORT, "127.0.0.1", () => {
 // Tắt router thì tắt luôn daemon con, đừng để lại tiến trình mồ côi giữ cổng.
 for (const sig of ["SIGTERM", "SIGINT"]) {
   process.on(sig, () => {
-    for (const { proc } of children.values()) proc.kill("SIGTERM");
+    for (const [user, c] of children) stopChild(user, c, "router tắt");
     process.exit(0);
   });
 }
