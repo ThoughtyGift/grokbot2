@@ -200,3 +200,27 @@ test("/app/ không cho đi ngang ra ngoài thư mục build", async () => {
     assert.doesNotMatch(Buffer.concat(chunks).toString("utf8"), /GROKBOT2_/, `${path} không được lộ .env`);
   }
 });
+
+test("dưới một nhánh: chuyển hướng phải mang theo nhánh đó", () => {
+  // Trên VPS backend đứng dưới `cinai.app/agent/`, và nginx cắt tiền tố trước khi chuyển tiếp —
+  // nên backend thấy mọi request như ở gốc. Bỏ qua chỗ này thì trình duyệt bị đẩy tới
+  // `cinai.app/app/` và rơi vào Next.js của cinAPI. Đo được ở lượt chạy thật đầu tiên qua Internet.
+  resetDeviceLogins();
+  const prev = process.env.GROKBOT2_PUBLIC_PATH;
+  process.env.GROKBOT2_PUBLIC_PATH = "/agent";
+  try {
+    const { res, out } = fakeRes();
+    handleLoginPage("/loginDeepControl?uuid=u-1&challenge=c-1", res);
+    assert.equal(out.headers.location, "/agent/app/?login_uuid=u-1");
+  } finally {
+    if (prev === undefined) delete process.env.GROKBOT2_PUBLIC_PATH;
+    else process.env.GROKBOT2_PUBLIC_PATH = prev;
+  }
+});
+
+test("không khai nhánh: giữ nguyên hành vi cũ", () => {
+  resetDeviceLogins();
+  const { res, out } = fakeRes();
+  handleLoginPage("/loginDeepControl?uuid=u-2&challenge=c-2", res);
+  assert.equal(out.headers.location, "/app/?login_uuid=u-2");
+});

@@ -12,8 +12,13 @@
  * Bước 2 là chỗ có thật một con người và một mật khẩu. Trước đây không có bước nào như thế: app hỏi
  * `/auth/poll` là được token ngay, nên "đăng nhập" chỉ là một hình vẽ.
  *
- * Trang này dùng lại `/v1/login` đã có từ chặng 2 — scrypt, hãm nhịp theo email+IP, số đời token.
- * Không dựng đường xác thực thứ hai: hai đường xác thực là hai chỗ để sai khác nhau.
+ * Bước 2 KHÔNG có form riêng ở đây. Giao diện đăng nhập đã tồn tại từ trước trong
+ * `apps/grokbot-web` (email + mật khẩu + tạo tài khoản + đăng xuất), nên `/loginDeepControl` chỉ ghi
+ * nhận cặp uuid/challenge rồi **chuyển hướng vào đúng giao diện đó** — xem `web-app.ts`. Dựng form
+ * thứ hai là hai chỗ để sửa và hai chỗ để lệch nhau.
+ *
+ * Xác thực vẫn dùng chung `/v1/login` của chặng 2: scrypt, hãm nhịp theo email+IP, số đời token.
+ * Hai đường xác thực là hai chỗ để sai khác nhau.
  */
 import type { ServerResponse } from "node:http";
 import { DEFAULT_USER, tokenPayload, verifyJwt } from "./auth.js";
@@ -31,9 +36,21 @@ const json = (res: ServerResponse, value: unknown, status = 200): void => {
   res.end(JSON.stringify(value));
 };
 
-/** Thoát HTML — `uuid`/`challenge` đi thẳng từ URL vào trang, nên không được tin. */
-const esc = (s: string): string =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/**
+ * Nhánh mà backend này đứng dưới, nhìn từ ngoài Internet — ví dụ `/agent`.
+ *
+ * Backend **không thể tự biết**: nginx cắt tiền tố trước khi chuyển tiếp (`proxy_pass …:8788/` có
+ * gạch chéo cuối), nên mọi request tới đây đều trông như ở gốc. Đó là điều tốt — không có gì trong
+ * backend phải biết về nginx — trừ **một** chỗ: khi nó tự sinh ra một địa chỉ cho trình duyệt đi tiếp.
+ *
+ * Rỗng là mặc định, tức bản chạy trên máy cá nhân không đổi gì.
+ */
+function publicPath(): string {
+  const raw = (process.env.GROKBOT2_PUBLIC_PATH ?? "").trim();
+  if (!raw || raw === "/") return "";
+  // Chuẩn hoá về dạng `/abc`: khai `agent`, `/agent` hay `/agent/` đều phải ra cùng một thứ.
+  return `/${raw.replace(/^\/+|\/+$/g, "")}`;
+}
 
 /**
  * `GET /loginDeepControl?challenge=…&uuid=…&mode=login&redirectTarget=sand`
@@ -65,8 +82,16 @@ export function handleLoginPage(url: string, res: ServerResponse): void {
    *
    * Chỉ `uuid` đi tiếp, KHÔNG mang `challenge`: giao diện không cần nó, và một giá trị đã nằm sẵn
    * trong bộ nhớ backend thì không có lý do gì phải đi thêm một vòng qua thanh địa chỉ trình duyệt.
+   *
+   * `publicPath()` là chỗ backend học được nó đang đứng dưới nhánh nào — nó **không tự biết**, vì
+   * nginx cắt tiền tố trước khi chuyển tiếp. Bỏ qua chỗ này thì trên VPS trình duyệt bị đẩy tới
+   * `cinai.app/app/` và rơi vào Next.js của cinAPI: đo được ngay lượt chạy thật đầu tiên qua
+   * Internet (26/08), và không có lỗi nào nói vì sao.
    */
-  res.writeHead(302, { location: `/app/?login_uuid=${encodeURIComponent(uuid)}`, "cache-control": "no-store" });
+  res.writeHead(302, {
+    location: `${publicPath()}/app/?login_uuid=${encodeURIComponent(uuid)}`,
+    "cache-control": "no-store",
+  });
   res.end();
 }
 
