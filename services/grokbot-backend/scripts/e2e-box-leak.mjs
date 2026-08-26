@@ -45,8 +45,18 @@ const as = (owner, op, args) => runWithOwner(owner, () => boxCall(op, args));
  */
 const text = (r) => {
   if (typeof r === "string") return r;
-  if (r && typeof r === "object") return String(r.stdout ?? r.content ?? r.text ?? JSON.stringify(r));
-  return String(r);
+  if (!r || typeof r !== "object") return String(r);
+  /*
+   * Khi stdout rỗng thì lấy stderr — nếu không, một bước đậu mà **không có bằng chứng nào**.
+   *
+   * `cat` bị kernel từ chối thì stdout rỗng, và "rỗng không chứa bí mật" nên bài báo KÍN. Đúng kết
+   * luận, nhưng cột chi tiết trống trơn: không phân biệt được "bị từ chối" với "lệnh chạy xong mà
+   * chẳng in gì" — mà cái thứ hai là một bài kiểm vô nghĩa đang giả vờ có ý nghĩa.
+   */
+  const out = String(r.stdout ?? r.content ?? r.text ?? "");
+  if (out.trim()) return out;
+  const err = String(r.stderr ?? "");
+  return err.trim() ? err : (out || JSON.stringify(r));
 };
 
 /**

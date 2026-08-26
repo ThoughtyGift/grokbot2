@@ -12,12 +12,8 @@
  * rather than opening a port to the world.
  */
 import { createServer } from "node:http";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile } from "node:child_process";
 import { readFile, writeFile, readdir, stat, mkdir, rename, unlink } from "node:fs/promises";
-// Sổ ghép người dùng đọc/ghi ĐỒNG BỘ, cố ý: nó nằm trên đường cấp tài khoản, và hai request cùng lúc
-// đọc-rồi-ghi bất đồng bộ thì cấp trùng một tài khoản cho hai người — hỏng cách ly, không báo gì.
-import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, join, relative, isAbsolute, dirname } from "node:path";
 
 const PORT = Number(process.argv[2] ?? process.env.GROKBOT2_EXEC_PORT ?? 1337);
@@ -31,92 +27,13 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-/*
- * ── Tách người dùng theo tài khoản hệ điều hành (chặng 5, tầng 1) ───────────────
- *
- * Hôm nay mọi bot của mọi người chạy dưới cùng một user `box`, cùng đọc một
- * `/home/box/workspace`. Đo được ngày 26/08 bằng `e2e-box-leak.mjs`: **0/6 chỗ kín** — bot của người
- * A đọc, liệt kê, `cat`, và GHI ĐÈ được file của người B.
- *
- * Cách sửa không phải viết thêm kiểm tra trong code này, mà là **để kernel làm việc đó**: mỗi người
- * một tài khoản hệ điều hành, mỗi tài khoản một thư mục 700. Một lỗi trong daemon cũng không mở được
- * file của người khác, vì Linux từ chối.
- *
- * `GROKBOT2_PER_USER` là công tắc, và mặc định TẮT: box đang chạy thật, nên bản này phải bật được
- * sau khi đã đo chứ không đổi hành vi ngay khi cài.
- *
- * Cần trước (bước 0, làm một lần bằng root — xem docs/plan/per-user-on-one-box.md):
- *   groupadd gb2users · useradd -m -g gb2users gb2uNNN · chmod 700 /home/gb2uNNN
- *   /etc/sudoers.d/grokbot2:  box ALL=(%gb2users) NOPASSWD: ALL
- */
-const PER_USER = (process.env.GROKBOT2_PER_USER ?? "").trim() === "1";
-
 /**
- * Sổ ghép người dùng grokbot2 → tài khoản hệ điều hành.
- *
- * `/var/lib/grokbot2` chứ không phải `/opt`: daemon chạy dưới `box`, và `/opt` thuộc root — bản đầu
- * đặt ở đó nên lượt cấp tài khoản đầu tiên chết với `EACCES`. Thư mục này phải do `box` sở hữu, mode
- * 700 (bước 0 dựng nó).
- *
- * Không nằm trong home của người dùng nào: nó là sổ của cả hệ, và để trong home ai thì người đó đọc
- * được ai đang dùng tài khoản nào.
- */
-const MAP_FILE = process.env.GROKBOT2_USER_MAP ?? "/var/lib/grokbot2/users.json";
-
-/**
- * Tài khoản hệ điều hành của một người — cấp từ dải đã tạo sẵn, ghi vào sổ để lần sau vẫn thế.
- *
- * KHÔNG băm owner ra số: hai người trùng ô băm sẽ dùng chung một tài khoản, và đó là **hỏng cách ly
- * mà không có dấu hiệu nào**. Sổ thì trùng là thấy ngay.
- *
- * Hết dải thì ném lỗi. Không lùi về `box`: lùi về nghĩa là im lặng bỏ cách ly đúng lúc cần nó nhất.
- */
-function osUserFor(owner) {
-  const key = String(owner ?? "").trim();
-  if (!key) throw new Error("per-user mode: request carried no owner");
-
-  let map = {};
-  try { map = JSON.parse(readFileSync(MAP_FILE, "utf8")); } catch { /* sổ chưa có */ }
-  if (map[key]) return map[key];
-
-  const taken = new Set(Object.values(map));
-  const free = (process.env.GROKBOT2_USER_POOL ?? "gb2u001,gb2u002,gb2u003,gb2u004,gb2u005")
-    .split(",").map((s) => s.trim()).filter(Boolean)
-    .find((u) => !taken.has(u));
-  if (!free) throw new Error(`per-user mode: pool exhausted (${taken.size} in use) — create more gb2u* accounts`);
-
-  map[key] = free;
-  writeFileSync(MAP_FILE, `${JSON.stringify(map, null, 2)}\n`);
-  console.error(`[exec-daemon] owner ${key} -> ${free}`);
-  return free;
-}
-
-/**
- * Ai đang gọi, cho suốt một request — không phải truyền qua 13 handler.
- *
- * Cùng khuôn với `request-context.ts` ở backend, và cùng lý do: thêm một tham số `owner` vào mọi
- * handler thì chỗ nào quên truyền sẽ **im lặng rơi về mặc định**, tức im lặng bỏ cách ly. Kho theo
- * request thì chỗ quên là chỗ nổ.
- */
-const ctx = new AsyncLocalStorage();
-
-/** Thư mục gốc của request hiện tại: của riêng người gọi khi bật tách, còn không thì ROOT chung. */
-const rootOf = () => ctx.getStore()?.root ?? ROOT;
-
-/** Tài khoản hệ điều hành phải chạy dưới, hoặc `null` khi chưa bật tách. */
-const userOf = () => ctx.getStore()?.user ?? null;
-
-/**
- * Keep every path inside the request's root. A traversal check on the *resolved* path is the only
+ * Keep every path inside ROOT. A traversal check on the *resolved* path is the only
  * one that holds — checking the raw string lets `a/../../etc` through.
- *
- * Khi bật tách, gốc này là `/home/gb2uNNN/workspace` — nên phép chặn đi-ngang sẵn có tự thành phép
- * chặn giữa người với người, không phải thêm luật mới.
  */
 function safePath(p) {
-  const root = rootOf();
-  const abs = isAbsolute(p ?? "") ? resolve(p) : resolve(root, p ?? ".");
-  const rel = relative(root, abs);
+  const abs = isAbsolute(p ?? "") ? resolve(p) : resolve(ROOT, p ?? ".");
+  const rel = relative(ROOT, abs);
   if (rel.startsWith("..") || isAbsolute(rel)) throw new Error(`path escapes root: ${p}`);
   return abs;
 }
@@ -129,19 +46,9 @@ const clip = (s) =>
 const SHELL = process.env.GROKBOT2_EXEC_SHELL ?? "/bin/bash";
 
 /** Run through bash so pipes and globs behave as the model expects. */
-/**
- * Chạy lệnh dưới tài khoản hệ điều hành nào — `null` là dưới chính daemon, như trước.
- *
- * `sudo -n`: không bao giờ hỏi mật khẩu. Không có quyền thì thất bại NGAY và thấy được, chứ không
- * treo chờ một dấu nhắc mà không ai gõ vào được.
- */
-const asUser = (user, command) =>
-  user ? ["sudo", ["-n", "-u", user, SHELL, "-lc", command]] : [SHELL, ["-lc", command]];
-
-const sh = (command, cwd, timeout, user = null) =>
+const sh = (command, cwd, timeout) =>
   new Promise((res) => {
-    const [bin, argv] = asUser(user, command);
-    execFile(bin, argv, { cwd, timeout, maxBuffer: MAX_OUTPUT * 2, killSignal: "SIGKILL" },
+    execFile(SHELL, ["-lc", command], { cwd, timeout, maxBuffer: MAX_OUTPUT * 2, killSignal: "SIGKILL" },
       (err, stdout, stderr) => {
         const out = clip(String(stdout ?? ""));
         const errOut = clip(String(stderr ?? ""));
@@ -193,19 +100,14 @@ const handlers = {
   },
 
   async health() {
-    const { stdout } = await sh("uname -a; echo; df -h / | tail -1", rootOf(), 10_000, userOf());
-    return {
-      ok: true, root: rootOf(), display: process.env.DISPLAY ?? null, info: stdout.trim(),
-      // Nói rõ đang chạy dưới tài khoản nào: một lần `health` là biết tách đã bật thật hay chưa,
-      // thay vì đoán từ hành vi.
-      osUser: userOf() ?? "(chung)", perUser: PER_USER,
-    };
+    const { stdout } = await sh("uname -a; echo; df -h / | tail -1", ROOT, 10_000);
+    return { ok: true, root: ROOT, display: process.env.DISPLAY ?? null, info: stdout.trim() };
   },
 
   // run_terminal_command_v2
   async exec({ command, cwd, timeoutMs }) {
     if (typeof command !== "string" || !command.trim()) throw new Error("command required");
-    return sh(command, safePath(cwd ?? "."), Math.min(Number(timeoutMs) || DEFAULT_TIMEOUT, 300_000), userOf());
+    return sh(command, safePath(cwd ?? "."), Math.min(Number(timeoutMs) || DEFAULT_TIMEOUT, 300_000));
   },
 
   /**
@@ -378,22 +280,7 @@ const server = createServer((req, res) => {
     // on the way in looks identical to a tool that simply found nothing.
     if (process.env.GROKBOT2_EXEC_LOG) console.error(`[exec-daemon] ${name} ${JSON.stringify(args).slice(0, 300)}`);
     try {
-      /*
-       * Ai đang gọi — backend gửi trong header `x-grokbot2-owner`.
-       *
-       * Header chứ không phải một trường trong thân: thân là **tham số của công cụ**, do model điền.
-       * Nhét danh tính vào đó thì một ngày nào đó model sẽ điền nó — và "tự chọn mình là ai" đúng là
-       * thứ tầng này tồn tại để ngăn.
-       */
-      if (!PER_USER) { send(200, await fn(args)); return; }
-
-      const user = osUserFor(req.headers["x-grokbot2-owner"]);
-      const root = join("/home", user, "workspace");
-      // Tạo gốc DƯỚI DANH NGHĨA người đó, để thư mục thuộc về họ chứ không thuộc `box`. `mkdir -p`
-      // nên gọi lại bao nhiêu lần cũng được.
-      const made = await sh(`mkdir -p ${JSON.stringify(root)} && chmod 700 ${JSON.stringify(root)}`, "/", 10_000, user);
-      if (made.exitCode !== 0) throw new Error(`không tạo được gốc của ${user}: ${made.stderr.trim() || made.stdout.trim()}`);
-      send(200, await ctx.run({ user, root }, () => fn(args)));
+      send(200, await fn(args));
     } catch (e) {
       if (process.env.GROKBOT2_EXEC_LOG) console.error(`[exec-daemon] ${name} ERROR ${String(e?.message ?? e).slice(0, 200)}`);
       send(200, { error: String(e?.message ?? e) });
