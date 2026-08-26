@@ -9,6 +9,8 @@
  * service does (ROADMAP §5.5). A set URL that is down is `computer down`, not a silent hop to
  * the daemon.
  */
+import { currentOwner } from "./request-context.js";
+
 const daemonBase = (): string => process.env.GROKBOT2_BOX_EXEC_URL ?? "";
 const computerBase = (): string => (process.env.GROKBOT2_COMPUTER_URL ?? "").replace(/\/$/, "");
 const TOKEN = (): string => process.env.GROKBOT2_EXEC_TOKEN ?? "";
@@ -59,7 +61,18 @@ async function viaDaemon<T>(op: string, args: Record<string, unknown>): Promise<
   try {
     const res = await fetch(`${BASE.replace(/\/+$/, "")}/${op}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...(TOKEN() ? { authorization: `Bearer ${TOKEN()}` } : {}) },
+      headers: {
+        "content-type": "application/json",
+        ...(TOKEN() ? { authorization: `Bearer ${TOKEN()}` } : {}),
+        /*
+         * Ai đang gọi. Box dùng nó để chạy lệnh dưới tài khoản hệ điều hành của đúng người đó
+         * (chặng 5, tầng 1) — xem `infra/vps/exec-daemon.mjs`.
+         *
+         * Gửi kể cả khi box chưa bật tách: một header dư thì bị bỏ qua, còn thiếu nó lúc box đã bật
+         * thì mọi công cụ hỏng cùng lúc. Rẻ hơn nhiều so với một cờ phải nhớ đồng bộ ở hai đầu.
+         */
+        "x-grokbot2-owner": currentOwner(),
+      },
       body: JSON.stringify(args),
       signal: ctl.signal,
     });
