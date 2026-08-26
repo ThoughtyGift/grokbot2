@@ -41,6 +41,23 @@ function configPathFor(owner: string): string {
 const installsPath = (owner: string): string =>
   join(DATA_DIR, "plugin-installs", `${owner.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
+/**
+ * Cài thêm plugin — cho phép trên máy của mình, **không** trên máy dùng chung.
+ *
+ * "Cài một plugin" ở đây nghĩa là ghi một dòng `command` vào cấu hình MCP, rồi lần gọi công cụ sau đó
+ * backend **spawn tiến trình** đó. Trên máy cá nhân thì đó là điều bình thường: người dùng đã toàn
+ * quyền trên máy của họ rồi, plugin không cho họ thêm quyền nào mới.
+ *
+ * Trên một VPS dùng chung thì khác hẳn: tiến trình đó chạy cạnh những dịch vụ khác, đọc được cùng
+ * đĩa, và người cài nó không phải chủ máy. Nên mặc định là **cho phép** (bản cài trên máy cá nhân
+ * không đổi hành vi), và bản trên VPS khai `GROKBOT2_ALLOW_PLUGIN_INSTALL=0`.
+ *
+ * Tắt thì các plugin đã khai sẵn trong cấu hình **vẫn chạy** — chỉ chặn việc thêm cái mới qua giao diện.
+ */
+export function pluginInstallAllowed(): boolean {
+  return (process.env.GROKBOT2_ALLOW_PLUGIN_INSTALL ?? "1").trim() !== "0";
+}
+
 export function installedIds(owner: string = currentOwner()): number[] {
   try {
     const raw = JSON.parse(readFileSync(installsPath(owner), "utf8"));
@@ -62,6 +79,8 @@ export function installPlugin(
   owner: string = currentOwner(),
   values: Record<string, string> = {},
 ): boolean {
+  // Máy chung thì không cho ai tự cài thêm — xem `pluginInstallAllowed`.
+  if (!pluginInstallAllowed()) return false;
   // The catalog decides what exists and what it installs — see plugin-catalog.ts (file or URL).
   if (!isKnownPlugin(pluginId)) return false;
 
