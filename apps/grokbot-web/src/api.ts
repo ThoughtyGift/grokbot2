@@ -27,6 +27,31 @@ import type {
 
 export type { NativeAgent, NativeEntry, NativeWidget, NativeWidgetOption, ComputerStatus, SidebarSection, UiPrefs, Routine, SearchHit, Plugin };
 
+/**
+ * Tiền tố đường dẫn của backend, suy ra từ chính chỗ trang này đang đứng.
+ *
+ * Trang chạy ở hai nơi: `/` trên Vite khi phát triển, và `<tiền tố>/app/` khi backend phát nó —
+ * trên VPS thì tiền tố đó là `/agent`, vì grokbot2 nằm dưới `cinai.app/agent/` (kế hoạch hợp nhất, P5).
+ * Gọi thẳng `/v1/…` thì ở đó nó bay ra **gốc tên miền**, trúng vào Next.js của cinAPI chứ không tới
+ * backend — và cách chữa bằng nginx là chiếm `/v1/` trên tên miền của họ, một lời đòi rất rộng cho
+ * một thứ chỉ cần ở dưới một nhánh.
+ *
+ * `…/app/` là mốc duy nhất cần: cắt từ đó trở đi là ra tiền tố. Ở Vite không có `/app/` nên ra chuỗi
+ * rỗng, tức giữ nguyên hành vi cũ.
+ */
+const BASE = /\/app\//.test(location.pathname)
+  ? location.pathname.replace(/\/app\/.*$/, "")
+  : "";
+
+/**
+ * `fetch` của module này — cùng chữ ký, có thêm tiền tố.
+ *
+ * Đặt đúng tên `fetch` là cố ý: 32 chỗ gọi bên dưới không phải sửa, và một chỗ gọi mới viết theo
+ * thói quen cũ cũng tự đúng. Muốn gọi ra ngoài thật thì dùng `globalThis.fetch`.
+ */
+const fetch = (path: string, init?: RequestInit): Promise<Response> =>
+  globalThis.fetch(`${BASE}${path}`, init);
+
 // Persisted so a reload keeps the account signed in (multi-tenant Phase 4). The token is a signed
 // user JWT from /v1/login; every /v1 call carries it, and the backend derives the owner from it.
 let token = localStorage.getItem("grokbot2.token") ?? "";
