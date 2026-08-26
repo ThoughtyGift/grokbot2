@@ -337,6 +337,39 @@ mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện gi
 
 ---
 
+## 3f · Khoá pool có lộ được không — đo 27/08
+
+Câu hỏi: *"máy khác tải app về có nhìn thấy khoá không?"* Ba đường một khoá có thể lộ, đo cả ba.
+
+| đường | kết quả |
+|---|---|
+| Đi kèm bộ cài | **kín** — bộ cài chỉ chép client + launcher + icon; không `Source:` nào là file khoá |
+| Đi qua dây về app | **kín** — chỉ `loadPoolKey()` đọc khoá, 3 nơi gọi đều phía máy chủ; 5 file phục vụ HTTP không chạm |
+| Lọt vào log | **che** — `redact` bắt `hal_…` trong header, giữa dòng có nhãn, trong JSON, trong query |
+
+**App trên máy người dùng không bao giờ cầm khoá.** Nó gửi yêu cầu tới backend; backend mới gắn khoá
+rồi gọi pool. Khoá một đầu, app đầu kia.
+
+`pool-key-exposure.test.ts` (8/8) khoá cả ba. Trước đó **chưa từng có bài kiểm nào cho `redact`** —
+chỉ có mẫu che, không ai kiểm nó thật sự che.
+
+> **Một câu tôi nói SAI, và đã đo lại.** Tôi bảo *"bot chạy shell được, nếu backend và bot chung tài
+> khoản thì bot đọc được `.env`"*. Đo thật:
+>
+> | | |
+> |---|---|
+> | backend VPS chạy dưới | `root` |
+> | daemon box chạy dưới | `box` |
+> | `/opt/grokbot2/.env` | `-rw------- root:root` |
+> | bot thật `cat` file đó | **`Permission denied`** |
+> | bot tìm file `*.env` / `pool-key.txt` trong tầm với | **không có cái nào** |
+> | bot đọc `/proc/*/environ` tìm `hal_` | **0 kết quả** |
+>
+> Hai tài khoản đã khác nhau từ trước, nên mối lo đó **không tồn tại**. Tôi đã nêu nó như một sự thật
+> trong khi chưa đo — đúng cái lỗi mà tài liệu này tồn tại để tránh.
+
+---
+
 ## 3e · Lỗ danh tính bịa — ✅ **bịt 27/08**
 
 Máy 2 vào thẳng app không qua đăng nhập. Đo ra thì **không phải cổng hở**: `/auth/poll` trả 403,
