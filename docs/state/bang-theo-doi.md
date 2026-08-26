@@ -16,17 +16,17 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 | **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
 | **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
 | **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
-| **Kiểm thử** | 31 file unit (**303 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
-| **Chưa mở ra ngoài** | cả 4 cổng nghe `127.0.0.1`. **Lỗ `/oauth/token` đã bịt** (26/08) — xem §3b. Còn vướng: dữ liệu cũ chưa đổi chủ sở hữu |
+| **Kiểm thử** | 34 file unit (**310 bài**) · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
+| **Đã ra Internet** | `https://cinai.app/agent/` — BE chạy trên VPS sau nginx, **không phơi cổng nào**. Máy này vẫn chạy bản riêng ở `127.0.0.1` |
 
 **Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
 🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
-🟡 **4 đưa BE ra ngoài** (đăng nhập thật xong 26/08 — xem §3b; còn chuyển quyền dữ liệu cũ + VPS) ·
+✅ **4 đưa BE ra ngoài** (26/08: đăng nhập thật §3b · BE trên VPS qua HTTPS §3d) ·
 ⬜ 5 tách user trên box · ⬜ 6 FE.
 
-**Đọc một dòng nếu chỉ đọc một dòng:** dọn xong, tiền đo được, đăng nhập đã siết, app đóng gói giống
-hãng. Mảnh cuối để máy thứ hai **chat được** (không chỉ tải) là **chặng 4** — đưa backend ra khỏi
-`127.0.0.1`.
+**Đọc một dòng nếu chỉ đọc một dòng:** backend đã sống trên Internet tại `https://cinai.app/agent/`
+với đăng nhập thật. Việc còn lại để máy thứ hai dùng được là **cài app trên máy đó** và trỏ vào địa
+chỉ ấy — không còn hạ tầng nào phải dựng.
 
 ---
 
@@ -219,7 +219,7 @@ sai. `install.log` chỉ ra: **Git Bash biến `/VERYSILENT` thành đường d�
 bộ cài không nhận cờ nên mở wizard chờ bấm. Chạy đúng: `MSYS_NO_PATHCONV=1`, hoặc qua một file `.cmd`,
 hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Người dùng cuối không gặp lỗi này.
 
-### Chặng 4 · Đưa BE ra khỏi máy cá nhân — 🟡 **5/7 xong · 4.3 và 4.5 CHƯA**
+### Chặng 4 · Đưa BE ra khỏi máy cá nhân — ✅ **XONG 26/08 · BE sống trên VPS qua HTTPS**
 
 | # | việc | kiểm bằng | kết quả |
 |---|---|---|---|
@@ -229,8 +229,9 @@ hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Ngư
 | 4.4 | ✅ `host_settings` theo người | `host-settings.test.ts` | hai người hai múi giờ không đè nhau; cài đặt máy vẫn chung |
 | 4.6 | ✅ Bịt lỗ `/oauth/token` + đăng nhập thật | §3b | đo đầu-cuối qua HTTP · 403/403/200/403 |
 | 4.7 | ✅ Sửa lối mở trỏ đăng nhập sang **máy chủ hãng** | `launcher-env.test.ts` | 3/3 — xem ô dưới |
-| 4.3 | ❌ **HTTPS — CHƯA** | `curl -I https://103.75.186.63:8099/` | **000**, không có TLS · cổng 8099 chỉ HTTP |
-| 4.5 | ❌ **T6 — CHƯA** | `curl http://103.75.186.63:8099/v1/health` | **404** — VPS mới chỉ có **trang tải**, chưa có backend |
+| 4.3 | ✅ **HTTPS** | `curl https://cinai.app/agent/v1/health` | **200** · TLS do Cloudflare Tunnel, **không cần certbot** |
+| 4.5 | ✅ **BE trên VPS** | `systemctl is-active grokbot2-be` | **active** · luồng đăng nhập 9/9 bước qua Internet |
+| 4.8 | ⬜ Máy 2 trỏ vào `https://cinai.app/agent/` | mở app máy 2 | *chờ bạn cài trên máy 2* |
 
 **Cách mở an toàn (một lệnh):**
 ```
@@ -247,6 +248,74 @@ nơi qua IP LAN.
 > mở `https://cursor.com/loginDeepControl?challenge=…&uuid=…`: trình duyệt vào trang của **họ**, đăng
 > nhập không bao giờ xong, và uuid + challenge của phiên trên máy người dùng bị giao cho họ. Nay cả
 > ba chỗ trỏ vào chính backend, và `launcher-env.test.ts` đọc thẳng các tệp phát ra để khoá lại.
+
+---
+
+## 3d · BE trên VPS — ✅ **dựng xong 26/08**
+
+**Đang sống:** `https://cinai.app/agent/` — đo được từ Internet, không phải ước.
+
+### Nằm ở đâu, và vì sao ở đó
+
+| | |
+|---|---|
+| Mã nguồn | `/opt/grokbot2` (đẩy bằng `git archive`, **không** đặt khoá GitHub lên VPS) |
+| Dịch vụ | `grokbot2-be.service` — systemd, `Restart=always` |
+| Nghe ở | **`127.0.0.1:8788`** — không có cổng công khai nào để dò |
+| Ra Internet | nginx `cinai-app` → `/agent/` · HTTPS do **Cloudflare Tunnel**, không cần certbot |
+| Kho | SQLite **rỗng**, riêng của VPS — máy cá nhân không bị đụng |
+| Plugin | `GROKBOT2_ALLOW_PLUGIN_INSTALL=0` — máy chung thì không cho ai spawn tiến trình |
+
+### Đo trên chính hệ đang chạy
+
+Toàn bộ luồng đăng nhập thiết bị, chạy qua Internet:
+
+| bước | kết quả |
+|---|---|
+| hỏi vòng trước khi mở trình duyệt | **403** |
+| `/loginDeepControl` | **302 → `/agent/app/?login_uuid=…`** |
+| tạo tài khoản đầu tiên · đăng nhập | **200 · 200** |
+| trang duyệt phiên | **200** |
+| kẻ khác đoán verifier | **403** |
+| app nhận token | **200**, đúng `authId` |
+| đọc roster bằng token đó | **200** |
+| hỏi lại lần hai | **403** |
+
+Và trang đăng nhập mở được **trong trình duyệt thật** ở `https://cinai.app/agent/app/` — không trắng.
+
+### Ba lỗi chỉ lộ ra khi chạy thật
+
+1. **Kho sạch không build được.** `pnpm --filter @grokbot2/web build` không dựng `api-contract`
+   trước, nên kiểu thành `any` và `tsc` đỏ. Máy cá nhân không thấy vì `dist/` cũ còn đó — đúng kiểu
+   "chạy được trên máy tôi". Trên VPS phải `pnpm -r --filter './packages/*' build` trước.
+2. **Giao diện web gọi `/v1/…` tuyệt đối**, nên dưới `/agent/` nó bay ra gốc tên miền và rơi vào
+   Next.js của cinAPI. Chữa bằng nginx thì phải chiếm `/v1/` trên tên miền của họ — quá rộng. Nay FE
+   tự suy tiền tố từ chỗ nó đang đứng.
+3. **Chuyển hướng đăng nhập mất nhánh.** nginx cắt tiền tố trước khi chuyển tiếp nên backend thấy
+   mọi request như ở gốc, và nó trả `302 → /app/…` — trình duyệt đi thẳng vào Next.js của cinAPI,
+   **không lỗi nào nói vì sao**. `GROKBOT2_PUBLIC_PATH` là chỗ backend được *bảo* nó đứng ở đâu.
+
+### Vì sao cấu hình nginx lại hẹp đến thế
+
+Client ghép URL bằng **ba kiểu khác nhau**. Đo trên app thật:
+
+- base **có gạch chéo cuối** → mọi RPC giữ nguyên `/agent/`
+- nhưng **đường dẫn tuyệt đối** luôn bay ra gốc, dù base là gì
+
+Danh sách đường tuyệt đối lấy từ chính bản dựng của client (mọi `new URL("/…")`), nên nó **đóng và
+ngắn** — 5 đường. Cấu hình vì thế chỉ cần **một nhánh `/agent/` + một khối regex 5 đường**, thay vì
+chiếm hàng loạt tiền tố trên tên miền của cinAPI.
+
+**Chạm vào nginx an toàn ra sao:** sao lưu trước → `nginx -t` → `reload` (không restart) → đối chiếu
+`diff`: **0 dòng bị xoá, 39 dòng thêm** → kiểm lại 7 site đang chạy, cinai.app vẫn chuyển hướng i18n
+như cũ.
+
+### Chưa khai, có ý
+
+`CLAUDE_POOL_KEY` (bộ não) và `GROKBOT2_EXEC_TOKEN` (công cụ chạy trên box) **chưa đặt** — không bí
+mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện giao diện được, nhưng **chưa trả lời
+được**. Muốn đủ chức năng thì thêm hai dòng đó vào `/opt/grokbot2/.env` rồi
+`systemctl restart grokbot2-be`.
 
 ---
 
