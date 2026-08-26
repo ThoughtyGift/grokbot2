@@ -677,18 +677,31 @@ Còn **58 bộ e2e** khác trong `scripts/`; bảng này chỉ liệt kê nhữn
 | **5 · Tách user** | `e2e-box-tools` + `e2e-desktop` + `test-real-box` |
 | **6 · FE** | `e2e-routine-ui` + `e2e-routines` |
 
-### ⚠ Chặn thật hiện nay: **pool trả về "Your group's usage limit is set to $0"**
+### ~~Chặn: pool $0~~ — ✅ **HẾT từ 27/08, và tôi đã báo sai**
 
-Mọi bài E2E cần **agent trả lời** đều dừng ở đây, không phải lỗi code. Đo 26/08:
+Suốt hai ngày tôi nói việc này chặn mọi bài E2E cần agent trả lời, và nói bạn phải "nâng hạn mức
+pool". **Đo lại 27/08 thì không còn đúng**, mà cũng chưa chắc từng đúng theo cách tôi mô tả:
 
-| bài | kết quả | bước đỏ |
-|---|---|---|
-| `e2e-app-full` | 12/16 | *"the reply RENDERS"* · *"a tool actually ran against the box"* — cả hai in ra chính câu trên |
-| `e2e-mcp-plugin` | 1/3 | agent không gọi được tool — cùng câu đó |
+| đo | kết quả |
+|---|---|
+| Gọi thẳng `admin.halcion.vn/v1/claude` bằng khoá `Grokbot2` | **HTTP 200** · `success:true` · `keyName:"Grokbot2"` |
+| Backend khởi động | `[model] claude-opus-5 honours TOOL_CALL — tools available` |
+| Gửi một lượt thật qua `/v1/agents/:id/turns` | **202** → bot trả lời **`"XONG"`** |
 
-Chuỗi `"Your group's usage limit is set to $0"` **không có trong kho này** (đã tìm) — nó do
-`admin.halcion.vn` trả về. Tức là hạn mức của nhóm trên pool đang là **0 đô** — việc của tài khoản,
-không sửa được bằng commit. **Nâng hạn mức xong mới đóng được các bước đó.**
+Thông điệp `$0` lần cuối xuất hiện trong nhật ký là **25/08**. Bảng admin cho thấy khoá `Grokbot2`
+vẫn chạy đều: **1.352 request/tuần**, lần cuối 05:55 ngày 27/08.
+
+> **Hai lỗi của tôi trong lúc truy việc này, ghi lại vì cả hai đều là "đọc sai rồi kết luận":**
+>
+> 1. Tôi bảo `pool-key.txt` không có khoá thật, vì nhìn dòng 2 thấy bắt đầu bằng `API-key-HALCION…`.
+>    Thực ra `config.ts` dùng `/hal_[A-Za-z0-9]{24,}/` **rút khoá ra từ giữa dòng** — có khoá thật,
+>    52 ký tự, đúng key `Grokbot2`. Tôi đọc đầu dòng thay vì chạy chính phép rút của code.
+> 2. Bài kiểm chat đầu tiên của tôi báo "hết giờ chờ, chưa thấy trả lời". Sai vì nó đọc cột `text`,
+>    mà bảng `entries` lưu ở cột **`body`**. Bot đã trả lời trong 3 giây. **Một bài kiểm đọc sai chỗ
+>    thì im lặng y hệt một hệ thống hỏng** — và tôi suýt báo cáo cái im lặng đó là sự thật.
+
+**Vẫn cần đo lại `e2e-app-full` và `e2e-mcp-plugin`** để biết 12/16 và 1/3 hôm nay còn đỏ ở đâu — có
+thể là lý do khác, không phải hạn mức.
 
 Phần **không** cần model thì xanh hết: tạo bot · hiện lên thanh bên 269 ms · mở bằng chuột ·
 gõ vào ô soạn · lời nhắn tới backend · avatar HTTP 200 · pane máy tính có trạng thái.
