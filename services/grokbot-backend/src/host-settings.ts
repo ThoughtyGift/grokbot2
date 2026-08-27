@@ -25,6 +25,24 @@ import { currentOwner } from "./request-context.js";
  */
 const PER_USER_KEYS = new Set(["userTimeZone", "notifications", "hasSeenOnboarding"]);
 
+/**
+ * Gỡ khoá-theo-người ra khỏi blob dùng chung khi nạp — **bản vá cho máy đã chạy bản cũ**.
+ *
+ * Sửa mặc định thành `false` chỉ cứu được một kho TRỐNG. Backend nào đã chạy bản cũ thì trong
+ * `state.json` còn nguyên `hasSeenOnboarding: true` ở mức dùng chung, do chính app ghi xuống hồi
+ * nó còn là cài đặt của máy. Giá trị đó đè lên mặc định mãi mãi, nên mọi người MỚI vẫn bị coi là
+ * "đã xem" và vẫn mất phần giới thiệu — đúng triệu chứng đã đo trên máy thứ hai, chỉ là bản vá
+ * trước chưa với tới. VPS và máy này đều đang ở tình trạng đó.
+ *
+ * Cái giá: người đã dùng thật sẽ xem lại phần mở đầu đúng một lần, và múi giờ về mặc định cho
+ * tới lần app gửi lên kế tiếp. Rẻ hơn nhiều so với việc mọi người mới đều mất phần mở đầu.
+ */
+function withoutPerUserKeys(saved: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(saved)) if (!PER_USER_KEYS.has(k)) out[k] = v;
+  return out;
+}
+
 const settings: Record<string, unknown> = {
   notifications: { isEnabled: false },
   mcpCustomInstructions: "",
@@ -49,7 +67,7 @@ const settings: Record<string, unknown> = {
   hasSeenOnboarding: false,
   uiByOwner: {},   // bố cục theo từng chủ sở hữu — xem `patchUiPrefs` ở cuối file
   byOwner: {},     // khoá theo người (múi giờ, thông báo) — xem PER_USER_KEYS
-  ...(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults
+  ...withoutPerUserKeys(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults
 };
 
 bindHostSettings(() => settings);   // so settings save alongside agents/transcripts
