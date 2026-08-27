@@ -10,24 +10,27 @@ Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
 
 ## 1 · Hôm nay đang ở đâu
 
+*Số đo lại ngày **27/08**. Bản trước ghi ngày 25–26/08 và đã lệch khá xa — chép lại đây thay vì sửa
+từng dòng, và ghi cả con số cũ để thấy nó trôi bao nhiêu.*
+
 | | |
 |---|---|
-| **Backend** | 4 tiến trình · 15.687 dòng TS · 29 route `/v1` · 120 lệnh cổng (103 đã gọi thật) |
-| **Dữ liệu** | 14 bảng · 2.036 tin nhắn · 8 bot · 8 routine · **10 bảng có `owner_id`** |
-| **Bot** | 60 công cụ · 4 loại thợ phụ · màn hình ảo 1920×1080 trên box |
-| **Trang tải** | `/` + `/download/windows` (**bản chở app 118 MB**) + bản cấu hình 2 MB + macOS; phát cho máy LAN khác bằng `serve-site.mjs` |
-| **Kiểm thử** | 34 file unit (**310 bài**) · e2e chặng 4 **28/28** · thử rò box **7/8** · 58 bộ e2e · máy đo tự động **9/9 xanh** *(26/08)* |
-| **Đã ra Internet** | `https://cinai.app/agent/` — BE chạy trên VPS sau nginx, **không phơi cổng nào**. Máy này vẫn chạy bản riêng ở `127.0.0.1` |
+| **Backend** | **20.693** dòng TS *(bảng cũ: 15.687)* · **134** lệnh cổng *(cũ: 120)* · 21 lệnh đã gọi thật trên VPS, **0 lệnh chưa có mapping** |
+| **Kiểm thử** | **37** file unit / **337 bài** *(cũ: 34 file / 310 bài)* · **61** bộ e2e *(cũ: 58)* |
+| **Hai backend đang sống** | máy này `127.0.0.1:8788` · VPS `https://cinai.app/agent/` — cả hai trả 200 |
+| **Cờ trên VPS** | `AUTH=enforce` · `BILLING=warn` · `ALLOW_REGISTER=1` · `ALLOW_PLUGIN_INSTALL=1` · `PER_BOT_DISPLAY=off` · `BIND=127.0.0.1` |
+| **Tài khoản thật** | 2 người có mật khẩu: `phamduykhanh0209@` (máy 1/2) · `ngoclongdz96@` (máy 3) |
+| **Danh tính trên đường `/gw`** | `user-ticket: 152` · `matching-bearer: 70` — **vé theo người đã chiếm phần lớn lưu lượng thật**, tức app đã khởi động lại và đang dùng nó |
 
-**Tiến độ theo chặng (26/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
-🟡 3 máy thứ hai (T1 xong · bộ cài chở app + trang tải LAN xong · T2–T5 chờ máy sạch) ·
-✅ **4 đưa BE ra ngoài** (26/08: đăng nhập thật §3b · BE trên VPS qua HTTPS §3d) ·
-🟡 **5 tách user trên box** (**đã BẬT trên box thật 27/08 · 7/8 kín** · còn cờ trình duyệt) ·
-⬜ 6 FE.
+**Tiến độ theo chặng (27/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
+✅ **3 máy thứ hai VÀ thứ ba** (máy 3 tải app, đăng ký, đăng nhập, chạy thật qua Internet) ·
+✅ **4 đưa BE ra ngoài** · 🟡 **5 tách người dùng trên box** (7/8 kín; cờ màn-riêng đã **TẮT lại**
+27/08 vì màn riêng không có VNC — xem N17) · ⬜ 6 FE riêng.
 
-**Đọc một dòng nếu chỉ đọc một dòng:** backend đã sống trên Internet tại `https://cinai.app/agent/`
-với đăng nhập thật. Việc còn lại để máy thứ hai dùng được là **cài app trên máy đó** và trỏ vào địa
-chỉ ấy — không còn hạ tầng nào phải dựng.
+**Đọc một dòng nếu chỉ đọc một dòng:** nhiều người dùng thật đã chạy song song trên một backend
+Internet, mỗi người thấy đúng dữ liệu của mình. Việc chặn duy nhất còn lại không phải hạ tầng mà là
+**chuyển quyền 116 dòng dữ liệu cũ** đang đứng tên danh tính desktop vô danh — có sẵn công cụ, xem
+§3 chặng 4.
 
 ---
 
