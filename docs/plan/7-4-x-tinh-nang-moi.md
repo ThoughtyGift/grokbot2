@@ -26,7 +26,7 @@ app gốc.**
 | Bot xem video, tự chấm đầu ra | 3L | ⬜ **đề nghị làm kế tiếp** | — |
 | Bot tự cài phần mềm trên box (OBS…) | 3 | ⬜ hạ tầng, làm sau 3L | — |
 | Lời nhắc "bộ não" gợi ý skill/MCP/plugin | 2 | ⬜ | — |
-| Chạy lại kịch bản B2 còn lại (OBS, CapCut) | khép vòng | ⬜ cần 3 + 3L | — |
+| Chạy lại kịch bản B2 (24 case, 7 bot) | khép vòng | 🟡 **lần 1: 28/08** — lặp lại sau mỗi tính năng | `b2-replay-2026-08-27-22-25.md`: trả lời 24/24, cùng nhịp tương tác 2/6 |
 
 ---
 
@@ -101,9 +101,16 @@ React, 12 skill), Canva…"* — và với Shopee thì tự đề xuất ba đư
 sản phẩm) bằng widget `ask_question`, kèm điều kiện từng đường (Partner ID, key…). Nó cũng tự viết
 SOP thành file (`shopee-ops-sop.md` đính trong B2) — "skill" chính là file SOP trên đĩa.
 
+**Đo lần 1 (b2-replay 28/08) nói gì:** bot mình ĐÃ rà catalog thật (tự gọi `setup_plugin`,
+`run_terminal_command_v2` dò OBS/ffmpeg — cùng lớp hành động với bot gốc), nhưng **nhảy thẳng vào
+cài** thay vì HỎI trước: 4 case app gốc mở widget "Bạn muốn gắn kiểu nào?" (case 5, 8, 15, 23) thì
+bên mình đều ra thẳng thẻ `setup_plugin`. Nhịp đúng của hãng: rà → kể tên thật → `ask_question` →
+người dùng chọn → mới cài.
+
 **Kế hoạch bên ta:**
 1. Lời nhắc: thêm đoạn "khi thiếu năng lực → rà `get_mcp_tools` + catalog plugin + skill trước, trả
-   lời có tên cụ thể, đề xuất bằng `ask_question`" — đúng nhịp ba bước của B2.
+   lời có tên cụ thể, đề xuất bằng `ask_question`, và KHÔNG `setup_plugin` khi người dùng chưa chọn"
+   — đúng nhịp ba bước của B2, giờ có số đo làm chuẩn (4 case lệch ở trên phải đổi màu khi chạy lại).
 2. Tool `create_skill`: ghi file SOP vào thư mục skill trên box của chính chủ (đường ống
    `skills.ts` + `cachedSkillsSection()` đã đọc sẵn thư mục đó — chỉ thiếu đường ghi).
 
