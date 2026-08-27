@@ -879,6 +879,7 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
 | [architecture.md](../architecture.md) | kiến trúc tổng |
 | [legal.md](../legal.md) | ranh giới: dùng cá nhân / nghiên cứu |
+| [len-0-29.md](../plan/len-0-29.md) | **client 0.29 có gì mới · có nên lên không · theo thứ tự nào** |
 
 ---
 
