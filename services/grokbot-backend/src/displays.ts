@@ -26,6 +26,7 @@ import { sq } from "./desktop.js";
  * đường dẫn ở đây do code sinh (`$HOME` + số slot), không nhận chuỗi từ người dùng.
  */
 const dq = (s: string): string => `"${s.replace(/"/g, '\\"')}"`;
+import { randomBytes } from "node:crypto";
 import { boxSnapshot } from "./box-resources.js";
 
 export interface DisplaySlot {
@@ -35,6 +36,10 @@ export interface DisplaySlot {
   cdpPort: number;
   profileDir: string;
   dir: string;
+  /** Cổng RFB của x11vnc cho slot này. Theo đúng nếp của box: 5900 + số display. */
+  vncPort: number;
+  /** Cổng websockify — noVNC nói WebSocket, nginx đứng trước. 7000 + số display, cùng nếp. */
+  wsPort: number;
 }
 
 export interface DisplayLease extends DisplaySlot {
@@ -76,7 +81,35 @@ export const slotOf = (index: number): DisplaySlot => ({
   cdpPort: CDP_BASE_PORT + index,
   dir: `${ROOT}/${DISPLAY_BASE + index}`,
   profileDir: `${ROOT}/${DISPLAY_BASE + index}/profile`,
+  // Số cổng suy ra từ số display, không cấp phát tự do — cùng phép mà box đã dùng cho `:77`
+  // (RFB 5977, websockify 7077). Nhờ vậy cấu hình nginx viết được sẵn, tĩnh, không phải nạp lại
+  // mỗi lần một bot xin màn.
+  vncPort: 5900 + DISPLAY_BASE + index,
+  wsPort: 7000 + DISPLAY_BASE + index,
 });
+
+/**
+ * Nhánh công khai của một slot, và mật khẩu của nó.
+ *
+ * **Mỗi slot một mật khẩu ngẫu nhiên, sinh mới mỗi lần dựng.** Bản dùng chung của box đi một mật
+ * khẩu cố định nằm trong `GROKBOT2_VNC_URL`; sao chép cách đó sang đây thì một người đọc được URL
+ * là xem được màn hình của **mọi** bot, kể cả bot của người khác — đúng cái lỗ mà chặng 5 sinh ra
+ * để bịt. Mật khẩu nằm trong thư mục slot, chỉ chủ slot đọc được.
+ */
+const vncPass = new Map<number, string>();
+const publicBase = (): string =>
+  (process.env.GROKBOT2_SLOT_VNC_BASE ?? "https://admin.halcion.vn").replace(/\/+$/, "");
+const slotPath = (index: number): string => `flowvnc-gb2-${index + 1}`;
+
+/** URL noVNC của slot đang giữ bởi `agentId`, hoặc `null` khi bot không có slot riêng. */
+export function slotVncUrl(agentId: string): string | null {
+  const lease = leases.get(agentId);
+  if (!lease) return null;
+  const pass = vncPass.get(lease.index);
+  if (!pass) return null;
+  const p = slotPath(lease.index);
+  return `${publicBase()}/${p}/vnc.html?path=${p}/websockify&autoconnect=true&password=${encodeURIComponent(pass)}`;
+}
 
 export const allSlots = (): DisplaySlot[] => Array.from({ length: MAX }, (_, i) => slotOf(i));
 
@@ -112,7 +145,7 @@ interface ExecResult { stdout?: string; stderr?: string }
  * `--disable-background-networking` bỏ hộp "Can't update Chrome". Cả hai **chiếm chỗ trên ảnh chụp**
  * mà model đọc toạ độ từ đó, nên chúng là lỗi đo chứ không phải chuyện thẩm mỹ.
  */
-async function spawnSlot(s: DisplaySlot): Promise<void> {
+async function spawnSlot(s: DisplaySlot & { vncPass: string }): Promise<void> {
   const chrome = [
     "google-chrome", "--no-first-run", "--no-default-browser-check", "--test-type",
     "--disable-background-networking", "--disable-component-update", "--no-sandbox",
@@ -127,7 +160,24 @@ async function spawnSlot(s: DisplaySlot): Promise<void> {
     `mkdir -p ${dq(s.profileDir)} || { echo "MKDIR-FAIL"; exit 1; }`,
     `nohup Xvfb ${s.display} -screen 0 1280x800x24 -ac > ${dq(`${s.dir}/xvfb.log`)} 2>&1 < /dev/null & sleep 1.2`,
     `DISPLAY=${s.display} nohup fluxbox > ${dq(`${s.dir}/wm.log`)} 2>&1 < /dev/null & sleep 0.6`,
-    `DISPLAY=${s.display} nohup ${chrome} > ${dq(`${s.dir}/chrome.log`)} 2>&1 < /dev/null & echo started`,
+    `DISPLAY=${s.display} nohup ${chrome} > ${dq(`${s.dir}/chrome.log`)} 2>&1 < /dev/null & sleep 0.4`,
+    /*
+     * Màn hình phải NHÌN THẤY được, nếu không cả slot là vô hình.
+     *
+     * Bật cờ này lần đầu (27/08) đã tách cái bot điều khiển khỏi cái người dùng nhìn thấy: Chrome
+     * riêng chạy trên `:521` mà không ai chiếu nó, còn khung "màn hình của bot" vẫn chỉ có một địa
+     * chỉ cố định trỏ vào màn dùng chung. Hậu quả đo được: Teach vũ trang vào một tab `about:blank`
+     * trong khi người dùng thao tác ở chỗ khác, mỗi lần dạy ghi đúng một bước rỗng.
+     *
+     * `-passwdfile` chứ không phải `-passwd`: đối số của tiến trình nằm trong `ps` mà **mọi người
+     * dùng trên máy đều đọc được**, kể cả bot của người khác.
+     */
+    `printf %s ${dq(s.vncPass)} > ${dq(`${s.dir}/vncpass`)} && chmod 600 ${dq(`${s.dir}/vncpass`)}`,
+    `nohup x11vnc -display ${s.display} -rfbport ${s.vncPort} -localhost -forever -shared`
+      + ` -passwdfile ${dq(`${s.dir}/vncpass`)} -o ${dq(`${s.dir}/x11vnc.log`)}`
+      + ` > /dev/null 2>&1 < /dev/null & sleep 0.5`,
+    `nohup websockify --web /usr/share/novnc/ ${s.wsPort} localhost:${s.vncPort}`
+      + ` > ${dq(`${s.dir}/websockify.log`)} 2>&1 < /dev/null & echo started`,
   ].join("; ");
   const r = await boxCall<ExecResult>("exec", { command: cmd });
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -169,10 +219,14 @@ export async function ensureDisplay(agentId: string): Promise<DisplayLease | nul
   const snap = await boxSnapshot();
   if (snap.ok && snap.headroom.bots < 1) return null;
 
-  await spawnSlot(slot);
+  // Mật khẩu mới mỗi lần dựng: một slot được cấp lại cho người khác thì URL cũ phải chết theo.
+  const pass = randomBytes(9).toString("base64url");
+  await spawnSlot({ ...slot, vncPass: pass });
+  vncPass.set(slot.index, pass);
   if (!(await waitCdp(slot.cdpPort))) {
     // Không lên được thì thu ngay. Để lại một Xvfb mồ côi là rò 500 MB không ai nhìn thấy.
     await teardown(slot);
+    vncPass.delete(slot.index);
     return null;
   }
   const lease: DisplayLease = { ...slot, agentId, startedAtMs: Date.now(), lastUsedMs: Date.now() };
@@ -191,17 +245,22 @@ export async function ensureDisplay(agentId: string): Promise<DisplayLease | nul
  * báo xong. `[X]vfb` khớp "Xvfb" nhưng không khớp chính nó.
  */
 async function teardown(s: DisplaySlot): Promise<void> {
+  vncPass.delete(s.index);
   const port = `${s.cdpPort}`;
   const n = s.display.slice(1);
   const cmd = [
     `pkill -f ${sq(`[r]emote-debugging-port=${port}`)}`,
     `pkill -f ${sq(`[X]vfb :${n}`)}`,
+    // x11vnc và websockify cũng phải chết theo. Bỏ sót chúng là để lại một cổng còn mở chiếu vào
+    // một màn hình không còn tồn tại — và slot sau nhận cùng số cổng sẽ đụng nó.
+    `pkill -f ${sq(`[x]11vnc -display :${n}`)}`,
+    `pkill -f ${sq(`[w]ebsockify --web /usr/share/novnc/ ${s.wsPort}`)}`,
     "sleep 1",
     `rm -rf ${dq(s.dir)}`,
     `rm -f ${sq(`/tmp/.X11-unix/X${n}`)}`,
     // Nói ra kết quả thật thay vì "done": còn sót thì phải thấy ngay ở log, không phải một tuần sau
     // khi RAM hết.
-    `echo "left=$(ps -eo args | grep -cE '[X]vfb :${n}|[c]hrome.*${port}') dir=$(test -e ${dq(s.dir)} && echo yes || echo no)"`,
+    `echo "left=$(ps -eo args | grep -cE '[X]vfb :${n}|[c]hrome.*${port}|[x]11vnc -display :${n}|[w]ebsockify.* ${s.wsPort} ') dir=$(test -e ${dq(s.dir)} && echo yes || echo no)"`,
   ].join("; ");
   const r = await boxCall<ExecResult>("exec", { command: cmd });
   const out = String(r.stdout ?? "").trim();

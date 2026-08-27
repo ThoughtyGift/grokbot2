@@ -20,8 +20,19 @@
  */
 import { redact } from "./redact.js";
 import { publish } from "./events.js";
+import { slotVncUrl } from "./displays.js";
 
-const boxVncUrl = (): string | null => process.env.GROKBOT2_VNC_URL ?? null;
+/**
+ * Màn hình của MỘT bot — của riêng nó nếu nó có slot, còn không thì màn dùng chung.
+ *
+ * `getForeverBoxStatus` vốn đã hỏi theo từng `agentId`, nên chỗ này không cần client đổi gì: mỗi
+ * bot nhận một địa chỉ khác nhau qua đúng cái RPC nó vẫn gọi. Đó là lý do chặng 5 gọn hơn vẻ ngoài
+ * — phần khó nằm ở việc **dựng** noVNC cho từng slot (`displays.ts`), không ở việc giao nó.
+ *
+ * Không có slot thì trả màn dùng chung: một bot chạy trên Chrome chung vẫn phải nhìn thấy được.
+ */
+const boxVncUrl = (agentId?: string): string | null =>
+  (agentId ? slotVncUrl(agentId) : null) ?? process.env.GROKBOT2_VNC_URL ?? null;
 
 const computerBase = (): string => (process.env.GROKBOT2_COMPUTER_URL ?? "").replace(/\/$/, "");
 
@@ -198,7 +209,7 @@ export async function foreverBoxStatus(args: { id?: unknown; agentId?: unknown }
     }
   }
   const handoff = handoffs.get(agentId) ?? null;
-  const vncUrl = boxVncUrl();
+  const vncUrl = boxVncUrl(agentId);
   // Cùng lý do như services/grokbot-computer/src/session.ts: "off" vì chưa cấu hình và "off" vì
   // không ai đang dùng là hai chuyện khác nhau, và FE phải nói đúng cái nào.
   const screenConfigured = vncUrl != null;
