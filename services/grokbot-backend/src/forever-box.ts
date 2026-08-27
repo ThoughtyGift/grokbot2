@@ -20,7 +20,7 @@
  */
 import { redact } from "./redact.js";
 import { publish } from "./events.js";
-import { slotVncUrl } from "./displays.js";
+import { slotVncUrl, ensureDisplay, perBotDisplays } from "./displays.js";
 
 /**
  * Màn hình của MỘT bot — của riêng nó nếu nó có slot, còn không thì màn dùng chung.
@@ -87,6 +87,19 @@ export async function beginComputerUse(agentId: string): Promise<void> {
   if (!agentId) return;
   const t = releaseTimers.get(agentId);
   if (t) { clearTimeout(t); releaseTimers.delete(agentId); }
+  /*
+   * Xin luôn màn riêng — "ensure" phải thật sự ensure.
+   *
+   * Trước đây slot chỉ được cấp khi bot **tự** chạm vào trình duyệt. Nên người dùng mở khung máy
+   * tính (đúng lúc cần nhìn màn nhất) lại nhận địa chỉ màn **dùng chung**, và muốn đăng nhập một
+   * lần vào Shopee trong màn của chính con bot thì không có cách nào tới đó.
+   *
+   * `ensureDisplay` tự trả lại lease cũ nếu đã có, nên gọi thêm ở đây không dựng thừa cái gì.
+   * Không chặn nếu hỏng: khung máy tính vẫn phải mở được với màn dùng chung.
+   */
+  if (perBotDisplays()) {
+    try { await ensureDisplay(agentId); } catch { /* rơi về màn dùng chung */ }
+  }
   if (computerBase()) {
     try {
       const r = await computerRpc("/internal/begin", { agentId });
