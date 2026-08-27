@@ -16,18 +16,36 @@
  */
 export default {
   id: "win-drive-path",
-  file: "dist/electron-main/main.cjs",
-  summary: "cOt: treat a Windows drive letter as a path, not a URL (composer thumbnails)",
+  summary: "chuẩn hoá đường dẫn: ổ đĩa Windows là ĐƯỜNG DẪN, không phải URL (ảnh thu nhỏ trong ô soạn)",
 
   /**
-   * Verbatim from vendor `app.asar` v0.20.0. `expected: 1` is the whole safety story: if a future
-   * bundle renames or reshapes `cOt`, this string stops matching and the pipeline goes red with
-   * this patch's id — rather than patching whatever happens to look similar.
+   * Một bản vá, nhiều phiên bản client.
+   *
+   * Không dấu hiệu nào của 0.20 còn sống trong 0.29 — nhưng **lỗi thì còn**, chỉ là hàm đổi tên.
+   * Bản 0.29 tự khai tên thật của nó, nên lần này không phải đoán:
+   *
+   *     function vht(n){…protocol!=="file:"?null:Pst(n)…}
+   *     s(vht,"normalizeAttachmentSource")
+   *
+   * `expected: 1` vẫn là toàn bộ câu chuyện an toàn: bundle nào đổi hình dạng thì không biến thể
+   * nào khớp, và `--apply` dừng đỏ kèm id thay vì vá bừa vào thứ trông na ná.
    */
-  find: 'function cOt(t){if(typeof t!="string"||t.length===0)return null;try{return new URL(t).protocol!=="file:"?null:swr(t)}catch{return t}}',
-  expected: 1,
-
-  /** The trailing comment is the verify marker — cheap to grep, harmless at runtime. */
-  replace: 'function cOt(t){if(typeof t!="string"||!t)return null;try{new URL(t)}catch{return t}return t[1]==":"?t:swr(t)}/*grokbot2:win-drive-path-fix*/',
-  marker: "/*grokbot2:win-drive-path-fix*/",
+  variants: [
+    {
+      version: "0.20.0",
+      file: "dist/electron-main/main.cjs",
+      find: 'function cOt(t){if(typeof t!="string"||t.length===0)return null;try{return new URL(t).protocol!=="file:"?null:swr(t)}catch{return t}}',
+      expected: 1,
+      replace: 'function cOt(t){if(typeof t!="string"||!t)return null;try{new URL(t)}catch{return t}return t[1]==":"?t:swr(t)}/*grokbot2:win-drive-path-fix*/',
+      marker: "/*grokbot2:win-drive-path-fix*/",
+    },
+    {
+      version: "0.29.0",
+      file: "dist/electron-main/main.cjs",
+      find: 'function vht(n){if(typeof n!="string"||n.length===0)return null;try{return new URL(n).protocol!=="file:"?null:Pst(n)}catch{return n}}',
+      expected: 1,
+      replace: 'function vht(n){if(typeof n!="string"||!n)return null;try{new URL(n)}catch{return n}return n[1]==":"?n:Pst(n)}/*grokbot2:win-drive-path-fix*/',
+      marker: "/*grokbot2:win-drive-path-fix*/",
+    },
+  ],
 };

@@ -42,6 +42,13 @@ function Get-ListenPids([int]$Port) {
 
 # -- patch gate ----------------------------------------------------------------
 # Unpatched install would boot vendor asar (no cOt) while looking fine. Fail closed.
+# Kiem DUNG ban sap mo, khong phai duong dan mac dinh.
+#
+# `$appExe` o tren da thu ba cho, vi bo cai 0.29 cua hang chiem mat cho mac dinh. Nhung
+# `patch-client.mjs` van doc duong mac dinh cua rieng no, nen no kiem MOT ban trong khi launcher mo
+# mot ban KHAC — va tu 28/08 thi ban mac dinh khong con ton tai, nen `--verify` do va launcher tu
+# choi chay chinh ban app dang dung duoc.
+$env:GROKBOT2_CLIENT_DIR = Split-Path $appExe
 $verify = & node (Join-Path $repo 'infra\scripts\patch-client.mjs') --verify
 if ($LASTEXITCODE -ne 0) {
   Write-Host 'Client is not patched (or the patch drifted). Do not launch the vendor bundle.' -ForegroundColor Red

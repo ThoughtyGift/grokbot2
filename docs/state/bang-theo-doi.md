@@ -703,7 +703,7 @@ thành 7.x vì tài liệu cũ có "Chặng 1/2/3" của riêng nó, trùng tên
 | 7.0 | Biết trước khi quyết — bộ cài 0.29 đã **xoá** bản 0.20 đã vá | ✅ ghi nhận |
 | 7.1 | Bảy cờ chuyển roster/transcript/gửi tin lên đám mây | ✅ đã đo — **cờ do CHÍNH ta phát** |
 | 7.2 | Chạy thử 0.29 trên backend này | ✅ **28/08 — 3 lệnh thiếu, đã vá, `unmapped` rỗng** |
-| 7.3 | Đưa bộ vá sang 0.29 | ⬜ chưa bắt đầu |
+| 7.3 | Đưa bộ vá sang 0.29 | ✅ **28/08 — chạy khô xanh trên 0.29 thật, 0.20 không hỏng** |
 | 7.4 | Tính năng mới, xếp theo giá trị | ⬜ xem 7.4.x |
 | 7.5 | VNC từng slot (chặn 7.4.1) | ✅ **28/08** |
 | 7.6 | Nếu 7.2 xấu thì làm gì | — không cần, 7.2 tốt |
@@ -804,7 +804,7 @@ roster/transcript/gửi tin. Chưa phải bảo chứng vĩnh viễn (hãng có 
   tới bước hiện roster.
 - ⬜ Đối chiếu SSE: 0.29 có đọc cùng các kênh không, hay có kênh mới.
 
-#### 7.3 · Đưa bộ vá sang 0.29 — ⬜
+#### 7.3 · Đưa bộ vá sang 0.29 — ✅ **XONG 28/08**
 
 Bốn bản vá hiện có ([../../infra/patches/](../../infra/patches/)):
 
@@ -815,10 +815,43 @@ Bốn bản vá hiện có ([../../infra/patches/](../../infra/patches/)):
 | `get-ultra-redirect.mjs` | chặn đẩy sang trang bán hàng | vừa |
 | `client-paths.mjs` | đường dẫn tài nguyên | thấp |
 
-Cách làm: `patch-client.mjs --verify` trên 0.29 để xem cái nào còn bám được, rồi truy lại từng hàm
-trong bundle mới. Bundle chia 288 chunk nên **phải dò theo nội dung, không theo tên file**.
+**Đo trước khi sửa:** quét 307 file js của 0.29 — **không một dấu hiệu nào của 0.20 còn sống**. Đúng
+như dự đoán: tên rút gọn đổi hết sau mỗi lần hãng dựng lại.
 
-**Cổng ra:** `node infra/scripts/patch-client.mjs --verify` xanh trên bản 0.29.
+Nhưng ba bản vá có ba số phận khác nhau, và chỉ đọc mã mới biết:
+
+| bản vá | ở 0.29 | xử lý |
+|---|---|---|
+| `win-drive-path` | **lỗi còn nguyên**, hàm đổi tên `cOt`→`vht` (`swr`→`Pst`); bản dựng mới tự khai `s(vht,"normalizeAttachmentSource")` | thêm biến thể 0.29 |
+| `get-ultra-redirect` | URL còn, nhưng chuyển từ renderer sang **`main.cjs`** (`jpr="…"`) | thêm biến thể 0.29 — và **bớt được chỗ giòn nhất**: không còn phụ thuộc tên file renderer mang băm nội dung |
+| `attach-upload-observable` | `uploadAttachmentsIntoBox` và `getRemoteBoxAvailable` **biến mất hoàn toàn** (0 lần trong 307 file) — đường đính kèm đã viết lại, khớp cờ `sand_attachments_via_server` | **đã thừa**, đánh dấu `obsoleteWhenMissing` |
+
+**Khung vá nay đỡ nhiều phiên bản.** Mỗi bản vá khai `variants`, mỗi biến thể một phiên bản client;
+`pickVariant` chọn cái khớp bundle đang cầm. Nhân đôi file bản vá cho từng phiên bản là hai chỗ để
+sửa và hai chỗ để quên. Không biến thể nào khớp ⇒ **dừng đỏ kèm id**, không vá mò — `expected: 1`
+vẫn là toàn bộ câu chuyện an toàn.
+
+**Hai lỗi lộ ra từ chính lượt kiểm này:**
+
+1. `--verify` bắt `C:\cai` đỏ với *"vendor app.asar not found aside"*. Nhưng đó là **bản tự chứa** —
+   bộ cài "chở cả app" dựng thẳng `resources/app`, không có asar nào để dời, và cũng không có gì
+   tranh thứ tự nạp. Ba trạng thái, không phải hai; bản trước gộp hai cái cuối thành "lỗi" và khiến
+   `run.ps1` từ chối chạy **chính bản app đang dùng được**.
+2. `run.ps1` kiểm đường dẫn **mặc định** trong khi mở một bản **khác** — và từ 28/08 thì bản mặc định
+   không còn tồn tại. Nay nó truyền `GROKBOT2_CLIENT_DIR` từ chính `$appExe` nó vừa chọn.
+
+**Cổng ra — đạt cả hai đầu:**
+
+```
+0.20 (C:\cai)      → OK — patch set is live and intact
+0.29 (chạy khô)     → win-drive-path 1x (biến thể 0.29) · get-ultra-redirect 1x (biến thể 0.29)
+                      attach-upload-observable: đã thừa
+                      DRY RUN OK — every patch matched and parsed
+```
+
+**Chưa làm:** `--apply` thật lên bản 0.29 đang cài. Chạy khô đã chứng minh mọi thứ khớp và parse
+được, nhưng áp thật là đụng vào bản client của hãng đang chạy — việc đó chờ lúc bạn thực sự muốn
+chuyển sang 0.29.
 
 ---
 

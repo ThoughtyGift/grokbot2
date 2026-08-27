@@ -150,7 +150,20 @@ if (mode === "--verify") {
 
   const boot = bootSource();
   boot.patched ? ok(`boots from ${boot.source}`) : fail(`boots from ${boot.source} — patches are NOT live`);
-  existsSync(ASAR_ASIDE) ? ok("vendor app.asar moved aside") : fail("vendor app.asar not found aside — cannot prove load order");
+  /*
+   * Ba trạng thái, không phải hai — và bản trước gộp hai cái cuối thành "lỗi".
+   *
+   *   asar đã dời sang bên      → đúng ý: `resources/app` thắng thứ tự nạp
+   *   KHÔNG có asar nào cả      → **bản tự chứa** (bộ cài "chở cả app" dựng thẳng `resources/app`).
+   *                               Không có gì để dời, và cũng không có gì tranh thứ tự nạp.
+   *   asar còn nằm cạnh app đã vá → NGUY: app boot bản gốc, im lặng
+   *
+   * `C:\cai` là ca thứ hai, và bản trước bắt nó đỏ — khiến `run.ps1` từ chối chạy chính bản app
+   * đang dùng được.
+   */
+  if (existsSync(ASAR_ASIDE)) ok("vendor app.asar moved aside");
+  else if (!existsSync(join(RES, "app.asar"))) ok("không có app.asar nào — bản tự chứa, không ai tranh thứ tự nạp");
+  else fail("app.asar CÒN nằm cạnh resources/app — app sẽ boot bản gốc, im lặng");
   existsSync(ASAR) && fail("app.asar is back in place — it WINS the load order, patches are dead");
 
   // package.json must stay verbatim: `name` decides userData, so changing it moves the app's
@@ -161,17 +174,28 @@ if (mode === "--verify") {
   } catch { fail("cannot read resources/app/package.json"); }
 
   for (const p of PATCHES) {
-    const target = join(APP_UNPACKED, p.file);
-    if (!existsSync(target)) { fail(`${p.id}: ${p.file} missing`); continue; }
-    const src = readFileSync(target, "utf8");
-    const marks = p.marker ? src.split(p.marker).length - 1 : 0;
-    const stale = src.split(p.find).length - 1;
-    if (marks === p.expected && stale === 0) ok(`${p.id}: applied (${marks}× marker, 0 unpatched)`);
-    else if (stale > 0) fail(`${p.id}: ${stale} unpatched occurrence(s) still present — re-run --apply`);
-    else fail(`${p.id}: marker found ${marks}×, expected ${p.expected}`);
-
-    const chk = spawnSync(process.execPath, ["--check", target], { encoding: "utf8" });
-    chk.status === 0 ? ok(`${p.id}: ${p.file} parses`) : fail(`${p.id}: ${p.file} is not valid JS — ${(chk.stderr || "").split("\n")[0]}`);
+    let seen = false;
+    for (const file of targetsOf(p)) {
+      const target = join(APP_UNPACKED, file);
+      if (!existsSync(target)) continue;
+      const src = readFileSync(target, "utf8");
+      // Đếm theo TẬP marker, không cộng dồn từng biến thể: hai biến thể của cùng một bản vá dùng
+      // chung một chuỗi marker, nên cộng dồn báo "2x" cho một lần vá và con số đó nói sai.
+      const markers = [...new Set((p.variants ?? [p]).map((v) => v.marker).filter(Boolean))];
+      const marks = markers.reduce((n, m) => n + (src.split(m).length - 1), 0);
+      const stale = pickVariant(p, src);
+      if (marks > 0 && !stale) ok(`${p.id}: applied (${marks}x marker, 0 unpatched) trong ${file}`);
+      else if (stale) fail(`${p.id}: con ${stale.expected} cho CHUA va trong ${file} — chay lai --apply`);
+      else continue;
+      seen = true;
+      const chk = spawnSync(process.execPath, ["--check", target], { encoding: "utf8" });
+      chk.status === 0 ? ok(`${p.id}: ${file} parses`) : fail(`${p.id}: ${file} is not valid JS — ${(chk.stderr || "").split(String.fromCharCode(10))[0]}`);
+      break;
+    }
+    if (!seen) {
+      if (p.obsoleteWhenMissing) ok(`${p.id}: khong con trong bundle nay — da thua (${p.obsoleteWhenMissing})`);
+      else fail(`${p.id}: khong tim thay dau vet nao trong bundle`);
+    }
   }
 
   const v = fuseVerdict(readFuses());
@@ -268,24 +292,61 @@ if (ex.status !== 0) {
 }
 ok("extracted");
 
+/**
+ * Chọn biến thể khớp với bundle đang cầm.
+ *
+ * Một bản vá bám vào **chuỗi mã đã minify**, và tên rút gọn đổi sau mỗi lần hãng dựng lại. Đo ngày
+ * 28/08: không một dấu hiệu nào của 0.20 còn sống trong 0.29 — nhưng **lỗi thì còn**, chỉ là hàm
+ * đổi tên (`cOt` → `vht`, và bản dựng mới tự khai `s(vht,"normalizeAttachmentSource")`).
+ *
+ * Nên mỗi bản vá khai một danh sách `variants`, mỗi biến thể là một phiên bản client. Nhân đôi cả
+ * file bản vá cho từng phiên bản là hai chỗ để sửa và hai chỗ để quên; ở đây chỉ có một.
+ *
+ * Không khớp biến thể nào ⇒ trả `null`, và người gọi phải **dừng đỏ kèm id**, không được vá mò.
+ */
+function pickVariant(p, src) {
+  const list = p.variants ?? [{ ...p, version: p.version ?? "0.20.0" }];
+  for (const v of list) {
+    const find = v.find ?? p.find;
+    const expected = v.expected ?? p.expected;
+    if (src.split(find).length - 1 === expected) {
+      return { find, expected, replace: v.replace ?? p.replace, marker: v.marker ?? p.marker, version: v.version ?? "?" };
+    }
+  }
+  return null;
+}
+
+/** Tên file trong bundle — biến thể được phép trỏ chỗ khác (renderer đổi tên theo băm nội dung). */
+function targetsOf(p) {
+  const list = p.variants ?? [p];
+  return [...new Set(list.map((v) => v.file ?? p.file))];
+}
+
 // Patch in staging, and assert the occurrence count BEFORE writing anything. A bundle that no
 // longer matches must stop the run with the patch id — never get patched approximately.
 for (const p of PATCHES) {
-  const target = join(staging, p.file);
-  if (!existsSync(target)) { console.error(`FAIL ${p.id}: ${p.file} not in this bundle`); process.exit(1); }
-  const src = readFileSync(target, "utf8");
-  const found = src.split(p.find).length - 1;
-  if (found !== p.expected) {
-    console.error(`FAIL ${p.id}: found ${found} occurrence(s), expected ${p.expected}`);
+  let done = false;
+  for (const file of targetsOf(p)) {
+    const target = join(staging, file);
+    if (!existsSync(target)) continue;
+    const src = readFileSync(target, "utf8");
+    const v = pickVariant(p, src);
+    if (!v) continue;
+    writeFileSync(target, src.split(v.find).join(v.replace));
+    const chk = spawnSync(process.execPath, ["--check", target], { encoding: "utf8" });
+    if (chk.status !== 0) { console.error(`FAIL ${p.id}: patched ${file} is not valid JS
+${chk.stderr}`); process.exit(1); }
+    ok(`${p.id}: ${v.expected}x replaced in ${file} (bien the ${v.version})`);
+    done = true;
+    break;
+  }
+  if (!done) {
+    if (p.obsoleteWhenMissing) { ok(`${p.id}: khong con trong bundle nay — da thua (${p.obsoleteWhenMissing})`); continue; }
+    console.error(`FAIL ${p.id}: khong bien the nao khop bundle nay`);
     console.error(`  ${p.summary}`);
-    console.error("  The vendor bundle changed. Re-locate the function and update the patch — do not patch blind.");
+    console.error("  The vendor bundle changed. Re-locate the function and add a variant — do not patch blind.");
     process.exit(1);
   }
-  const out = src.split(p.find).join(p.replace);
-  writeFileSync(target, out);
-  const chk = spawnSync(process.execPath, ["--check", target], { encoding: "utf8" });
-  if (chk.status !== 0) { console.error(`FAIL ${p.id}: patched ${p.file} is not valid JS\n${chk.stderr}`); process.exit(1); }
-  ok(`${p.id}: ${found}× replaced, ${p.file} parses`);
 }
 
 if (DRY) {

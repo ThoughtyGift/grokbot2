@@ -33,6 +33,17 @@
  * never be able to break sending a message.
  */
 export default {
+  /**
+   * **Đã thừa từ 0.29.** `uploadAttachmentsIntoBox` và `getRemoteBoxAvailable` **không còn tồn tại**
+   * trong bundle 0.29 (quét 307 file js, 0 lần xuất hiện): đường đính kèm đã bị viết lại để đi qua
+   * máy chủ — khớp với cờ mới `sand_attachments_via_server`.
+   *
+   * Giữ lại bản vá thay vì xoá, vì `C:\cai` vẫn đang chạy 0.20 và cần nó. `obsoleteWhenMissing`
+   * cho phép `--apply`/`--verify` nói "đã thừa" thay vì đỏ — nhưng chỉ khi dấu hiệu **hoàn toàn**
+   * biến mất, không phải khi nó đổi hình dạng.
+   */
+  obsoleteWhenMissing: "0.29 viết lại đường đính kèm — sand_attachments_via_server",
+
   id: "attach-upload-observable",
   file: "dist/host/host-main.cjs",
   summary: "uploadAttachmentsIntoBox: log the swallowed error instead of discarding it",

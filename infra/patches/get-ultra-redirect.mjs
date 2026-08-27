@@ -31,14 +31,34 @@ const CHECKOUT = process.env.GROKBOT2_CHECKOUT_URL ?? "https://checkout.example.
 
 export default {
   id: "get-ultra-redirect",
-  file: "dist/renderer/assets/index-DNC736IO.js",
-  summary: 'Get Ultra button opens GROKBOT2_CHECKOUT_URL instead of cursor.com/bot/onboarding',
+  summary: 'nút Get Ultra mở GROKBOT2_CHECKOUT_URL thay vì cursor.com/bot/onboarding',
 
-  /** Verbatim from vendor renderer v0.20.0; expected:1 is the safety — 1 occurrence in the bundle. */
-  find: 'const n1t="https://cursor.com/bot/onboarding"',
-  expected: 1,
-
-  /** Inline marker comment before the string — parses fine mid-expression, cheap to grep for --verify. */
-  replace: `const n1t=/*grokbot2:get-ultra-redirect*/${JSON.stringify(CHECKOUT)}`,
-  marker: "/*grokbot2:get-ultra-redirect*/",
+  /**
+   * URL bền, TÊN BIẾN thì không — và ở 0.29 nó còn đổi cả file.
+   *
+   * 0.20: chuỗi nằm trong renderer, `const n1t="…"`, và tên file renderer mang băm nội dung nên
+   * đổi sau mỗi lần hãng dựng lại. 0.29: chuỗi có ở **cả** `main.cjs` (`jpr="…"`) lẫn renderer
+   * (`const lU="…"`), và cái quyết định điều hướng nằm ở main.
+   *
+   * Nên biến thể 0.29 vá `main.cjs` — tên file ổn định, không mang băm. Bớt được đúng cái mảnh
+   * giòn nhất của bản vá này.
+   */
+  variants: [
+    {
+      version: "0.20.0",
+      file: "dist/renderer/assets/index-DNC736IO.js",
+      find: 'const n1t="https://cursor.com/bot/onboarding"',
+      expected: 1,
+      replace: `const n1t=/*grokbot2:get-ultra-redirect*/${JSON.stringify(CHECKOUT)}`,
+      marker: "/*grokbot2:get-ultra-redirect*/",
+    },
+    {
+      version: "0.29.0",
+      file: "dist/electron-main/main.cjs",
+      find: 'jpr="https://cursor.com/bot/onboarding"',
+      expected: 1,
+      replace: `jpr=/*grokbot2:get-ultra-redirect*/${JSON.stringify(CHECKOUT)}`,
+      marker: "/*grokbot2:get-ultra-redirect*/",
+    },
+  ],
 };
