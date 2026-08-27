@@ -22,15 +22,26 @@ từng dòng, và ghi cả con số cũ để thấy nó trôi bao nhiêu.*
 | **Tài khoản thật** | 2 người có mật khẩu: `phamduykhanh0209@` (máy 1/2) · `ngoclongdz96@` (máy 3) |
 | **Danh tính trên đường `/gw`** | `user-ticket: 152` · `matching-bearer: 70` — **vé theo người đã chiếm phần lớn lưu lượng thật**, tức app đã khởi động lại và đang dùng nó |
 
-**Tiến độ theo chặng (27/08):** ✅ 0 dọn · ✅ 1 đo tiền (`warn`) · ✅ 2 vá 3 lỗ đăng nhập ·
-✅ **3 máy thứ hai VÀ thứ ba** (máy 3 tải app, đăng ký, đăng nhập, chạy thật qua Internet) ·
-✅ **4 đưa BE ra ngoài** · ✅ **5 tách người dùng trên box** (28/08: VNC cho từng slot xong, cờ
-**BẬT thật** trên VPS — xem N17) · ⬜ 6 FE riêng.
 
-**Đọc một dòng nếu chỉ đọc một dòng:** nhiều người dùng thật đã chạy song song trên một backend
-Internet, mỗi người thấy đúng dữ liệu của mình. Việc chặn duy nhất còn lại không phải hạ tầng mà là
-**chuyển quyền 116 dòng dữ liệu cũ** đang đứng tên danh tính desktop vô danh — có sẵn công cụ, xem
-§3 chặng 4.
+### Bảng chặng — một mắt nhìn hết
+
+| chặng | việc | trạng thái | còn gì |
+|---|---|---|---|
+| 0 | Dọn mã | ✅ 25/08 | — |
+| 1 | Đo được tiền | ✅ 25/08 (`warn`) | `tokens_in/out` là **ước lượng**, chưa tách theo người |
+| 2 | Vá ba lỗ đăng nhập | ✅ 25/08 | 2.1 chỉ siết khi `AUTH=enforce` (VPS: có · máy này: không) |
+| 3 | Máy thứ hai / thứ ba | ✅ 27–28/08 | máy 3 đã đăng ký + đăng nhập thật qua Internet |
+| 4 | Đưa BE ra Internet | ✅ 26/08 | ⚠ **chuyển quyền 116 dòng dữ liệu cũ** — chờ bạn chọn tài khoản |
+| 5 | Tách người dùng trên box | ✅ 28/08 | VNC từng slot xong, cờ **BẬT thật** |
+| 6 | FE riêng | ⬜ | 6.1 routines · 6.2 đối chiếu app gốc |
+| **7** | **Lên client 0.29** | 🟡 **đang làm** | 7.3 bộ vá · 7.4 tính năng mới |
+| 8 | Tự cập nhật | ⬜ | cơ chế đã moi xong, chưa dựng |
+
+**Việc kế tiếp đã chọn:** `setBoxSecrets` (đang là khúc gỗ) → 7.3 đưa bộ vá sang 0.29.
+
+**Ba việc chờ bạn, không chặn tôi:** ① chọn tài khoản nhận 116 dòng dữ liệu cũ ·
+② đăng nhập Shopee một lần trong màn riêng của bot · ③ đồng hồ máy chậm 13 phút (cần quyền quản trị).
+
 
 ---
 
@@ -546,7 +557,7 @@ node scripts/adopt-legacy-owner.mjs --to <email> --yes     # sao lưu rồi đ�
    của máy đo chỉ nhận `/assets/`. Một phép đo luôn ra 0 thì tệ hơn không đo — nay là **109 KB thô /
    34 KB gzip**.
 
-### Chặng 5 · Tách người dùng trên box — 🟡 **7/8 chỗ kín · còn đúng một việc: bật thật**
+### Chặng 5 · Tách người dùng trên box — ✅ **XONG 28/08 · 8/8, cờ màn-riêng BẬT thật**
 
 **Mốc đầu `0/7` → nay `7/8`.** `npx tsx scripts/e2e-box-leak.mjs` chạy trên box thật:
 
@@ -682,6 +693,308 @@ node scripts/e2e-routines.mjs       → routine nổ đúng điều kiện
 node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 ```
 
+### Chặng 7 · Lên client 0.29 — 🟡 **đang làm**
+
+*Gộp từ `docs/plan/len-0-29.md` ngày 28/08 — một tài liệu để theo dõi, không phải hai. Đánh số lại
+thành 7.x vì tài liệu cũ có "Chặng 1/2/3" của riêng nó, trùng tên với các chặng ở trên và đọc lẫn.*
+
+| bước | việc | trạng thái |
+|---|---|---|
+| 7.0 | Biết trước khi quyết — bộ cài 0.29 đã **xoá** bản 0.20 đã vá | ✅ ghi nhận |
+| 7.1 | Bảy cờ chuyển roster/transcript/gửi tin lên đám mây | ✅ đã đo — **cờ do CHÍNH ta phát** |
+| 7.2 | Chạy thử 0.29 trên backend này | ✅ **28/08 — 3 lệnh thiếu, đã vá, `unmapped` rỗng** |
+| 7.3 | Đưa bộ vá sang 0.29 | ⬜ chưa bắt đầu |
+| 7.4 | Tính năng mới, xếp theo giá trị | ⬜ xem 7.4.x |
+| 7.5 | VNC từng slot (chặn 7.4.1) | ✅ **28/08** |
+| 7.6 | Nếu 7.2 xấu thì làm gì | — không cần, 7.2 tốt |
+| 7.7 | Thứ tự đề nghị | 🟡 đang theo |
+
+#### 7.0 · Điều phải biết trước khi quyết
+
+**Bộ cài 0.29 đã xoá bản 0.20 đã vá.** Nó đặt vào đúng `%LOCALAPPDATA%\Programs\Grok Bot` và thay
+thế toàn bộ; thư mục đó giờ không còn. Bản tự chứa `C:\cai` (0.20.0, đã vá, không có `app.asar`) là
+**bản 0.20 duy nhất còn lại** — đừng cài gì đè lên nó. `run.ps1` đã sửa để thử ba đường thay vì ghi
+cứng một đường.
+
+**Cấu trúc bundle đổi hẳn.** 0.20 gom vào một file renderer; 0.29 chia **288 chunk**. `main.cjs` lại
+*nhỏ đi* (8,2 MB → 6,5 MB) trong khi số kiểu proto tăng 3572 → 3905. Nghĩa là bộ vá hiện tại — 4 file,
+237 dòng, bám vào hình dạng mã đã minify — **gần như chắc chắn không áp được nguyên xi**.
+
+**Bề mặt cầu nối desktop: 151 → 332 phương thức.** Nhưng đó không phải 181 tính năng mới: 0.29 đã
+**dời bề mặt lệnh cổng vào cầu nối desktop**. Trừ đi những gì 0.20 đã có ở dạng lệnh cổng thì còn
+**101 phương thức mới thật**. Hình dạng khai báo cũng đổi: `name:{args:"object"}` → `name:v().args(…)`.
+
+**Bốn biến môi trường vẫn còn** trong 0.29 (`CURSOR_API_BASE_URL`, `SAND_BACKEND_URL`,
+`CURSOR_WEBSITE_URL`, `SAND_DISABLE_UPDATES`), kèm `SAND_USER_DATA_DIR` và
+`SAND_FEATURE_GATE_OVERRIDES`. Nên nó **vẫn trỏ được** vào backend tự dựng.
+
+---
+
+#### 7.1 · Mối đe doạ thật, và vì sao ta vẫn cầm đằng chuôi
+
+Cờ tính năng: **58 → 101**. Bảy cờ trong số mới quyết định số phận của cả dự án này:
+
+```
+sand_roster_via_server        sand_send_via_server
+sand_transcript_store_first   sand_transcript_store_read
+sand_transcript_server_tail   sand_transcript_double_write
+sand_attachments_via_server
+```
+
+Kèm theo là RPC mới: `ListGrokBotAgents` · `CommitGrokBotTranscriptEntries` ·
+`WatchGrokBotTranscripts` · `SendGrokBotAgentMessage` · `GetGrokBotSendStatus`.
+
+Ở 0.20, **danh sách bot, bản ghi hội thoại và việc gửi tin** nằm trong *box gateway* — đúng thứ
+backend này emulate. Ở 0.29 chúng chuyển lên một *dịch vụ đám mây*. Nếu client bắt buộc đi đường mới
+thì emulation chết.
+
+**Nhưng cờ do ta phát.** `BootstrapStatsig` là của backend này
+([../../packages/grokbot-proto/src/feature-gates.ts](../../packages/grokbot-proto/src/feature-gates.ts)),
+và chính hôm nay ta đã dùng nó để bật `sand_teach_by_demonstration`. Nên giả thuyết là: **để bảy cờ
+đó tắt thì 0.29 vẫn đi đường box**. Đó là giả thuyết, không phải kết luận — và nó rẻ đến mức phải thử
+trước mọi thứ khác.
+
+---
+
+#### 7.2 · Chạy thử 0.29 trên backend này — ✅ **XONG 28/08, tốt hơn dự đoán**
+
+Chạy đúng như mô tả: bản 0.29 chưa vá, kho dữ liệu riêng, trỏ vào `localhost:8788`, cạnh bản 0.20 và
+bản hãng đang chạy — ba instance cùng lúc, không cái nào đụng cái nào.
+
+```powershell
+$env:SAND_USER_DATA_DIR   = "$env:APPDATA\Grok Bot (thu-029)"
+$env:CURSOR_API_BASE_URL  = 'http://localhost:8788'
+$env:SAND_BACKEND_URL     = 'http://localhost:8788'
+$env:CURSOR_WEBSITE_URL   = 'http://localhost:8788'
+$env:SAND_DISABLE_UPDATES = '1'
+Start-Process 'C:\Program Files\Grok Bot\Grok Bot.exe' --remote-debugging-port=9226
+```
+
+**Kết quả: 0.29 boot được, đăng nhập được, và hiện đúng roster + hội thoại của backend này.** Không
+phải "chạy tàm tạm" — nó vào thẳng vỏ ứng dụng với dữ liệu thật.
+
+`/gw/__coverage` sau lượt chạy đầu: **30 lệnh được gọi, đúng 3 lệnh chưa có mapping** — và cả ba là
+bề mặt plugin/MCP bị **đổi tên**, không phải tính năng mới:
+
+| lệnh 0.29 | tương ứng ở 0.20 | reply |
+|---|---|---|
+| `getEffectiveMcpPlugins` | `getEffectivePlugins` | array |
+| `getMcpCatalog` | (RPC proto `ListMarketplacePlugins`) | array |
+| `getMcpState` | (gần `listBoxMcpServers`) | record |
+
+Đã vá. Hình dạng đọc từ chính bản dựng 0.29, không suy đoán: renderer dùng
+`q.servers.some(J => J.id === X.serverId && J.accountKey === X.accountKey)` cho `getMcpState`, tức
+đúng những hàng `mcpServerRows` đã dựng sẵn. **Đo lại sau khi vá: `unmapped` rỗng.**
+
+Một chi tiết đáng giữ: bản đầu tôi gọi thẳng hàm dựng hình của proto trong `gateway.ts`, và
+`boundaries.test.ts` đỏ ngay với *"no service module imports protobuf — it lives in the ACL"*. Test
+đúng: tầng dịch vụ nói tiếng grokbot2, tiếng của client dừng ở ACL. `gateway.ts` giờ chỉ đưa dữ liệu
+thô (`mcpCatalogEntries`, `mcpInstalledIds`) qua cổng.
+
+##### Điều này đổi kết luận của §1
+
+Giả thuyết "để bảy cờ server tắt thì 0.29 vẫn đi đường box" **đã được nghiệm đúng một lần** — với
+`BootstrapStatsig` của ta chỉ bật `sand_teach_by_demonstration`, client không hề đòi đường server cho
+roster/transcript/gửi tin. Chưa phải bảo chứng vĩnh viễn (hãng có thể đổi mặc định phía họ), nhưng
+đủ để **chọn hướng (A): lên 0.29 và giữ backend box**, thay vì viết lại lõi.
+
+##### Việc còn lại của chặng 1
+
+- ⬜ Chạy dài hơn: gửi một lượt chat thật, mở khung máy tính, thử Teach trên 0.29 — mới chỉ nghiệm
+  tới bước hiện roster.
+- ⬜ Đối chiếu SSE: 0.29 có đọc cùng các kênh không, hay có kênh mới.
+
+#### 7.3 · Đưa bộ vá sang 0.29 — ⬜
+
+Bốn bản vá hiện có ([../../infra/patches/](../../infra/patches/)):
+
+| bản vá | vá gì | rủi ro khi sang 0.29 |
+|---|---|---|
+| `win-drive-path.mjs` | `cOt` từ chối đường dẫn có ổ đĩa Windows | cao — bám vào một hàm đã minify |
+| `attach-upload-observable.mjs` | đường upload nuốt lỗi | cao |
+| `get-ultra-redirect.mjs` | chặn đẩy sang trang bán hàng | vừa |
+| `client-paths.mjs` | đường dẫn tài nguyên | thấp |
+
+Cách làm: `patch-client.mjs --verify` trên 0.29 để xem cái nào còn bám được, rồi truy lại từng hàm
+trong bundle mới. Bundle chia 288 chunk nên **phải dò theo nội dung, không theo tên file**.
+
+**Cổng ra:** `node infra/scripts/patch-client.mjs --verify` xanh trên bản 0.29.
+
+---
+
+#### 7.4 · Tính năng mới, xếp theo giá trị THẬT với bạn
+
+Xếp theo việc bạn đang làm (đội bot vận hành Shopee, ba máy, nhiều người dùng), không theo thứ tự
+hãng ra.
+
+##### 4.1 · Nhập cookie Chrome — **làm trước, cách biệt**
+
+Ảnh chụp màn hình của bạn nói hết: năm con bot đứng im với dòng
+*"Waiting for you: Đăng nhập Shopee Seller Centre"*. Đây là thứ gỡ đúng nút thắt đó.
+
+- **API mới:** `importChromeCookies` · `injectChromeCookies` · `listChromeProfiles` ·
+  `listChromeCookieAllowItems` · `listCookieOriginGrants` · `putCookieOriginGrants` ·
+  `removeCookieOriginGrants`. Cờ `sand_import_chrome_cookies`.
+- **BE:** đọc kho cookie của Chrome trên máy người dùng, bơm vào Chrome của box qua CDP
+  (`Network.setCookies` — ta đã nói CDP sẵn rồi, xem `browser.ts`). Phần khó không phải kỹ thuật mà
+  là **phạm vi**: `cookieOriginGrants` là danh sách trang được phép, và nó phải theo **từng người**,
+  nếu không một người mở khoá phiên Shopee cho tất cả.
+- **FE:** màn chọn hồ sơ Chrome + chọn trang cho phép.
+- **System prompt:** thêm cho bot biết nó *có* phiên đăng nhập, và **không được** dùng phiên đó ngoài
+  danh sách trang đã cho.
+- ⚠ **Chỗ này chạm thẳng vào lỗ đang mở**: hiện mọi bot của mọi người dùng chung một Chrome trên box
+  (`PER_BOT_DISPLAY=off`). Bơm cookie thật vào một trình duyệt dùng chung là **nhân lỗ đó lên**. Nên
+  việc này **phải đi sau** phần tách trình duyệt ở §5.
+
+##### 4.2 · Phòng chung / nhiều bot một hội thoại — **phần lớn đã có**
+
+Ảnh của bạn cho thấy nhóm *"Shopee Ops"* với danh sách Members đang chạy trên app hãng. Kiểm trong
+kho: `createGroup` · `setGroupMembers` · `broadcastToAgents` · `createSharedRoom` **đã có** trong
+`packages/cursor-acl/src/commands.ts`.
+
+- **Còn thiếu:** `RequestGrokBotRoomMemberTurn` / `CancelGrokBotRoomMemberTurn` và các kiểu
+  `GrokBotRoomMemberTurn{Dispatch,Message,Peer,Room}` — tức **luật lượt nói** khi nhiều bot ở chung
+  một phòng. Đây mới là phần khó: ai trả lời trước, ai được nhắc tên thì mới nói, làm sao không thành
+  vòng lặp bot nói với bot.
+- **BE:** một bộ điều phối lượt, và nó phải nằm cạnh `runtime/turn.ts`.
+- **System prompt:** luật "chỉ nói khi được nhắc tên hoặc khi phần việc của mình tới" — nhìn ảnh của
+  bạn thì bot hãng đang theo đúng luật này.
+
+##### 4.3 · Keyring — kho bí mật có phân quyền
+
+`Keyring` · `KeyringSecret` · `KeyringGrant` · `KeyringAccessLevel` · `CopyTeamSecretsToKeyring`.
+
+Khớp thẳng với chỗ backend này đang yếu: hôm nay bí mật MCP nằm theo từng người trong
+`.data/mcp/<authId>.json`, không chia sẻ được, không phân quyền được. Nhiều người dùng chung một
+backend thì sớm muộn cũng cần.
+
+##### 4.4 · Máy của người dùng (`GrokBotUserComputer*`) — bot chạy trên máy BẠN
+
+~20 kiểu message + `spawnLocalExecDaemon` · `mintLocalExecDaemonCredential` · `sealLocalExecFile` ·
+`ListSandMachines` · `RegisterSandMachine` · `UpdateSandMachineLabel`. Cờ `sand_multi_machine_local_exec`.
+
+Đây là hướng đi **ngược** với box: thay vì một máy Linux dùng chung, bot chạy trên chính máy Windows
+của từng người. Với ba máy của bạn thì nó giải quyết luôn cả chuyện tách trình duyệt lẫn chuyện phiên
+đăng nhập — nhưng nó là **một kiến trúc khác**, không phải một tính năng. Đáng bàn riêng.
+
+##### 4.5 · Template bot / chợ
+
+`GrokBotTemplate` · `publishBotTemplate` · `listBotTemplates` · `createAgentFromTemplate` ·
+`GrokBotMarketplaceListing*`. Đội bot Shopee của bạn **chính là** một template — dựng một lần, phát
+cho người khác.
+
+##### 4.6 · Còn lại, chưa gấp
+
+Gọi thoại (`MintSandVoiceCallSecret`, `TextToSpeech`) · Slack hạng nhất
+(`InstallGrokBotSlackApp`) · nhiều tài khoản trong một app (`switchCursorAccount`, `selectCursorTeam`,
+`setCursorSpendLimit`) · form người dùng (`submitUserForm` — **chưa có** bên ta) · lịch nâng cấp box ·
+agent tạm thời · accent theming · i18n.
+
+Đã có sẵn bên ta, không phải làm lại: ký ức (`getAgentMemories`), workflow (`createAgentWorkflow`),
+reaction (`reactToMessage`), tray (`getTrays`).
+
+---
+
+#### 7.5 · VNC từng slot — chặn 7.4.1 — ✅ **XONG 28/08**
+
+**Tách trình duyệt theo người.** Hôm nay `PER_BOT_DISPLAY=off` nên mọi bot của mọi người dùng chung
+một Chrome trên box. Từ lúc đăng ký mở ra Internet, đó là lỗ nghiêm trọng nhất còn lại — và §4.1 sẽ
+nhân nó lên nhiều lần nếu làm trước.
+
+Việc thật không phải bật một cờ (đã thử 27/08, hỏng Teach và khung màn hình): Chrome riêng từng bot
+chạy `Xvfb + fluxbox` **không có x11vnc/websockify**, nên không ai nhìn thấy chúng.
+
+**Đã dựng 28/08.** Mỗi slot tự chạy x11vnc + websockify dưới chính tài khoản của nó, mật khẩu ngẫu
+nhiên riêng sinh mới mỗi lần dựng. Cổng suy ra từ số display nên nginx viết tĩnh bốn nhánh. Client
+không phải đổi gì: `getForeverBoxStatus` vốn đã hỏi theo từng `agentId`.
+
+Đo thật trên VPS: hai bot → hai display (`:521`, `:522`), hai đường noVNC, hai mật khẩu khác nhau;
+cả hai trả 200 qua Internet và bắt tay WebSocket **101**; Teach ghi **4 bước** và tạo routine — hôm
+qua chỗ này ghi đúng **1 bước rỗng**.
+
+Giờ §4.1 (nhập cookie Chrome) mới an toàn để làm: phiên đăng nhập thật sẽ nằm trong trình duyệt của
+riêng từng người, không phải một con Chrome dùng chung.
+
+---
+
+#### 7.6 · Nếu bước 7.2 cho kết quả xấu
+
+Nếu 0.29 **bắt buộc** đi đường server cho roster/transcript, thì lên 0.29 nghĩa là viết lại phần lõi
+của backend theo một hợp đồng khác — không còn là "cập nhật" mà là một dự án mới. Khi đó hai lựa chọn
+thành thật hơn:
+
+- **Ở lại 0.20** và tự làm các tính năng mới trên FE riêng. `C:\cai` chạy ổn định, không tự cập nhật,
+  và ta nắm toàn bộ hợp đồng. Giá: vĩnh viễn tụt lại sau hãng.
+- **Đổi mục tiêu**: bỏ việc bám client của hãng, dồn sang FE riêng (chặng 6) và dùng client hãng như
+  một tham chiếu thiết kế thay vì một thứ phải chiều.
+
+Không quyết chuyện này trước khi có số của chặng 1.
+
+---
+
+#### 7.7 · Thứ tự đề nghị
+
+1. ~~**bước 7.2**~~ — ✅ xong 27/08: 0.29 chạy được, 3 lệnh thiếu đã vá, `unmapped` rỗng.
+2. **§5** — VNC từng slot, đóng lỗ trình duyệt dùng chung.
+3. **§4.1** — nhập cookie Chrome (chỉ sau bước 2).
+4. **Chặng 2** — đưa bộ vá sang 0.29, nếu bước 1 cho kết quả tốt.
+5. **§4.2** — luật lượt nói trong phòng chung.
+6. Còn lại theo giá trị.
+
+Bước 1 và bước 2 **không phụ thuộc nhau**, làm song song được.
+
+---
+
+### Chặng 8 · Tự cập nhật — ⬜ **đã moi xong cơ chế của hãng, chưa dựng**
+
+Đọc từ bản dựng 0.29 ngày 28/08. Ghi lại đủ để dựng sau mà không phải đọc lại bundle.
+
+#### Móc có sẵn, không cần vá
+
+```js
+feedBaseUrl: process.env.SAND_UPDATE_FEED_BASE_URL          // hãng để sẵn
+url = `${base}/api/update/${platform}/${appName}/${version}/${machineId}/${track}`
+platform : win32-x64-user · win32-arm64-user · darwin-arm64 · darwin-x64
+appName  : stable → "sand" · nightly → "sand-nightly" · dogfood → "sand-dogfood"
+```
+
+Trả lời:
+
+| mã | nghĩa |
+|---|---|
+| `204` | đang là bản mới nhất — **không phải** 200 thân rỗng, cũng không phải 404 |
+| `200` | Windows (`iupdate`): `{url, version, sha256hash?}` · macOS (`squirrel`): `{url, name}` |
+
+Client tự tải về `sand-update-<version>.exe`, **tự kiểm sha256**, rồi mới áp dụng. macOS thì nó dựng
+một feed server **localhost** rồi giao cho Squirrel.Mac — không nói chuyện thẳng với máy chủ.
+
+#### Đường ngắn bị chặn ở đâu
+
+```js
+LMr = ["Anysphere, Inc.", "Anysphere"]
+if (sig.status !== "Valid") throw …
+if (!(signerAllowlist ?? LMr).includes(signerCommonName)) throw `unexpected signer ""`
+```
+
+`SandWindowsInstaller` kiểm **chữ ký Authenticode** và đối chiếu tên người ký với danh sách ghi cứng
+của hãng. Bộ cài của ta không ký ⇒ client tải xong rồi mới ném lỗi — **tệ hơn là không làm gì**.
+Nó cũng chạy file cài với `--updated /S` (cờ kiểu NSIS), trong khi bộ cài của ta là Inno Setup
+(`/VERYSILENT`).
+
+#### Nên dựng theo hình nào
+
+1. **Feed đúng hình dạng của hãng** trong backend này, phát từ `.data/dist` — để nếu sau này ký được
+   bộ cài và vá `signerAllowlist` thì chỉ cần bỏ `SAND_DISABLE_UPDATES`, không phải viết lại.
+2. **Bộ cập nhật của riêng ta** trong launcher (PowerShell, không cần Node trên máy đích): hỏi cùng
+   cửa đó → tải → kiểm sha256 → chạy bộ cài với `/VERYSILENT`.
+3. Ký bộ cài + vá `signerAllowlist` là **đường thứ ba**, cần chứng chỉ thật; chỉ làm nếu muốn nút
+   "Check for Updates" trong app chạy được.
+
+Phiên bản suy từ tên file (`Bot-Noi-Bo-Setup-20260827.exe` → `2026.08.27`) chứ không chép tay: một
+con số suy được từ file đang nằm đó thì không bao giờ lệch với file thật.
+
+---
+
 ### Nợ lẻ — không chặn ai, nhưng đừng quên
 
 | # | việc | kiểm bằng |
@@ -713,56 +1026,6 @@ node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 | N24 | ⚠️ **Sau N23, app phải khởi động lại** để lấy vé riêng — và dữ liệu tạo TRƯỚC đó nằm dưới `auth0|grokbot2-user`, nên tài khoản thật sẽ thấy trống cho tới khi chuyển chủ. Chủ thật nằm ở `body.agentOwnerAuthId` (cột `owner_id` chỉ là bản sao cũ; `ownerOf()` đọc body). |
 | N25 | ✅ **Onboarding không bị ta cắt** — cổng nằm trong chính app gốc: `nGn()` trả `shell` khi `countAgents() > 0` (và tự `markOnboardingSeen()`), nên bất kỳ tài khoản nào đã có bot sẽ KHÔNG bao giờ thấy phần mở đầu. Bước `landing` cũng bị bỏ qua khi đã đăng nhập (`IJt`) vì `landing` chính là màn đăng nhập. Luồng thật của người mới: `meet → computer-demo → jobs → tools → create → hand-off`. Đo trên VPS với tài khoản mới: `countAgents=0` + `hasSeenOnboarding=false` ⇒ cổng mở ONBOARDING. |
 | N26 | ⬜ `getOnboardingSeen()` là **hoà giải hai chiều** giữa kho cục bộ của máy và host settings của ta (`dDt.reconcile()`): box thắng khi luồng box đọc được, không thì lấy bản cục bộ. Nghĩa là backend KHÔNG ép được onboarding trên một máy đã xem, nếu luồng box chưa sống lúc kiểm. |
-
----
-
-## 3h · Tự cập nhật — đã moi xong cơ chế của hãng, **chưa dựng**
-
-Đọc từ bản dựng 0.29 ngày 28/08. Ghi lại đủ để dựng sau mà không phải đọc lại bundle.
-
-### Móc có sẵn, không cần vá
-
-```js
-feedBaseUrl: process.env.SAND_UPDATE_FEED_BASE_URL          // hãng để sẵn
-url = `${base}/api/update/${platform}/${appName}/${version}/${machineId}/${track}`
-platform : win32-x64-user · win32-arm64-user · darwin-arm64 · darwin-x64
-appName  : stable → "sand" · nightly → "sand-nightly" · dogfood → "sand-dogfood"
-```
-
-Trả lời:
-
-| mã | nghĩa |
-|---|---|
-| `204` | đang là bản mới nhất — **không phải** 200 thân rỗng, cũng không phải 404 |
-| `200` | Windows (`iupdate`): `{url, version, sha256hash?}` · macOS (`squirrel`): `{url, name}` |
-
-Client tự tải về `sand-update-<version>.exe`, **tự kiểm sha256**, rồi mới áp dụng. macOS thì nó dựng
-một feed server **localhost** rồi giao cho Squirrel.Mac — không nói chuyện thẳng với máy chủ.
-
-### Đường ngắn bị chặn ở đâu
-
-```js
-LMr = ["Anysphere, Inc.", "Anysphere"]
-if (sig.status !== "Valid") throw …
-if (!(signerAllowlist ?? LMr).includes(signerCommonName)) throw `unexpected signer ""`
-```
-
-`SandWindowsInstaller` kiểm **chữ ký Authenticode** và đối chiếu tên người ký với danh sách ghi cứng
-của hãng. Bộ cài của ta không ký ⇒ client tải xong rồi mới ném lỗi — **tệ hơn là không làm gì**.
-Nó cũng chạy file cài với `--updated /S` (cờ kiểu NSIS), trong khi bộ cài của ta là Inno Setup
-(`/VERYSILENT`).
-
-### Nên dựng theo hình nào
-
-1. **Feed đúng hình dạng của hãng** trong backend này, phát từ `.data/dist` — để nếu sau này ký được
-   bộ cài và vá `signerAllowlist` thì chỉ cần bỏ `SAND_DISABLE_UPDATES`, không phải viết lại.
-2. **Bộ cập nhật của riêng ta** trong launcher (PowerShell, không cần Node trên máy đích): hỏi cùng
-   cửa đó → tải → kiểm sha256 → chạy bộ cài với `/VERYSILENT`.
-3. Ký bộ cài + vá `signerAllowlist` là **đường thứ ba**, cần chứng chỉ thật; chỉ làm nếu muốn nút
-   "Check for Updates" trong app chạy được.
-
-Phiên bản suy từ tên file (`Bot-Noi-Bo-Setup-20260827.exe` → `2026.08.27`) chứ không chép tay: một
-con số suy được từ file đang nằm đó thì không bao giờ lệch với file thật.
 
 ---
 
@@ -930,7 +1193,6 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
 | [architecture.md](../architecture.md) | kiến trúc tổng |
 | [legal.md](../legal.md) | ranh giới: dùng cá nhân / nghiên cứu |
-| [len-0-29.md](../plan/len-0-29.md) | **client 0.29 có gì mới · có nên lên không · theo thứ tự nào** |
 | [runbooks/trien-khai.md](runbooks/trien-khai.md) | **triển khai + lùi bản** — một trang, §1 là nút lùi |
 
 ---
