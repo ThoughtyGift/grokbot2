@@ -96,6 +96,13 @@ export interface RpcCtx {
   /** The raw (unframed) request body, for the one RPC whose argument matters: InstallUserPlugin. */
   body?: Buffer;
   /**
+   * Vé cổng dành riêng cho người gọi, đóng vào bản mô tả box (`EnsureSandBox`, trường 11).
+   *
+   * Gói này không tự sinh ra được — nó thuần protobuf, không giữ bí mật nào. Backend đưa xuống.
+   * Vắng mặt ⇒ vé dùng chung như trước, tức mọi máy là một người.
+   */
+  gatewayTicket?: string;
+  /**
    * Plugin installs for the caller, owned by the backend (it writes the per-user `.mcp.json`).
    * Absent ⇒ the historical hardcoded behaviour: plugin 1 shown installed, `Add` a no-op.
    */
@@ -221,8 +228,8 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
 
   // GrokBotService.EnsureSandBox -> descriptor pointing the box gateway/vnc/exec at this backend.
   // Override these URLs in production to point at the real VPS box.
-  EnsureSandBox: () => ensureSandBox(),
-  EnsureSandBoxWindow: () => ensureSandBox(),
+  EnsureSandBox: (ctx) => ensureSandBox(undefined, ctx.gatewayTicket),
+  EnsureSandBoxWindow: (ctx) => ensureSandBox(undefined, ctx.gatewayTicket),
 
   // Plugins overlay. Empty proto used to decode as plugins:[] → Marketplace "isn't available".
   // These are local stubs (not Cursor.com). yPa drops a Plugin with no mcp_servers and no skills.
@@ -560,7 +567,7 @@ export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
  * because the app opens it as given. Point GROKBOT2_VNC_URL at a self-hosted box
  * (infra/vps/grok-box-up.sh brings one up); without it the pane stays unreachable.
  */
-export function ensureSandBox(base = "http://localhost:8788"): Buffer {
+export function ensureSandBox(base = "http://localhost:8788", gatewayTicket?: string): Buffer {
   const vncUrl = process.env.GROKBOT2_VNC_URL ?? `${base}/vnc`;
   const execUrl = process.env.GROKBOT2_EXEC_URL ?? `${base}/exec`;
   const gatewayUrl = process.env.GROKBOT2_GATEWAY_URL ?? `${base}/gw`;
@@ -577,7 +584,11 @@ export function ensureSandBox(base = "http://localhost:8788"): Buffer {
     // The ticket the client presents on every /gw/* call. Minted per boot by the backend
     // (services/grokbot-backend/src/auth-gate.ts) — a literal here would be a credential written
     // in the source, which is no credential at all against a process that can read the repo.
-    pbStr(11, process.env.GROKBOT2_GATEWAY_TOKEN ?? "gw-token"), // gateway_token
+    // Vé **của người gọi** khi backend đưa một cái; nếu không thì vé dùng chung như trước.
+    // Đây là chỗ hai tài khoản đang dùng chung dữ liệu: app dội lại đúng chuỗi này trên mọi lời
+    // gọi /gw, nên một vé dùng chung nghĩa là mọi máy desktop đều là một người.
+    // Xem services/grokbot-backend/src/gateway-ticket.ts.
+    pbStr(11, gatewayTicket || process.env.GROKBOT2_GATEWAY_TOKEN || "gw-token"), // gateway_token
     // The viewer config wants primaryUrl + forkBaseUrl + networkToken together; leaving the
     // fork base empty makes the whole vncProxy block invalid, so default it to the same box.
     pbStr(12, process.env.GROKBOT2_FORK_VNC_URL ?? new URL(vncUrl).origin), // fork_vnc_base_url

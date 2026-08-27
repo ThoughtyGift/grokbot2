@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { tokenVersionOf } from "./token-version.js";
+import { ownerOfTicket } from "./gateway-ticket.js";
 import { authMode } from "./auth-mode.js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -192,7 +193,19 @@ export function cinapiCookieUser(headers: Record<string, unknown> | { cookie?: s
 /** The trusted owner for a request, from a verified JWT — or the default identity when absent/invalid
  *  (the /gw gateway ticket, or the single-user desktop). One place decides the identity trust. */
 export function ownerFromAuth(authHeader?: string | string[]): string {
-  return verifyJwt(authHeader)?.authId ?? DEFAULT_USER.authId;
+  const jwt = verifyJwt(authHeader);
+  if (jwt) return jwt.authId;
+  /*
+   * Vé cổng cũng là một danh tính — và trên thực tế nó là danh tính DUY NHẤT mà app desktop gửi.
+   *
+   * Đo trên VPS 27/08: `/gw/__coverage` đếm 429 lượt `matching-bearer` và 3 lượt `user-jwt`. Ba
+   * lượt kia là lệnh thử của tôi; app không gửi JWT bao giờ. Nên dòng cũ — chỉ đọc JWT rồi rơi về
+   * danh tính mặc định — biến mọi máy desktop thành cùng một người, và tài khoản mới trên máy 3
+   * mở ra thấy nguyên bộ bot của máy 2.
+   */
+  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const presented = String(raw ?? "").replace(/^Bearer\s+/i, "").trim();
+  return ownerOfTicket(presented) ?? DEFAULT_USER.authId;
 }
 
 

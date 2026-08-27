@@ -22,6 +22,7 @@ if (billingMode() !== "off") seedPlans();
 import { pluginsPortFor } from "./plugins.js";
 import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";
+import { mintTicket } from "./gateway-ticket.js";
 import { mcpServers as mcpServersFor, mcpServerStatus } from "./mcp.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
 import {
@@ -317,6 +318,15 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   const rpcUser = verifyJwt(req.headers.authorization) ?? DEFAULT_USER;
   const rpc = await runWithOwner(ownerFromAuth(req.headers.authorization), () => handleBootstrapRpc(url, ct, {
     user: rpcUser,
+    /*
+     * Vé cổng RIÊNG cho người này, đóng vào bản mô tả box.
+     *
+     * Trên đường bootstrap app CÓ gửi JWT (nên `rpcUser` ở trên mới có nghĩa), nhưng trên đường
+     * `/gw` nó chỉ dội lại vé lấy từ bản mô tả. Đó là lý do hai tài khoản dùng chung dữ liệu:
+     * vé dùng chung ⇒ `ownerFromAuth` trên `/gw` luôn ra danh tính mặc định. Phát vé theo người
+     * ở đây là chỗ duy nhất sửa được, vì app chỉ trả lại đúng thứ ta đưa nó.
+     */
+    gatewayTicket: mintTicket(rpcUser.authId),
     access: accessVerdict(rpcUser),
     usage: currentPeriodUsage(rpcUser) ?? undefined,
     body,

@@ -39,6 +39,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redact } from "./redact.js";
 import { verifyJwt, cinapiCookieUser } from "./auth.js";
+import { ownerOfTicket, looksLikeUserTicket } from "./gateway-ticket.js";
 // Mức siết sống ở `auth-mode.ts` — `auth.ts` cũng cần nó, và nhập từ đây sẽ thành vòng tròn.
 import { authMode } from "./auth-mode.js";
 
@@ -105,7 +106,7 @@ export interface AuthVerdict {
   /** Set when the request should be refused: the host's own message for this case. */
   message?: string;
   /** What we saw, for the warn log. Never the token itself. */
-  saw: "matching-bearer" | "user-jwt" | "stale-literal" | "unknown-token" | "other-scheme" | "no-header";
+  saw: "matching-bearer" | "user-ticket" | "user-jwt" | "stale-literal" | "unknown-token" | "other-scheme" | "no-header";
 }
 
 /** Shape (never value) of the last unrecognised token, to tell a wrong guess from a stale cache. */
@@ -145,6 +146,14 @@ export function checkAuth(url: string, headers: Record<string, unknown>): AuthVe
   else {
     const presented = raw.replace(/^Bearer\s+/i, "").trim();
     if (presented === expected) saw = "matching-bearer";
+    /*
+     * Vé riêng của một người — chữ ký HMAC bằng chính bí mật của bản cài này.
+     *
+     * Phải xét TRƯỚC `verifyJwt`: vé không phải JWT nên `verifyJwt` sẽ trượt, rồi nó rơi xuống
+     * `unknown-token` và bị 401 — tức app của mọi người chết ngay lần khởi động sau khi đổi.
+     * Đứng sau `matching-bearer` thì vé dùng chung vẫn giữ nghĩa cũ.
+     */
+    else if (ownerOfTicket(presented)) saw = "user-ticket";
     // A signed grokbot-web user token (multi-tenant Phase 4) — a real credential, verified by HMAC,
     // distinct from the desktop's gateway ticket. Accepting it is what lets GROKBOT2_AUTH=enforce
     // protect the /v1 web surface without rejecting logged-in browser users.
@@ -161,6 +170,10 @@ export function checkAuth(url: string, headers: Record<string, unknown>): AuthVe
     // Comparing against the old literal is safe to record: it was public in the source until this
     // commit's parent. The unknown case reports shape only â€” length and prefix, never the value.
     else if (presented === "gw-token") saw = "stale-literal";
+    // Đúng hình dạng vé-theo-người mà chữ ký sai: hoặc là bí mật đã xoay (xoá
+    // `.data/gateway-token.txt` rồi dựng lại), hoặc có người đang tự bịa vé. Hai ca cần hai cách
+    // xử khác hẳn, nên chúng không được gộp vào một chữ "unknown".
+    else if (looksLikeUserTicket(presented)) saw = "unknown-token";
     else saw = "unknown-token";
     if (saw === "unknown-token") lastUnknownShape = `len=${presented.length} prefix=${presented.slice(0, 3)}â€¦`;
   }
