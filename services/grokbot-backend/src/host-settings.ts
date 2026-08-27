@@ -17,8 +17,13 @@ import { currentOwner } from "./request-context.js";
  * quyền tool…) là cài đặt của cái máy và đúng là dùng chung.
  *
  * Lưu dưới `byOwner[ownerId]` trong cùng blob JSON đã có — khỏi đổi bảng, cùng lối với `uiByOwner`.
+ *
+ * `hasSeenOnboarding` thuộc nhóm này, và nó **từng bị bỏ quên**: mặc định cứng là `true`, dùng chung
+ * cho mọi người. Nên người dùng MỚI trên một backend đã chạy một thời gian bị app cho là "đã xem
+ * giới thiệu rồi" và **nhảy thẳng vào giao diện chính, mất phần mở đầu**. Đúng triệu chứng đo được
+ * trên máy thứ hai ngày 27/08. "Đã xem chưa" là chuyện của từng người, không phải của cái máy.
  */
-const PER_USER_KEYS = new Set(["userTimeZone", "notifications"]);
+const PER_USER_KEYS = new Set(["userTimeZone", "notifications", "hasSeenOnboarding"]);
 
 const settings: Record<string, unknown> = {
   notifications: { isEnabled: false },
@@ -31,7 +36,17 @@ const settings: Record<string, unknown> = {
   webauthnProxyEnabled: false,
   userTimeZone: "UTC",
   sidebarSections: [],
-  hasSeenOnboarding: true,
+  /*
+   * `false` là mặc định ĐÚNG, dù nó nghe như một bước lùi.
+   *
+   * `hostSettings()` trộn mặc định rồi đè phần riêng của người gọi lên, nên giá trị này chỉ áp dụng
+   * cho **người chưa có slice nào** — tức người mới. Họ chưa xem giới thiệu thật, nên nói `true` là
+   * nói dối, và app bỏ qua phần mở đầu.
+   *
+   * Người đã dùng rồi không bị ảnh hưởng: app ghi `hasSeenOnboarding: true` vào slice của họ ngay
+   * lần xem đầu, và slice luôn thắng mặc định.
+   */
+  hasSeenOnboarding: false,
   uiByOwner: {},   // bố cục theo từng chủ sở hữu — xem `patchUiPrefs` ở cuối file
   byOwner: {},     // khoá theo người (múi giờ, thông báo) — xem PER_USER_KEYS
   ...(loadState().hostSettings ?? {}),   // restore persisted settings over the defaults

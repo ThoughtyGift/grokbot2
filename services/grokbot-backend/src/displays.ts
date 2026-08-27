@@ -17,6 +17,15 @@
  */
 import { boxCall, boxConfigured } from "./box-exec.js";
 import { sq } from "./desktop.js";
+
+/**
+ * Bọc nháy KÉP — dùng khi đường dẫn có `$HOME` cần shell nở ra.
+ *
+ * `sq` bọc nháy đơn và chặn mọi phép nở, đúng cho đường dẫn cố định. Nhưng slot nay nằm trong home
+ * của từng người, và home đó chỉ shell của họ mới biết. Chỉ thoát `"`, `$` của biến giữ nguyên —
+ * đường dẫn ở đây do code sinh (`$HOME` + số slot), không nhận chuỗi từ người dùng.
+ */
+const dq = (s: string): string => `"${s.replace(/"/g, '\\"')}"`;
 import { boxSnapshot } from "./box-resources.js";
 
 export interface DisplaySlot {
@@ -42,7 +51,22 @@ const MAX = Number(process.env.GROKBOT2_MAX_DISPLAYS ?? 4);
 const CDP_BASE_PORT = Number(process.env.GROKBOT2_SLOT_CDP_BASE ?? 9301);
 /** Tránh xa các display box đang dùng (:77 :99 :294 :336 :341 :342 :381 :433). */
 const DISPLAY_BASE = Number(process.env.GROKBOT2_SLOT_DISPLAY_BASE ?? 521);
-const ROOT = "/tmp/grokbot2/slots";
+/**
+ * Nơi đặt display + hồ sơ Chrome của mỗi slot.
+ *
+ * `~/grokbot2-slots` chứ không phải `/tmp/grokbot2/slots`, và đây là chỗ chặng 5 buộc phải đổi.
+ *
+ * Bản cũ dùng một thư mục dùng chung dưới `/tmp`, do `box` sở hữu, mode 755. Chạy được khi mọi bot
+ * là `box`. Sau khi tách người dùng thì bot chạy dưới `gb2uNNN`, và `mkdir` trong đó trả
+ * **`Permission denied`** — nhưng `spawnSlot` không kiểm mã trả về, nên nó **im lặng không tạo được
+ * gì**, `waitCdp` hết giờ, `ensureDisplay` trả `null`, và bot lặng lẽ lùi về con Chrome dùng chung.
+ * Tức là chỗ rò mà cờ này sinh ra để bịt lại **vẫn mở**, trong khi mọi thứ trông như đã bật.
+ *
+ * Dùng `$HOME`, và bọc bằng **nháy kép** (`dq`) chứ không phải `sq`: trong nháy đơn shell không nở
+ * biến, nên `sq("$HOME/…")` sẽ tạo một thư mục tên đúng là `$HOME`. `dq` giữ được phép nở, và nở
+ * thành home của **chính người đang chạy lệnh** — nên mỗi người một chỗ, không ai chạm được của ai.
+ */
+const ROOT = process.env.GROKBOT2_SLOT_ROOT ?? "$HOME/grokbot2-slots";
 /** Nghỉ lâu hơn mức này thì thu — 500 MB không nên nằm không vì một bot đã xong việc. */
 const IDLE_MS = Number(process.env.GROKBOT2_DISPLAY_IDLE_MS ?? 600_000);
 
@@ -93,16 +117,23 @@ async function spawnSlot(s: DisplaySlot): Promise<void> {
     "google-chrome", "--no-first-run", "--no-default-browser-check", "--test-type",
     "--disable-background-networking", "--disable-component-update", "--no-sandbox",
     "--disable-gpu", "--window-size=1280,800",
-    `--user-data-dir=${s.profileDir}`, `--remote-debugging-port=${s.cdpPort}`,
+    `--user-data-dir=${dq(s.profileDir)}`, `--remote-debugging-port=${s.cdpPort}`,
     "about:blank",
   ].join(" ");
   const cmd = [
-    `mkdir -p ${sq(s.profileDir)}`,
-    `nohup Xvfb ${s.display} -screen 0 1280x800x24 -ac > ${sq(`${s.dir}/xvfb.log`)} 2>&1 < /dev/null & sleep 1.2`,
-    `DISPLAY=${s.display} nohup fluxbox > ${sq(`${s.dir}/wm.log`)} 2>&1 < /dev/null & sleep 0.6`,
-    `DISPLAY=${s.display} nohup ${chrome} > ${sq(`${s.dir}/chrome.log`)} 2>&1 < /dev/null & echo started`,
+    // `mkdir` phải nói ra khi thất bại. Bản trước nuốt mã trả về, nên khi thư mục dùng chung dưới
+    // `/tmp` không cho `gb2uNNN` ghi, cả hàm này **im lặng không tạo gì** — rồi `waitCdp` hết giờ và
+    // bot lặng lẽ lùi về Chrome dùng chung. Nghĩa là chỗ rò vẫn mở trong khi mọi thứ trông như đã bật.
+    `mkdir -p ${dq(s.profileDir)} || { echo "MKDIR-FAIL"; exit 1; }`,
+    `nohup Xvfb ${s.display} -screen 0 1280x800x24 -ac > ${dq(`${s.dir}/xvfb.log`)} 2>&1 < /dev/null & sleep 1.2`,
+    `DISPLAY=${s.display} nohup fluxbox > ${dq(`${s.dir}/wm.log`)} 2>&1 < /dev/null & sleep 0.6`,
+    `DISPLAY=${s.display} nohup ${chrome} > ${dq(`${s.dir}/chrome.log`)} 2>&1 < /dev/null & echo started`,
   ].join("; ");
-  await boxCall<ExecResult>("exec", { command: cmd });
+  const r = await boxCall<ExecResult>("exec", { command: cmd });
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  if (out.includes("MKDIR-FAIL")) {
+    throw new Error(`không tạo được thư mục slot ${s.dir} — kiểm quyền trên box: ${out.trim().slice(0, 160)}`);
+  }
 }
 
 /** CDP đã trả lời chưa. Không có bước này thì lệnh đầu tiên của bot rơi vào một Chrome chưa mở. */
@@ -166,11 +197,11 @@ async function teardown(s: DisplaySlot): Promise<void> {
     `pkill -f ${sq(`[r]emote-debugging-port=${port}`)}`,
     `pkill -f ${sq(`[X]vfb :${n}`)}`,
     "sleep 1",
-    `rm -rf ${sq(s.dir)}`,
+    `rm -rf ${dq(s.dir)}`,
     `rm -f ${sq(`/tmp/.X11-unix/X${n}`)}`,
     // Nói ra kết quả thật thay vì "done": còn sót thì phải thấy ngay ở log, không phải một tuần sau
     // khi RAM hết.
-    `echo "left=$(ps -eo args | grep -cE '[X]vfb :${n}|[c]hrome.*${port}') dir=$(test -e ${sq(s.dir)} && echo yes || echo no)"`,
+    `echo "left=$(ps -eo args | grep -cE '[X]vfb :${n}|[c]hrome.*${port}') dir=$(test -e ${dq(s.dir)} && echo yes || echo no)"`,
   ].join("; ");
   const r = await boxCall<ExecResult>("exec", { command: cmd });
   const out = String(r.stdout ?? "").trim();

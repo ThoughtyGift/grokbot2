@@ -35,3 +35,23 @@ test("notifications cũng theo người", () => {
   assert.deepEqual(as("user-A", () => hostSettings().notifications), { isEnabled: true });
   assert.deepEqual(as("user-B", () => hostSettings().notifications), { isEnabled: false });
 });
+
+/*
+ * ── Onboarding là chuyện của từng NGƯỜI ────────────────────────────────────────
+ *
+ * Đo trên máy thứ hai 27/08: người dùng mới bị app nhảy thẳng vào giao diện chính, **mất phần giới
+ * thiệu mở đầu**. Truy ra `hasSeenOnboarding` là mặc định cứng `true` và dùng chung cho mọi người —
+ * nên một backend đã chạy một thời gian nói với MỌI người mới rằng họ đã xem rồi.
+ */
+test("người MỚI chưa xem giới thiệu", () => {
+  const s = as("auth0|nguoi-hoan-toan-moi", () => hostSettings());
+  assert.equal(s.hasSeenOnboarding, false,
+    "người chưa có slice nào phải được coi là chưa xem — nếu không app cắt mất phần mở đầu");
+});
+
+test("xem xong thì chỉ NGƯỜI ĐÓ được nhớ, người khác vẫn được xem", () => {
+  as("auth0|nguoi-A", () => patchHostSettings({ hasSeenOnboarding: true }));
+  assert.equal(as("auth0|nguoi-A", () => hostSettings()).hasSeenOnboarding, true, "A đã xem");
+  assert.equal(as("auth0|nguoi-B", () => hostSettings()).hasSeenOnboarding, false,
+    "B chưa xem — A xem xong không được cướp mất phần mở đầu của B");
+});
