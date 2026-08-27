@@ -14,7 +14,7 @@
 #
 #   git archive --format=tar.gz -o /tmp/g.tar.gz HEAD
 #   scp -P 24700 /tmp/g.tar.gz root@103.75.186.63:/tmp/
-#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/current/infra/vps/deploy.sh /tmp/g.tar.gz'
+#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/bin/deploy.sh /tmp/g.tar.gz'
 name: Deploy VPS
 
 on:
@@ -68,7 +68,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "bash /opt/grokbot2/current/infra/vps/deploy.sh /tmp/grokbot2-${{ steps.pack.outputs.sha }}.tar.gz"
+            "bash /opt/grokbot2/bin/deploy.sh /tmp/grokbot2-${{ steps.pack.outputs.sha }}.tar.gz"
 
       - name: Kiểm qua Internet
         run: |
@@ -85,5 +85,5 @@ jobs:
       - name: Nếu hỏng thì lùi thế nào
         if: failure()
         run: |
-          echo "::notice::Lui nhanh: ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash /opt/grokbot2/current/infra/vps/rollback.sh'"
+          echo "::notice::Lui nhanh: ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash /opt/grokbot2/bin/rollback.sh'"
           echo "::notice::Hoac chay workflow 'Rollback VPS'."

@@ -4,7 +4,7 @@
 # nút, không phải một form có bốn ô. Bỏ trống `release` thì nó về bản ngay trước bản đang chạy.
 #
 # Cùng bốn secret như deploy. Không có GitHub thì một dòng SSH cũng làm được:
-#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/current/infra/vps/rollback.sh'
+#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/bin/rollback.sh'
 name: Rollback VPS
 
 on:
@@ -37,13 +37,13 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "bash /opt/grokbot2/current/infra/vps/rollback.sh --list"
+            "bash /opt/grokbot2/bin/rollback.sh --list"
 
       - name: Lùi
         run: |
           ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "bash /opt/grokbot2/current/infra/vps/rollback.sh ${{ inputs.release }}"
+            "bash /opt/grokbot2/bin/rollback.sh ${{ inputs.release }}"
 
       - name: Kiểm qua Internet
         run: |

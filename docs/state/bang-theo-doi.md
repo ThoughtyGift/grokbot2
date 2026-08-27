@@ -880,6 +880,7 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [architecture.md](../architecture.md) | kiến trúc tổng |
 | [legal.md](../legal.md) | ranh giới: dùng cá nhân / nghiên cứu |
 | [len-0-29.md](../plan/len-0-29.md) | **client 0.29 có gì mới · có nên lên không · theo thứ tự nào** |
+| [runbooks/trien-khai.md](runbooks/trien-khai.md) | **triển khai + lùi bản** — một trang, §1 là nút lùi |
 
 ---
 

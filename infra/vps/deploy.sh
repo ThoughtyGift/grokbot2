@@ -107,6 +107,17 @@ if [ "$ok" != "1" ]; then
   exit 1
 fi
 
+# Công cụ vận hành sống NGOÀI release.
+#
+# Bẫy này bắt được khi thử lùi thật: lùi về một bản cũ hơn ngày viết `rollback.sh` thì
+# `current/infra/vps/rollback.sh` **không còn tồn tại** — tức vừa lùi xong là mất luôn cái nút để
+# lùi tiếp. Công cụ phải ở chỗ không đổi theo bản đang chạy, và luôn là bản mới nhất.
+log "cap nhat cong cu van hanh -> $ROOT/bin"
+mkdir -p "$ROOT/bin"
+for t in deploy.sh rollback.sh; do
+  [ -f "$NEW/infra/vps/$t" ] && install -m 755 "$NEW/infra/vps/$t" "$ROOT/bin/$t"
+done
+
 # Dọn bản cũ — GIỮ LẠI `$KEEP` bản gần nhất, vì lối lùi chỉ có giá trị khi bản cũ còn đó.
 log "don ban cu (giu $KEEP)"
 ls -1dt "$ROOT/releases"/*/ 2>/dev/null | tail -n +"$((KEEP+1))" | while read -r old; do
