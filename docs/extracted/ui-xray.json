@@ -1,5 +1,5 @@
 {
-  "at": "2026-08-22T15:42:12.947Z",
+  "at": "2026-08-22T15:43:58.430Z",
   "viewport": "1920x1040",
   "controls": [
     {
@@ -768,5 +768,56 @@
     "restoredTo": 87,
     "x0": 87,
     "ok": true
-  }
+  },
+  "expandedControls": [
+    {
+      "label": "New",
+      "tag": "button",
+      "block": "sand-kit-icon-button",
+      "box": "346,14 24x24",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Search",
+      "tag": "button",
+      "block": "sand-agents-sidebar__search",
+      "box": "12,56 362x32",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Phòng marketing",
+      "tag": "button",
+      "block": "sand-agents-section__header",
+      "box": "12,96 362x30",
+      "cursor": "grab"
+    },
+    {
+      "label": "BOT HTML1",
+      "tag": "button",
+      "block": "sand-agents-section__header",
+      "box": "12,426 362x30",
+      "cursor": "grab"
+    },
+    {
+      "label": "Unassigned",
+      "tag": "button",
+      "block": "sand-agents-section__header",
+      "box": "12,466 362x30",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Plugins",
+      "tag": "button",
+      "block": "sand-agents-sidebar__plugins",
+      "box": "12,946 362x40",
+      "cursor": "pointer"
+    },
+    {
+      "label": "Open account menu",
+      "tag": "button",
+      "block": "sand-euugli",
+      "box": "12,988 362x40",
+      "cursor": "pointer"
+    }
+  ]
 }

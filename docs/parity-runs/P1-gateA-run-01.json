@@ -2,7 +2,7 @@
   "plan": "P1",
   "run": 1,
   "gate": "A",
-  "backendCommit": "2cb55e9",
+  "backendCommit": "463e91c",
   "appVersion": "0.20.0",
   "base": "http://localhost:8788",
   "summary": {
@@ -19,7 +19,7 @@
       "failed": 0
     },
     "channels": {
-      "checks": 14,
+      "checks": 16,
       "failed": 0
     }
   },
