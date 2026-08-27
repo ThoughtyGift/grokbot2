@@ -704,7 +704,7 @@ thành 7.x vì tài liệu cũ có "Chặng 1/2/3" của riêng nó, trùng tên
 | 7.1 | Bảy cờ chuyển roster/transcript/gửi tin lên đám mây | ✅ đã đo — **cờ do CHÍNH ta phát** |
 | 7.2 | Chạy thử 0.29 trên backend này | ✅ **28/08 — 3 lệnh thiếu, đã vá, `unmapped` rỗng** |
 | 7.3 | Đưa bộ vá sang 0.29 | ✅ **28/08 — chạy khô xanh trên 0.29 thật, 0.20 không hỏng** |
-| 7.4 | Tính năng mới, xếp theo giá trị | 🟡 **kế hoạch riêng: [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md)** — tính năng 1 ✅ 28/08 (đội bot + phòng chung), 3L/3/2 còn lại |
+| 7.4 | Tính năng mới, xếp theo giá trị | 🟡 **kế hoạch riêng: [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md)** — tính năng 1 ✅ 28/08 (đội bot + phòng chung), 3L/3/2 còn lại · bản đồ 0.29↔ta (trích từ bundle thật): [docs/extracted/0-29-mapping.md](../extracted/0-29-mapping.md) |
 | 7.5 | VNC từng slot (chặn 7.4.1) | ✅ **28/08** |
 | 7.6 | Nếu 7.2 xấu thì làm gì | — không cần, 7.2 tốt |
 | 7.7 | Thứ tự đề nghị | 🟡 đang theo |
