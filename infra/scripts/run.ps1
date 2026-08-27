@@ -7,7 +7,20 @@
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path $PSScriptRoot)
 $backend = Join-Path $repo 'services\grokbot-backend'
-$appExe = "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe"
+# Duong dan app — thu nhieu cho, vi cho MAC DINH khong con la cua ta.
+#
+# Bo cai 0.29 cua hang dat vao dung `%LOCALAPPDATA%\Programs\Grok Bot` va **thay the** ban 0.20 da
+# va o do (do 27/08: thu muc bien mat hoan toan). Ban tu chua o `C:\cai` con nguyen. Ghi cung mot
+# duong dan nghia la launcher chet ngay lan cai dat tiep theo cua hang.
+$appExe = $env:GROKBOT2_APP_EXE
+if (-not $appExe) {
+  foreach ($c in @(
+    "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe",
+    'C:\cai\Grok Bot.exe',
+    "$env:LOCALAPPDATA\Bot Noi Bo\Grok Bot.exe"
+  )) { if (Test-Path $c) { $appExe = $c; break } }
+}
+if (-not $appExe) { $appExe = "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe" }
 $bff = 8788
 
 Write-Host '=== grokbot2  pnpm dev:app ===' -ForegroundColor Cyan
