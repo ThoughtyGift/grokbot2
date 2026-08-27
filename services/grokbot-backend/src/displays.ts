@@ -161,7 +161,34 @@ interface ExecResult { stdout?: string; stderr?: string }
  * `--disable-background-networking` bỏ hộp "Can't update Chrome". Cả hai **chiếm chỗ trên ảnh chụp**
  * mà model đọc toạ độ từ đó, nên chúng là lỗi đo chứ không phải chuyện thẩm mỹ.
  */
+/**
+ * Giết `x11vnc`/`websockify` cũ của CHÍNH slot này — **lượt gọi RIÊNG, không gộp vào lệnh dựng**.
+ *
+ * Hai chuyện, và cả hai đã trả giá:
+ *
+ *  1. **Vì sao phải dọn.** Mật khẩu VNC sinh mới mỗi lần dựng. `x11vnc` cũ còn sống thì cái mới
+ *     không chiếm được cổng RFB, chết lặng, và cái cũ phục vụ tiếp bằng mật khẩu CŨ — người dùng
+ *     nhận *"password check failed"*, một thông báo không liên quan gì tới nguyên nhân. `teardown`
+ *     có dọn, nhưng backend khởi động lại giữa chừng thì lượt thu ấy không bao giờ chạy.
+ *
+ *  2. **Vì sao phải TÁCH.** Bản đầu nhét `pkill` vào đầu chuỗi lệnh dựng. Chuỗi đó chứa cả mẫu
+ *     `[x]11vnc …` lẫn `nohup x11vnc -display :521 …` ở dòng sau — và `pkill -f` soi **toàn bộ dòng
+ *     lệnh của shell đang chạy nó**, nên nó khớp đoạn `x11vnc` phía sau và **tự giết chính mình**.
+ *     Kết quả: không Xvfb, không x11vnc, không websockify, mà log vẫn báo "nhận :521" vì Chrome cũ
+ *     còn sống nên `waitCdp` vẫn đạt. Mẹo `[x]` chỉ tránh được đối số của chính pkill, không tránh
+ *     được một lần xuất hiện khác trong cùng dòng.
+ */
+async function killSlotVnc(s: DisplaySlot): Promise<void> {
+  const cmd = [
+    `pkill -f ${sq(`[x]11vnc -display ${s.display} `)}`,
+    `pkill -f ${sq(`[w]ebsockify --web /usr/share/novnc/ ${s.wsPort} `)}`,
+    "true",
+  ].join("; ");
+  try { await boxCall<ExecResult>("exec", { command: cmd }); } catch { /* chưa có gì để giết */ }
+}
+
 async function spawnSlot(s: DisplaySlot & { vncPass: string; profileDir: string }): Promise<void> {
+  await killSlotVnc(s);
   const chrome = [
     "google-chrome", "--no-first-run", "--no-default-browser-check", "--test-type",
     "--disable-background-networking", "--disable-component-update", "--no-sandbox",
@@ -174,20 +201,6 @@ async function spawnSlot(s: DisplaySlot & { vncPass: string; profileDir: string 
     // `/tmp` không cho `gb2uNNN` ghi, cả hàm này **im lặng không tạo gì** — rồi `waitCdp` hết giờ và
     // bot lặng lẽ lùi về Chrome dùng chung. Nghĩa là chỗ rò vẫn mở trong khi mọi thứ trông như đã bật.
     `mkdir -p ${dq(s.profileDir)} || { echo "MKDIR-FAIL"; exit 1; }`,
-    /*
-     * Dọn tiến trình cũ của CHÍNH slot này trước khi dựng — bước này đã trả giá thật.
-     *
-     * Mật khẩu VNC sinh mới mỗi lần dựng. Nếu `x11vnc` cũ còn sống thì cái mới **không chiếm được
-     * cổng RFB**, chết lặng, và cái cũ tiếp tục phục vụ bằng **mật khẩu cũ** — trong khi URL vừa
-     * phát cho người dùng mang mật khẩu mới. Triệu chứng: *"New connection has been rejected with
-     * reason: password check failed!"*, và không có gì trong log backend nói vì sao.
-     *
-     * Không phải "để cho chắc": `teardown` chạy khi thu slot, nhưng backend khởi động lại giữa
-     * chừng thì lượt thu ấy không bao giờ chạy, và tiến trình cũ sống tiếp qua nhiều bản triển khai.
-     */
-    `pkill -f ${sq(`[x]11vnc -display ${s.display} `)} 2>/dev/null; true`,
-    `pkill -f ${sq(`[w]ebsockify --web /usr/share/novnc/ ${s.wsPort} `)} 2>/dev/null; true`,
-    "sleep 0.5",
     `nohup Xvfb ${s.display} -screen 0 1280x800x24 -ac > ${dq(`${s.dir}/xvfb.log`)} 2>&1 < /dev/null & sleep 1.2`,
     `DISPLAY=${s.display} nohup fluxbox > ${dq(`${s.dir}/wm.log`)} 2>&1 < /dev/null & sleep 0.6`,
     `DISPLAY=${s.display} nohup ${chrome} > ${dq(`${s.dir}/chrome.log`)} 2>&1 < /dev/null & sleep 0.4`,
