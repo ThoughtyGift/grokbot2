@@ -137,7 +137,14 @@ export async function setBoxSecrets(arg: unknown, owner = currentOwner()): Promi
 /**
  * Tiền tố nạp bí mật cho một lệnh shell của bot.
  *
- * `.` (dot) chứ không phải `source`: `source` là của bash, còn daemon có thể chạy `sh`. `2>/dev/null`
- * và `|| true` vì chưa đặt bí mật nào là chuyện bình thường, không phải lỗi.
+ * Hai chi tiết, và cái thứ hai đã suýt làm hỏng mọi lệnh shell của mọi người chưa đặt bí mật:
+ *
+ * **`.` chứ không phải `source`** — `source` là của bash, còn daemon trên hộp chạy `sh`.
+ *
+ * **Phải kiểm `[ -r ]` TRƯỚC.** Trong `sh` (dash), `.` là **builtin đặc biệt**: nạp một file không
+ * tồn tại làm **shell thoát ngay lập tức**, và `|| true` KHÔNG cứu được — đây là luật của POSIX về
+ * special builtin, không phải lỗi của dash. Bản đầu viết `. FILE 2>/dev/null || true` và đo được
+ * đúng hậu quả: với một người chưa đặt bí mật, `sh -c 'echo BAT-DAU; . FILE || true; echo KET-THUC'`
+ * chỉ in `BAT-DAU`. Tức mọi lệnh của bot chết ở dòng đầu, không chạy gì, không báo gì.
  */
-export const SECRETS_PRELUDE = `. ${BOX_SECRETS_FILE} 2>/dev/null || true; `;
+export const SECRETS_PRELUDE = `[ -r ${BOX_SECRETS_FILE} ] && . ${BOX_SECRETS_FILE} || true; `;

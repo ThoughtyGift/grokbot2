@@ -74,12 +74,22 @@ test("đối số hỏng không làm nổ, chỉ trả trạng thái hiện có"
   }
 });
 
-test("tiền tố nạp bí mật dùng `.` chứ không phải `source`, và không chết khi chưa có file", () => {
-  // `source` là của bash; daemon trên hộp có thể chạy `sh`. Và "chưa đặt bí mật nào" là chuyện
-  // bình thường, không phải lỗi — nếu nó làm hỏng lệnh thì mọi lệnh shell của bot chết theo.
-  assert.ok(SECRETS_PRELUDE.startsWith(". "), SECRETS_PRELUDE);
-  assert.ok(SECRETS_PRELUDE.includes("2>/dev/null"));
+test("tiền tố phải KIỂM file trước khi nạp — nếu không, mọi lệnh của người chưa đặt bí mật chết", () => {
+  /*
+   * Trong `sh` (dash), `.` là builtin ĐẶC BIỆT: nạp file không tồn tại làm shell thoát ngay, và
+   * `|| true` không cứu được. Đo trên hộp thật với bản đầu:
+   *
+   *     sh -c 'echo BAT-DAU; . $HOME/.grokbot2-secrets.env 2>/dev/null || true; echo KET-THUC'
+   *     → chỉ in "BAT-DAU"
+   *
+   * Nghĩa là mọi lệnh shell của bot chết ở dòng đầu, không chạy gì, không báo gì. Bài này là chỗ
+   * giữ để không ai viết lại `. FILE || true` cho gọn.
+   */
+  assert.ok(SECRETS_PRELUDE.startsWith("[ -r "), `phai kiem truoc khi nap: ${SECRETS_PRELUDE}`);
+  assert.ok(!/^\s*\. /.test(SECRETS_PRELUDE), "khong duoc goi `.` vo dieu kien");
+  assert.ok(SECRETS_PRELUDE.includes("&& . "));
   assert.ok(SECRETS_PRELUDE.includes("|| true"));
+  assert.ok(!SECRETS_PRELUDE.includes("source "), "`source` la cua bash, hop chay sh");
   assert.ok(BOX_SECRETS_FILE.startsWith("$HOME/"), "phải nằm trong home của CHÍNH người đó");
 });
 
