@@ -1,0 +1,89 @@
+# Triển khai lên VPS — **bấm tay**, không tự chạy khi merge.
+#
+# Vì sao bấm tay: máy đó đang có người dùng thật, và một lần merge không phải một lần quyết định
+# triển khai. Ai muốn tự động thì đổi `on:` — nhưng hãy đọc `deploy.sh` trước, nhất là cửa sức khoẻ.
+#
+# Cần bốn secret (Settings → Secrets and variables → Actions):
+#   VPS_HOST      103.75.186.63
+#   VPS_PORT      24700
+#   VPS_USER      root
+#   VPS_SSH_KEY   khoá riêng SSH, dạng OpenSSH đầy đủ (có cả dòng BEGIN/END)
+#
+# Việc thật xảy ra ở `infra/vps/deploy.sh` TRÊN máy đích. Workflow này chỉ đóng gói và giao —
+# để cùng một quy trình chạy được từ máy cá nhân khi GitHub có việc:
+#
+#   git archive --format=tar.gz -o /tmp/g.tar.gz HEAD
+#   scp -P 24700 /tmp/g.tar.gz root@103.75.186.63:/tmp/
+#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/current/infra/vps/deploy.sh /tmp/g.tar.gz'
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Nhánh hoặc commit muốn triển khai'
+        required: true
+        default: 'main'
+
+concurrency:
+  # Hai lượt triển khai chồng nhau sẽ tranh liên kết `current`. Không huỷ lượt đang chạy —
+  # bỏ dở giữa chừng còn tệ hơn chờ.
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  trien-khai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Đóng gói (chỉ file đã theo dõi)
+        id: pack
+        run: |
+          sha="$(git rev-parse --short HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # `git archive` — không kéo theo node_modules, .data, hay rác trong cây làm việc.
+          git archive --format=tar.gz -o "/tmp/grokbot2-$sha.tar.gz" HEAD
+          ls -la "/tmp/grokbot2-$sha.tar.gz"
+
+      - name: Mở khoá SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Giao gói
+        run: |
+          scp -i ~/.ssh/id_deploy -P "${{ secrets.VPS_PORT }}" \
+            "/tmp/grokbot2-${{ steps.pack.outputs.sha }}.tar.gz" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/"
+
+      - name: Chạy deploy.sh trên máy đích
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "bash /opt/grokbot2/current/infra/vps/deploy.sh /tmp/grokbot2-${{ steps.pack.outputs.sha }}.tar.gz"
+
+      - name: Kiểm qua Internet
+        run: |
+          # Cửa sức khoẻ trong deploy.sh hỏi từ bên trong máy. Đây hỏi từ NGOÀI, qua nginx và
+          # Cloudflare — hai chặng mà một lần triển khai tốt vẫn có thể vấp.
+          for i in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -m 8 https://cinai.app/agent/ || true)"
+            [ "$code" = "200" ] && { echo "cinai.app/agent = 200"; exit 0; }
+            sleep 3
+          done
+          echo "::error::khong thay 200 tu ngoai Internet — cannh bao: ban moi CO THE dang chay ma nginx/CF chua theo kip"
+          exit 1
+
+      - name: Nếu hỏng thì lùi thế nào
+        if: failure()
+        run: |
+          echo "::notice::Lui nhanh: ssh -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'bash /opt/grokbot2/current/infra/vps/rollback.sh'"
+          echo "::notice::Hoac chay workflow 'Rollback VPS'."

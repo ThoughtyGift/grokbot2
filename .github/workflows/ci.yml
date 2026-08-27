@@ -1,0 +1,68 @@
+# Cổng chất lượng — chạy trên mọi lần đẩy và mọi PR.
+#
+# Bốn cổng, xếp theo "cái nào hỏng thì đau nhất":
+#   1. typecheck  — sai kiểu là sai hợp đồng, và hợp đồng ở đây là với một client ta không viết
+#   2. unit       — 337 bài, trong đó có ranh giới kiến trúc (protobuf không được rò xuống dịch vụ)
+#   3. kích thước — hàm > 50 dòng / file > 800; mốc trong docs/state/self-xray-baseline.json
+#   4. hợp đồng   — contract-test.mjs, 48 bài về hình dạng client thật sự đọc
+#
+# KHÔNG triển khai. Triển khai là `deploy.yml`, bấm tay, vì đẩy thẳng lên máy đang có người dùng
+# thật khi vừa merge là cách nhanh nhất để một sáng thứ Hai trở nên tồi tệ.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Đẩy liên tiếp lên cùng một nhánh thì chỉ lượt cuối đáng chạy.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kiem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Cài phụ thuộc
+        run: pnpm install --frozen-lockfile
+
+      - name: Dựng
+        run: pnpm build
+
+      - name: Kiểm kiểu
+        run: pnpm typecheck
+
+      - name: Test đơn vị (337 bài)
+        working-directory: services/grokbot-backend
+        run: npx tsx --test src/*.test.ts
+
+      - name: Cổng kích thước mã
+        working-directory: services/grokbot-backend
+        run: |
+          # Cổng này đã bắt được một hàm 78 dòng lọt vào ngày 27/08 — giữ nó nghiêm.
+          out="$(node scripts/code-size.mjs)"
+          echo "$out"
+          long="$(echo "$out" | sed -n 's/.*hàm > 50 dòng: \([0-9]*\).*/\1/p')"
+          big="$(echo "$out"  | sed -n 's/.*file > 800 dòng: \([0-9]*\).*/\1/p')"
+          moc_long="$(node -p "require('../../docs/state/self-xray-baseline.json').longFns ?? 999")"
+          moc_big="$(node -p  "require('../../docs/state/self-xray-baseline.json').bigFiles ?? 999")"
+          echo "moc: hàm=$moc_long file=$moc_big"
+          [ "${long:-999}" -le "$moc_long" ] || { echo "::error::hàm > 50 dòng: $long, vượt mốc $moc_long"; exit 1; }
+          [ "${big:-999}"  -le "$moc_big"  ] || { echo "::error::file > 800 dòng: $big, vượt mốc $moc_big"; exit 1; }
+
+      - name: Hợp đồng client
+        working-directory: services/grokbot-backend
+        run: node scripts/contract-test.mjs

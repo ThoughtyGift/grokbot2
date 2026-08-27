@@ -1,0 +1,56 @@
+# Lùi bản trên VPS — bấm tay, vài giây.
+#
+# Để riêng khỏi `deploy.yml` có chủ ý: lúc cần lùi là lúc đang hoảng, và thứ bạn cần khi đó là **một**
+# nút, không phải một form có bốn ô. Bỏ trống `release` thì nó về bản ngay trước bản đang chạy.
+#
+# Cùng bốn secret như deploy. Không có GitHub thì một dòng SSH cũng làm được:
+#   ssh -p 24700 root@103.75.186.63 'bash /opt/grokbot2/current/infra/vps/rollback.sh'
+name: Rollback VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Tên bản muốn về (bỏ trống = bản ngay trước). Xem danh sách: rollback.sh --list'
+        required: false
+        default: ''
+
+concurrency:
+  # Dùng CHUNG nhóm với deploy: lùi trong lúc đang triển khai là cách chắc chắn nhất để hỏng cả hai.
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  lui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Mở khoá SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Các bản đang có
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "bash /opt/grokbot2/current/infra/vps/rollback.sh --list"
+
+      - name: Lùi
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${{ secrets.VPS_PORT }}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "bash /opt/grokbot2/current/infra/vps/rollback.sh ${{ inputs.release }}"
+
+      - name: Kiểm qua Internet
+        run: |
+          for i in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -m 8 https://cinai.app/agent/ || true)"
+            [ "$code" = "200" ] && { echo "cinai.app/agent = 200"; exit 0; }
+            sleep 3
+          done
+          echo "::error::da lui nhung ngoai Internet chua thay 200"
+          exit 1
