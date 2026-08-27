@@ -445,6 +445,68 @@ function isPrivateAddress(addr: string): boolean {
  * on loopback and is unauthenticated remote code execution, so an unfenced fetcher would hand
  * a prompt-injected page a way to reach it.
  */
+/**
+ * 3L — bot XEM video, đúng cơ chế app gốc đã lộ trong B2: rút khung hình + đo âm lượng + nhìn
+ * khung bằng mắt model. Transcript Test Clone: "~20 giây toàn màn đen", "track AAC có mà gần như
+ * câm (-91 dB)" — rồi tự sửa scene và quay lại. Không có phép màu nào khác.
+ *
+ * Một ảnh duy nhất: các khung ghép thành CONTACT SHEET (tile) vì pool chỉ chở một ảnh mỗi lượt —
+ * xem ctx.see. Ảnh vừa vào transcript cho người xem, vừa đặt trước mắt model ở lượt kế.
+ */
+TOOLS.watch_video = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
+  const path = String(spec?.path ?? spec?.file ?? spec?.target_file ?? spec?.video ?? "").trim();
+  if (!path) return 'watch_video cần {"path":"file video trên máy tính của bạn"}';
+  if (!boxConfigured()) return "Chưa nối máy tính nên không mở được video.";
+  // Đường dẫn đi thẳng vào lệnh shell trong nháy đơn — cấm nháy đơn và xuống dòng thay vì escape.
+  const NLCH = String.fromCharCode(10), CRCH = String.fromCharCode(13);
+  if (path.includes("'") || path.includes(NLCH) || path.includes(CRCH)) return "(đường dẫn chứa ký tự không hợp lệ)";
+  const q = `'${path}'`;
+  const frames = Math.min(Math.max(Number(spec?.frames) || 6, 2), 12);
+
+  // 1) ffprobe — dài, kích thước, codec; đồng thời là bước xác nhận file có thật.
+  const probe = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
+    command: `ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of default=noprint_wrappers=1 ${q}`,
+  });
+  if (probe.exitCode !== 0) return `Không mở được ${path}: ${probe.stderr.trim().slice(0, 300) || "ffprobe lỗi"}`;
+  const dur = Number((probe.stdout.match(/duration=([0-9.]+)/) ?? [])[1]) || 0;
+  const w = (probe.stdout.match(/width=([0-9]+)/) ?? [])[1] ?? "?";
+  const h = (probe.stdout.match(/height=([0-9]+)/) ?? [])[1] ?? "?";
+  const codec = (probe.stdout.match(/codec_name=([a-z0-9_]+)/) ?? [])[1] ?? "?";
+
+  // 2) volumedetect — chính là phép đo cho câu "-91 dB" của bot gốc. Không có track tiếng cũng là
+  // một câu trả lời, không phải lỗi.
+  const vol = await boxCall<{ stdout: string; exitCode: number }>("exec", {
+    command: `ffmpeg -hide_banner -i ${q} -map 0:a:0 -af volumedetect -f null - 2>&1 | grep -E "mean_volume|max_volume" || echo NO_AUDIO`,
+  });
+  const mean = (vol.stdout.match(/mean_volume: ([-0-9.]+) dB/) ?? [])[1];
+  const audio = vol.stdout.includes("NO_AUDIO") || mean == null
+    ? "không có track tiếng"
+    : `tiếng mean ${mean} dB, max ${(vol.stdout.match(/max_volume: ([-0-9.]+) dB/) ?? [])[1] ?? "?"} dB${Number(mean) <= -70 ? " (gần như câm)" : ""}`;
+
+  // 3) contact sheet — N khung rải đều, ghép 3 cột. -frames:v 1 → đúng MỘT ảnh jpg.
+  const cols = 3, rows = Math.ceil(frames / cols);
+  // KHÔNG ghi ra /tmp: exec chạy shell tự do nhưng readBytes đi qua safePath của daemon — mọi
+  // đường dẫn phải nằm TRONG root của box. Đường dẫn tương đối resolve về root ở cả hai op
+  // (exec có cwd mặc định là root), nên sheet nằm đúng chỗ đọc được. Đo được đúng lỗi này ở E2E
+  // lần 1: bot tự khai "tool trích khung hình bị chặn vì nó ghi tạm ra /tmp".
+  const sheet = `gb2-frames-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
+  const mk = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
+    command: `ffmpeg -hide_banner -y -i ${q} -vf "fps=${frames}/${Math.max(dur, 1)},scale=480:-2,tile=${cols}x${rows}" -frames:v 1 ${sheet} 2>&1 | tail -2`,
+  });
+  const info = `${path}: dài ${dur ? dur.toFixed(1) : "?"}s, ${w}x${h} ${codec}; ${audio}`;
+  if (mk.exitCode !== 0) return `Đã đo được ${info} — nhưng không rút được khung hình: ${mk.stdout.trim().slice(0, 200)}`;
+  const pull = await boxCall<{ totalSize: number; bytesBase64: string }>("readBytes", { target_file: sheet, offset: 0, length: 8_000_000 });
+  void boxCall("exec", { command: `rm -f ${sheet}` }).catch(() => { /* rác /tmp, box tự dọn */ });
+  if (!pull.bytesBase64 || pull.totalSize > 8_000_000) return `Đã đo được ${info} — nhưng ảnh khung hình quá lớn (${pull.totalSize} byte), không đính được.`;
+  const dataUrl = `data:image/jpeg;base64,${pull.bytesBase64}`;
+  const fileName = path.split("/").pop() || "video";
+  ctx.attach(dataUrl, `${fileName}.khung-hinh.jpg`, `${frames} khung hình rải đều từ ${fileName}`);
+  ctx.see(dataUrl);
+  return `Đã xem ${info}. ${frames} khung hình rải đều (đọc từ trái sang phải, trên xuống dưới) đã đặt trước mắt bạn — hãy nhìn và nhận xét nội dung thật, đừng đoán.`;
+};
+
 TOOLS.attach_image = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { url: unquote(arg) }; }
@@ -964,6 +1026,16 @@ const PEER_PROTOCOL =
  * like them, and a model shown a `calc` tool reaches for it instead of doing arithmetic in an
  * ordinary sentence.
  */
+const VIDEO_PROTOCOL = boxConfigured()
+  ? String.fromCharCode(10) + String.fromCharCode(10) +
+    "WATCHING VIDEO: to actually SEE a video file on your computer (one you recorded, downloaded, or " +
+    "produced), call " +
+    'TOOL_CALL: watch_video({"path":"/workspace/clip.mp4"}) — you get duration, resolution, audio ' +
+    "loudness, and a grid of evenly-spaced frames placed before your eyes. ALWAYS watch your own " +
+    "output before telling the user it is good — a black or silent clip is something you must catch " +
+    "yourself, then fix and re-check."
+  : "";
+
 const DEV_TOOLS = new Set(["echo", "time", "reverse", "upper", "count", "calc"]);
 
 const toolProtocolBase = (): string =>
@@ -985,7 +1057,7 @@ const toolProtocolBase = (): string =>
   "single response. Write nothing after those lines. Tools: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". If no tool is needed, just answer. Once tool results come back, answer from them." +
-  BROWSER_PROTOCOL + IMAGE_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + IMAGE_PROTOCOL + VIDEO_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 /** The tool protocol for one owner — the shared part plus that owner's MCP servers. */
 /**

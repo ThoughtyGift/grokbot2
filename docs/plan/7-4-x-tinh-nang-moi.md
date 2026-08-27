@@ -23,7 +23,7 @@ app gốc.**
 | Luật lượt nói trong phòng chung | 1 (nửa sau) | ✅ **28/08** | `e2e-group-turn.mjs` 7/7 |
 | Bot tự dựng đội: description + phòng | 1 (nửa đầu) | ✅ **28/08** | `e2e-team-build.mjs` 5/5 |
 | Description vào lời nhắc hệ thống | nền của 1 và 2 | ✅ **28/08** | `prompt-persona.test.ts` |
-| Bot xem video, tự chấm đầu ra | 3L | ⬜ **đề nghị làm kế tiếp** | — |
+| Bot xem video, tự chấm đầu ra | 3L | ✅ **28/08** | `e2e-watch-video.mjs` 8/8 — clip đen: bot tự thấy 'đen tuyền, -91 dB'; clip testsrc: tả đúng dải màu |
 | Bot tự cài phần mềm trên box (OBS…) | 3 | ⬜ hạ tầng, làm sau 3L | — |
 | Lời nhắc "bộ não" gợi ý skill/MCP/plugin | 2 | ⬜ | — |
 | Chạy lại kịch bản B2 (24 case, 7 bot) | khép vòng | 🟡 **lần 1: 28/08** — lặp lại sau mỗi tính năng | `b2-replay-2026-08-27-22-25.md`: trả lời 24/24, cùng nhịp tương tác 2/6 |
@@ -51,7 +51,7 @@ phía người nhận là `{role:"user", fromAgent:{id,name}}` — cả hai shap
 
 ---
 
-## Tính năng 3L — bot xem video, tự chấm đầu ra — ⬜ KẾ TIẾP
+## Tính năng 3L — bot xem video, tự chấm đầu ra — ✅ XONG 28/08
 
 **App gốc làm gì (đo trong B2, transcript Test Clone):** sau khi ghi hình bằng OBS, bot MỞ file
 `2026-08-08_20-17-52.mp4` và tự kết luận: *"~20 giây toàn màn đen, không đệ quy, không đổi scene,
@@ -59,14 +59,20 @@ không thấy UI"*, *"tiếng thì track AAC có mà gần như câm (-91 dB)"* 
 clip mới *"không đen, ~15s, chữ xanh Shopee E2E Man hinh"*. Tức: **rút khung hình + đo âm lượng +
 nhìn khung bằng mắt model**, không có phép màu nào khác.
 
-**Kế hoạch bên ta:** một tool `watch_video` trong `runtime/tools.ts`:
-1. `ffprobe` trên box: dài, codec, kích thước (ffmpeg đã có trên box — bot hãng cũng dùng ffmpeg).
-2. Rút N khung đều tay (`ffmpeg -vf fps=...`) + `volumedetect` lấy mean/max dB.
-3. Đính các khung vào lượt kế như ảnh (đường ống ảnh inline đã có sẵn — `attachments.ts`).
-4. Lời nhắc: "bạn ĐANG thấy các khung hình" — như ghi chú ảnh hiện có.
+**Đã làm (28/08):** tool `watch_video` trong `runtime/tools.ts` — ffprobe (dài/kích thước/codec)
++ `volumedetect` (mean/max dB, ≤ -70 dB chú thích "gần như câm") + contact sheet N khung ghép
+`tile=3xR` thành MỘT ảnh jpg (pool chỉ chở một ảnh mỗi lượt), vào transcript cho người xem
+(`ctx.attach`) và đặt trước mắt model ở lượt kế (`ctx.see`). Auto-approve vì chỉ NHÌN — cùng hạng
+với screenshot. ffmpeg 4.2.7 có sẵn trên box (`/usr/bin/ffmpeg`, đã probe).
 
-**Nghiệm thu:** E2E tạo một mp4 đen 5s + một mp4 có chữ trên box, hỏi bot "clip này có gì" — phải
-phân biệt được đen/có nội dung và đọc được mức âm lượng. So câu trả lời với đoạn B2 ở trên.
+Hai lỗi bắt được bằng đo: sheet ghi `/tmp` bị `safePath` của daemon chặn khi `readBytes` (mọi đường
+đọc/ghi file phải nằm trong ROOT của box — đường dẫn tương đối resolve về ROOT ở cả exec lẫn
+readBytes); và một assertion mù phủ định trong E2E match chữ "câm" của câu "không câm như clip kia".
+
+**Nghiệm thu (đạt):** `e2e-watch-video.mjs` **8/8** — hai clip dựng ngay trên box (đen+câm vs
+testsrc+440Hz): clip đen → "cả 6 khung hình đều đen tuyền … mean và max đều -91 dB, im lặng tuyệt
+đối" (đúng con số -91 dB như transcript app gốc); clip testsrc → "có hình, có tiếng … các dải màu
+dọc đỏ, xanh lá, xanh dương…", không kêu đen, không cần thẻ Allow.
 
 ---
 
