@@ -151,7 +151,22 @@ export function handleAuthPoll(url: string, res: ServerResponse): void {
     res.end(tokenPayload(out.user));
     return;
   }
-  // "chưa duyệt" và "không có phiên nào" trả cùng một câu: tách ra là nói cho người dò biết uuid nào
-  // có thật để dò tiếp.
-  return json(res, { error: "authorization_pending" }, 403);
+  /*
+   * **404, không phải 403** — và đây là hợp đồng của client, không phải lựa chọn của ta.
+   *
+   * Đọc từ chính bản dựng (`waitForResult` trong electron-main):
+   *
+   *     if (status === 403) { …; if (++o >= 3) return null }   ← ĐẾM LÀ LỖI, ba lần thì BỎ CUỘC
+   *     else if (status === 404) o = 0                          ← "chưa xong", đếm lại từ đầu
+   *
+   * Bản trước trả 403 nên client bỏ cuộc sau ba lượt hỏi — tức khoảng vài giây, **trước khi người
+   * dùng kịp gõ xong email và mật khẩu**. Đo trên máy thứ hai 27/08: app hỏi lần cuối lúc 09:57:22,
+   * người dùng duyệt xong lúc 09:58:27, và không còn ai hỏi nữa. Trang web báo "Xong" hoàn toàn
+   * đúng, còn app thì đã thôi lắng nghe từ một phút trước — nên nó hiện "Cursor sign-in did not
+   * finish" dù mọi thứ phía máy chủ đều thành công.
+   *
+   * Vẫn giữ một câu trả lời chung cho "chưa duyệt" và "không có phiên nào": tách ra là nói cho người
+   * dò biết uuid nào có thật để dò tiếp.
+   */
+  return json(res, { error: "authorization_pending" }, 404);
 }

@@ -103,7 +103,7 @@ test("enforce: hỏi vòng khi chưa có ai duyệt thì không có token", () =
 
   const { res, out } = fakeRes();
   withMode("enforce", () => handleAuthPoll(`/auth/poll?uuid=${uuid}&verifier=${verifier}`, res));
-  assert.equal(out.status, 403);
+  assert.equal(out.status, 404);
   assert.doesNotMatch(out.body, /access_token/);
 });
 
@@ -135,7 +135,7 @@ test("enforce: biết uuid mà không có verifier thì vẫn KHÔNG lấy đư�
   // uuid đi qua thanh địa chỉ trình duyệt nên coi như lộ; verifier thì không rời khỏi app.
   const { res, out } = fakeRes();
   withMode("enforce", () => handleAuthPoll(`/auth/poll?uuid=${uuid}&verifier=doan-bua`, res));
-  assert.equal(out.status, 403);
+  assert.equal(out.status, 404);
 });
 
 test("enforce: một lượt duyệt chỉ đổi được token MỘT lần", () => {
@@ -150,7 +150,7 @@ test("enforce: một lượt duyệt chỉ đổi được token MỘT lần", (
 
   const second = fakeRes();
   withMode("enforce", () => handleAuthPoll(`/auth/poll?uuid=${uuid}&verifier=${verifier}`, second.res));
-  assert.equal(second.out.status, 403);
+  assert.equal(second.out.status, 404);
 });
 
 test("duyệt một uuid chưa từng mở qua trình duyệt thì không ăn thua", () => {
@@ -223,4 +223,28 @@ test("không khai nhánh: giữ nguyên hành vi cũ", () => {
   const { res, out } = fakeRes();
   handleLoginPage("/loginDeepControl?uuid=u-2&challenge=c-2", res);
   assert.equal(out.headers.location, "/app/?login_uuid=u-2");
+});
+
+/*
+ * ── Mã trạng thái của `/auth/poll` là HỢP ĐỒNG, không phải lựa chọn ─────────────
+ *
+ * Đọc từ chính bản dựng của client (`waitForResult`, electron-main):
+ *
+ *     if (status === 403) { …; if (++o >= 3) return null }   ← ĐẾM LÀ LỖI, ba lần thì BỎ CUỘC
+ *     else if (status === 404) o = 0                          ← "chưa xong", đếm lại từ đầu
+ *
+ * Trả 403 nghĩa là app thôi lắng nghe sau ba lượt hỏi — vài giây, **trước khi người dùng gõ xong
+ * mật khẩu**. Đo trên máy thứ hai 27/08: app hỏi lần cuối 09:57:22, người dùng duyệt xong 09:58:27,
+ * và không còn lượt hỏi nào. Máy chủ làm đúng hết, app vẫn báo "sign-in did not finish".
+ */
+test("chưa duyệt phải trả 404 — 403 làm client bỏ cuộc sau ba lượt", () => {
+  resetDeviceLogins();
+  const verifier = "v-hop-dong", uuid = "uuid-hop-dong";
+  handleLoginPage(`/loginDeepControl?uuid=${uuid}&challenge=${challengeFor(verifier)}`, fakeRes().res);
+
+  const { res, out } = fakeRes();
+  withMode("enforce", () => handleAuthPoll(`/auth/poll?uuid=${uuid}&verifier=${verifier}`, res));
+  assert.equal(out.status, 404,
+    "client đếm 403 là lỗi và bỏ cuộc sau ba lượt; chỉ 404 mới là 'chưa xong, hỏi tiếp'");
+  assert.notEqual(out.status, 403, "403 ở đây là lỗi đã gặp thật trên máy 2 ngày 27/08");
 });

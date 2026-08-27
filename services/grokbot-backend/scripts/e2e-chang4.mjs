@@ -87,7 +87,7 @@ let liveToken = "";
     return { code: r.status, body: await r.text() };
   };
 
-  step("hỏi vòng trước khi mở trình duyệt → 403", (await poll()).code === 403);
+  step("hỏi vòng trước khi mở trình duyệt → 404", (await poll()).code === 404);
 
   const page = await fetch(
     `${ROOT}/loginDeepControl?challenge=${encodeURIComponent(challenge)}&uuid=${uuid}&mode=login&redirectTarget=sand`,
@@ -126,7 +126,7 @@ let liveToken = "";
     });
     step("trang duyệt được phiên đang chờ", ap.status === 200, `HTTP ${ap.status}`);
 
-    step("kẻ khác biết uuid mà đoán verifier → 403", (await poll("doan-bua")).code === 403);
+    step("kẻ khác biết uuid mà đoán verifier → 404", (await poll("doan-bua")).code === 404);
 
     const ok = await poll();
     const got = ok.code === 200 ? JSON.parse(ok.body) : null;
@@ -135,10 +135,10 @@ let liveToken = "";
          ok.code === 200 && String(got?.authId ?? "").includes(EMAIL.split("@")[0]),
          `HTTP ${ok.code} · authId ${got?.authId ?? "?"}`);
 
-    step("một lượt duyệt chỉ đổi được token MỘT lần", (await poll()).code === 403);
+    step("một lượt duyệt chỉ đổi được token MỘT lần", (await poll()).code === 404);
   } else {
     step("trang duyệt được phiên đang chờ", false, "không có token để duyệt");
-    step("kẻ khác biết uuid mà đoán verifier → 403", false, "bỏ qua");
+    step("kẻ khác biết uuid mà đoán verifier → 404", false, "bỏ qua");
     step("app nhận token, và là ĐÚNG tài khoản vừa đăng nhập", false, "bỏ qua");
     step("một lượt duyệt chỉ đổi được token MỘT lần", false, "bỏ qua");
   }
@@ -193,7 +193,7 @@ if (liveToken) {
 {
   const neighbours = [
     ["cinai.app gốc", `${ROOT}/`, [200, 307, 308]],
-    ["cinai.app /api/", `${ROOT}/api/`, [200, 401, 403, 404]],
+    ["cinai.app /api/", `${ROOT}/api/`, [200, 401, 404, 404]],
     ["trang tải /tai/", `${ROOT}/tai/`, [200]],
     ["admin.halcion.vn", "https://admin.halcion.vn/", [200]],
     ["foodaymart.vn", "https://foodaymart.vn/", [200, 301]],
