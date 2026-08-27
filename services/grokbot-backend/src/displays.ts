@@ -311,6 +311,25 @@ export async function reapIdleDisplays(nowMs = Date.now()): Promise<string[]> {
   return gone;
 }
 
+/**
+ * Xoá hồ sơ Chrome của một bot đã bị xoá.
+ *
+ * Hồ sơ sống ngoài slot để phiên đăng nhập không chết theo mỗi lần thu màn — nhưng "sống lâu" và
+ * "sống mãi" là hai chuyện. Đo được: một hồ sơ đã dùng thật nặng **57 MB**, nên bốn chục con bot đã
+ * xoá là hơn 2 GB nằm không trong home của người dùng, không ai nhìn thấy.
+ *
+ * Gọi khi bot bị xoá, không gọi khi thu slot.
+ */
+export async function dropAgentProfile(agentId: string): Promise<void> {
+  if (!ON() || !agentId) return;
+  const dir = profileDirOf(agentId);
+  // Chỉ xoá trong đúng gốc slot của người dùng — `profileDirOf` đã lọc ký tự, đây là lớp thứ hai.
+  if (!dir.startsWith(`${ROOT}/agents/`)) return;
+  try {
+    await boxCall<ExecResult>("exec", { command: `rm -rf ${dq(dir.replace(/\/profile$/, ""))}` });
+  } catch { /* bot bị xoá rồi thì một hồ sơ còn sót không đáng làm hỏng lượt xoá */ }
+}
+
 /** Ai cũng nghỉ thì thu hết — dùng khi backend tắt, để không để lại Xvfb mồ côi trên box. */
 export async function releaseAllDisplays(): Promise<void> {
   for (const id of [...leases.keys()]) await releaseDisplay(id);

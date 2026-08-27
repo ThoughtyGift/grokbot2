@@ -3,6 +3,7 @@
  * not by walking tool-call internals here.
  */
 import { closeAgentTab } from "../browser.js";
+import { dropAgentProfile } from "../displays.js";
 import { publish } from "../events.js";
 import { AUTH_ID } from "../identity/index.js";
 import { currentOwner } from "../request-context.js";
@@ -126,6 +127,9 @@ export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: stri
   for (const id of ids) {
     agents.delete(id); transcripts.delete(id); inflight.get(id)?.abort(); inflight.delete(id);
     void closeAgentTab(id);
+    // Hồ sơ Chrome của bot sống NGOÀI slot (để phiên đăng nhập không chết mỗi lần thu màn), nên
+    // xoá bot mà quên nó là để lại ~57 MB không ai nhìn thấy.
+    void dropAgentProfile(id);
     automationCleanupRef?.(id);
   }
   persist(); rosterChanged(); return { deleted: ids };
