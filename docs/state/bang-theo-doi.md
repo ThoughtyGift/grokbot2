@@ -78,10 +78,10 @@ Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 |---|---|---|---|
 | 0.1 | ✅ Tách 6 hàm dài (backend) | `node scripts/code-size.mjs` | 28 → 22 |
 | 0.2 | ✅ Sửa 5 bài `store.test` đỏ im lặng | `npx tsx --test src/store.test.ts` | 9/9 |
-| 0.3 | ✅ `httpTransport` 182 → 6 hàm nhỏ | `npx tsx --test src/mcp-http.test.ts` | 28/28 |
+| 0.3 | ✅ `httpTransport` 182 → 6 hàm nhỏ | `npx tsx --test src/mcp-http.test.ts src/mcp-oauth.test.ts` | 28/28 *(16 + 12 — 12 bài đã dời sang `mcp-oauth.test.ts`; chạy một file ra 16/16, kiểm 27/08)* |
 | 0.4 | ✅ `oauthPortFor` → `pendingPort` + `tokenPort` | như trên | 28/28 |
 | 0.5 | ✅ `mcp.ts` 936 → dưới 800 | `node scripts/code-size.mjs` | rời danh sách |
-| 0.6 | ✅ `bootstrap.ts` 862 → dưới 800 | `node scripts/contract-test.mjs` | 46/46 |
+| 0.6 | ✅ `bootstrap.ts` 862 → dưới 800 | `node scripts/contract-test.mjs` | **48/48** *(routes 16 · auth 6 · commands 10 · channels 16 — đếm lại 27/08, bảng cũ ghi 46)* |
 | 0.7 | ✅ FE: `mdToHtml`·`renderRuns`·`messageActions`·`bootApp` | `npx tsx --test src/markdown.test.ts` | 10/10 |
 | 0.8 | ✅ Xoá 3 export chết mới sinh | `npx knip` | về mốc 72 |
 | 0.9 | ✅ **Sửa bẫy tự quy chiếu của cổng** | `node scripts/self-xray.mjs` | **9/9** |
@@ -89,7 +89,13 @@ Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 | 0.11 | ✅ Sửa bài kiểm ôm hợp đồng cũ (X8) | `node scripts/e2e-native.mjs` | 58/1 → **60/0** |
 
 **Kết quả chốt chặng:** 3 file > 800 · 16 hàm > 50 — **đúng mốc**. BE 272/272 · FE 16/17 · hợp
-đồng 46/46 · `/v1` đầu-cuối **60/60** · MCP xanh · ba cổng tiến trình xanh · self-xray **9/9**.
+đồng **48/48** · `/v1` đầu-cuối **60/60** · MCP xanh · ba cổng tiến trình xanh · self-xray **9/9**.
+
+> **Cổng kích thước suýt đỏ 27/08 và thủ phạm là tôi.** Hàm `discover` mới trong `oauth-client.ts`
+> dài 78 dòng, đẩy "hàm > 50" từ 16 lên **17**, tức vượt mốc `self-xray-baseline.json`. Đã tách thành
+> `declaredResourceUrl` · `wellKnownResourceUrls` · `issuerFor` · `authServerMetadata`, về lại **16**,
+> 5 test khám phá OAuth vẫn xanh và Zernio vẫn ra đúng endpoint. Nới mốc thì dễ hơn, nhưng mốc nới
+> một lần là mốc chết.
 
 > **Một bài FE đỏ, và nó KHÔNG phải do chặng này:** `avatar.test.ts` — "SVG có thân, có hai mắt".
 > Đã kiểm trên cây trước khi sửa: đỏ y hệt. Xếp vào nợ lẻ N8, đừng tính vào chặng 0.
@@ -100,7 +106,7 @@ Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
 |---|---|---|---|
 | 1.1 | ✅ Seed bảng `plans` | `SELECT * FROM plans` | `free cap=100.000` · `pro` không giới hạn |
 | 1.2 | ✅ Bật `GROKBOT2_BILLING=warn` | `curl /v1/me` | `plan:"free"` · `overQuota:false` |
-| 1.3 | ✅ Gửi một lượt thật rồi đọc số | `SELECT * FROM usage` | **`tokens_in=46, tokens_out=2, turns=1`** (trước: 0 dòng) |
+| 1.3 | ✅ Gửi một lượt thật rồi đọc số | `SELECT * FROM usage` | có dòng thật — nhưng **chỉ `turns` là số đếm**; `tokens_in/out` là **ước lượng** `len/2.8` (`compaction.ts:30`, dùng ở `runtime/turn.ts:969`) vì pool không trả số token. Đừng đọc nó như hoá đơn. |
 | 1.4 | ⬜ Chỉ khi có đủ số một tuần: cân nhắc `enforce` | `GROKBOT2_BILLING=enforce` | *chưa làm — cố ý* |
 
 **E2E chốt chặng:** `e2e-native` **60/60** · unit **272/272** · hợp đồng **4/4 nhóm** · self-xray **9/9**.
@@ -131,17 +137,27 @@ không nên tự mọc thêm bảng.
 một số đời trong `users.token_version`; token web mang `tv`; đăng xuất thì tăng số, mọi token đời cũ
 chết ngay. Không danh sách đen, không phải dọn rác.
 
-> **Hai đường giấy tờ, và chỉ một đường bị siết.** App desktop vào bằng **token cổng** qua handshake
-> không mật khẩu, và **không biết tự làm mới**. Nên token desktop giữ hạn dài 365 ngày và **không
-> mang `tv`** — token thiếu `tv` vẫn hợp lệ, đúng lối tương thích ngược đã dùng cho `purpose`. Siết
-> cả hai đường thì app chết sau 30 ngày mà người dùng không có nút nào bấm.
+> **Hai đường giấy tờ khác nhau ở HẠN, không khác ở số đời — và bản trước của đoạn này nói sai.**
+> App desktop vào bằng **token cổng** qua handshake không mật khẩu và **không biết tự làm mới**, nên
+> token desktop giữ hạn **365 ngày** còn đường web là 30. Nhưng **cả hai đều mang `tv`**:
+> `tokenPayload()` gọi `mintJwt(user, { days, tokenVersion: … })` (`auth.ts:213`). Đo 27/08 — lấy
+> token thật từ `/auth/poll` rồi giải mã:
+>
+> ```
+> {"sub":"auth0|grokbot2-user","email":"user@localhost","iat":…,"exp":…,"tv":0}   365 ngày
+> ```
+>
+> Hệ quả ngược hẳn điều đoạn cũ khẳng định: một cú `/v1/logout` nâng số đời của danh tính đó, và
+> `verifyJwt` từ chối mọi token có `tv` lệch (`auth.ts:137`) — nên **đăng xuất trên web cắt luôn app
+> desktop cùng tài khoản**. Đó là hành vi đúng của "đăng xuất"; chỉ đừng ai đọc đoạn cũ rồi tưởng
+> app không bị đụng tới. Nhánh "thiếu `tv` vẫn hợp lệ" còn đó, nhưng nay chỉ để đỡ token cũ.
 
 > **Đăng ký tự mở cho người đầu tiên.** Sổ trống → mở (không thì backend vừa dựng lên không ai vào
 > được). Có người rồi → đóng, trừ khi bật `GROKBOT2_ALLOW_REGISTER=1`.
 
-**Còn lại một dấu vết:** tài khoản thử `chang2-probe@test.local` (đã đăng xuất, token đã chết) vẫn
-nằm trong bảng `users` — chưa xoá vì **chỉ máy chủ được ghi sổ**, và dựng một người ghi thứ hai để
-xoá một dòng là đúng cái đã gây mất dữ liệu hai lần. Xoá khi có đường quản trị.
+**~~Còn lại một dấu vết~~ — đã sạch.** Tài khoản thử `chang2-probe@test.local` không còn trong sổ
+`users` (đọc lại 27/08). Sổ trên máy này giờ có hai dòng: một tài khoản web thật và danh tính
+desktop `auth0|grokbot2-user`.
 
 ### Chặng 3 · Test trên máy thứ hai
 
@@ -739,7 +755,7 @@ chỉ là sai runner. Tìm ra được cũng vì chạy thật (25/08).
 |---|---|---|---|
 | **Unit backend** | `node scripts/run-tests.mjs` | 288 bài · store, auth, mcp, site, đường dẫn client, **trạng thái MCP gửi cho client** | ✅ 288/288 · 26/08 |
 | **Unit FE** | `cd apps/grokbot-web && npx tsx --test src/*.test.ts` | markdown, avatar | ⚠️ 16/17 — **N8 đỏ từ trước** |
-| **Hợp đồng client** | `node scripts/contract-test.mjs` | 46 · routes·auth·commands·channels | ✅ 46/46 · 25/08 |
+| **Hợp đồng client** | `node scripts/contract-test.mjs` | 48 · routes·auth·commands·channels | ✅ **48/48** · 27/08 |
 | **`/v1` đầu-cuối** | `node scripts/e2e-native.mjs` | 60 · roster CRUD·gửi·ngắt·SSE·đính kèm | ✅ 60/60 · 25/08 |
 | **MCP** | `npx tsx scripts/e2e-mcp.mjs` | liệt kê tool·gọi tool·lỗi tool·args hỏng | ✅ · 26/08 — 4 server spawn thật, trả tool thật |
 | **Plugin qua agent** | `npx tsx scripts/e2e-mcp-plugin.mjs` | agent có **dùng** được tool của plugin không | ⚠️ **1/3 · 26/08** — kẹt ở pool, xem ô dưới |

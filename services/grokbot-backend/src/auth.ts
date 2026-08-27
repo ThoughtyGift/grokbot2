@@ -131,8 +131,17 @@ export function verifyJwt(authHeader?: string | string[]): TokenUser | null {
     /*
      * Số đời — đây là chỗ `/v1/logout` thật sự cắt được token đã phát.
      *
-     * KHÔNG có `tv` thì bỏ qua: token desktop và token e2e chưa từng mang trường này, và bắt chúng
-     * phải có là làm hỏng đường app ngay lập tức. Cùng lối tương thích ngược với `purpose` ở trên.
+     * KHÔNG có `tv` thì bỏ qua, cùng lối tương thích ngược với `purpose` ở trên. Nhánh đó nay chỉ
+     * còn để đỡ token cũ đã phát ra ngoài: **mọi token ta phát hôm nay đều mang `tv`**, kể cả
+     * token desktop — `tokenPayload()` gọi `mintJwt(user, { days, tokenVersion: … })`. Đo bằng
+     * cách lấy token thật từ `/auth/poll` rồi giải mã (27/08):
+     *
+     *     {"sub":"auth0|grokbot2-user","email":"user@localhost","iat":…,"exp":…,"tv":0}   365 ngày
+     *
+     * Chú thích cũ ở đây nói ngược — rằng token desktop "chưa từng mang trường này" — và bảng theo
+     * dõi chép lại điều đó. Hệ quả THẬT thì ngược hẳn: một cú `/v1/logout` trên web nâng số đời của
+     * chính danh tính ấy, nên nó **cắt luôn token của app desktop** cùng tài khoản. Đó là hành vi
+     * đúng của "đăng xuất", nhưng đừng ai đọc chú thích cũ rồi tưởng app không bị đụng tới.
      */
     if (typeof tv === "number" && tv !== tokenVersionOf(sub)) return null;
     return { authId: sub, email: email ?? "" };

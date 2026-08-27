@@ -58,19 +58,12 @@ const getJson = async (url: string): Promise<any> => {
 };
 
 /**
- * Find the authorization server for an MCP endpoint.
+ * Địa chỉ tài liệu tài nguyên mà máy chủ TỰ KHAI trong lượt 401.
  *
- * The chain is the MCP Authorization spec's: the server's 401 carries
- * `WWW-Authenticate: Bearer resource_metadata="…"`, that document names its authorization servers,
- * and each of those publishes its own metadata. Falling back to a guessed `.well-known` path on the
- * MCP host itself is deliberate — some servers are their own authorization server — but the header
- * is tried first because it is the only authoritative answer.
+ * Đây là câu trả lời có thẩm quyền, nên nó được hỏi trước. `null` khi máy chủ không trả 401 —
+ * chuyện có thật, xem `wellKnownResourceUrls`.
  */
-async function discover(serverUrl: string): Promise<Discovered> {
-  const cached = discovered.get(serverUrl);
-  if (cached) return cached;
-
-  let resourceMetadataUrl: string | null = null;
+async function declaredResourceUrl(serverUrl: string): Promise<string | null> {
   try {
     const probe = await fetch(serverUrl, {
       method: "POST",
@@ -79,24 +72,78 @@ async function discover(serverUrl: string): Promise<Discovered> {
       signal: AbortSignal.timeout(NET_TIMEOUT_MS),
     });
     const header = probe.headers.get("www-authenticate") ?? "";
-    resourceMetadataUrl = /resource_metadata="([^"]+)"/.exec(header)?.[1] ?? null;
-  } catch { /* fall through to the well-known guess */ }
-
-  let issuerBase: string;
-  if (resourceMetadataUrl) {
-    const meta = await getJson(resourceMetadataUrl);
-    const servers: string[] = Array.isArray(meta?.authorization_servers) ? meta.authorization_servers : [];
-    if (!servers.length) throw new Error("resource metadata names no authorization server");
-    issuerBase = servers[0].replace(/\/+$/, "");
-  } else {
-    issuerBase = new URL(serverUrl).origin;
+    return /resource_metadata="([^"]+)"/.exec(header)?.[1] ?? null;
+  } catch {
+    return null;   // rơi xuống đường dựng địa chỉ
   }
+}
 
-  // Both spellings are legal and servers differ on which they publish.
-  let meta: any = null;
+/**
+ * Đường thứ hai của RFC 9728 §3.1, khi máy chủ không hề trả 401.
+ *
+ * `mcp.zernio.com` cho `initialize` VÀ `tools/list` đi qua với **200 và không một header
+ * `WWW-Authenticate` nào** — đo ngày 27/08 — nên cú thăm dò ở trên về tay không, và bản trước rơi
+ * thẳng xuống nhánh đoán `issuerBase = mcp.zernio.com`. Máy đó không phải máy chủ uỷ quyền, nên
+ * khám phá chết với "publishes no usable authorization server metadata" và app hiện "This connector
+ * did not provide a sign-in link" — đúng câu người dùng nhìn thấy.
+ *
+ * Phép dựng: chèn đường dẫn của tài nguyên vào **SAU** `/.well-known/oauth-protected-resource`.
+ * `https://mcp.zernio.com/mcp` → `https://mcp.zernio.com/.well-known/oauth-protected-resource/mcp`,
+ * và tài liệu đó nói đúng `authorization_servers: ["https://zernio.com/"]`.
+ */
+function wellKnownResourceUrls(serverUrl: string): string[] {
+  const u = new URL(serverUrl);
+  const path = u.pathname.replace(/\/+$/, "");
+  return [
+    `${u.origin}/.well-known/oauth-protected-resource${path}`,
+    `${u.origin}/.well-known/oauth-protected-resource`,
+  ];
+}
+
+/**
+ * Máy chủ uỷ quyền của một MCP endpoint — gốc để đi hỏi metadata.
+ *
+ * Kiểm NỘI DUNG chứ không chỉ mã trạng thái: một địa chỉ trả 200 với thân rỗng là 200 hợp lệ mà
+ * không phải câu trả lời, và coi nó là xong thì dừng ở sai chỗ.
+ */
+async function issuerFor(serverUrl: string): Promise<string> {
+  const declared = await declaredResourceUrl(serverUrl);
+  const candidates = declared ? [declared] : wellKnownResourceUrls(serverUrl);
+  for (const url of candidates) {
+    try {
+      const meta = await getJson(url);
+      const servers: unknown = meta?.authorization_servers;
+      if (Array.isArray(servers) && servers.length) return String(servers[0]).replace(/\/+$/, "");
+    } catch { /* thử địa chỉ tiếp theo */ }
+  }
+  // Máy chủ tự khai mà không nêu được ai uỷ quyền là hỏng thật, không phải thiếu thông tin.
+  if (declared) throw new Error("resource metadata names no authorization server");
+  // Không tài liệu nào: có máy chủ TỰ nó là máy chủ uỷ quyền, nên thử chính nó.
+  return new URL(serverUrl).origin;
+}
+
+/** Metadata của máy chủ uỷ quyền. Hai lối viết tên đều hợp lệ và mỗi nơi công bố một kiểu. */
+async function authServerMetadata(issuerBase: string): Promise<any> {
   for (const path of ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"]) {
-    try { meta = await getJson(issuerBase + path); break; } catch { /* try the next */ }
+    try { return await getJson(issuerBase + path); } catch { /* try the next */ }
   }
+  return null;
+}
+
+/**
+ * Find the authorization server for an MCP endpoint.
+ *
+ * The chain is the MCP Authorization spec's: the server's 401 carries
+ * `WWW-Authenticate: Bearer resource_metadata="…"`, that document names its authorization servers,
+ * and each of those publishes its own metadata. When there is no 401 at all, RFC 9728 §3.1 lets the
+ * document address be built from the resource URL instead — see `wellKnownResourceUrls`.
+ */
+async function discover(serverUrl: string): Promise<Discovered> {
+  const cached = discovered.get(serverUrl);
+  if (cached) return cached;
+
+  const issuerBase = await issuerFor(serverUrl);
+  const meta = await authServerMetadata(issuerBase);
   if (!meta?.authorization_endpoint || !meta?.token_endpoint) {
     throw new Error(`${issuerBase} publishes no usable authorization server metadata`);
   }
