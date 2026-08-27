@@ -1,0 +1,96 @@
+/**
+ * `AnalyticsService/BootstrapStatsig` — cửa mà client hỏi để biết **tính năng nào được bật**.
+ *
+ * Đây là chỗ "Teach a task" đã biến mất, và nó chưa bao giờ có mặt. Trong chính bản dựng của
+ * client, nút Teach nằm sau một cổng tính năng:
+ *
+ *     function hEe(){ return ds(rt().experiments.snapshots)?.featureGates
+ *                       ?.sand_teach_by_demonstration ?? false }
+ *
+ * và cái "+" cạnh ô nhập chỉ **mở ra menu** (Attach file / Teach a task) khi cổng đó bật:
+ *
+ *     const P = t && (!S || f == null);          // S = hEe()
+ *     _ = S && f != null ? {} : { onClick: m };  // cổng tắt ⇒ "+" là nút đính kèm, không có menu
+ *
+ * Cổng lấy giá trị từ tiến trình chính, và tiến trình chính lấy từ **backend của ta**:
+ *
+ *     fetch(new URL("aiserver.v1.AnalyticsService/BootstrapStatsig", backendUrl), {method:"POST"})
+ *       → { config: "<chuỗi JSON bootstrap của Statsig>" }
+ *
+ * Backend cũ rơi vào nhánh mặc định của `handleBootstrapRpc` và trả `{}` — đúng 200, nhưng
+ * **không có khoá `config`**, nên client bỏ qua, không dựng được Statsig, và mọi cổng rơi về mặc
+ * định đóng gói sẵn. `sand_teach_by_demonstration` mặc định là `false`. Đo được: `curl` vào
+ * `:8788/aiserver.v1.AnalyticsService/BootstrapStatsig` trả đúng hai ký tự `{}`.
+ *
+ * Vì sao không sửa bằng biến môi trường: client CÓ đọc `SAND_FEATURE_GATE_OVERRIDES`, nhưng chỉ
+ * khi `canUseFeatureFlagOverrides()` — tức bản dev hoặc tài khoản nội bộ của hãng. Bản ta chạy
+ * không phải cả hai, nên biến đó bị bỏ qua. Trả `config` mới là đường của hợp đồng.
+ */
+
+/**
+ * Cổng bật sẵn — **chỉ những gì backend này làm được thật**.
+ *
+ * Bật một cổng cho tính năng chưa có phía máy chủ là vẽ ra một nút bấm vào thì hỏng, nên danh
+ * sách này ngắn có chủ ý. `startTeachRecording`/`stopTeachRecording`/`getTeachRecordingStatus` đã
+ * có trong `packages/cursor-acl/src/commands.ts` và `services/grokbot-backend/src/teach.ts`.
+ */
+const DEFAULT_GATES: Readonly<Record<string, boolean>> = {
+  sand_teach_by_demonstration: true,
+};
+
+/**
+ * `GROKBOT2_FEATURE_GATES="a=1,b=0"` — mở/đóng thêm cổng mà không phải dựng lại.
+ *
+ * Tên cổng không có trong bản dựng thì client lặng lẽ bỏ qua (`computeSnapshot` chỉ duyệt các
+ * khoá nó biết), nên gõ sai một tên là vô hại chứ không làm hỏng cái gì.
+ */
+function envGates(): Record<string, boolean> {
+  const raw = (process.env.GROKBOT2_FEATURE_GATES ?? "").trim();
+  if (!raw) return {};
+  const out: Record<string, boolean> = {};
+  for (const part of raw.split(",")) {
+    const [name, value] = part.split("=", 2).map((s) => s.trim());
+    if (name) out[name] = value === "1" || value === "true" || value === "on";
+  }
+  return out;
+}
+
+/**
+ * Chuỗi bootstrap mà `StatsigClient.dataAdapter.setData()` ăn được.
+ *
+ * Hai chi tiết phải đúng, đọc từ SDK nhúng trong bản dựng:
+ *
+ *  - **Không** đặt `response_format`. `setValues` chọn `V2InitializeContainer` khi
+ *    `response_format === "init-v2"`, còn lại dùng V1 — và chỉ V1 tra cứu bằng **tên trần**
+ *    (`e[name] ?? e[_DJB2(name)]`). Với V2 thì tên phải băm sẵn, tức là ta phải nhúng thuật toán
+ *    băm của họ vào đây để đổi một chữ `true`.
+ *  - `has_updates: true` và `time` phải ≥ mốc hiện có, nếu không `setValues` bỏ nguyên gói.
+ *
+ * `user` cũng nằm trong chuỗi này chứ không phải tham số riêng: tiến trình chính đọc lại chính nó
+ * (`JSON.parse(config).user ?? {}`) để dựng StatsigUser.
+ */
+export function statsigBootstrapConfig(userId: string, nowMs = Date.now()): string {
+  const gates = { ...DEFAULT_GATES, ...envGates() };
+  const featureGates: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(gates)) {
+    featureGates[name] = { name, value, rule_id: "grokbot2", secondary_exposures: [] };
+  }
+  return JSON.stringify({
+    has_updates: true,
+    time: nowMs,
+    hash_used: "none",
+    user: { userID: userId },
+    evaluated_keys: { userID: userId },
+    feature_gates: featureGates,
+    dynamic_configs: {},
+    layer_configs: {},
+    sdkParams: {},
+    derived_fields: {},
+    generator: "grokbot2",
+  });
+}
+
+/** Thân câu trả lời của `BootstrapStatsig`: một khoá `config` mang chuỗi ở trên. */
+export function bootstrapStatsigJson(userId: string): string {
+  return JSON.stringify({ config: statsigBootstrapConfig(userId) });
+}

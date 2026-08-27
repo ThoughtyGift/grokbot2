@@ -13,6 +13,8 @@ import {
   currentPeriodUsage, listMarketplaces, availableMcpServers, listMarketplacePlugins, listMarketplacePluginsJson, getEffectiveUserPlugins, getEffectiveUserPluginsJson,
   type PluginEntry,
 } from "./bootstrap-plugins.js";
+import { bootstrapStatsigJson } from "./feature-gates.js";
+export { statsigBootstrapConfig, bootstrapStatsigJson } from "./feature-gates.js";
 // Giữ nguyên bề mặt công khai: nơi khác vẫn `import { listMarketplaces } from "@grokbot2/proto"`.
 export {
   currentPeriodUsage, listMarketplaces, availableMcpServers, listMarketplacePlugins, listMarketplacePluginsJson, getEffectiveUserPlugins, getEffectiveUserPluginsJson,
@@ -538,6 +540,16 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
 export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
   ListMarketplacePlugins: (ctx) => listMarketplacePluginsJson(ctx.catalog),
   GetEffectiveUserPlugins: (ctx) => getEffectiveUserPluginsJson(ctx.plugins?.installedIds, ctx.catalog),
+  /*
+   * Cổng tính năng. Trước đây rơi vào nhánh mặc định `"{}"` — đúng 200 nhưng thiếu khoá `config`,
+   * nên client không dựng được Statsig và mọi cổng về mặc định đóng. Đó là lý do "Teach a task"
+   * không có trong menu "+". Xem `feature-gates.ts`.
+   *
+   * Danh tính đi vào chuỗi bootstrap để mỗi người có `userID` riêng — cùng lối với phần còn lại
+   * của backend đa người dùng. Không có `ctx.user` (gọi trước khi đăng nhập) thì dùng một tên
+   * chung; cổng của ta không phân biệt theo người nên giá trị vẫn đúng.
+   */
+  BootstrapStatsig: (ctx) => bootstrapStatsigJson(ctx.user?.authId ?? "grokbot2-local"),
 };
 
 /**
