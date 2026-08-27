@@ -34,7 +34,6 @@ export interface DisplaySlot {
   index: number;
   display: string;
   cdpPort: number;
-  profileDir: string;
   dir: string;
   /** Cổng RFB của x11vnc cho slot này. Theo đúng nếp của box: 5900 + số display. */
   vncPort: number;
@@ -75,12 +74,29 @@ const ROOT = process.env.GROKBOT2_SLOT_ROOT ?? "$HOME/grokbot2-slots";
 /** Nghỉ lâu hơn mức này thì thu — 500 MB không nên nằm không vì một bot đã xong việc. */
 const IDLE_MS = Number(process.env.GROKBOT2_DISPLAY_IDLE_MS ?? 600_000);
 
+/**
+ * Hồ sơ Chrome thuộc về **BOT**, không thuộc về slot — và đây là chỗ quyết định Shopee dùng được
+ * hay không.
+ *
+ * Bản trước để hồ sơ ở `${ROOT}/<display>/profile`, tức trong thư mục slot, mà `teardown` thì
+ * `rm -rf` cả thư mục đó sau **10 phút nghỉ**. Hệ quả: chủ đăng nhập Shopee trong màn của bot, mười
+ * phút sau phiên bị xoá sạch, và lần sau bot nhận slot khác thì lại là một hồ sơ khác nữa. Đúng quy
+ * trình mà chính đám bot đề ra — *"Owner đăng nhập xong em kéo queue liền"* — không thể chạy được.
+ *
+ * Cùng một bài học với `shared/data` bên triển khai: **trạng thái phải sống ngoài cái thứ bị dựng
+ * lại**. Slot là thứ dùng xong thì bỏ; phiên đăng nhập thì không.
+ *
+ * Giá: hồ sơ Chrome không tự nhỏ đi. Chúng nằm trong home của chính người dùng nên không ai thấy
+ * hồ sơ của ai, và `/admin` đã báo dung lượng đĩa còn lại.
+ */
+export const profileDirOf = (agentId: string): string =>
+  `${ROOT}/agents/${agentId.replace(/[^A-Za-z0-9_-]/g, "_")}/profile`;
+
 export const slotOf = (index: number): DisplaySlot => ({
   index,
   display: `:${DISPLAY_BASE + index}`,
   cdpPort: CDP_BASE_PORT + index,
   dir: `${ROOT}/${DISPLAY_BASE + index}`,
-  profileDir: `${ROOT}/${DISPLAY_BASE + index}/profile`,
   // Số cổng suy ra từ số display, không cấp phát tự do — cùng phép mà box đã dùng cho `:77`
   // (RFB 5977, websockify 7077). Nhờ vậy cấu hình nginx viết được sẵn, tĩnh, không phải nạp lại
   // mỗi lần một bot xin màn.
@@ -145,7 +161,7 @@ interface ExecResult { stdout?: string; stderr?: string }
  * `--disable-background-networking` bỏ hộp "Can't update Chrome". Cả hai **chiếm chỗ trên ảnh chụp**
  * mà model đọc toạ độ từ đó, nên chúng là lỗi đo chứ không phải chuyện thẩm mỹ.
  */
-async function spawnSlot(s: DisplaySlot & { vncPass: string }): Promise<void> {
+async function spawnSlot(s: DisplaySlot & { vncPass: string; profileDir: string }): Promise<void> {
   const chrome = [
     "google-chrome", "--no-first-run", "--no-default-browser-check", "--test-type",
     "--disable-background-networking", "--disable-component-update", "--no-sandbox",
@@ -221,7 +237,7 @@ export async function ensureDisplay(agentId: string): Promise<DisplayLease | nul
 
   // Mật khẩu mới mỗi lần dựng: một slot được cấp lại cho người khác thì URL cũ phải chết theo.
   const pass = randomBytes(9).toString("base64url");
-  await spawnSlot({ ...slot, vncPass: pass });
+  await spawnSlot({ ...slot, vncPass: pass, profileDir: profileDirOf(agentId) });
   vncPass.set(slot.index, pass);
   if (!(await waitCdp(slot.cdpPort))) {
     // Không lên được thì thu ngay. Để lại một Xvfb mồ côi là rò 500 MB không ai nhìn thấy.
@@ -256,6 +272,8 @@ async function teardown(s: DisplaySlot): Promise<void> {
     `pkill -f ${sq(`[x]11vnc -display :${n}`)}`,
     `pkill -f ${sq(`[w]ebsockify --web /usr/share/novnc/ ${s.wsPort}`)}`,
     "sleep 1",
+    // Chỉ xoá thư mục RUNTIME của slot (log, mật khẩu vnc). Hồ sơ Chrome nằm ở
+    // `agents/<id>/profile`, ngoài chỗ này — xem `profileDirFor`.
     `rm -rf ${dq(s.dir)}`,
     `rm -f ${sq(`/tmp/.X11-unix/X${n}`)}`,
     // Nói ra kết quả thật thay vì "done": còn sót thì phải thấy ngay ở log, không phải một tuần sau

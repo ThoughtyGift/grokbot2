@@ -8,7 +8,30 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { slotOf, allSlots, freeSlot, perBotDisplays, displayOf } from "./displays.js";
+import { slotOf, allSlots, freeSlot, perBotDisplays, displayOf, profileDirOf } from "./displays.js";
+
+/*
+ * Hồ sơ Chrome thuộc về BOT, không thuộc về slot — và bài này là chỗ giữ điều đó.
+ *
+ * Bản trước đặt hồ sơ trong thư mục slot, mà `teardown` `rm -rf` cả thư mục ấy sau 10 phút nghỉ.
+ * Nghĩa là chủ đăng nhập Shopee trong màn của bot thì mười phút sau phiên bị xoá sạch, và lần sau
+ * bot nhận slot khác lại là một hồ sơ khác nữa. Không có bài đo nào bắt được, vì cả hai đường đều
+ * "chạy" — chỉ là phiên đăng nhập lặng lẽ biến mất.
+ */
+test("hồ sơ Chrome đi theo BOT, không theo slot", () => {
+  const a = profileDirOf("agent-11"), b = profileDirOf("agent-12");
+  assert.notEqual(a, b, "hai bot hai hồ sơ");
+  assert.equal(profileDirOf("agent-11"), a, "cùng một bot thì luôn cùng một hồ sơ, dù nhận slot nào");
+  for (const s of allSlots()) {
+    assert.ok(!a.startsWith(s.dir), `hồ sơ không được nằm trong thư mục slot ${s.dir} — teardown xoá chỗ đó`);
+  }
+});
+
+test("id bot lạ không thoát ra khỏi thư mục hồ sơ", () => {
+  // `agentId` đi từ client. Một dấu `/` hay `..` lọt vào đây là ghi ra ngoài home của người dùng.
+  assert.ok(!profileDirOf("../../etc/passwd").includes(".."));
+  assert.ok(!profileDirOf("a/b").includes("/b/"));
+});
 
 test("slot là một cặp (display, cổng) suy ra được, không phải cấp phát tự do", () => {
   const a = slotOf(0), b = slotOf(3);
@@ -16,7 +39,7 @@ test("slot là một cặp (display, cổng) suy ra được, không phải cấ
   assert.equal(a.cdpPort, 9301);
   assert.equal(b.display, ":524");
   assert.equal(b.cdpPort, 9304, "cổng thứ tư phải khớp -Slots 4 của đường hầm");
-  assert.ok(a.profileDir.includes("521"), "hồ sơ mang số display để /admin nối được Chrome về màn hình");
+  assert.ok(!("profileDir" in a), "hồ sơ KHÔNG thuộc slot — xem bài dưới");
 });
 
 test("số slot khớp trần cấu hình", () => {
