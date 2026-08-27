@@ -704,7 +704,7 @@ thành 7.x vì tài liệu cũ có "Chặng 1/2/3" của riêng nó, trùng tên
 | 7.1 | Bảy cờ chuyển roster/transcript/gửi tin lên đám mây | ✅ đã đo — **cờ do CHÍNH ta phát** |
 | 7.2 | Chạy thử 0.29 trên backend này | ✅ **28/08 — 3 lệnh thiếu, đã vá, `unmapped` rỗng** |
 | 7.3 | Đưa bộ vá sang 0.29 | ✅ **28/08 — chạy khô xanh trên 0.29 thật, 0.20 không hỏng** |
-| 7.4 | Tính năng mới, xếp theo giá trị | ⬜ xem 7.4.x |
+| 7.4 | Tính năng mới, xếp theo giá trị | 🟡 **kế hoạch riêng: [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md)** — tính năng 1 ✅ 28/08 (đội bot + phòng chung), 3L/3/2 còn lại |
 | 7.5 | VNC từng slot (chặn 7.4.1) | ✅ **28/08** |
 | 7.6 | Nếu 7.2 xấu thì làm gì | — không cần, 7.2 tốt |
 | 7.7 | Thứ tự đề nghị | 🟡 đang theo |
@@ -879,19 +879,25 @@ hãng ra.
   (`PER_BOT_DISPLAY=off`). Bơm cookie thật vào một trình duyệt dùng chung là **nhân lỗ đó lên**. Nên
   việc này **phải đi sau** phần tách trình duyệt ở §5.
 
-##### 4.2 · Phòng chung / nhiều bot một hội thoại — **phần lớn đã có**
+##### 4.2 · Phòng chung / nhiều bot một hội thoại — ✅ **XONG 28/08**
 
 Ảnh của bạn cho thấy nhóm *"Shopee Ops"* với danh sách Members đang chạy trên app hãng. Kiểm trong
 kho: `createGroup` · `setGroupMembers` · `broadcastToAgents` · `createSharedRoom` **đã có** trong
 `packages/cursor-acl/src/commands.ts`.
 
-- **Còn thiếu:** `RequestGrokBotRoomMemberTurn` / `CancelGrokBotRoomMemberTurn` và các kiểu
-  `GrokBotRoomMemberTurn{Dispatch,Message,Peer,Room}` — tức **luật lượt nói** khi nhiều bot ở chung
-  một phòng. Đây mới là phần khó: ai trả lời trước, ai được nhắc tên thì mới nói, làm sao không thành
-  vòng lặp bot nói với bot.
-- **BE:** một bộ điều phối lượt, và nó phải nằm cạnh `runtime/turn.ts`.
-- **System prompt:** luật "chỉ nói khi được nhắc tên hoặc khi phần việc của mình tới" — nhìn ảnh của
-  bạn thì bot hãng đang theo đúng luật này.
+- ✅ **28/08 — làm xong, đo xong.** `createGroup`/`setGroupMembers` hết là khúc gỗ trả `null`
+  (nút New Group từng im lặng không làm gì); nhóm = `AgentRecord` mang `isGroup + memberIds`, đúng
+  hình client vẽ. Luật lượt nói nằm trong `sendPrompt` (`runtime/turn.ts`), KHÔNG cần cặp RPC
+  `RequestGrokBotRoomMemberTurn` của hãng: lần lượt mỗi thành viên một lượt (con sau đọc được lời
+  con trước), bot không kích hoạt bot (chặn vòng lặp tận gốc), bản ghi thuộc nhóm còn giọng thuộc
+  thành viên (`speakAs`). Đối chiếu shape với app gốc: `author {id,name}` khớp, thứ tự tuần tự khớp
+  (docs/extracted/chat-goc-0.29.md).
+- Bằng chứng: `e2e-group-turn.mjs` **7/7** · `e2e-team-build.mjs` **5/5** (bot mẹ tự tạo 2 bot con
+  kèm SOP trong description rồi tự mở phòng) · unit 355/355. Hai lỗi thật bắt được khi đo:
+  description chưa bao giờ vào lời nhắc hệ thống, và `summarise()` hardcode `isGroup:false` +
+  `memberIds:[]` đè sự thật trên mọi roster row.
+- Phần còn lại của 7.4.x (tính năng 3L xem video · 3 cài phần mềm trên box · 2 gợi ý skill/MCP):
+  kế hoạch riêng ở [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md).
 
 ##### 4.3 · Keyring — kho bí mật có phân quyền
 
