@@ -132,6 +132,17 @@ $env:CURSOR_WEBSITE_URL = "http://localhost:$bff"
 # the app would keep working and quietly stop being ours. Pin the version instead; re-apply
 # deliberately with `node infra/scripts/patch-client.mjs --apply` after reviewing a new release.
 $env:SAND_DISABLE_UPDATES = '1'
+# Kho du lieu RIENG cho ban da va — de no dung canh app cua hang duoc.
+#
+# Khoa mot-ban cua Electron nam TRONG userData, va client doi userData truoc khi lay khoa:
+#   cUn(): oUt(argv, env) -> app.setPath("userData", e); app.setPath("sessionData", e)
+# nen hai ban chung userData thi ban thu hai tu thoat va chi focus ban dau. Chung userData con
+# nghia la chung token va chung phien — hai tai khoan giam len nhau.
+#
+# Ban cua HANG giu cho mac dinh (%APPDATA%\Grok Bot) de no chay binh thuong tu Start menu; ban cua
+# ta doi cho. Gia: lan dau sau thay doi nay phai dang nhap lai mot lan, vi token nam trong userData.
+if (-not $env:SAND_USER_DATA_DIR) { $env:SAND_USER_DATA_DIR = Join-Path $env:APPDATA 'Grok Bot (local)' }
+Write-Host "User data: $env:SAND_USER_DATA_DIR" -ForegroundColor DarkGray
 Write-Host 'Launching patched Grok Bot.exe  (CDP :9222, API :8788)' -ForegroundColor Cyan
 $app = Start-Process -FilePath $appExe -ArgumentList '--remote-debugging-port=9222' -PassThru
 if (-not $app) {

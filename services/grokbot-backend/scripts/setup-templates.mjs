@@ -140,6 +140,13 @@ setlocal
 set "BE=http://localhost:8788"
 if exist "%~dp0backend.txt" set /p BE=<"%~dp0backend.txt"
 
+REM Kho du lieu RIENG, de ban nay dung canh app cua nha phat hanh duoc.
+REM
+REM Khoa mot-ban cua Electron nam TRONG userData, va client doi userData TRUOC khi lay khoa. Chung
+REM userData thi ban thu hai tu thoat va chi focus ban dau — trong nhu bam khong len. Chung userData
+REM con nghia la chung token va chung phien.
+if not defined SAND_USER_DATA_DIR set "SAND_USER_DATA_DIR=%APPDATA%\Bot Noi Bo"
+
 set "CURSOR_API_BASE_URL=%BE%"
 set "SAND_BACKEND_URL=%BE%"
 REM Tro vao BACKEND, khong phai cursor.com: dang nhap mo
