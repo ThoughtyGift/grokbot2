@@ -1,6 +1,6 @@
 # Lịch sử chat app gốc 0.29 — xuất từ cache client (B2)
 
-> Xuất lúc 2026-08-27 21:21:26 bằng `export-vendor-chat.mjs` từ `C:\Users\admin\AppData\Roaming\Grok Bot\sand-client-persistence`.
+> Xuất lúc 2026-08-27 22:13:19 bằng `export-vendor-chat.mjs` từ `C:\Users\admin\AppData\Roaming\Grok Bot\sand-client-persistence`.
 > Đây là **cache phía client** — bản đầy đủ nằm trong `store.db` trên box của hãng, ngoài tầm với.
 
 ## Dàn bot và description (bot mẹ tự viết khi tạo bot con)

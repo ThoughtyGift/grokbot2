@@ -119,3 +119,57 @@ for (const [key, data] of slices) {
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, lines.join("\n"), "utf8");
 console.log(`đã ghi ${OUT} — ${roster.length} bot, ${[...slices.keys()].filter((k) => k.includes(".transcript.")).length} transcript, ${lines.length} dòng`);
+
+
+/*
+ * ── Kịch bản E2E (yêu cầu B2): cặp input → expected, máy đọc được ──────────────────────────────
+ *
+ * Bản .md ở trên là cho NGƯỜI đọc; để chạy lại trên app mình cần cấu trúc: mỗi tin người dùng gõ
+ * vào app gốc + toàn bộ những gì bot gốc trả ra sau đó (text, widget, thẻ xin quyền, file đính,
+ * tin nhắn sang bot khác) cho tới tin người dùng kế tiếp. e2e-replay-b2.mjs ăn file này.
+ */
+const scenarios = [];
+for (const [key, data] of slices) {
+  const m = key.match(/[.]transcript[.]replicas[.]([0-9a-f-]+)$/);
+  if (!m) continue;
+  const id = m[1];
+  const bot = roster.find((r) => r.id === id);
+  const entries = data.value?.entries ?? [];
+  const cases = [];
+  let cur = null;
+  for (const e of entries) {
+    if (e.kind === "message" && e.role === "user" && !e.fromAgent) {
+      cur = { input: e.content ?? "", atMs: e.timestampMs ?? null, expected: [] };
+      cases.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (e.kind === "message" && e.role === "assistant" && e.toAgent) {
+      cur.expected.push({ kind: "message_agent", to: e.toAgent.name, text: e.content ?? "" });
+    } else if (e.kind === "message" && e.role === "user" && e.fromAgent) {
+      cur.expected.push({ kind: "from_agent", from: e.fromAgent.name, text: e.content ?? "" });
+    } else if (e.kind === "send-message") {
+      const msg = e.message ?? {};
+      if (msg.type === "text" && (msg.content ?? "").trim()) {
+        cur.expected.push({ kind: "text", author: e.author?.name ?? null, text: msg.content });
+      } else if (msg.type === "widget") {
+        cur.expected.push({ kind: "widget", prompt: msg.widget?.prompt ?? "", options: (msg.widget?.options ?? []).map((o) => o.label), responded: e.respondedValue ?? null });
+      } else if (msg.type === "attachment") {
+        cur.expected.push({ kind: "attachment", fileName: msg.file_name ?? "" });
+      } else if (msg.type === "local-tool-permission") {
+        cur.expected.push({ kind: "permission", action: msg.ask?.action ?? "", target: String(msg.ask?.target ?? "").slice(0, 200) });
+      }
+    }
+  }
+  scenarios.push({
+    botId: id,
+    bot: bot?.name ?? id,
+    description: bot?.description ?? "",
+    isGroup: bot?.isGroup === true || (bot?.memberIds?.length ?? 0) > 0,
+    memberNames: (bot?.memberIds ?? []).map((x) => nameOf(x) ?? x),
+    cases,
+  });
+}
+const SCEN = join(dirname(OUT), "kich-ban-b2.json");
+writeFileSync(SCEN, JSON.stringify({ exportedAt: Date.now(), source: SRC, scenarios }, null, 1), "utf8");
+console.log(`đã ghi ${SCEN} — ${scenarios.reduce((n, sc) => n + sc.cases.length, 0)} cặp input/expected trên ${scenarios.length} bot`);
