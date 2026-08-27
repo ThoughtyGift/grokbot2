@@ -8,6 +8,7 @@
  * that does not run.
  */
 import { boxCall, boxConfigured } from "./box-exec.js";
+import { SECRETS_PRELUDE } from "./box-secrets.js";
 import { webSearch, webFetch } from "./web.js";
 import { isMcpConfigured, listMcpResources, readMcpResource } from "./mcp.js";
 // Safe direction: tool-calls.ts takes `known`/`isReadOnly` as parameters and imports nothing from
@@ -185,8 +186,12 @@ export const TOOLS: Record<string, ToolSpec> = {
     needsApproval: true,
     async run(arg) {
       const { command } = toolArgs(arg, [{ name: "command", aliases: ["cmd", "shell"] }]);
+      // Nạp bí mật của người dùng vào môi trường lệnh — xem `box-secrets.ts`.
+      //
+      // Nạp bằng FILE chứ không truyền `KEY=value` trên dòng lệnh: `ps` trên hộp thì mọi người dùng
+      // đều đọc được, kể cả bot của người khác. Đây đúng là cái bẫy đã trả giá với `x11vnc -passwd`.
       const r = await boxCall<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean; truncated: boolean }>(
-        "exec", { command }
+        "exec", { command: SECRETS_PRELUDE + command }
       );
       const bits = [
         `exit=${r.exitCode}${r.timedOut ? " (timeout)" : ""}`,

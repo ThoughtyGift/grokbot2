@@ -253,6 +253,16 @@ export interface AclPorts {
   automations: AutomationsPort;
   connectors: ConnectorsPort;
   extensions: ExtensionsPort;
+  /**
+   * Bí mật của hộp — `setBoxSecrets` / `getBoxSecretsStatus`.
+   *
+   * Tuỳ chọn: một chỗ nhúng không có hộp thì hai lệnh này vẫn phải trả lời được, và câu trả lời
+   * đúng khi đó là "chưa đặt gì", không phải một `{}` vô nghĩa.
+   */
+  secrets?: {
+    set(arg: unknown): Promise<{ names: string[]; count: number; path: string; boxConfigured: boolean }>;
+    status(): { names: string[]; count: number; path: string; boxConfigured: boolean };
+  };
   events: EventsPort;
   observe: ObservePort;
 }

@@ -1,0 +1,86 @@
+/**
+ * Bí mật của hộp — mỗi bài dưới đây là một cách bí mật rò ra mà không ai thấy.
+ *
+ *   npx tsx --test src/box-secrets.test.ts
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "box-secrets");
+const A = "local|nguoi-a@vi-du.vn";
+const B = "local|nguoi-b@vi-du.vn";
+const sach = (): void => { try { rmSync(DIR, { recursive: true, force: true }); } catch { /* chưa có */ } };
+
+const { setBoxSecrets, boxSecretsStatus, SECRETS_PRELUDE, BOX_SECRETS_FILE } =
+  await import("./box-secrets.js");
+
+test("lưu rồi đọc lại được, và KHÔNG trả về giá trị", async () => {
+  sach();
+  const st = await setBoxSecrets({ secrets: { SHOPEE_USER: "khanh", SHOPEE_PASS: "bi-mat" } }, A);
+  assert.deepEqual(st.names, ["SHOPEE_PASS", "SHOPEE_USER"]);
+  assert.equal(st.count, 2);
+  // Nếu một ngày ai đó thêm `values` vào đây, bài này phải đỏ: pane chỉ cần biết "đã đặt chưa".
+  assert.equal(JSON.stringify(st).includes("bi-mat"), false, "trang thai KHONG duoc mang gia tri");
+});
+
+test("hai người hai kho — bí mật của người này không lọt sang người kia", async () => {
+  sach();
+  await setBoxSecrets({ secrets: { TOKEN: "cua-A" } }, A);
+  await setBoxSecrets({ secrets: { KHAC: "cua-B" } }, B);
+  assert.deepEqual(boxSecretsStatus(A).names, ["TOKEN"]);
+  assert.deepEqual(boxSecretsStatus(B).names, ["KHAC"]);
+});
+
+test("gửi từng phần thì TRỘN, không thay cả kho", async () => {
+  sach();
+  await setBoxSecrets({ secrets: { MOT: "1" } }, A);
+  const st = await setBoxSecrets({ secrets: { HAI: "2" } }, A);
+  // Client gửi từng phần; một lượt thiếu KHÔNG có nghĩa là "xoá phần còn lại".
+  assert.deepEqual(st.names, ["HAI", "MOT"]);
+});
+
+test("chuỗi rỗng là cách nói 'bỏ cái này'", async () => {
+  sach();
+  await setBoxSecrets({ secrets: { BO: "x", GIU: "y" } }, A);
+  const st = await setBoxSecrets({ secrets: { BO: "" } }, A);
+  assert.deepEqual(st.names, ["GIU"]);
+});
+
+test("tên biến độc bị chặn — file này được `source`", async () => {
+  sach();
+  // File bí mật được nạp bằng `.`, nên một "tên" như dưới đây là thực thi mã tuỳ ý dưới tài khoản
+  // của chính người dùng. Đây là kiểm tra an ninh, không phải kiểm tra hình thức.
+  const st = await setBoxSecrets({
+    secrets: { "X=1; rm -rf ~": "a", "co dau cach": "b", "1BATDAU_BANG_SO": "c", HOP_LE: "d" },
+  }, A);
+  assert.deepEqual(st.names, ["HOP_LE"]);
+});
+
+test("giá trị chỉ nhận chuỗi — số/đối tượng bị bỏ, không ép kiểu", async () => {
+  sach();
+  const st = await setBoxSecrets({ secrets: { SO: 123, DOI_TUONG: { a: 1 }, CHUOI: "ok" } } as unknown, A);
+  assert.deepEqual(st.names, ["CHUOI"]);
+});
+
+test("đối số hỏng không làm nổ, chỉ trả trạng thái hiện có", async () => {
+  sach();
+  await setBoxSecrets({ secrets: { CO: "san" } }, A);
+  for (const rac of [null, undefined, {}, { secrets: null }, { secrets: "chuoi" }, 42]) {
+    const st = await setBoxSecrets(rac as unknown, A);
+    assert.deepEqual(st.names, ["CO"], JSON.stringify(rac));
+  }
+});
+
+test("tiền tố nạp bí mật dùng `.` chứ không phải `source`, và không chết khi chưa có file", () => {
+  // `source` là của bash; daemon trên hộp có thể chạy `sh`. Và "chưa đặt bí mật nào" là chuyện
+  // bình thường, không phải lỗi — nếu nó làm hỏng lệnh thì mọi lệnh shell của bot chết theo.
+  assert.ok(SECRETS_PRELUDE.startsWith(". "), SECRETS_PRELUDE);
+  assert.ok(SECRETS_PRELUDE.includes("2>/dev/null"));
+  assert.ok(SECRETS_PRELUDE.includes("|| true"));
+  assert.ok(BOX_SECRETS_FILE.startsWith("$HOME/"), "phải nằm trong home của CHÍNH người đó");
+});
+
+test("dọn", () => { sach(); });

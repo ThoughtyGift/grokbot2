@@ -30,6 +30,7 @@ import {
 import { currentOwner, runWithOwner } from "./request-context.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
 import { installedIds } from "./plugins.js";
+import { setBoxSecrets, boxSecretsStatus } from "./box-secrets.js";
 import {
   transcriptTail,
   reactToMessage,
@@ -186,6 +187,7 @@ const ports: AclPorts = {
     submitResponses,
     channelSnapshot,
   },
+  secrets: { set: setBoxSecrets, status: boxSecretsStatus },
   extensions: {
     closeMcp, mcpServers, mcpServerStatus,
     /*

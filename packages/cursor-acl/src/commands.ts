@@ -368,8 +368,21 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       () => (name === "setSharedRoomTyping" ? {} : { ok: false, reason: NO_RELAY }),
     ])),
 
-    getBoxSecretsStatus: () => ({}),
-    setBoxSecrets: () => ({}),
+    /*
+     * Bí mật của hộp — đường chính thức để đưa mật khẩu/token cho bot.
+     *
+     * Hai dòng này từng là `() => ({})`. Client 0.20 có đủ giao diện phía desktop
+     * (`listSecrets`/`revealSecret`/`upsertSecrets`) rồi đẩy sang hộp bằng `setBoxSecrets` — mà
+     * nhánh đẩy ấy **rơi vào hư không**, nên người dùng chỉ còn cách dán mật khẩu vào chat, nơi nó
+     * nằm lại trong bản ghi hội thoại mãi mãi.
+     *
+     * Đối số đọc từ bản dựng 0.29: `v().args({secrets: f2e})` với `f2e = vl(C())` — `vl` là
+     * "record of", nên đây là bản đồ tên→chuỗi. `getBoxSecretsStatus` là `noArgs`.
+     *
+     * Trả về TÊN, không trả giá trị: pane chỉ cần biết "đã đặt chưa".
+     */
+    getBoxSecretsStatus: () => ports.secrets?.status() ?? { names: [], count: 0, path: "", boxConfigured: false },
+    setBoxSecrets: async (a) => await ports.secrets?.set(a) ?? { names: [], count: 0, path: "", boxConfigured: false },
     setWindowFocused: () => ({}),
 
     // The app's own memory screen. Answering with the real entries beats an empty {}; the reply
