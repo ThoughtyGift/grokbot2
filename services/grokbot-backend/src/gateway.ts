@@ -28,6 +28,8 @@ import {
   ownerOf,
 } from "./directory/index.js";
 import { currentOwner, runWithOwner } from "./request-context.js";
+import { catalog as pluginCatalog } from "./plugin-catalog.js";
+import { installedIds } from "./plugins.js";
 import {
   transcriptTail,
   reactToMessage,
@@ -184,7 +186,18 @@ const ports: AclPorts = {
     submitResponses,
     channelSnapshot,
   },
-  extensions: { closeMcp, mcpServers, mcpServerStatus },
+  extensions: {
+    closeMcp, mcpServers, mcpServerStatus,
+    /*
+     * Dữ liệu THÔ cho hai lệnh 0.29 hỏi qua cổng — không dựng hình ở đây.
+     *
+     * Dựng hình cho client là việc của ACL, và `boundaries.test.ts` bắt đúng chỗ này: bản đầu tôi
+     * gọi thẳng `listMarketplacePluginsJson` trong file này và test "no service module imports
+     * protobuf" đỏ ngay. Nó đúng — tầng dịch vụ nói tiếng grokbot2, tiếng của client dừng ở ACL.
+     */
+    mcpCatalogEntries: () => pluginCatalog(),
+    mcpInstalledIds: () => installedIds(currentOwner()),
+  },
   events: { subscribe },
   observe: {
     recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,

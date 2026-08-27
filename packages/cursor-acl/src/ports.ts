@@ -177,6 +177,19 @@ export interface ExtensionsPort {
    * answer keeps the previous flat report rather than being forced to invent one.
    */
   mcpServerStatus?(name: string): { status: string; detail: string; toolCount: number };
+  /*
+   * Danh mục plugin và những plugin người gọi đã cài.
+   *
+   * 0.20 hỏi hai thứ này qua RPC proto (`ListMarketplacePlugins` / `GetEffectiveUserPlugins`);
+   * **0.29 hỏi qua cổng** bằng `getMcpCatalog` / `getEffectiveMcpPlugins`, cả hai `noArgs` và cùng
+   * trả về `array`. Đo trên client 0.29 thật ngày 27/08: đó là hai trong ba lệnh duy nhất nó gọi
+   * mà backend này chưa có mapping.
+   *
+   * Tuỳ chọn, vì một chỗ nhúng không có danh mục thì trả mảng rỗng vẫn đúng — client đọc
+   * `length === 0` là "chưa có", không phải lỗi.
+   */
+  mcpCatalogEntries?(): readonly unknown[];
+  mcpInstalledIds?(): number[];
 }
 
 /**

@@ -16,6 +16,7 @@
  *   something similarly spelled is handled, and then silently does nothing, is the bug class
  *   parity.md records six times.
  */
+import { listMarketplacePluginsJson, getEffectiveUserPluginsJson, type PluginEntry } from "@grokbot2/proto";
 import type { AclPorts, Call } from "./ports.js";
 import type { WireChannel } from "./sse.js";
 
@@ -80,6 +81,21 @@ const idOf = (a: any): string =>
 export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel, payload: unknown) => void): Record<string, Call> {
   const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions } = ports;
   const push = (channel: WireChannel, payload: unknown) => { broadcast?.(channel, payload); };
+
+  /**
+   * Danh mục plugin, và cách bóc mảng ra khỏi hai hàm dựng hình đã có.
+   *
+   * Dùng LẠI đúng hai hàm mà đường proto của 0.20 dùng, thay vì dựng hình lần thứ hai: hai client
+   * khác phiên bản phải thấy **cùng một** danh mục, và hai chỗ dựng là hai chỗ để lệch nhau. Hai
+   * hàm đó trả chuỗi JSON `{plugins:[…]}` còn 0.29 muốn mảng trần, nên chỉ bóc một lớp.
+   *
+   * Trả `undefined` khi chỗ nhúng không có danh mục — hai hàm kia đã lấy danh mục dựng sẵn làm giá
+   * trị mặc định, nên đưa `undefined` là đúng ý chúng, còn đưa `[]` là nói dối rằng danh mục rỗng.
+   */
+  const catalogEntries = (): PluginEntry[] | undefined =>
+    extensions.mcpCatalogEntries?.() as PluginEntry[] | undefined;
+  const pluginsArray = (json: string): unknown[] =>
+    (JSON.parse(json) as { plugins?: unknown[] }).plugins ?? [];
 
   /**
    * The MCP server summary rows the client reads.
@@ -317,6 +333,24 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         : [];
       return { servers: mcpServerRows(want) };
     },
+    /*
+     * Ba lệnh 0.29 đổi tên — đo trên client thật, không suy từ tài liệu.
+     *
+     * Bản 0.29 chạy trên backend này boot được, đăng nhập được, hiện đúng roster; nó gọi 30 lệnh và
+     * **chỉ ba lệnh này** không có mapping. Cả ba là bề mặt plugin/MCP bị đổi tên:
+     * `getEffectivePlugins` → `getEffectiveMcpPlugins`, và hai cái còn lại là mới.
+     *
+     * Hình dạng đọc từ chính bản dựng 0.29 (`{args:"none",reply:…}`):
+     *   getMcpCatalog          → array
+     *   getEffectiveMcpPlugins → array
+     *   getMcpState            → record, và renderer dùng `q.servers.some(J => J.id === … &&
+     *                            J.accountKey === …)`, tức đúng những hàng `listBoxMcpServers`
+     *                            đã trả — nên nó dùng lại `mcpServerRows`, không dựng hình mới.
+     */
+    getMcpCatalog: () => pluginsArray(listMarketplacePluginsJson(catalogEntries())),
+    getEffectiveMcpPlugins: () =>
+      pluginsArray(getEffectiveUserPluginsJson(extensions.mcpInstalledIds?.(), catalogEntries())),
+    getMcpState: () => ({ servers: mcpServerRows([]) }),
     // ── shared rooms: answered, and answered NO ──────────────────────────────
     //
     // All nine are declared in the renderer (`reply:"record"`, except `setSharedRoomTyping` which
