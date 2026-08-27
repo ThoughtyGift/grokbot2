@@ -42,6 +42,17 @@ export interface AgentRecord {
   isRetrying?: boolean;
   awaitingUserResponse?: unknown;
   currentActivity?: AgentActivity | null;
+  /**
+   * Nhóm — một hội thoại có nhiều bot cùng ngồi.
+   *
+   * Client vẽ nhóm bằng chính hai trường này, đọc từ bản dựng 0.20:
+   *   `n.isGroup` quyết định biểu tượng và nhánh "group" của roster
+   *   `rows.find(r => r.id === id)?.memberIds` là danh sách thành viên
+   * Nên nhóm KHÔNG phải một bảng riêng: nó là một agent mang thêm hai trường, và `summarise` trải
+   * `...a` nên chúng tự chảy ra roster.
+   */
+  isGroup?: boolean;
+  memberIds?: string[];
 }
 
 export interface Parked {

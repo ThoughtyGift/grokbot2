@@ -570,6 +570,42 @@ export function messageAgent(fromId: string, target: string, content: string): s
   return `đã nhắn cho ${to.name}`;
 }
 
+/**
+ * Lịch sử gửi cho model, dựng từ một bản ghi hội thoại.
+ *
+ * Tách khỏi `sendPrompt` vì **nhóm phải dựng lại nó sau mỗi lượt**: con thứ hai chỉ thấy câu của
+ * con thứ nhất nếu lịch sử được đọc lại sau khi câu ấy đã nằm trong bản ghi. Dùng lại biến đã tính
+ * một lần ở đầu hàm thì cả năm thành viên cùng đọc một bản ghi chưa ai trả lời — và trả lời giống
+ * hệt nhau.
+ */
+function historyFor(agentId: string, text: string, freshAttIds: Set<string>): PoolMessage[] {
+  const t = tail(agentId);
+  return t.filter((e) => (textOf(e) || attachmentNameOf(e)) && !isToolEcho(e))
+    .map((e) => {
+      const from = e.kind === "message" ? e.fromAgent : undefined;
+      // An attachment entry has no text; name it so the turn it belongs to still exists in the
+      // history. The bytes themselves ride the top-level `image` field, not this line.
+      let body = textOf(e) || attachmentLineOf(e, freshAttIds.has(e.id));
+      // A TEXT file attached THIS turn carries its content into the history (X8). The name alone
+      // told the model nothing: "tóm tắt tệp này" got an answer invented from the file name.
+      // Images ride the `image` field; older attachments stay name-only — re-inlining them every
+      // turn would balloon the prompt with bytes the model has already seen.
+      if (freshAttIds.has(e.id)) {
+        const url = e.kind === "message" ? (e as { message?: { url?: string } }).message?.url : undefined;
+        const inline = url ? stagedTextPreview(url) : null;
+        if (inline) body += `${NEWLINE}Nội dung tệp:${NEWLINE}${inline.text}${inline.truncated ? `${NEWLINE}[…đã cắt: tệp dài hơn 32KB]` : ""}`;
+      }
+      // Tin trả lời mang theo tham chiếu cho model — không có dòng này thì `replyTo` chỉ là
+      // trang trí ở FE, đúng cái bẫy X6.1 đã gọi tên.
+      const rt = e.kind === "message" ? e.replyTo : undefined;
+      if (rt) body = `[trả lời tin của ${rt.author}: "${rt.excerpt}"] ${body}`;
+      return {
+        role: e.kind === "message" && e.role === "user" ? "user" : "assistant",
+        content: from ? `[tin nhắn từ bot ${from.name}] ${body}` : body,
+      } as PoolMessage;
+    });
+}
+
 export function sendPrompt(args: SendArgs) {
   // Multi-tenant Phase 2: a caller may only prompt an agent they own. An explicit id they do not
   // own is rejected without any write; with no id, fall back to their OWN first agent (or a new one).
@@ -665,30 +701,7 @@ export function sendPrompt(args: SendArgs) {
   // A message from another bot is attributed in the model's history, not in the entry text —
   // the entry carries `fromAgent` so the renderer can label it, and prefixing the stored text
   // instead would put "[từ bot X]" inside the visible bubble as well.
-  const history: PoolMessage[] = t.filter((e) => (textOf(e) || attachmentNameOf(e)) && !isToolEcho(e))
-    .map((e) => {
-      const from = e.kind === "message" ? e.fromAgent : undefined;
-      // An attachment entry has no text; name it so the turn it belongs to still exists in the
-      // history. The bytes themselves ride the top-level `image` field, not this line.
-      let body = textOf(e) || attachmentLineOf(e, freshAttIds.has(e.id));
-      // A TEXT file attached THIS turn carries its content into the history (X8). The name alone
-      // told the model nothing: "tóm tắt tệp này" got an answer invented from the file name.
-      // Images ride the `image` field; older attachments stay name-only — re-inlining them every
-      // turn would balloon the prompt with bytes the model has already seen.
-      if (freshAttIds.has(e.id)) {
-        const url = e.kind === "message" ? (e as { message?: { url?: string } }).message?.url : undefined;
-        const inline = url ? stagedTextPreview(url) : null;
-        if (inline) body += `${NEWLINE}Nội dung tệp:${NEWLINE}${inline.text}${inline.truncated ? `${NEWLINE}[…đã cắt: tệp dài hơn 32KB]` : ""}`;
-      }
-      // Tin trả lời mang theo tham chiếu cho model — không có dòng này thì `replyTo` chỉ là
-      // trang trí ở FE, đúng cái bẫy X6.1 đã gọi tên.
-      const rt = e.kind === "message" ? e.replyTo : undefined;
-      if (rt) body = `[trả lời tin của ${rt.author}: "${rt.excerpt}"] ${body}`;
-      return {
-        role: e.kind === "message" && e.role === "user" ? "user" : "assistant",
-        content: from ? `[tin nhắn từ bot ${from.name}] ${body}` : body,
-      } as PoolMessage;
-    });
+  const history: PoolMessage[] = historyFor(agentId, text, freshAttIds);
   // Vertex refuses outright a conversation whose last turn is the model’s:
   //   "Vertex 400: Requests ending with a model turn are not supported"
   // Sending a picture with no caption produced exactly that. Both entries the turn appended -
@@ -708,6 +721,53 @@ export function sendPrompt(args: SendArgs) {
   inflight.get(agentId)?.abort();
   const controller = new AbortController();
   inflight.set(agentId, controller);
+
+  /*
+   * ── Luật lượt nói trong nhóm ──────────────────────────────────────────────────────────────
+   *
+   * Một nhóm là một hội thoại có nhiều bot cùng ngồi. Ba luật, và mỗi luật là một cách nó hỏng nếu
+   * thiếu:
+   *
+   * **1. Người nói → mỗi thành viên đúng MỘT lượt, LẦN LƯỢT.** Chạy song song thì cả năm con cùng
+   * đọc một bản ghi chưa ai trả lời, nên năm câu trả lời giống hệt nhau và không con nào biết con
+   * kia vừa nói gì. Lần lượt thì con thứ hai đọc được câu của con thứ nhất — đó chính là thứ biến
+   * năm con bot rời rạc thành một đội.
+   *
+   * **2. Trả lời của bot KHÔNG kích hoạt bot khác.** Chỉ tin của NGƯỜI mới mở một vòng
+   * (`!args.fromAgent`). Đây là chỗ chặn vòng lặp tận gốc, không phải bằng một bộ đếm: hai con bot
+   * trả lời nhau sẽ làm thế mãi mãi, đốt hạn mức pool trong lúc không ai nhìn. Bot vẫn nhắn riêng
+   * cho nhau được bằng `message_agent`, và đường đó có trần `MAX_HOPS` của riêng nó.
+   *
+   * **3. Bản ghi thuộc về NHÓM, giọng nói thuộc về THÀNH VIÊN.** Bong bóng mang `authorOf(memberId)`
+   * nên giao diện gắn đúng tên; `speakAs` khiến lời nhắc hệ thống dùng tên và ký ức của chính con
+   * đó. Thiếu vế sau thì cả năm trả lời dưới một nhân cách.
+   *
+   * Huỷ giữa chừng: cả chuỗi dùng chung một `controller`, nên một tin mới của người dùng dừng luôn
+   * những thành viên chưa kịp nói — thay vì để họ trả lời một câu hỏi đã cũ.
+   */
+  const group = agents.get(agentId);
+  const members = group?.isGroup ? (group.memberIds ?? []).filter((id) => agents.has(id)) : [];
+  if (members.length && !args.fromAgent) {
+    // Bong bóng rỗng dựng sẵn ở trên là của con ĐẦU TIÊN; những con sau tự dựng bong bóng riêng.
+    void (async () => {
+      for (let i = 0; i < members.length; i++) {
+        if (controller.signal.aborted) return;
+        const memberId = members[i];
+        const b = i === 0 ? bubble : (() => {
+          const nb: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(memberId),
+            message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+          t.push(nb); onUpdate(agentId);
+          return nb;
+        })();
+        if (i === 0 && b.kind === "send-message") b.author = authorOf(memberId);
+        // Dựng LẠI lịch sử mỗi lượt: con thứ hai phải thấy câu của con thứ nhất.
+        const h = historyFor(agentId, text, freshAttIds);
+        await startTurn(agentId, b, h, key, controller, image, memberId);
+      }
+    })();
+    return { accepted: true, entryId: userEntry.id, agentId };
+  }
+
   void startTurn(agentId, bubble, history.length ? history : [{ role: "user", content: text }], key, controller, image);
   return { accepted: true, entryId: userEntry.id, agentId };
 }
@@ -780,7 +840,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
  * exceeded the call fails outright, and a retry with the same oversized history fails the
  * same way.
  */
-async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
+async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string, speakAs?: string): Promise<void> {
   // Per-user quota (multi-tenant Phase 5). Billed to the agent's OWNER, not the caller: this runs
   // detached from the request, so `ownerOf(agentId)` is the reliable identity (currentOwner() would
   // be the default here). Under GROKBOT2_BILLING=enforce an over-cap user does not spend a turn.
@@ -799,19 +859,31 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
     const next = await compact(history, key, prior, controller.signal);
     if (next) { compaction.set(agentId, next); persist(); }
   }
-  return runTurn(agentId, bubble, applyCompaction(history, compaction.get(agentId) ?? null), key, controller, image);
+  return runTurn(agentId, bubble, applyCompaction(history, compaction.get(agentId) ?? null), key, controller, image, speakAs);
 }
 
-async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string): Promise<void> {
+async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], key: string, controller: AbortController, image?: string, speakAs?: string): Promise<void> {
   // Tiered so the ~5k-token base prompt stays a stable cacheable prefix; the timestamp and
   // anything else per-turn goes last. See prompt.ts.
   // Per-owner: the MCP paragraph names THIS account's servers, and picks up a plugin installed
   // since boot. Was a module-level constant built from the default owner's config at import time.
   // Quét lại ở nền nếu bộ nhớ đệm đã cũ; lượt này vẫn dùng bản cũ.
   warmSkills();
+  /*
+   * `speakAs` — ai đang NÓI, khi khác với hội thoại đang ghi.
+   *
+   * Trong một nhóm, hội thoại thuộc về nhóm (`agentId`) nhưng người trả lời là một thành viên. Nên
+   * bản ghi và trình bày đi theo `agentId`, còn **nhân cách** — tên và ký ức — đi theo `speakAs`.
+   * Không tách hai thứ này thì mọi thành viên trả lời dưới cùng một cái tên và cùng một ký ức: một
+   * con bot đóng năm vai, chứ không phải năm con bot.
+   */
+  const voice = speakAs ?? agentId;
   const system = buildSystemPrompt(toolProtocolFor(ownerOf(agentId) ?? DEFAULT_USER.authId), {
-    memory: renderMemory(await loadMemory(agentId)),
-    agentName: agents.get(agentId)?.name,
+    memory: renderMemory(await loadMemory(voice)),
+    agentName: agents.get(voice)?.name,
+    // Nhân cách đi theo `voice`: trong nhóm, đây là description của THÀNH VIÊN đang nói —
+    // chính là bản SOP bot mẹ viết khi tạo bot con (đối chiếu roster app gốc 0.29).
+    description: agents.get(voice)?.description,
     boxOn: boxConfigured(),
     browserOn: isBrowserConfigured(),
     // Lấy bản đã có sẵn, không chờ mạng: prompt dựng đồng bộ, và một lượt chat không nên đứng lại

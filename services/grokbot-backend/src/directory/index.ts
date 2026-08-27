@@ -107,6 +107,46 @@ export function createAgent(args: { name?: string; profile?: { name?: string }; 
   return rec;
 }
 
+/**
+ * Tạo một nhóm — một hội thoại có nhiều bot cùng ngồi.
+ *
+ * Trước đây `createGroup` trả `null`, nghĩa là nút "New group" trong app **im lặng không làm gì**:
+ * client đọc `Ge.agent.id` từ câu trả lời, và `null.agent` thì hội thoại mới không bao giờ mở ra.
+ *
+ * Nhóm là một `AgentRecord` mang `isGroup` + `memberIds`, không phải một bảng riêng — đó là hình
+ * dạng client đã đọc sẵn (`n.isGroup`, `rows.find(...).memberIds`). Thêm bảng là thêm một chỗ để
+ * lệch với roster.
+ *
+ * Chỉ nhận thành viên mà **người gọi sở hữu**: `memberAgentIds` đến từ client, và một id của người
+ * khác lọt vào đây là kéo bot của họ vào phòng của mình.
+ */
+export function createGroup(
+  a: { name?: string; description?: string; memberAgentIds?: string[]; memberIds?: string[] } = {},
+): AgentRecord {
+  const wanted = (a.memberAgentIds ?? a.memberIds ?? []).filter((id) => ownedRec(id) != null);
+  const rec = createAgent({ name: a.name || "Nhóm mới", ...(a.description ? { description: a.description } : {}) });
+  rec.isGroup = true;
+  rec.memberIds = [...new Set(wanted)];
+  persist(); rosterChanged(rec.id);
+  return rec;
+}
+
+/**
+ * Đổi danh sách thành viên. `null` khi không phải nhóm của người gọi — client khai
+ * `reply:"record-or-null"` nên `null` là câu trả lời hợp lệ, không phải lỗi.
+ */
+export function setGroupMembers(
+  a: { id?: string; agentId?: string; memberAgentIds?: string[]; memberIds?: string[] } = {},
+): AgentRecord | null {
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
+  if (!rec) return null;
+  const wanted = (a.memberAgentIds ?? a.memberIds ?? []).filter((id) => ownedRec(id) != null && id !== rec.id);
+  rec.isGroup = true;
+  rec.memberIds = [...new Set(wanted)];
+  persist(); rosterChanged(rec.id);
+  return rec;
+}
+
 export function updateAgent(
   a: { id?: string; agentId?: string; name?: string; description?: string; profile?: { name?: string; description?: string } },
 ): AgentRecord | null {

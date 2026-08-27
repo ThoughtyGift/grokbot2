@@ -19,6 +19,13 @@ import { config } from "./config.js";
 export interface PromptContext {
   /** The bot the user is talking to; the original addresses the agent by name. */
   agentName?: string;
+  /**
+   * The bot's Description — the Settings pane calls it "What this Bot is for", and when one bot
+   * creates another (0.29's team flow) this is the SOP the creator writes for it. It steered
+   * nothing until 7.4.2: measured in the group E2E, a bot named "Kho" with a warehouse-only
+   * description introduced itself as a generic assistant because this text never left the roster.
+   */
+  description?: string;
   /** Shell/file tools are attached to a real box. */
   boxOn?: boolean;
   /** The box's browser is reachable. */
@@ -55,6 +62,20 @@ export function contextTier(ctx: PromptContext): string {
       `Your name in this conversation is "${ctx.agentName}" — when the user asks who you are or what ` +
       `you are called, answer with that name. You NEVER introduce yourself by the name of the ` +
       `underlying model (Gemini, Claude, GPT, Grok…) and never say which company made you.`,
+    );
+  }
+
+  // The persona sits directly after the name, still inside the cacheable context tier: it
+  // changes when the user edits the bot, not per turn.
+  if (ctx.description?.trim()) {
+    lines.push(
+      "",
+      "## Your role",
+      "",
+      "The user set this bot up with the following description. It is your job description —",
+      "follow it: stay in this role, respect its rules and boundaries, and answer in its voice.",
+      "",
+      ctx.description.trim(),
     );
   }
 

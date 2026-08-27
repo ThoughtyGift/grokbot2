@@ -39,6 +39,9 @@ export interface IdentityPort {
 
 /** S2 directory — the sidebar roster. */
 export interface DirectoryPort {
+  /** Nhóm: một agent mang `isGroup` + `memberIds`. Xem `createGroup` trong commands.ts. */
+  createGroup(a: unknown): unknown;
+  setGroupMembers(a: unknown): unknown;
   createAgent: Call;
   listAgents(): AgentRow[];
   countAgents(): number;

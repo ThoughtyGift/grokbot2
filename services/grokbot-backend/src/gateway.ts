@@ -26,6 +26,8 @@ import {
   nextRosterOrdered,
   agentById,
   ownerOf,
+  createGroup,
+  setGroupMembers,
 } from "./directory/index.js";
 import { currentOwner, runWithOwner } from "./request-context.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
@@ -93,6 +95,8 @@ const ports: AclPorts = {
   },
   directory: {
     createAgent,
+    createGroup,
+    setGroupMembers,
     listAgents,
     countAgents,
     updateAgent,

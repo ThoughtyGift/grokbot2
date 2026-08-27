@@ -465,8 +465,18 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     unpublishSkill: () => ({ ok: false }),
     getCloudAgentInfo: () => null,
     requestDiskSaverAudit: () => null,
-    createGroup: () => null,
-    setGroupMembers: () => null,
+    /*
+     * Nhóm — một hội thoại có nhiều bot cùng ngồi.
+     *
+     * Hai dòng này từng trả `null`, nghĩa là nút "New group" trong app **im lặng không làm gì**:
+     * renderer đọc `Ge.agent.id` từ câu trả lời, và `null.agent` thì hội thoại mới không bao giờ
+     * mở ra. Hình dạng đọc từ bản dựng 0.20: `createGroup` reply `record`, `setGroupMembers` reply
+     * `record-or-null`, và roster vẽ nhóm bằng `n.isGroup` + `rows.find(...).memberIds`.
+     *
+     * `createGroup` bọc trong `{agent}` giống `createAgent` — cùng một renderer đọc cả hai.
+     */
+    createGroup: (a) => ({ agent: directory.createGroup(a) }),
+    setGroupMembers: (a) => { const r = directory.setGroupMembers(a); return r ? { agent: r } : null; },
 
     // ── teach a task ────────────────────────────────────────────────────────────
     //
