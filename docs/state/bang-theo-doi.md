@@ -716,6 +716,56 @@ node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
 
 ---
 
+## 3h · Tự cập nhật — đã moi xong cơ chế của hãng, **chưa dựng**
+
+Đọc từ bản dựng 0.29 ngày 28/08. Ghi lại đủ để dựng sau mà không phải đọc lại bundle.
+
+### Móc có sẵn, không cần vá
+
+```js
+feedBaseUrl: process.env.SAND_UPDATE_FEED_BASE_URL          // hãng để sẵn
+url = `${base}/api/update/${platform}/${appName}/${version}/${machineId}/${track}`
+platform : win32-x64-user · win32-arm64-user · darwin-arm64 · darwin-x64
+appName  : stable → "sand" · nightly → "sand-nightly" · dogfood → "sand-dogfood"
+```
+
+Trả lời:
+
+| mã | nghĩa |
+|---|---|
+| `204` | đang là bản mới nhất — **không phải** 200 thân rỗng, cũng không phải 404 |
+| `200` | Windows (`iupdate`): `{url, version, sha256hash?}` · macOS (`squirrel`): `{url, name}` |
+
+Client tự tải về `sand-update-<version>.exe`, **tự kiểm sha256**, rồi mới áp dụng. macOS thì nó dựng
+một feed server **localhost** rồi giao cho Squirrel.Mac — không nói chuyện thẳng với máy chủ.
+
+### Đường ngắn bị chặn ở đâu
+
+```js
+LMr = ["Anysphere, Inc.", "Anysphere"]
+if (sig.status !== "Valid") throw …
+if (!(signerAllowlist ?? LMr).includes(signerCommonName)) throw `unexpected signer ""`
+```
+
+`SandWindowsInstaller` kiểm **chữ ký Authenticode** và đối chiếu tên người ký với danh sách ghi cứng
+của hãng. Bộ cài của ta không ký ⇒ client tải xong rồi mới ném lỗi — **tệ hơn là không làm gì**.
+Nó cũng chạy file cài với `--updated /S` (cờ kiểu NSIS), trong khi bộ cài của ta là Inno Setup
+(`/VERYSILENT`).
+
+### Nên dựng theo hình nào
+
+1. **Feed đúng hình dạng của hãng** trong backend này, phát từ `.data/dist` — để nếu sau này ký được
+   bộ cài và vá `signerAllowlist` thì chỉ cần bỏ `SAND_DISABLE_UPDATES`, không phải viết lại.
+2. **Bộ cập nhật của riêng ta** trong launcher (PowerShell, không cần Node trên máy đích): hỏi cùng
+   cửa đó → tải → kiểm sha256 → chạy bộ cài với `/VERYSILENT`.
+3. Ký bộ cài + vá `signerAllowlist` là **đường thứ ba**, cần chứng chỉ thật; chỉ làm nếu muốn nút
+   "Check for Updates" trong app chạy được.
+
+Phiên bản suy từ tên file (`Bot-Noi-Bo-Setup-20260827.exe` → `2026.08.27`) chứ không chép tay: một
+con số suy được từ file đang nằm đó thì không bao giờ lệch với file thật.
+
+---
+
 ## 4 · E2E — quy trình và danh sách
 
 ### Quy trình (bắt buộc theo thứ tự)
