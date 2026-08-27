@@ -21,6 +21,7 @@ import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from ".
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
+import { resetSkillsCache, warmSkills } from "../skills.js";
 import { installedIds, installPlugin } from "../plugins.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
@@ -849,6 +850,52 @@ function setupPlugin(arg: string, owner: string): string {
 
 TOOLS.setup_plugin = (arg, ctx) => setupPlugin(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 
+/**
+ * Tính năng 2 (nửa sau) — bot TỰ VIẾT skill: đường ghi cho thứ `skills.ts` mới chỉ biết đọc.
+ *
+ * App gốc làm đúng thế này trong B2: nó tự viết `shopee-ops-sop.md` rồi đính vào chat — "skill"
+ * của hệ này CHÍNH LÀ file SOP trên đĩa. Ghi vào `$HOME/.claude/skills/<slug>/SKILL.md`:
+ *   - `$HOME` nở trong exec, mà exec chạy dưới tài khoản OS của CHÍNH CHỦ (chặng 5) — nên skill
+ *     theo từng người, không phải một kho chung để người này đổi lời nhắc của người kia.
+ *   - `.claude/skills` là quy ước quét sẵn trong SKILL_DIRS, và cũng là định dạng Claude chuẩn.
+ *   - heredoc TRÍCH DẪN (như box-secrets): nội dung có `$`, backtick, nháy — nở ra trong echo là
+ *     nội dung SOP biến thành lệnh shell.
+ *
+ * KHÔNG auto-approve: một skill là lời dặn ĐỨNG LẠI trong mọi lượt sau — thay đổi hành vi lâu dài
+ * thì người dùng phải gật, cùng lý do với create_agent.
+ */
+TOOLS.create_skill = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = null; }
+  const rawName = String(spec?.name ?? spec?.title ?? "").trim();
+  const content = String(spec?.content ?? spec?.body ?? spec?.sop ?? "").trim();
+  const description = String(spec?.description ?? "").trim();
+  if (!rawName || !content) return 'create_skill cần {"name":"tên-skill","description":"dùng khi nào","content":"các bước SOP"}';
+  if (!boxConfigured()) return "Chưa nối máy tính nên chưa có chỗ lưu skill.";
+  const slug = rawName.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  if (!slug) return "(tên skill không hợp lệ)";
+  const MARK = "GB2_SKILL_EOF";
+  if (content.includes(MARK) || description.includes(MARK)) return "(nội dung chứa chuỗi đánh dấu nội bộ, đổi chữ khác giúp)";
+  const file = `$HOME/.claude/skills/${slug}/SKILL.md`;
+  const doc = `---
+name: ${slug}
+description: ${(description || rawName).split(String.fromCharCode(10)).join(" ").split(String.fromCharCode(13)).join(" ")}
+---
+
+${content}
+`;
+  const cmd = `mkdir -p "$HOME/.claude/skills/${slug}"
+cat > ${file} <<'${MARK}'
+${doc}${MARK}
+echo "wrote=$(wc -c < ${file})"`;
+  const r = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", { command: cmd });
+  if (r.exitCode !== 0) return `Không ghi được skill: ${r.stderr.trim().slice(0, 200)}`;
+  // Lát skill trong prompt đang cache TTL 2 phút — làm mới ngay để lượt sau đã thấy skill vừa ghi.
+  resetSkillsCache();
+  warmSkills();
+  return `Đã lưu skill "${slug}" tại ${file} — từ giờ mọi lượt chat đều thấy nó trong <available_skills>.`;
+};
+
 TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 
@@ -1069,7 +1116,24 @@ const PLUGIN_PROTOCOL =
   'needs; TOOL_CALL: setup_plugin({"plugin":"lark","values":{"LARK_APP_ID":"…"}}) installs one. ' +
   "You may look a credential up in the browser when the person is signed in to that console, but " +
   "never invent one, and never print a credential back into the chat — pass it in `values` and say " +
-  "which keys you saved. If a required value is missing, ask the person for it.";
+  "which keys you saved. If a required value is missing, ask the person for it. " +
+  // Nhịp của app gốc, đo trong b2-replay (case 5, 8, 15, 23): nó RÀ trước, KỂ TÊN THẬT, rồi HỎI
+  // bằng widget — và chỉ cài sau khi người dùng chọn. Bên mình từng nhảy thẳng vào setup_plugin.
+  "WHEN THE PERSON ASKS whether a capability/plugin/MCP exists (rather than telling you to install " +
+  "one): first LOOK — setup_plugin() for the catalog, get_mcp_tools for connected servers, your " +
+  "skills list — then answer with the REAL names you found (or say plainly nothing matches), and " +
+  "offer the choices with ask_question. Do NOT call setup_plugin with a plugin until the person " +
+  "has picked one.";
+
+const SKILL_WRITE_PROTOCOL = boxConfigured()
+  ? "" +
+    String.fromCharCode(10) + String.fromCharCode(10) +
+    "WRITING SKILLS: when the person settles a procedure worth keeping (an SOP, a checklist, rules " +
+    "for a recurring task) or asks you to remember HOW to do something, save it as a skill: " +
+    'TOOL_CALL: create_skill({"name":"ten-ngan","description":"when to use it","content":"the steps"}). ' +
+    "It lands in <available_skills> for every later conversation. Skills are procedures; " +
+    "knowledge_base is for facts about the person."
+  : "";
 
 /**
  * Replaying a task somebody demonstrated.
@@ -1155,7 +1219,7 @@ const TASK_PROTOCOL =
   "Chỉ có MỘT việc thì đừng dùng async: giao nền rồi chờ ngay còn chậm hơn làm thẳng.";
 
 const toolProtocolFor = (owner: string): string =>
-  toolProtocolBase() + PLUGIN_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
+  toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;

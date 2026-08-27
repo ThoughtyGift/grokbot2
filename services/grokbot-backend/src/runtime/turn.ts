@@ -126,6 +126,7 @@ const ACTIVITY_TOOL: Record<string, string> = {
   create_agent: "CreateAgent",
   create_group: "CreateAgent",
   watch_video: "Screenshot",
+  create_skill: "Shell",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
   attach_image: "Screenshot",
@@ -797,6 +798,13 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   // Looking at the box screen changes nothing, and it is the step that tells the model where
   // to click — see isDesktopLook. Clicking and typing on that desktop is not covered here.
   const isDesktopLookOnly = lower === "computer_use" && isDesktopLook(arg);
+  /*
+   * setup_plugin KHÔNG tham số là cú "rà danh mục" — read-only, không cài gì. Đo trong
+   * e2e-feature2: bắt nó xin phép nghĩa là nhịp "rà → kể tên thật → hỏi" chết ở bước đầu,
+   * lượt đỗ ở thẻ Allow trước khi bot kịp hỏi người dùng bằng widget. Dạng CÀI (có "plugin")
+   * vẫn phải hỏi như cũ — nó ghi cấu hình và bật một connector.
+   */
+  const isPluginListOnly = lower === "setup_plugin" && !arg.includes('"plugin"');
   /**
    * The user's standing answer to the permission card, which we were storing and ignoring.
    *
@@ -821,7 +829,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     onUpdate(agentId);
     return;
   }
-  if (known && (standing === "always" || AUTO_APPROVED.has(lower) || isBrowserAction || isDesktopLookOnly || isAutoApproved(lower))) {
+  if (known && (standing === "always" || AUTO_APPROVED.has(lower) || isBrowserAction || isDesktopLookOnly || isPluginListOnly || isAutoApproved(lower))) {
     runTool(agentId, toolCallId, lower, arg, history);
     onUpdate(agentId);
     return;
