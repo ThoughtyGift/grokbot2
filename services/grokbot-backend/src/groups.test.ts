@@ -14,7 +14,7 @@ import { test } from "node:test";
 
 process.env.GROKBOT2_ALLOW_WRITE = "1";
 const { runWithOwner: as } = await import("./request-context.js");
-const { createAgent, createGroup, setGroupMembers } = await import("./directory/index.js");
+const { createAgent, createGroup, setGroupMembers, listAgents } = await import("./directory/index.js");
 
 const A = "local|nguoi-a@vi-du.vn";
 const B = "local|nguoi-b@vi-du.vn";
@@ -45,4 +45,12 @@ test("nhóm không tự chứa chính nó — fan-out sẽ đệ quy vô hạn",
 test("thành viên trùng chỉ tính một lần — không ai được nói hai lượt", () => {
   const g = as(A, () => createGroup({ name: "Trung", memberAgentIds: [botA1.id, botA1.id, botA2.id] }));
   assert.deepEqual(g.memberIds, [botA1.id, botA2.id]);
+});
+
+test("roster row của nhóm phải mang isGroup + memberIds — summarise từng đè false", () => {
+  const g = as(A, () => createGroup({ name: "Row That", memberAgentIds: [botA1.id] }));
+  const row = as(A, () => listAgents().find((r) => r.id === g.id));
+  // Sidebar vẽ nhóm bằng `n.isGroup` + `rows.find(...).memberIds` — row nói dối là app vẽ sai.
+  assert.equal(row?.isGroup, true, JSON.stringify(row));
+  assert.deepEqual(row?.memberIds, [botA1.id]);
 });

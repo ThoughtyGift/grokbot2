@@ -17,7 +17,8 @@ import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
-import { createAgent, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
+import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
+import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
 import { installedIds, installPlugin } from "../plugins.js";
@@ -260,14 +261,55 @@ TOOLS.send_to_user = (arg, ctx) => {
 TOOLS.create_agent = (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
-  const names = (Array.isArray(spec?.names) ? spec.names : [spec?.name ?? spec?.title ?? unquote(arg)])
-    .map((n: unknown) => String(n ?? "").trim()).filter(Boolean);
-  if (names.length === 0) return 'create_agent cần {"name":"tên bot"} hoặc {"names":["A","B"]}';
-  const made: AgentRecord[] = names.map((n: string) => createAgent({ name: n }));
+  /*
+   * 0.29 giao SOP cho bot con qua DESCRIPTION, không phải qua một tin nhắn: roster app gốc cho
+   * thấy 5 bot Shopee sinh trong 6 giây, mỗi con mang một bản SOP đầy đủ trong ô Description
+   * (docs/extracted/chat-goc-0.29.md). Description giờ vào thẳng lời nhắc hệ thống (prompt.ts),
+   * nên đây là chỗ nhân cách của bot con được ĐÓNG ĐINH — tin nhắn brief thì trôi theo transcript.
+   */
+  const specs: { name: string; description?: string }[] = (
+    Array.isArray(spec?.agents)
+      ? spec.agents.map((a: any) => ({
+          name: String(a?.name ?? "").trim(),
+          description: String(a?.description ?? a?.role ?? "").trim() || undefined,
+        }))
+      : (Array.isArray(spec?.names) ? spec.names : [spec?.name ?? spec?.title ?? unquote(arg)])
+          .map((n: unknown) => ({ name: String(n ?? "").trim(), description: String(spec?.description ?? "").trim() || undefined }))
+  ).filter((a: { name: string }) => a.name);
+  if (specs.length === 0) return 'create_agent cần {"agents":[{"name":"Kho","description":"vai + luật"}]} hoặc {"name":"tên bot"}';
+  // Lượt nền (cron, automation) không có request context — chủ của bot con là chủ của bot MẸ,
+  // không phải danh tính mặc định của tiến trình.
+  const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+  const made: AgentRecord[] = runWithOwner(owner, () => specs.map((a) => createAgent(a)));
   // Brief each new bot with its purpose, if one was given — an empty bot is not a colleague.
-  const brief = String(spec?.brief ?? spec?.role ?? spec?.instructions ?? "").trim();
+  const brief = String(spec?.brief ?? spec?.instructions ?? "").trim();
   if (brief) for (const m of made) turnHooks.sendPrompt({ agentId: m.id, content: brief, fromAgent: { id: ctx.agentId, name: agents.get(ctx.agentId)?.name ?? "bot" } });
   return `đã tạo ${made.map((m) => m.name).join(", ")}`;
+};
+
+/**
+ * Bot tự dựng phòng chung — nửa còn lại của quy trình 0.29: tạo dàn bot xong thì mở nhóm cho cả
+ * dàn (Shopee Ops sinh 06:37:38, đúng 7 giây sau con bot cuối). Thành viên nhận theo TÊN vì đó là
+ * thứ model biết; tên chỉ được so trong dàn bot của CHÍNH CHỦ — id người khác không có đường vào.
+ */
+TOOLS.create_group = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
+  const name = String(spec?.name ?? spec?.title ?? "").trim();
+  if (!name) return 'create_group cần {"name":"tên phòng","members":["Kho","Ads"]} (members là tên hoặc id bot)';
+  const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+  const wanted = (Array.isArray(spec?.members) ? spec.members : Array.isArray(spec?.memberNames) ? spec.memberNames : [])
+    .map((m: unknown) => String(m ?? "").trim()).filter(Boolean);
+  const mine = [...agents.values()].filter((a) => ownerOf(a.id) === owner && !a.isGroup);
+  const missing: string[] = [];
+  const memberIds = wanted.map((w: string) => {
+    const hit = mine.find((a) => a.id === w) ?? mine.find((a) => a.name.toLowerCase() === w.toLowerCase());
+    if (!hit) missing.push(w);
+    return hit?.id;
+  }).filter((id: string | undefined): id is string => Boolean(id));
+  const g = runWithOwner(owner, () => createGroup({ name, memberAgentIds: memberIds }));
+  const note = missing.length ? ` (không thấy: ${missing.join(", ")})` : "";
+  return `đã mở phòng ${g.name} với ${g.memberIds?.length ?? 0} thành viên${note}`;
 };
 
 /**
@@ -907,9 +949,14 @@ const PEER_PROTOCOL =
   "use it for single-step work, and do not repeat what you already said. " +
   'Brief several bots at once with a list: {"to":["Sales","Marketing"],"content":"..."}. ' +
   "\n\nCREATING / RENAMING BOTS: " +
-  'TOOL_CALL: create_agent({"name":"Manager","brief":"the role and how to work together"}) — add "names":[…] to create several. ' +
+  // 0.29's team flow: the creator writes each bot's job description INTO the bot, then opens a
+  // room for the team. The description is the bot's standing role (it rides the system prompt);
+  // a briefing message is just one line in its transcript.
+  'TOOL_CALL: create_agent({"agents":[{"name":"Kho","description":"vai trò + luật làm việc, viết kỹ như một bản SOP"}]}) — one entry per bot. ' +
+  'TOOL_CALL: create_group({"name":"Ops","members":["Kho","Ads"]}) — a shared room; every member answers in turn when the user speaks there. ' +
+  "A room is NOT a bot: never create_agent for something meant to hold members — create the member bots first, then create_group with their names. " +
   'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
-  "Brief a bot on its role as soon as you create it; never leave an empty one.";
+  "Give every bot you create a real description; never leave an empty one.";
 
 /**
  * Scaffolding from the first spike — `calc`, `echo` and friends. They stay callable so the

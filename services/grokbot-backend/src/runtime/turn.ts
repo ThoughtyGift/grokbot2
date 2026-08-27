@@ -124,6 +124,7 @@ const ACTIVITY_TOOL: Record<string, string> = {
   task_v2: "Task",
   message_agent: "SendToAgent",
   create_agent: "CreateAgent",
+  create_group: "CreateAgent",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
   attach_image: "Screenshot",

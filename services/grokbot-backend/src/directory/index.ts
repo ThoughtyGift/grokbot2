@@ -48,11 +48,14 @@ function summarise(a: AgentRecord): RosterRow {
     hasUnread: a.unread === true,
     notificationsEnabled: a.notificationsEnabled === true,
     notifyOnUpdatesEnabled: a.notifyOnUpdates !== false,
-    isGroup: false,
+    // Đứng SAU spread `...a` nên từng ĐÈ cờ nhóm thật: hardcode `false` từ thời chưa có nhóm,
+    // và e2e-team-build đo được hậu quả — create_group chạy xong "2 thành viên" mà sidebar vẫn
+    // vẽ một bot thường, không có panel Members. Row phải nói đúng sự thật của record.
+    isGroup: a.isGroup === true,
     origin: "user",
     lastMessageId: last ? last.id : null,
     awaitingUserResponse: a.awaitingUserResponse ?? null,
-    memberIds: [],
+    memberIds: a.memberIds ?? [],  // hardcode [] cũ từng đè danh sách thành viên thật
     conversationPartnerIds: [],
     lastEntry: lastEntry ?? null,
     isRunningTurn: a.isRunning === true,
