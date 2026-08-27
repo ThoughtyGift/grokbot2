@@ -35,6 +35,26 @@ const DIST = join(svcRoot, ".data", "dist");
 const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
 /**
+ * Địa chỉ backend điền sẵn trong bộ cài.
+ *
+ * `GROKBOT2_PUBLIC_URL` là thứ máy chủ công khai đã biết về chính nó (nginx đứng trước, xem
+ * `GROKBOT2_PUBLIC_PATH`). Dựng gói trên VPS mà không khai biến này thì gói phát ra cho cả thiên
+ * hạ mang mặc định `localhost:8788` — đo được ngày 27/08: máy thứ ba tải về, bấm Enter cho qua,
+ * và app trỏ vào chính nó. Trên máy cá nhân không khai gì thì mặc định cũ vẫn đúng.
+ */
+const beMacDinh = (() => {
+  const raw = (process.env.GROKBOT2_PUBLIC_URL ?? "http://localhost:8788").trim() || "http://localhost:8788";
+  /*
+   * **Giữ gạch chéo cuối.** Client nối đường dẫn TƯƠNG ĐỐI vào địa chỉ này, và
+   * `new URL("aiserver.v1.X/Y", "https://cinai.app/agent")` cho ra
+   * `https://cinai.app/aiserver.v1.X/Y` — rơi khỏi nhánh `/agent`. Thêm một gạch chéo thì nó ở
+   * lại đúng chỗ. Hiện nginx bắt hộ cả hai dạng (đo 27/08: cùng trả 200), nhưng sống nhờ luật
+   * bắt-tất của nginx là một chỗ sẽ gãy im lặng vào ngày ai đó dọn cấu hình.
+   */
+  return raw.replace(/\/+$/, "") + "/";
+})();
+
+/**
  * esbuild nằm trong store của pnpm, không có trên PATH. Dò theo tên gói thay vì ghi cứng số phiên
  * bản — nâng phiên bản mà quên sửa chỗ này thì bản dựng gãy vào một ngày ngẫu nhiên.
  */
@@ -77,8 +97,8 @@ mkdirSync(DIST, { recursive: true });
 const patchSource = bundlePatchClient();
 const patchB64 = b64(patchSource);
 const built = [
-  { name: `Cai-dat-Bot-Noi-Bo-win-${stamp}.cmd`, body: winInstaller({ patchB64, startB64: b64(winStart) }) },
-  { name: `Cai-dat-Bot-Noi-Bo-mac-${stamp}.command`, body: macInstaller({ patchB64, startB64: b64(macStart) }) },
+  { name: `Cai-dat-Bot-Noi-Bo-win-${stamp}.cmd`, body: winInstaller({ patchB64, startB64: b64(winStart), beMacDinh }) },
+  { name: `Cai-dat-Bot-Noi-Bo-mac-${stamp}.command`, body: macInstaller({ patchB64, startB64: b64(macStart), beMacDinh }) },
 ];
 
 // Gói cũ ở lại thì trang tải sẽ phát bản cũ hơn — dọn trước khi ghi bản mới.

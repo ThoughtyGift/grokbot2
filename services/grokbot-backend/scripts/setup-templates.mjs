@@ -21,7 +21,15 @@ export const b64 = (text) =>
   Buffer.from(text, "utf8").toString("base64").match(/.{1,76}/g).join("\r\n");
 
 // ── Windows: một file .cmd, bộ vá nằm sau `exit /b` nên cmd không bao giờ đọc tới ────────────
-export const winInstaller = ({ patchB64, startB64 }) => `@echo off
+/**
+ * `beMacDinh` — địa chỉ backend gợi ý sẵn khi bộ cài hỏi.
+ *
+ * Mặc định `http://localhost:8788` chỉ đúng cho người dựng gói trên chính máy chạy backend. Ai
+ * tải từ trang về **máy khác** mà bấm Enter cho qua sẽ trỏ app vào chính máy họ, ở đó không có
+ * gì — và triệu chứng là app im lặng không đăng nhập được, không nói vì sao. Máy dựng gói biết
+ * địa chỉ công khai của nó, nên nó là chỗ đúng để điền sẵn.
+ */
+export const winInstaller = ({ patchB64, startB64, beMacDinh = "http://localhost:8788" }) => `@echo off
 setlocal enabledelayedexpansion
 title Bot Noi Bo - cai dat
 color 0F
@@ -84,7 +92,7 @@ if errorlevel 1 (
 )
 echo   [3/5] Da va client.
 
-set "BE=http://localhost:8788"
+set "BE=${beMacDinh}"
 set /p "BE=  Dia chi backend [%BE%]: "
 > "%DEST%\\backend.txt" echo %BE%
 
@@ -151,7 +159,7 @@ start "" "%APP%" %*
 `;
 
 // ── macOS: cùng ý tưởng, khác vỏ ─────────────────────────────────────────────
-export const macInstaller = ({ patchB64, startB64 }) => `#!/bin/bash
+export const macInstaller = ({ patchB64, startB64, beMacDinh = "http://localhost:8788" }) => `#!/bin/bash
 # Bot Noi Bo - cai dat (macOS)
 #
 # Chay:  bash "Cai dat Bot Noi Bo.command"
@@ -196,9 +204,9 @@ fi
 node "$DEST/patch-client.mjs" --apply
 echo "  [3/5] Da va client."
 
-printf "  Dia chi backend [http://localhost:8788]: "
+printf "  Dia chi backend [${beMacDinh}]: "
 read -r BE
-echo "\${BE:-http://localhost:8788}" > "$DEST/backend.txt"
+echo "\${BE:-${beMacDinh}}" > "$DEST/backend.txt"
 
 ln -sf "$DEST/start-bot.command" "$HOME/Desktop/Bot Noi Bo.command"
 echo "  [4/5] Da tao loi mo 'Bot Noi Bo' tren Desktop."
