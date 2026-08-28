@@ -47,21 +47,38 @@ const ve = (c) => Object.entries(c).map(([k, v]) => (v > 1 ? `${k}×${v}` : k)).
 
 console.log("| # | KỊCH BẢN app gốc | LƯỢT NÀY | khớp loại |");
 console.log("|---|---|---|---|");
-let khop = 0, thieuW = 0, thieuA = 0, im = 0;
+let khop = 0, thieuW = 0, thuaW = 0, thieuA = 0, im = 0;
 moc.forEach((st, n) => {
   const seg = rows.slice(st + 1, moc[n + 1] ?? rows.length);
   const got = dem(seg.map((e) => (e.kind === "tool-call" ? "tool" : e.message?.type ?? e.kind)));
   const mong = dem((cases[n]?.expected ?? []).map((e) => e.kind));
   const wantW = !!mong.widget, wantA = !!mong.attachment;
+  /*
+   * Đếm CẢ HAI chiều.
+   *
+   * Bản đầu chỉ phạt khi THIẾU widget. Sau khi sửa ASK_PROTOCOL, số widget nhảy từ 2 lên 6 trong
+   * tám case đầu — nhưng một thước đo một chiều sẽ khen luôn cả trường hợp bot mời chọn ở nơi app
+   * gốc trả lời thẳng. "Mời chọn mọi lúc" sai ngang "không bao giờ mời chọn", chỉ khác là thước đo
+   * cũ không nhìn thấy — một chỉ số chỉ nhìn một phía sẽ khen bản vá của chính người viết ra nó.
+   */
   if (wantW && !got.widget) thieuW += 1;
+  if (!wantW && got.widget) thuaW += 1;
   if (wantA && !got.attachment) thieuA += 1;
   if (!got.text) im += 1;
-  const ok = !!got.text && (!wantW || got.widget) && (!wantA || got.attachment);
+  /*
+   * Thừa cũng là LỆCH.
+   *
+   * Bản trước để cột ✓ đúng khi có widget thừa, chỉ ghi chú bên cạnh — nên sau khi tôi sửa
+   * ASK_PROTOCOL, bảng báo 20/23 trong khi tính nghiêm chỉ là 14/23, tức TỆ hơn 15/23 trước đó.
+   * Một thước đo do chính người viết bản vá chọn mà chỉ phạt một chiều thì nó không đo bản vá, nó
+   * khen bản vá.
+   */
+  const ok = !!got.text && (!wantW || got.widget) && (wantW || !got.widget) && (!wantA || got.attachment);
   if (ok) khop += 1;
-  const ghi = ok ? "✓" : [wantW && !got.widget ? "thiếu widget" : "", wantA && !got.attachment ? "thiếu attachment" : "", !got.text ? "IM" : ""].filter(Boolean).join(", ");
+  const ghi = [ok ? "✓" : "", !wantW && got.widget ? "widget THỪA" : "", wantW && !got.widget ? "thiếu widget" : "", wantA && !got.attachment ? "thiếu attachment" : "", !got.text ? "IM" : ""].filter(Boolean).join(", ");
   console.log(`| ${n + 1} | ${ve(mong)} | ${ve(got)} | ${ghi} |`);
 });
-console.log(`\nkhớp loại ${khop}/${moc.length} · thiếu widget ${thieuW} · thiếu attachment ${thieuA} · im ${im}`);
+console.log(`\nkhớp loại ${khop}/${moc.length} · widget thiếu ${thieuW} / THỪA ${thuaW} · attachment thiếu ${thieuA} · im ${im}`);
 
 // Hai câu hỏi riêng của hôm nay, hỏi thẳng roster chứ không suy từ bản ghi.
 const ros = await gw("listAgents", {});

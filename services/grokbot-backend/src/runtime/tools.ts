@@ -1135,7 +1135,34 @@ const ASK_PROTOCOL =
   "— up to 6 options, add \"allowCustom\":true if they may type their own answer, and " +
   "\"multiSelect\":true when several answers may be picked at once (which plugins to install, which " +
   "shops to include…). " +
-  "Do not ask and then answer yourself: end the turn after asking, the answer arrives on the next one.";
+  "Do not ask and then answer yourself: end the turn after asking, the answer arrives on the next one. " +
+  /*
+   * Luật thứ hai, và nó KHÁC luật ở trên — đây là chỗ ta thua app gốc năm case liền.
+   *
+   * Luật trên nói "khi người dùng phải chọn giữa các HƯỚNG ĐI". Đo cách app gốc thật sự dùng widget
+   * (case 5, 6, 8, 11, 15 của kịch bản B2) thì tình huống khác hẳn: nó hỏi khi **câu trả lời tiếp
+   * theo phụ thuộc vào việc người dùng đang ở tình huống nào**, chứ không phải khi có nhiều hướng.
+   *
+   *     case 6  "Bạn đã có app trên Console chưa?"   [Đã có app | Mới có shop, chưa có app]
+   *     case 11 "Bạn muốn mình làm kiểu nào?"        [Quay màn hình | Setup OBS | Thử live Shopee]
+   *     case 15 "Làm tiếp cái nào?"                  [Cắt/edit clip | Gắn MCP OBS | Thôi]
+   *     case 5  "Bạn muốn mình gắn Shopee kiểu nào?" [Dùng web | MCP quản lý shop | MCP tìm sản phẩm]
+   *
+   * Bot ta trả lời đúng và đầy đủ rồi DỪNG. Nó không vi phạm luật nào — luật chỉ chưa mô tả tình
+   * huống này. Cùng loài với hai lỗi trước: một lệnh cấm ("đừng dựng bot giả làm phòng") không sinh
+   * ra hành động mở phòng, và một tên tool không kèm định dạng thì model không gọi.
+   *
+   * Đo case 6 cho thấy vế kiến thức của ta KHÔNG thua: bot ta còn nói thêm Test vs Live Partner Key
+   * và bước "Go live" chờ duyệt. Chỉ thiếu đúng câu hỏi cuối.
+   */
+  "AFTER you answer, if the next step is WORK YOU WOULD DO and the person's situation decides which "
+  + "work it is — do they already have the account, which of these should you set up first, should "
+  + "you do it here or on their machine — give the answer they asked for, then END the turn with the "
+  + "widget naming 2–4 concrete actions YOU would take next (plus a \"Thôi\" when stopping is "
+  + "reasonable). Spelling out every branch in prose lands as work the person must now sort through. "
+  + "But a question that only wants INFORMATION ends when the information is delivered: do not "
+  + "manufacture a next step for it. If you would not act on any of the options, there is no widget "
+  + "to raise.";
 
 /**
  * Memory only helps if the agent writes to it, and models do not volunteer that.
