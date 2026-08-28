@@ -323,3 +323,29 @@ client THẬT SỰ gọi: createGroup 14 · kickstartAgent 7 · runAgentAutomati
 
 Nghĩa là: **quyền tự chủ của bot bên hãng nằm ở server, không ở client.** Với ta điều đó không phải
 tin xấu — ta LÀ server. Nhưng nó có nghĩa là không có logic nào để chép: phải tự viết.
+
+
+### 7.4 — Bốn widget thiếu: phân loại, và một phép đo bị nhiễm
+
+Đo trên lượt chạy 28/08 (23/23 trả lời, 16/23 khớp loại):
+
+| case | app gốc mời chọn | cần dữ liệu ta không có? | loại |
+|---|---|---|---|
+| 5 | MCP quản lý shop / MCP tìm sản phẩm | **có** — `@codespar/mcp-shopee` | dữ liệu |
+| 6 | Đã có app Open Platform / Mới có shop | **không** — chỉ hỏi lại cho rõ | hành vi |
+| 11 | Quay màn hình / Setup OBS / Thử live Shopee | **không** | hành vi |
+| 15 | Cắt/edit clip / Gắn MCP OBS / Thôi | một phần | lai |
+
+**Nhưng phép đo này bị nhiễm và không được dùng để sửa lời nhắc.** Lượt chạy đó diễn ra khi shell
+của box đang chết (`per-user mode: request carried no owner` — xem commit `541b3fe`). Ba trong bốn
+case xoay quanh quay màn hình / OBS / video, tức đều phụ thuộc shell; bot không kiểm tra nổi ffmpeg
+nên trả lời phòng thủ thay vì mời chọn.
+
+Lời nhắc **đã có sẵn luật này** — `ASK_PROTOCOL`: *"when the user has to choose between directions,
+ask with the widget rather than stalling"*. Nên giả thuyết "model không biết luật" chưa đứng vững;
+giả thuyết cạnh tranh là "model không có gì để mời chọn vì công cụ hỏng". Phải đo lại sau khi vá
+shell rồi mới biết case nào còn thiếu thật.
+
+Ghi lại vì đây đúng cái bẫy đã ghi ở `0-29-mapping.md §5`: một con số parity thấp có thể là hành vi
+sai, mà cũng có thể là ta không có cùng điều kiện để hành xử giống. Lần này điều kiện khác nhau là
+một cái tool chết.
