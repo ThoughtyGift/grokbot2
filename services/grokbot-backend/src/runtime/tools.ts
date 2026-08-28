@@ -181,6 +181,9 @@ TOOLS.ask_question = (arg, ctx) => {
     options,
     ...(typeof spec?.helpText === "string" ? { helpText: spec.helpText } : {}),
     ...(typeof spec?.allowCustom === "boolean" ? { allowCustom: spec.allowCustom } : {}),
+    // 0.29 render thật nhánh nhiều-lựa-chọn (`if(e.multiSelect===!0)…`); thiếu trường này thì câu
+    // hỏi "chọn những cái nào cần" luôn bị vẽ thành chọn-một.
+    ...(typeof spec?.multiSelect === "boolean" ? { multiSelect: spec.multiSelect } : {}),
     ...(typeof spec?.dismissOnMoveOn === "boolean" ? { dismissOnMoveOn: spec.dismissOnMoveOn } : {}),
   });
   return id == null
@@ -1015,7 +1018,9 @@ const ASK_PROTOCOL =
   "\n\nASKING THE USER: when the user has to choose between directions, ask with the widget rather than " +
   "stalling: " +
   'TOOL_CALL: ask_question({"prompt":"The question?","options":[{"label":"Option A"},{"label":"Option B"}]}) ' +
-  "— up to 6 options, add \"allowCustom\":true if they may type their own answer. " +
+  "— up to 6 options, add \"allowCustom\":true if they may type their own answer, and " +
+  "\"multiSelect\":true when several answers may be picked at once (which plugins to install, which " +
+  "shops to include…). " +
   "Do not ask and then answer yourself: end the turn after asking, the answer arrives on the next one.";
 
 /**

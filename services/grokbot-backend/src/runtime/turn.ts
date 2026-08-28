@@ -609,6 +609,40 @@ function historyFor(agentId: string, text: string, freshAttIds: Set<string>): Po
     });
 }
 
+/**
+ * Ai được gọi ĐÍCH DANH trong câu này.
+ *
+ * Hãng CÓ chọn người nói chứ không cho cả phòng nói: client 0.29 gửi `directAddressedAcceptance`
+ * (xem `SendArgs`) và hợp đồng phòng của họ chở `peers[]` + `is_self` + `speaker_kind`. Nhưng
+ * thuật toán thì chạy trong workflow Temporal phía server — KHÔNG có trong client, và mẫu payload
+ * duy nhất ta bắt được là hội thoại 1:1 (docs/extracted/0-29-mapping.md §0.1, §0.3). Nên luật dưới
+ * đây là **của ta**, không phải bản chép của hãng:
+ *
+ *   gọi tên ai thì người đó nói; không gọi ai thì cả phòng, mỗi người một lượt (như cũ).
+ *
+ * Vì sao đáng làm: một câu "Kho ơi, còn bao nhiêu đơn?" trong phòng sáu bot đang đốt sáu lượt pool
+ * để năm con trả lời một câu không hỏi chúng — và trần hạn mức pool là thứ đã chạm thật trong phiên
+ * đo hôm nay.
+ *
+ * So theo BIÊN chữ, không phải `includes`: tên "Kho" nằm trong chữ "không" thì không tính. `\p{L}`
+ * cần cờ `u` vì tên bot ở đây là tiếng Việt có dấu.
+ */
+export function namedMembers(text: string, memberIds: string[]): string[] {
+  const hay = text.toLowerCase();
+  const isEdge = (c: string): boolean => c === "" || !/[\p{L}\p{N}]/u.test(c);
+  return memberIds.filter((id) => {
+    const name = (agents.get(id)?.name ?? "").trim().toLowerCase();
+    // Tên một ký tự thì bỏ qua: quá dễ trùng, và không ai đặt tên bot như vậy.
+    if (name.length < 2) return false;
+    for (let at = hay.indexOf(name); at >= 0; at = hay.indexOf(name, at + 1)) {
+      const before = at === 0 ? "" : hay[at - 1];
+      const after = at + name.length >= hay.length ? "" : hay[at + name.length];
+      if (isEdge(before) && isEdge(after)) return true;
+    }
+    return false;
+  });
+}
+
 export function sendPrompt(args: SendArgs) {
   // Multi-tenant Phase 2: a caller may only prompt an agent they own. An explicit id they do not
   // own is rejected without any write; with no id, fall back to their OWN first agent (or a new one).
@@ -749,7 +783,10 @@ export function sendPrompt(args: SendArgs) {
    * những thành viên chưa kịp nói — thay vì để họ trả lời một câu hỏi đã cũ.
    */
   const group = agents.get(agentId);
-  const members = group?.isGroup ? (group.memberIds ?? []).filter((id) => agents.has(id)) : [];
+  const roomMembers = group?.isGroup ? (group.memberIds ?? []).filter((id) => agents.has(id)) : [];
+  // Gọi tên ai thì chỉ người đó nói; không gọi ai thì cả phòng — xem `namedMembers`.
+  const called = namedMembers(text, roomMembers);
+  const members = called.length ? called : roomMembers;
   if (members.length && !args.fromAgent) {
     // Bong bóng rỗng dựng sẵn ở trên là của con ĐẦU TIÊN; những con sau tự dựng bong bóng riêng.
     void (async () => {

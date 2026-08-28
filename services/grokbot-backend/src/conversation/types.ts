@@ -18,7 +18,14 @@ export type SlackDraftMsg = { type: "slack-draft"; draft: { workspace?: string; 
 export type WidgetOption = { label: string; value?: string; description?: string; style?: "default" | "primary" | "danger" };
 export type WidgetMsg = {
   type: "widget";
-  widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean };
+  /**
+   * `multiSelect` — 0.29 render thật, ta thì chưa bao giờ gửi.
+   *
+   * Renderer 0.29: `multiSelect:AM()` trong schema widget, và nhánh vẽ riêng
+   * `if(e.multiSelect===!0)return Oon(n).map(…)`. Thiếu trường này thì mọi câu hỏi nhiều-lựa-chọn
+   * bị vẽ thành chọn-một — đúng ca "chọn những plugin nào cần cài" của tính năng 2.
+   */
+  widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; multiSelect?: boolean; dismissOnMoveOn?: boolean };
 };
 
 export type TranscriptEvent =
@@ -81,7 +88,7 @@ export interface ToolCtx {
    * request, so the last call before the follow-up wins.
    */
   see(dataUrl: string): void;
-  ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; dismissOnMoveOn?: boolean }): string | null;
+  ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; multiSelect?: boolean; dismissOnMoveOn?: boolean }): string | null;
   note(text: string): void;
   requestBoxHelp(instruction: string): Promise<string>;
   agentId: string;
@@ -97,6 +104,19 @@ export interface SendArgs {
   askWriteTools?: boolean;
   /** X6.3: entry được trả lời. Backend tra tên + trích đoạn từ transcript, caller chỉ gửi id. */
   replyToEntryId?: string;
+  /**
+   * Client 0.29 đính cờ này vào `sendPrompt` — và backend này từng bỏ qua nó hoàn toàn.
+   *
+   * Bằng chứng là payload client THẬT bắt được: `.data/coverage.json` → `lastArgs.sendPrompt` mang
+   * `"directAddressedAcceptance": true` cạnh `agentId`/`prompt`/`clientNonce`. Trong bundle 0.29 nó
+   * nằm đúng chỗ dựng đối số `sendPrompt` (`node-agent-coordinator/main.cjs`).
+   *
+   * Nghĩa quan sát được: người dùng gõ THẲNG vào hộp thoại của bot này. Mẫu bắt được là hội thoại
+   * 1:1, nên đây là tất cả những gì đo được — **không** suy ra luật chọn người nói trong phòng từ
+   * một mẫu. Luật thật của hãng chạy trong workflow Temporal phía server, không có trong client
+   * (xem docs/extracted/0-29-mapping.md §0.3).
+   */
+  directAddressedAcceptance?: boolean;
 }
 
 export interface SubagentRow {

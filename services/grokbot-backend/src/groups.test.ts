@@ -54,3 +54,43 @@ test("roster row của nhóm phải mang isGroup + memberIds — summarise từn
   assert.equal(row?.isGroup, true, JSON.stringify(row));
   assert.deepEqual(row?.memberIds, [botA1.id]);
 });
+
+/*
+ * ── Gọi tên ai thì người đó nói ────────────────────────────────────────────────────────────────
+ *
+ * Luật của TA (không phải bản chép của hãng — thuật toán của họ chạy server-side Temporal, xem
+ * docs/extracted/0-29-mapping.md §0.3). Bài quan trọng nhất là ca biên chữ: tên "Kho" nằm trong
+ * chữ "không" mà tính là được gọi thì cả phòng im, chỉ mình Kho nói — hỏng đúng theo cách khó thấy.
+ */
+const { namedMembers } = await import("./runtime/turn.js");
+
+const kho = as(A, () => createAgent({ name: "Kho" }));
+const ads = as(A, () => createAgent({ name: "Ads" }));
+const ketoan = as(A, () => createAgent({ name: "Kế toán" }));
+const room = [kho.id, ads.id, ketoan.id];
+
+test("gọi đích danh một người thì chỉ người đó", () => {
+  assert.deepEqual(namedMembers("Kho ơi còn bao nhiêu đơn?", room), [kho.id]);
+});
+
+test("tên nằm TRONG chữ khác thì KHÔNG tính — 'Kho' trong 'không'", () => {
+  assert.deepEqual(namedMembers("không ai trả lời à", room), []);
+  assert.deepEqual(namedMembers("khoan đã", room), []);
+});
+
+test("gọi nhiều người thì nhiều người nói, giữ thứ tự phòng", () => {
+  assert.deepEqual(namedMembers("Ads với Kho vào xem giúp", room), [kho.id, ads.id]);
+});
+
+test("tên có dấu và có khoảng trắng vẫn nhận ra", () => {
+  assert.deepEqual(namedMembers("Kế toán chốt số giúp mình", room), [ketoan.id]);
+});
+
+test("không gọi ai thì rỗng — nghĩa là cả phòng nói", () => {
+  assert.deepEqual(namedMembers("chào cả nhà, ai rảnh không", room), []);
+});
+
+test("không phân biệt hoa thường, và @tên cũng tính", () => {
+  assert.deepEqual(namedMembers("@ads pause giúp", room), [ads.id]);
+  assert.deepEqual(namedMembers("KHO ơi", room), [kho.id]);
+});
