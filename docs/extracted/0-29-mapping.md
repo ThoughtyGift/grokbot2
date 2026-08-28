@@ -324,6 +324,27 @@ billing tự quản chính là nhánh **`url` (no:5)** — đúng như [[grokbot
 
 ---
 
+## 5.1 · Một khoảng cách KHÔNG phải lỗi hành vi: danh mục plugin
+
+Replay B2 đo được **widget 0/5** — app gốc mở widget mời chọn ở 5 case, ta không mở cái nào. Ba lần
+chạy đều vậy, kể cả sau khi siết lời nhắc. Nguyên nhân không nằm ở model:
+
+```
+danh mục plugin của backend này: 2 mục  (Grokbot2 Memory, Grokbot2 Skill)
+danh mục app gốc trong B2:        chợ thật — Remotion, Canva, HeyGen, Notion, Gmail, …
+```
+
+Hỏi "có MCP nào giống CapCut không" thì bot ta rà bốn lượt tool rồi trả lời "chưa thấy gì kiểu
+CapCut" — **đúng**, và đúng theo chính luật ta viết ("không thấy gì thì nói thẳng, đừng dựng
+widget"). Mở widget để mời chọn giữa hư không mới là sai.
+
+Nên: khoảng cách widget ở những case này là khoảng trống **DỮ LIỆU**, không lời nhắc nào lấp được.
+Muốn đuổi kịp thì phải có danh mục thật, chứ không phải sửa câu chữ. Bài E2E đã đổi cho đúng: đo
+luật hai chiều (có ứng viên → mời chọn; không có → nói thẳng và im), thay vì đòi widget vô điều kiện.
+
+**Bài học cho mọi phép đo parity sau này:** một con số parity thấp có thể là hành vi sai, mà cũng có
+thể là ta không có cùng dữ liệu để hành xử giống. Phân biệt trước khi đi sửa lời nhắc.
+
 ## 6 · Những gì KHÔNG trích được (ghi để không ai đi tìm lại)
 
 - **Thuật toán lượt nói của hãng** — nằm trong workflow Temporal phía server, không có trong client.

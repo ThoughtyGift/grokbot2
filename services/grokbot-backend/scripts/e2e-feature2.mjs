@@ -110,20 +110,33 @@ const installCardsOf = (t) => t.filter((e) =>
 const textOf = (t) => t.filter((e) => e.kind === "send-message" && e.message?.type === "text" && (e.message.content ?? "").trim())
   .map((e) => e.message.content).join(" ");
 
-// ── A. nhịp rà→hỏi — đúng input case 23 của B2 ─────────────────────────────────────────────────
-console.log("A1. case 23: capcut");
-const a1 = await ask("kiểm tra có MCP skill plugin chuyên nghiệp giống capcut không");
-check("A1 có hỏi bằng widget", widgetsOf(a1).length > 0, JSON.stringify(a1.map((e) => e.kind === "send-message" ? e.message?.type : e.kind)));
+/*
+ * ── A. nhịp "rà → kể tên thật → mời chọn" — đo LUẬT, cả hai chiều ──────────────────────────────
+ *
+ * Bản đầu bắt cả hai ca phải mở widget, lấy nguyên input của B2 (capcut, mcp shopee). Hai lần chạy
+ * đều đỏ, và soi ra thì **bot làm đúng còn bài test sai**: danh mục plugin của backend này có đúng
+ * HAI mục (Grokbot2 Memory, Grokbot2 Skill), trong khi app gốc soi cả một chợ thật (Remotion,
+ * Canva, HeyGen, Notion, Gmail…). Không có ứng viên nào thì mở widget để mời chọn giữa hư không
+ * mới là sai — và chính lời nhắc của ta dặn "không thấy gì thì nói thẳng, đừng dựng widget".
+ *
+ * Nên khoảng cách widget với app gốc là khoảng trống **DỮ LIỆU** (danh mục), không phải hành vi;
+ * không lời nhắc nào lấp được nó. Bài dưới đây đo đúng thứ đo được: có ứng viên → mời chọn;
+ * không có → nói thẳng và im.
+ */
+console.log("A1. CÓ ứng viên trong danh mục → phải mời chọn");
+const a1 = await ask("Có plugin hay MCP nào giúp bạn nhớ lâu dài / lưu quy trình không? Kiểm tra rồi cho tôi chọn.");
+check("A1 có hỏi bằng widget khi danh mục CÓ thứ hợp", widgetsOf(a1).length > 0, JSON.stringify(a1.map((e) => e.kind === "send-message" ? e.message?.type : e.kind)));
 check("A1 KHÔNG cài trước khi người dùng chọn", installCardsOf(a1).length === 0, JSON.stringify(installCardsOf(a1).map((e) => e.message.ask?.target)));
 const w1 = widgetsOf(a1)[0];
 if (w1) console.log(`      widget: ${w1.message.widget?.prompt} — ${(w1.message.widget?.options ?? []).map((o) => o.label).join(" / ")}`);
 console.log(`      text  : ${textOf(a1).replace(/[ ]+/g, " ").slice(0, 160)}`);
 
-// ── A2. đúng input case 5 của B2 ────────────────────────────────────────────────────────────────
-console.log("A2. case 5: tìm mcp shopee");
-const a2 = await ask("tìm mcp shopee");
-check("A2 có hỏi bằng widget", widgetsOf(a2).length > 0, JSON.stringify(a2.map((e) => e.kind === "send-message" ? e.message?.type : e.kind)));
+console.log("A2. KHÔNG có ứng viên (input thật của B2 case 23) → nói thẳng, đừng dựng widget");
+const a2 = await ask("kiểm tra có MCP skill plugin chuyên nghiệp giống capcut không");
+check("A2 KHÔNG dựng widget giữa hư không", widgetsOf(a2).length === 0, JSON.stringify(widgetsOf(a2).map((e) => e.message.widget?.prompt)));
+check("A2 nói thẳng là không có", /không có|chưa có|không thấy|chưa thấy/i.test(textOf(a2)), textOf(a2).slice(0, 200));
 check("A2 KHÔNG cài trước khi người dùng chọn", installCardsOf(a2).length === 0, JSON.stringify(installCardsOf(a2).map((e) => e.message.ask?.target)));
+console.log(`      text  : ${textOf(a2).replace(/[ ]+/g, " ").slice(0, 160)}`);
 
 // ── B. create_skill — có thẻ, Allow, file nằm đúng chỗ, lượt sau thấy ──────────────────────────
 console.log("B. create_skill");
