@@ -252,12 +252,28 @@ for (const [i, c] of cases.entries()) {
    */
   const HAN_CUNG = 900_000;
   const deadline = Date.now() + HAN_CUNG;
+  /*
+   * Đo bằng ĐỘ DÀI CHỮ, không chỉ bằng số entry — và đây là lần thứ tư cùng một lỗi trong ngày.
+   *
+   * `sendPrompt` đẩy tin người dùng VÀ một bong bóng rỗng vào bản ghi ngay lập tức; đó là cách
+   * stream hoạt động. Nên ngay sau khi gõ Enter, số entry đã là 2. Nếu model trả lời bằng chữ
+   * thuần, không gọi tool nào, bong bóng được điền TẠI CHỖ và số entry đứng nguyên — `n > truoc`
+   * không bao giờ đúng, và case treo tới hết hạn cứng 900s.
+   *
+   * Các lượt Opus trước thoát được chỉ vì chúng gọi tool, làm số entry tăng. Phép đo ấy đúng do
+   * MAY, không do đúng — và cái may đó tan ngay khi đổi sang gemini-3.7-flash (đo 22:08–22:14:
+   * case 1 có câu trả lời đầy đủ từ phút đầu, script vẫn ngồi chờ).
+   *
+   * Nên đo cả hai: entry mới HOẶC chữ dài thêm. Một lượt kết thúc là khi không còn gì stream và
+   * có thêm nội dung so với lúc bắt đầu.
+   */
   const demEntry = async () => {
     const tr = await gw("getAgentTranscript", { agentId: bot.id, id: bot.id });
     const rows = tr?.transcript ?? tr?.entries ?? (Array.isArray(tr) ? tr : []);
-    return { n: rows.length, dangChay: rows.some((e) => e?.streaming === true) };
+    const len = rows.reduce((a, e) => a + String(e?.message?.content ?? e?.content ?? e?.result ?? "").length, 0);
+    return { n: rows.length, len, dangChay: rows.some((e) => e?.streaming === true) };
   };
-  const truoc = (await demEntry()).n;
+  const truoc = await demEntry();
   let widgetPrompt = null, permTargets = [], last = "", stable = 0;
   let thuLai = 0;   // số lần bấm lại một thẻ báo "didn't go through"
   let xong = false;   // lượt kết thúc thật, hay chạm hạn cứng?
@@ -369,11 +385,11 @@ for (const [i, c] of cases.entries()) {
      * `dangChay` tạm false trong khi lượt vẫn còn.
      */
     const d = await demEntry();
-    if (d.n > truoc && !d.dangChay) { stable += 1; if (stable >= 2) { xong = true; break; } } else stable = 0;
+    if (!d.dangChay && (d.n > truoc.n || d.len > truoc.len)) { stable += 1; if (stable >= 2) { xong = true; break; } } else stable = 0;
   }
 
   const sau = await demEntry();
-  const themEntry = sau.n - truoc;
+  const themEntry = Math.max(sau.n - truoc.n, sau.len > truoc.len ? 1 : 0);
   const grown = (last.length > before.length ? last.slice(before.length) : "").replace(/\n{2,}/g, "\n").trim();
   /*
    * Kết cục đo bằng số entry backend ghi được, không bằng chuỗi trên màn hình. Đây là chỗ bản
