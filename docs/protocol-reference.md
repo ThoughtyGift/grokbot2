@@ -76,7 +76,9 @@ The 10, grouped — a soft 404 means the button in the app does nothing at all, 
 > the feature. One inference is called out in `bot-templates.ts`: the vendor's CREATE step is not in
 > the client (no `createBotTemplate`, and `publishBotTemplate` carries no `sourceAgentId`, so their
 > server issues the `shareId`), therefore `getBotTemplateForSourceAgent` creates an unpublished draft
-> here instead of returning null.
+> here instead of returning null. **Đã bỏ suy luận đó cùng ngày**: mở app thật thì mọi bot hiện nút
+> "Delete Template" dù chưa ai chia sẻ — renderer chỉ hỏi "có record không", không phân biệt nháp.
+> Đọc giờ là đọc (null khi chưa chia sẻ); tạo mẫu đi qua tool `share_bot_template`.
 >
 > Closed 28/08: **`transcribeAudio`**. The proto answer had existed for ages, but 0.29 asks over the
 > **gateway** and that road was missing — so the composer's mic recorded, sent, and got silence. The
