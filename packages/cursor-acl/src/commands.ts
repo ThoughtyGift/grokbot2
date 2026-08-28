@@ -482,6 +482,35 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     // The desktop asks the box for attachment bytes once its own filesystem lookup misses. The
     // file chip's preview asks for text; the markdown/pdf/table previews ask for raw bytes
     // through chunked reads.
+    /*
+     * `transcribeAudio` — cái micro trong khung soạn tin, đi bằng CỔNG chứ không bằng proto.
+     *
+     * Backend này đã trả lời RPC proto `TranscribeAudio` từ lâu, nhưng client 0.29 hỏi qua cổng
+     * box, và đường đó chưa có — nên nút mic quay xong, gửi đi, rồi im. Đúng kiểu 404 mềm.
+     *
+     * Hình dạng trích thẳng từ bundle 0.29, cả hai đầu:
+     *   vào : transcribeAudio:v().args({audioBase64:ok("base64 audio that decodes to bytes"),
+     *                                   mimeType:C(), language:z(C())})
+     *   ra  : reply:"record", và renderer rút ĐÚNG một trường —
+     *         `function hGt(t){const{text:e}=t;return{text:e}}`
+     *
+     * Nên câu trả lời luôn là một record có `text`. Kể cả khi hỏng: `{text:""}` đọc thành "không
+     * nghe ra chữ nào" và người dùng gõ tay; ném lỗi ra thì cái nút chết mà không nói gì.
+     */
+    transcribeAudio: async (a) => {
+      const arg = (a ?? {}) as { audioBase64?: unknown; mimeType?: unknown; language?: unknown };
+      const b64 = typeof arg.audioBase64 === "string" ? arg.audioBase64 : "";
+      if (!b64 || !media.transcribe) return { text: "", ms: 0 };
+      try {
+        const audio = Buffer.from(b64, "base64");
+        if (!audio.length) return { text: "", ms: 0 };
+        const language = typeof arg.language === "string" && arg.language ? arg.language : undefined;
+        return await media.transcribe(audio, typeof arg.mimeType === "string" ? arg.mimeType : "", language);
+      } catch {
+        // Bộ phiên âm chưa cài, hoặc âm thanh hỏng. Cả hai đều là "không ra chữ", không phải lỗi cổng.
+        return { text: "", ms: 0 };
+      }
+    },
     readAttachmentImage: (a) => media.readAttachmentImage(a),
     readAttachmentText: (a) => media.readAttachmentText(a),
     readAttachmentChunk: (a) => media.readAttachmentChunk(a),

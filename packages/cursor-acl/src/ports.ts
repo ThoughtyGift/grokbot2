@@ -135,6 +135,14 @@ export interface MediaPort {
   stageImage(dataUrl: string, fileName: string): string | null;
   stageFile(dataUrl: string, fileName: string, mimeType?: string): string | null;
   stagedCount(): number;
+  /**
+   * Ghi âm → chữ, cho cái micro trong khung soạn tin.
+   *
+   * Tuỳ chọn: một chỗ nhúng không cài bộ phiên âm vẫn phải trả lời được, và câu trả lời đúng khi
+   * đó là chuỗi rỗng — client rút đúng một trường `text`, nên `{text:""}` đọc thành "không nghe ra
+   * chữ nào", còn 404 thì cái nút quay xong và im lặng.
+   */
+  transcribe?(audio: Buffer, mimeType: string, language?: string): Promise<{ text: string; ms: number }>;
 }
 
 /** S9 memory. */

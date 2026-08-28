@@ -58,10 +58,10 @@ không regex phía ta: bản đếm tay đầu tiên bỏ sót 9 lệnh shared-r
 | | |
 |---|---|
 | methods in the 0.29 gateway table | **146** |
-| answered by grokbot2 | **128 (88%)** — 119 implemented + 9 shared-room commands answered with an explicit refusal |
-| unanswered → soft 404 | **18** |
+| answered by grokbot2 | **129 (88%)** — 120 implemented + 9 shared-room commands answered with an explicit refusal |
+| unanswered → soft 404 | **17** |
 
-The 18, grouped — a soft 404 means the button in the app does nothing at all, with no error:
+The 17, grouped — a soft 404 means the button in the app does nothing at all, with no error:
 
 - **bot templates (7)** — `listBotTemplates`, `publishBotTemplate`, `createAgentFromTemplate`,
   `getBotTemplateVersion`, `getBotTemplateForSourceAgent`, `deleteBotTemplate`,
@@ -69,10 +69,15 @@ The 18, grouped — a soft 404 means the button in the app does nothing at all, 
 - **voice calls (5)** — `getVoiceCall`, `nudgeVoiceCall`, `recordVoiceCall`,
   `readVoiceCallAgentContext`, `readVoiceCallSentMessages`
 - **`injectChromeCookies` (1)** — the box half of the cookie feature above
-- **`transcribeAudio` (1)** — we have the `TranscribeAudio` proto and `stt.ts`, but the client 0.29
-  asks over the **gateway**, and that road is not connected
 - **assets / misc (4)** — `generateAgentAvatarImage`, `getAgentNotificationAvatar`,
   `getMcpPluginLogo`, `getAutomationWebhookCredential`
+
+> Closed 28/08: **`transcribeAudio`**. The proto answer had existed for ages, but 0.29 asks over the
+> **gateway** and that road was missing — so the composer's mic recorded, sent, and got silence. The
+> reply is a record and the renderer destructures exactly one field
+> (`function hGt(t){const{text:e}=t;return{text:e}}`), so the handler always returns `{text, ms}` and
+> never throws: no transcriber installed and broken audio are both "heard nothing", while an error
+> escaping to the gateway is a mic button that dies without a word.
 
 > Answering **NO** counts as answered. `SHARED_ROOM_COMMANDS` return
 > `{ok:false, reason:"Sharing needs a relay both installs can reach…"}` rather than a 404 or a

@@ -77,6 +77,7 @@ import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memor
 import { startTeach, stopTeach, recordingState } from "./teach.js";
 import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktopRecordConfigured } from "./desktop-record.js";
 import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, authenticateMcpServer } from "./mcp.js";
+import { transcribe } from "./stt.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -177,6 +178,7 @@ const ports: AclPorts = {
     stageImage,
     stageFile,
     stagedCount,
+    transcribe,
   },
   memory: { getAgentMemories, deleteAgentMemory, clearAgentMemories },
   automations: {

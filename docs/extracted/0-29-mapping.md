@@ -154,7 +154,7 @@ nhầm cả việc: `importChromeCookies` chẳng hạn là IPC app-local, **kh�
 | `createAgentFromTemplate` + cụm `listBotTemplates`/`publishBotTemplate`/… | `.args(zEr)` | cả bề mặt "mẫu bot" vắng bóng |
 | `injectChromeCookies` | `.args({cookies:Ie(xkr)})` | ← nửa **box** của tính năng cookie (§4.1 trong plan cũ); `importChromeCookies` mới là nửa app-IPC |
 | ~~`sendDraft` / `discardDraft`~~ ✅ **làm 28/08** | `.args({entryId,draft:LEr,agentId})` | **nút chết THẬT, đã sửa** — xem đính chính §3.1 |
-| `transcribeAudio` | `.args(qkr)` = `{audioBase64,mimeType,language?}` | ta có proto `TranscribeAudio` nhưng **chưa nối đường box-gateway** |
+| ~~`transcribeAudio`~~ ✅ **28/08** | `.args({audioBase64,mimeType,language?})`, trả record — renderer rút đúng `{text}` | đã nối; proto có sẵn từ lâu, thiếu đúng đoạn đường cổng |
 | `generateAgentAvatarImage`, `getAgentNotificationAvatar`, `getMcpPluginLogo`, `getAutomationWebhookCredential` | — | phụ trợ |
 
 Router của ta trả **404 mềm** cho tên lạ (`http.ts` `const fn=methods[name]`), nên các nút trên
