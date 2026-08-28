@@ -13,7 +13,7 @@ import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from ".
 import { boxConfigured } from "../box-exec.js";
 import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink, setComputerReleaseSink, beginComputerUse, endComputerUse, type BoxHandoff } from "../forever-box.js";
 import { compact, applyCompaction, needsCompaction, estimateTokens, historyTokens } from "../compaction.js";
-import { billingMode, recordUsage, accessVerdict } from "../billing.js";
+import { billingMode, recordUsage, accessVerdict, upgradeUrl } from "../billing.js";
 import { ownerOf } from "../directory/index.js";
 import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
@@ -25,7 +25,7 @@ import {
 } from "../chat/state.js";
 import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
-  isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget,
+  isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget, postNotice,
 } from "../conversation/index.js";
 import { stagedTextPreview } from "../attachments.js";
 import {
@@ -1000,8 +1000,20 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
   // be the default here). Under GROKBOT2_BILLING=enforce an over-cap user does not spend a turn.
   const turnOwner = ownerOf(agentId) ?? DEFAULT_USER.authId;
   if (billingMode() === "enforce" && accessVerdict({ authId: turnOwner, email: "" }) === "payment_required") {
-    setText(bubble, "[grokbot2] Hết hạn mức tháng — nâng cấp gói để tiếp tục.");
+    /*
+     * Màn chặn phải có LỐI ĐI TIẾP, và không được nói bằng miệng con bot.
+     *
+     * Bản cũ nhét câu này vào bong bóng của bot: người dùng đọc "Hết hạn mức tháng" như thể con bot
+     * tự nói về mình, và câu đó là ngõ cụt — không có đường nâng cấp. Giờ là một `notice` (renderer
+     * 0.29 vẽ thành `role:"note"`, không gán cho ai) kèm link tới trang thanh toán của chính bạn,
+     * nếu đã đặt `GROKBOT2_CHECKOUT_URL`. Chưa đặt thì không có link — không bịa địa chỉ.
+     */
+    const url = upgradeUrl();
+    setText(bubble, "");
     if (bubble.kind === "send-message") bubble.streaming = false;
+    postNotice(agentId, url
+      ? `Hết hạn mức tháng. [Nâng cấp gói để tiếp tục](${url})`
+      : "Hết hạn mức tháng — nâng cấp gói để tiếp tục.");
     clearPresence(agentId); onUpdate(agentId); persist();
     return;
   }

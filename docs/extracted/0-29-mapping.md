@@ -316,9 +316,9 @@ billing tự quản chính là nhánh **`url` (no:5)** — đúng như [[grokbot
 | 3 | **`submitUserForm` + `dismissUserForm`** | nút Submit của form đang chết lặng (404 mềm) | ✅ **xong 28/08** (+ `sendDraft`/`discardDraft` — nút chết thật) |
 | 4 | **Cụm MCP ghi** | MCP bên ta mới chỉ đọc — khoảng trống hành vi lớn nhất của một mặt phẳng đã làm dở | ✅ **xong 28/08 — 10/10**: 8 lệnh thật (`installMcpEntry` · `updateMcpPluginInstall` · `uninstallMcpPlugin` · `listMcpServerTools` · `toggleMcpToolDisabled` · `setMcpCustomInstructions` · `removeMcpServer` · `authenticateMcpServer`) + 2 từ chối có lý do (`renameMcpAccount`/`removeMcpAccount` — ở đây mỗi server chỉ có MỘT bộ đăng nhập, không có khái niệm nhiều tài khoản) |
 | 5 | **`web_search`/`web_fetch`** | 0.29 có ba tool web hạng nhất; ta **không có tool web nào** | vừa |
-| 6 | Entry `notice` + `user-attachment` | renderer 0.29 đã biết vẽ, ta chưa phát | nhỏ |
+| 6 | Entry `notice` + `user-attachment` | renderer 0.29 đã biết vẽ, ta chưa phát | ✅ **xong 28/08** |
 | 7 | `BackgroundShellSpawn` + `WriteShellStdin` ở daemon | kịch bản OBS/live cần lệnh chạy dài + gõ tiếp stdin | vừa |
-| 8 | `ErrorButton` nhánh `url` | nối nút trên màn chặn về trang thanh toán của mình | nhỏ |
+| 8 | `ErrorButton` nhánh `url` | nối nút trên màn chặn về trang thanh toán của mình | 🟡 **28/08 — nối bằng link markdown, không phải ErrorButton**: nút của hãng đi trong `CustomErrorDetails.buttons[]` (envelope LỖI RPC) và ta chưa dựng được đường chứng minh client đọc envelope đó từ backend này; link markdown thì có bằng chứng chạy trong bản ghi app gốc |
 | 9 | `injectChromeCookies` (nửa box) | gỡ nút thắt "5 bot đứng chờ đăng nhập Shopee" — **chỉ sau khi tách trình duyệt** | lớn |
 | 10 | `media_review` subagent · `create_diagram` | bù nốt bề mặt tool | vừa |
 

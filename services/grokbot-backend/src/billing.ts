@@ -121,6 +121,27 @@ export function getPlan(name: string): PlanRow | null {
   });
 }
 
+/**
+ * Lối thoát khi bị chặn: trang thanh toán của CHÍNH BẠN.
+ *
+ * `plans.checkout_url` có chỗ trong bảng từ đầu nhưng chưa ai đọc — nên màn chặn chỉ nói "hết hạn
+ * mức" rồi bỏ người dùng ở đó, không có đường đi tiếp. Đây là chỗ nối.
+ *
+ * Vì sao là link markdown chứ không phải `ErrorButton` của hãng: nút của họ đi trong
+ * `CustomErrorDetails.buttons[]` (một envelope LỖI RPC), và ta chưa dựng được đường nào chứng minh
+ * client đọc envelope đó từ backend này — đoán rồi phát ra là nút không bao giờ hiện. Còn link
+ * markdown thì có bằng chứng nó chạy: bản ghi app gốc có cả `[Shopee Open Platform](https://…)`
+ * lẫn deep-link `[Updates](grokbot://app/v1/settings?id=update-status)` hiện thành link bấm được.
+ *
+ * `null` khi chưa đặt `GROKBOT2_CHECKOUT_URL` — khi đó lời chặn không kèm link, chứ không bịa một
+ * địa chỉ.
+ */
+export function upgradeUrl(): string | null {
+  const url = getPlan("pro")?.checkoutUrl ?? null;
+  // Chỉ nhận http(s): một `javascript:` lọt vào đây là link chạy mã trong app của người dùng.
+  return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
 /** Day key in the user's local server time — matches how a "daily usage" row is read back. */
 function dayKey(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);

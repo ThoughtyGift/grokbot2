@@ -96,6 +96,27 @@ export function toNativeEntry(e: Entry): NativeEntry {
     return { ...base, kind: "event", event: e.event };
   }
 
+  /*
+   * Hai kind mới (28/08) — và cách hàm này thu hẹp kiểu là lý do chúng PHẢI có mặt ở đây.
+   *
+   * Phần dưới không kiểm `kind` nữa mà đọc thẳng `e.message`: nó tin rằng loại trừ ba nhánh trên
+   * thì chỉ còn `send-message`. Thêm `notice`/`user-attachment` vào union làm 31 dòng đó đỏ ngay —
+   * đúng thứ trình biên dịch nên bắt, vì nếu ép kiểu cho qua thì runtime sẽ đọc `undefined.type`
+   * và một entry hợp lệ làm hỏng cả lượt đọc transcript.
+   */
+  if (e.kind === "notice") {
+    // API `/v1` không có kind "notice" riêng; vẽ như lời hệ thống, không gán cho bot nào.
+    return { ...base, kind: "agent-message", author: { id: "system", name: "System" }, content: e.text,
+      ...(e.replyTo ? { replyTo: e.replyTo } : {}) };
+  }
+
+  if (e.kind === "user-attachment") {
+    return { ...base, kind: "message", role: "user",
+      content: e.file_name,
+      attachment: nativeAttachment(e.file_path, e.file_name),
+      ...(e.replyTo ? { replyTo: e.replyTo } : {}) };
+  }
+
   if (e.message.type === "text") {
     return {
       ...base,

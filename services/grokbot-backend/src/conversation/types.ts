@@ -36,7 +36,25 @@ export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })
   | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
   | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string })
-  | (Base & { kind: "event"; event: TranscriptEvent });
+  | (Base & { kind: "event"; event: TranscriptEvent })
+  /**
+   * Lời hệ thống trong dòng hội thoại — không phải người nói, cũng không phải bot nói.
+   *
+   * Renderer 0.29 biết vẽ sẵn: `case"notice":return{role:"note",timestampMs:Zp(t)}`, và khoá vẽ lại
+   * là `${t.id}:${t.text.length}`. Nó nằm trong danh sách kind chuẩn của renderer
+   * (`["message","tool-call","send-message","user-attachment","notice","event"]`) — ta chỉ chưa
+   * bao giờ phát. Trước đó mọi thông báo hệ thống phải giả dạng lời của bot, tức gán cho bot một
+   * câu nó không nói.
+   */
+  | (Base & { kind: "notice"; text: string; replyTo?: { entryId: string; author: string; excerpt: string } })
+  /**
+   * File NGƯỜI DÙNG gửi, ở dạng entry gốc (không phải đính kèm bên trong lời của bot).
+   *
+   * Renderer 0.29: `if(t.kind==="user-attachment")return{path:t.file_path,name:t.file_name}` và
+   * `t.kind==="user-attachment"?"user":…` — tức nó được vẽ về phía NGƯỜI. Tên trường là
+   * `file_path`/`file_name` (snake_case), không phải camelCase.
+   */
+  | (Base & { kind: "user-attachment"; file_path: string; file_name: string; replyTo?: { entryId: string; author: string; excerpt: string } });
 
 export type AgentActivity = { kind: "thinking" } | { kind: "tool"; tool: string; detail?: string };
 

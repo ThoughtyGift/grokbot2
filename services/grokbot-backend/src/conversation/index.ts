@@ -236,6 +236,21 @@ export function postFileAttachment(agentId: string, path: string, fileName: stri
   onUpdate(agentId);
 }
 
+/**
+ * Một lời của HỆ THỐNG trong dòng hội thoại.
+ *
+ * Trước đây mọi thông báo kiểu này phải giả dạng lời bot (`author: authorOf(agentId)`), tức gán cho
+ * bot một câu nó không hề nói — người dùng đọc "Hết hạn mức tháng" mà tưởng con bot đang tự nói về
+ * mình. Renderer 0.29 có sẵn kind cho việc này và vẽ thành `role:"note"`.
+ *
+ * Chữ đi qua nguyên vẹn, kể cả link markdown: bản ghi app gốc cho thấy client vẽ được cả
+ * `[Shopee Open Platform](https://open.shopee.com)` lẫn deep-link `[Updates](grokbot://app/v1/…)`.
+ */
+export function postNotice(agentId: string, text: string): void {
+  tail(agentId).push({ id: nextEntryId(), kind: "notice", text, timestampMs: Date.now() });
+  onUpdate(agentId);
+}
+
 const MAX_WIDGET_OPTIONS = 6;
 
 export function postWidget(
