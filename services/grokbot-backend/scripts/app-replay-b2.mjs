@@ -1,0 +1,195 @@
+/**
+ * Phát lại kịch bản B2 **trong app đang mở** — gõ vào khung soạn tin, tự chọn widget, tự duyệt thẻ,
+ * rồi ghi lại đúng những gì MÀN HÌNH trả ra.
+ *
+ *   node services/grokbot-backend/scripts/app-replay-b2.mjs [--max N] [--bot "Tên bot"]
+ *
+ * Khác `e2e-replay-b2.mjs` ở một điểm quyết định: bài kia nói chuyện với CỔNG, nên nó biết backend
+ * trả gì mà không biết renderer vẽ gì. Bài này đi qua đúng con đường người dùng đi — con trỏ, bàn
+ * phím, và những gì hiện trên màn hình. Widget vẽ ra hay không, thẻ quyền hiện hay không, chỉ ở đây
+ * mới thấy.
+ *
+ * ── Ba luật an toàn, vì kịch bản này là của NGƯỜI KHÁC ─────────────────────────────────────────
+ *
+ * 1. Chạy trên một bot MỚI do script tạo, không đụng bot thật của người dùng.
+ * 2. Widget: chọn đúng đáp án app gốc đã chọn (kịch bản có ghi `responded`); không có thì chọn lựa
+ *    chọn CUỐI, vốn gần như luôn là "Thôi" — chọn bừa một lựa chọn giữa có thể cài nhầm thứ gì đó.
+ * 3. Thẻ xin quyền: duyệt, NHƯNG chặn lệnh phá hoại (`rm -rf`, `mkfs`, `dd`, `shutdown`…). Kịch bản
+ *    này sinh từ máy khác; chạy mù mọi lệnh của nó trên hộp thật là cách hỏng việc nhanh nhất.
+ */
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const argv = process.argv.slice(2);
+const argOf = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
+const MAX = Number(argOf("--max", "0")) || Infinity;
+const BOT = argOf("--bot", `E2E ${new Date().toISOString().slice(11, 16)}`);
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const token = readFileSync(join(HERE, "..", ".data", "gateway-token.txt"), "utf8").trim();
+const gw = (m, b = {}) =>
+  fetch(`http://127.0.0.1:8788/gw/api/${m}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(b),
+  }).then((r) => r.json());
+
+// ── CDP ────────────────────────────────────────────────────────────────────────────────────────
+const targets = await (await fetch("http://127.0.0.1:9222/json/list")).json();
+const page = targets.find((t) => t.type === "page");
+if (!page) { console.error("app không mở (CDP 9222)"); process.exit(1); }
+const ws = new WebSocket(page.webSocketDebuggerUrl);
+let id = 0; const waits = new Map();
+ws.addEventListener("message", (e) => { const m = JSON.parse(e.data); if (waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); } });
+const send = (method, params = {}) => new Promise((res) => { const i = ++id; waits.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const js = async (expr) => (await send("Runtime.evaluate", { expression: expr, returnByValue: true })).result?.result?.value;
+const clickAt = async (x, y) => { for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 }); };
+await new Promise((r) => ws.addEventListener("open", r));
+
+/**
+ * Toạ độ giữa một phần tử, tìm theo selector hoặc theo CHỮ.
+ *
+ * Tìm theo chữ đi qua TreeWalker trên text node, KHÔNG quét `.innerText` của mọi phần tử: bản đầu
+ * làm thế và treo hẳn — mỗi lần đọc `innerText` ép trình duyệt tính lại layout, nhân với vài nghìn
+ * phần tử thì lượt đo không bao giờ về. Đo được: script đứng im hơn mười phút ở đúng dòng đó.
+ */
+const boxOf = (sel) => js(
+  "(() => { const el = document.querySelector(" + JSON.stringify(sel) + ");"
+  + " if (!el) return null; const r = el.getBoundingClientRect();"
+  + " return (r.width || r.height) ? { x: r.x + r.width/2, y: r.y + r.height/2 } : null; })()",
+);
+
+/*
+ * Nối chuỗi thẳng, KHÔNG lồng template.
+ *
+ * Bản đầu viết `${JSON.stringify(...)}` bên trong một template literal đã bị escape một lớp, nên
+ * thứ chạy trong trình duyệt là chuỗi `"${JSON.stringify(...)}"` — một literal, không phải tên bot.
+ * Hàm tìm chạy trơn tru và luôn trả `null`, còn script thì báo "không thấy trong sidebar" trong khi
+ * tên bot nằm ngay đó. Loại lỗi im lặng nhất: không ném, không log, chỉ trả sai.
+ */
+const boxOfText = (text) => js(
+  "(() => { const want = " + JSON.stringify(String(text).toLowerCase()) + ";"
+  + " const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);"
+  + " for (let n = w.nextNode(); n; n = w.nextNode()) {"
+  + "   if (!n.nodeValue || !n.nodeValue.toLowerCase().includes(want)) continue;"
+  + "   let el = n.parentElement;"
+  + "   while (el && !(el.getBoundingClientRect().width || el.getBoundingClientRect().height)) el = el.parentElement;"
+  + "   if (!el) continue;"
+  + "   const r = el.getBoundingClientRect();"
+  + "   return { x: r.x + r.width/2, y: r.y + r.height/2 };"
+  + " } return null; })()",
+);
+
+const screenText = () => js("document.body.innerText");
+
+// ── dựng bot mới rồi chọn nó trong sidebar ─────────────────────────────────────────────────────
+const bot = (await gw("createAgent", { name: BOT })).agent;
+console.log(`bot thử: ${BOT} (${bot.id})`);
+/*
+ * Chờ ĐIỀU KIỆN, không chờ một mốc thời gian.
+ *
+ * Bản đầu ngủ 2,5s rồi tìm — và trượt, vì roster đi xuống app qua SSE chứ không đồng bộ với lệnh
+ * tạo. Một con số ngủ cố định luôn sai theo một trong hai hướng: quá ngắn thì trượt, quá dài thì
+ * mỗi lần chạy đắt thêm mà không mua được gì.
+ */
+let row = null;
+for (let i = 0; i < 20 && !row; i += 1) { row = await boxOfText(BOT); if (!row) await wait(1000); }
+if (!row) { console.error(`không thấy "${BOT}" trong sidebar sau 20s — app đã nhận roster chưa?`); ws.close(); process.exit(1); }
+await clickAt(row.x, row.y);
+await wait(1500);
+
+// ── kịch bản ───────────────────────────────────────────────────────────────────────────────────
+const data = JSON.parse(await readFile("docs/extracted/kich-ban-b2.json", "utf8"));
+const sc = data.scenarios.find((s) => s.bot === "Test Clone");
+const cases = sc.cases.filter((c) => String(c.input ?? "").trim());
+
+/** Lệnh KHÔNG được duyệt mù — kịch bản này sinh từ máy khác. */
+const NGUY_HIEM = /\brm\s+-rf|\bmkfs|\bdd\s+if=|shutdown|reboot|:\(\)\{|\bformat\b|>\s*\/dev\/sd/i;
+
+const report = ["# Phát lại kịch bản B2 **trong app** (gõ tay qua CDP)", "",
+  `> Chạy ${new Date().toISOString()} · bot thử \`${BOT}\` · nguồn kich-ban-b2.json`,
+  "> Widget: chọn đúng đáp án app gốc đã chọn; không có thì chọn lựa chọn cuối (\"Thôi\").",
+  "> Thẻ quyền: duyệt, trừ lệnh phá hoại — xem `NGUY_HIEM` trong script.", ""];
+let nWidget = 0, nPerm = 0, nSkip = 0, done = 0;
+
+for (const [i, c] of cases.entries()) {
+  if (done >= MAX) break;
+  done += 1;
+  const before = (await screenText()) ?? "";
+
+  const box = await boxOf('[contenteditable="true"]');
+  if (!box) { console.error("mất khung soạn tin"); break; }
+  await clickAt(box.x, box.y);
+  await wait(300);
+  await send("Input.insertText", { text: c.input });
+  await wait(300);
+  for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+
+  // chờ lượt: xử lý widget/thẻ quyền ngay khi chúng hiện
+  const deadline = Date.now() + 240_000;
+  let widgetPrompt = null, permTargets = [], last = "", stable = 0;
+  while (Date.now() < deadline) {
+    await wait(3000);
+
+    // thẻ xin quyền
+    const perm = await js(`(() => {
+      const b = [...document.querySelectorAll("button")].find(x => /^(allow|cho phép|allow once)/i.test((x.innerText||"").trim()));
+      if (!b) return null;
+      const card = b.closest('[class*="message-card"]') || b.parentElement;
+      const r = b.getBoundingClientRect();
+      return { x: r.x + r.width/2, y: r.y + r.height/2, target: (card?.innerText || "").slice(0, 300) };
+    })()`);
+    if (perm) {
+      if (NGUY_HIEM.test(perm.target)) { nSkip += 1; permTargets.push(`BỎ QUA (nguy hiểm): ${perm.target.slice(0, 90)}`); }
+      else { await clickAt(perm.x, perm.y); nPerm += 1; permTargets.push(perm.target.split("\n").slice(0, 2).join(" ").slice(0, 90)); }
+      stable = 0; continue;
+    }
+
+    // widget
+    const w = await js(`(() => {
+      const f = document.querySelector(".sand-widget--choices");
+      if (!f) return null;
+      const opts = [...f.querySelectorAll(".sand-widget__options button")].map(b => (b.innerText||"").replace(/\\s+/g," ").trim());
+      const head = f.closest('[class*="message-card"]')?.innerText?.split("\\n")[0] ?? "";
+      return { head, opts };
+    })()`);
+    if (w && w.opts.length) {
+      const want = (c.expected.find((e) => e.kind === "widget" && e.responded) || {}).responded ?? "";
+      let idx = w.opts.length - 1;                                   // mặc định: lựa chọn cuối
+      if (want) {
+        const k = want.toLowerCase();
+        const hit = w.opts.findIndex((o) => k.includes(o.replace(/^[A-Z]\s+/, "").toLowerCase()) || o.toLowerCase().includes(k.slice(0, 14)));
+        if (hit >= 0) idx = hit;
+      }
+      const ob = await js(`(() => {
+        const b = [...document.querySelectorAll(".sand-widget__options button")][${idx}];
+        if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y + r.height/2 };
+      })()`);
+      if (ob) { await clickAt(ob.x, ob.y); nWidget += 1; widgetPrompt = `${w.head} → chọn "${w.opts[idx]}"`; stable = 0; continue; }
+    }
+
+    const now = (await screenText()) ?? "";
+    if (now === last && now.length > before.length) { stable += 1; if (stable >= 3) break; } else stable = 0;
+    last = now;
+  }
+
+  const grown = (last.length > before.length ? last.slice(before.length) : "").replace(/\n{2,}/g, "\n").trim();
+  console.log(`  case ${i + 1}/${cases.length}${widgetPrompt ? " [widget]" : ""}${permTargets.length ? " [thẻ]" : ""} — ${grown ? "có trả lời" : "TRỐNG"}`);
+  report.push(`### ${i + 1}. ⟵ ${c.input.replace(/\s+/g, " ").slice(0, 160)}`, "");
+  if (widgetPrompt) report.push(`- **widget**: ${widgetPrompt}`);
+  for (const p of permTargets) report.push(`- **thẻ quyền**: ${p}`);
+  report.push("", "```", (grown || "(màn hình không đổi)").slice(0, 1200), "```", "");
+}
+
+report.push("---", "", `**Tổng:** ${done} case · widget đã chọn ${nWidget} · thẻ quyền đã duyệt ${nPerm} · bỏ qua vì nguy hiểm ${nSkip}`);
+const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+await mkdir("docs/parity-runs", { recursive: true });
+const out = `docs/parity-runs/app-replay-${stamp}.md`;
+await writeFile(out, report.join("\n"), "utf8");
+console.log(`\nđã ghi ${out}`);
+console.log(`tổng: ${done} case, widget ${nWidget}, thẻ quyền ${nPerm}, bỏ qua ${nSkip}`);
+ws.close();
+process.exit(0);
