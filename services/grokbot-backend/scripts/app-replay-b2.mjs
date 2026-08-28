@@ -113,7 +113,7 @@ const report = ["# Phát lại kịch bản B2 **trong app** (gõ tay qua CDP)",
   `> Chạy ${new Date().toISOString()} · bot thử \`${BOT}\` · nguồn kich-ban-b2.json`,
   "> Widget: chọn đúng đáp án app gốc đã chọn; không có thì chọn lựa chọn cuối (\"Thôi\").",
   "> Thẻ quyền: duyệt, trừ lệnh phá hoại — xem `NGUY_HIEM` trong script.", ""];
-let nWidget = 0, nPerm = 0, nSkip = 0, done = 0;
+let nWidget = 0, nPerm = 0, nSkip = 0, nHetGio = 0, done = 0;
 /** Chữ ký các widget đã bấm — transcript giữ cả thẻ của lượt trước. */
 const daBam = new Set();
 
@@ -131,9 +131,19 @@ for (const [i, c] of cases.entries()) {
   for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
 
   // chờ lượt: xử lý widget/thẻ quyền ngay khi chúng hiện
-  const deadline = Date.now() + 240_000;
+  /*
+   * Hạn giờ theo VIỆC, không phải một con số chung cho mọi case.
+   *
+   * Lượt chạy 28/08 trả "TRỐNG" ở case 9, 16, 18 — và cả ba đều là case kịch bản mong có
+   * **attachment**: dựng cả bộ quy trình, quay màn hình, sửa rồi quay lại. Đó là việc hàng phút,
+   * còn 240s là con số tôi chọn cho một câu trả lời chữ. "TRỐNG" ở đó gần như chắc chắn là đồng
+   * hồ của tôi hết, chứ không phải bot im.
+   */
+  const choLau = (c.expected ?? []).some((e) => e.kind === "attachment");
+  const deadline = Date.now() + (choLau ? 600_000 : 240_000);
   let widgetPrompt = null, permTargets = [], last = "", stable = 0;
   let thuLai = 0;   // số lần bấm lại một thẻ báo "didn't go through"
+  let xong = false;   // thoát vì màn hình đứng yên, hay vì hết giờ?
   while (Date.now() < deadline) {
     await wait(3000);
 
@@ -237,24 +247,32 @@ for (const [i, c] of cases.entries()) {
     }
 
     const now = (await screenText()) ?? "";
-    if (now === last && now.length > before.length) { stable += 1; if (stable >= 3) break; } else stable = 0;
+    if (now === last && now.length > before.length) { stable += 1; if (stable >= 3) { xong = true; break; } } else stable = 0;
     last = now;
   }
 
   const grown = (last.length > before.length ? last.slice(before.length) : "").replace(/\n{2,}/g, "\n").trim();
-  console.log(`  case ${i + 1}/${cases.length}${widgetPrompt ? " [widget]" : ""}${permTargets.length ? " [thẻ]" : ""} — ${grown ? "có trả lời" : "TRỐNG"}`);
+  /*
+   * Ba kết cục, không phải hai. Gộp "hết giờ khi bot còn đang gõ" chung với "bot không trả lời" là
+   * tự bịa ra một thất bại: báo cáo trước ghi bốn case TRỐNG, mà ít nhất ba trong số đó chỉ là đồng
+   * hồ của tôi ngắn hơn công việc. Chỉ thị "is working" của app là thứ phân biệt được.
+   */
+  const conChay = /\bis working\b|đang làm/i.test(last);
+  const ketCuc = grown ? "có trả lời" : (!xong && conChay ? "HẾT GIỜ (bot vẫn đang chạy)" : "TRỐNG");
+  if (ketCuc.startsWith("HẾT GIỜ")) nHetGio += 1;
+  console.log(`  case ${i + 1}/${cases.length}${widgetPrompt ? " [widget]" : ""}${permTargets.length ? " [thẻ]" : ""} — ${ketCuc}`);
   report.push(`### ${i + 1}. ⟵ ${c.input.replace(/\s+/g, " ").slice(0, 160)}`, "");
   if (widgetPrompt) report.push(`- **widget**: ${widgetPrompt}`);
   for (const p of permTargets) report.push(`- **thẻ quyền**: ${p}`);
-  report.push("", "```", (grown || "(màn hình không đổi)").slice(0, 1200), "```", "");
+  report.push("", "```", (grown || (ketCuc === "TRỐNG" ? "(màn hình không đổi)" : "(hết giờ — bot vẫn đang chạy)")).slice(0, 1200), "```", "");
 }
 
-report.push("---", "", `**Tổng:** ${done} case · widget đã chọn ${nWidget} · thẻ quyền đã duyệt ${nPerm} · bỏ qua vì nguy hiểm ${nSkip}`);
+report.push("---", "", `**Tổng:** ${done} case · widget đã chọn ${nWidget} · thẻ quyền đã duyệt ${nPerm} · hết giờ ${nHetGio} · bỏ qua ${nSkip}`);
 const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
 await mkdir("docs/parity-runs", { recursive: true });
 const out = `docs/parity-runs/app-replay-${stamp}.md`;
 await writeFile(out, report.join("\n"), "utf8");
 console.log(`\nđã ghi ${out}`);
-console.log(`tổng: ${done} case, widget ${nWidget}, thẻ quyền ${nPerm}, bỏ qua ${nSkip}`);
+console.log(`tổng: ${done} case, widget ${nWidget}, thẻ quyền ${nPerm}, hết giờ ${nHetGio}, bỏ qua ${nSkip}`);
 ws.close();
 process.exit(0);
