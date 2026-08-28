@@ -155,6 +155,42 @@ function activityDetail(name: string, arg: string): string | undefined {
   return unquote(arg.split(",")[0] ?? "") || undefined;
 }
 
+/**
+ * "Waiting for you: …" — chấm vàng trên hàng bot trong sidebar.
+ *
+ * Renderer 0.29 quyết định bằng đúng một dòng (`H4e`, index-DO1aF_xy.js @2353961):
+ *
+ *     t.awaitingUserResponse != null ? marker = "blocked" : t.hasUnread && (marker = "unread")
+ *
+ * Nghĩa là: có trường này thì hàng bot mang marker `blocked`, dòng xem trước đổi sang lớp
+ * `previewAwaiting`, và nội dung là `"Waiting for you: " + F4e(giá trị)` — với `F4e` trả thẳng
+ * `.reason` khi không có bản dịch cấu trúc. Nó ĐÈ lên dấu chưa đọc, vì "đang chặn" quan trọng hơn
+ * "có tin mới".
+ *
+ * Ảnh chụp máy người dùng: Shopee CS / Ads / Listing mang chấm vàng với lý do
+ * "Đăng nhập Shopee Seller Centre (…)", còn Kho và Kế toán không có chấm.
+ *
+ * Backend này khai báo trường, `summarise` phát nó ra, `setPresence` nhận được — nhưng **không chỗ
+ * nào đặt**, nên bot của ta chưa bao giờ hiện trạng thái đó. Hai chỗ dưới đây là hai chỗ lượt chạy
+ * thật sự dừng lại chờ một hành động của người.
+ */
+const choNguoi = (agentId: string, reason: string): void => {
+  const r = reason.replace(/\s+/g, " ").trim();
+  if (r) setPresence(agentId, { awaitingUserResponse: { reason: r.slice(0, 160) } });
+};
+
+/** Lý do lấy từ THẺ vừa dựng, không parse lại đối số — thẻ là trạng thái thật. */
+function lyDoCho(agentId: string): string | null {
+  const t = tail(agentId);
+  for (let i = t.length - 1; i >= 0 && i >= t.length - 6; i -= 1) {
+    const e = t[i];
+    if (e.kind !== "send-message") continue;
+    if (e.boxInstruction) return e.boxInstruction;
+    if (e.message.type === "widget") return e.message.widget.prompt;
+  }
+  return null;
+}
+
 /** Everything presence-related back to idle. Called on every exit path, including failures. */
 const clearPresence = (agentId: string): void => {
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
@@ -389,6 +425,7 @@ function runTool(
   // it. The same reasoning the ask_question branch below already applies — a parked turn is
   // waiting, not working — just applied at the right moment rather than after the wait.
   if (name === "request_box_help") clearPresence(agentId);
+  if (name === "request_box_help") { const r = lyDoCho(agentId); if (r) choNguoi(agentId, r); }
 
   /*
    * ── Công cụ phải chạy DƯỚI DANH TÍNH CHỦ CỦA BOT ────────────────────────────────────────────
@@ -427,6 +464,7 @@ function runTool(
       // A parked turn is waiting on the user, not working: leaving it "running" spins the
       // indicator forever behind a card that needs a click.
       if (!history || name === "ask_question") clearPresence(agentId);
+      if (name === "ask_question") { const r = lyDoCho(agentId); if (r) choNguoi(agentId, r); }
     }));
 }
 
@@ -857,6 +895,8 @@ export function sendPrompt(args: SendArgs) {
   // The reset belongs here and only here: a message FROM THE USER is what starts a new chain,
   // while one carrying `fromAgent` IS the chain and must keep counting or the loop guard is gone.
   if (!args.fromAgent) hops.delete(agentId);
+  // Người đã trả lời, nên bot không còn "đang chờ" nữa — chấm vàng phải tắt cùng lúc.
+  if (!args.fromAgent) setPresence(agentId, { awaitingUserResponse: null });
 
   // Manual trigger: "/tool echo hello"
   const m = text.match(/^\/tool\s+(.+)/i);
