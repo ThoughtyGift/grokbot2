@@ -15,6 +15,7 @@ import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink
 import { compact, applyCompaction, needsCompaction, estimateTokens, historyTokens } from "../compaction.js";
 import { billingMode, recordUsage, accessVerdict, upgradeUrl } from "../billing.js";
 import { ownerOf } from "../directory/index.js";
+import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
 import { loadMemory, renderMemory } from "../memory.js";
@@ -389,7 +390,30 @@ function runTool(
   // waiting, not working — just applied at the right moment rather than after the wait.
   if (name === "request_box_help") clearPresence(agentId);
 
-  void Promise.resolve(fn(arg, ctxFor(agentId, history)))
+  /*
+   * ── Công cụ phải chạy DƯỚI DANH TÍNH CHỦ CỦA BOT ────────────────────────────────────────────
+   *
+   * Lượt chạy tách rời khỏi request, nên AsyncLocalStorage đã mất và `currentOwner()` rơi về danh
+   * tính MẶC ĐỊNH. Đo trực tiếp ngày 28/08:
+   *
+   *     trong ngữ cảnh request : currentOwner() = local|nguoi-b@vi-du.vn  → box nhận đúng
+   *     ngoài ngữ cảnh (tool)  : currentOwner() = auth0|grokbot2-user     → box nhận SAI
+   *
+   * Hậu quả không nhỏ. Box đang chạy per-user: nó ghép owner → tài khoản hệ điều hành, nên lệnh của
+   * MỌI người dùng chạy chung một tài khoản — đúng thứ chế độ đó sinh ra để tránh. Và không chỉ
+   * box: `box-secrets`, `mcp-prefs`, `bot-templates`, `mcp` đọc `currentOwner()` ở 26 chỗ, nên
+   * trong một lượt chat, bot của người B đọc và ghi vào kho của người A.
+   *
+   * Chỗ vá đúng là ĐÂY, không phải từng kho một: `turnOwner` đã được tính sẵn bên dưới bằng
+   * `ownerOf(agentId)` cho bộ đếm và cho lời nhắc MCP — hai chỗ ĐÃ đúng, vì lúc đó ai đó đã nhận ra
+   * cái bẫy này và vá tại chỗ thay vì tại gốc. Một chỗ ở đây phủ cả 26.
+   *
+   * Bọc CẢ chuỗi promise, không chỉ `fn(...)`: ALS lan vào những promise tạo ra BÊN TRONG `store.run`,
+   * nên một `.then` gắn từ ngoài sẽ nằm ngoài ngữ cảnh — và `continueAfterTool` bên trong nó còn gọi
+   * model tiếp.
+   */
+  const chuBot = ownerOf(agentId) ?? DEFAULT_USER.authId;
+  void runWithOwner(chuBot, () => Promise.resolve(fn(arg, ctxFor(agentId, history)))
     .catch((e: Error) => `tool error: ${e.message}`)
     .then((result) => {
       tc.result = result;
@@ -403,7 +427,7 @@ function runTool(
       // A parked turn is waiting on the user, not working: leaving it "running" spins the
       // indicator forever behind a card that needs a click.
       if (!history || name === "ask_question") clearPresence(agentId);
-    });
+    }));
 }
 
 
@@ -440,14 +464,18 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
         // Browser actions take seconds, so show "running" and finish out of band rather than
         // blocking the gateway reply the FE is waiting on.
         tc.status = "running";
-        void Promise.resolve(fn(p.arg ?? "", ctxFor(p.agentId, p.history)))
+        // Cùng lý do với `runTool`: công cụ chạy dưới danh tính CHỦ CỦA BOT, không phải của người
+        // vừa bấm nút. Ở đây hai thứ đó gần như luôn trùng nhau — nhưng "gần như luôn" không phải
+        // một bảo đảm, và phần đuôi của chuỗi này (`continueAfterTool`) còn gọi model tiếp.
+        void runWithOwner(ownerOf(p.agentId) ?? DEFAULT_USER.authId, () =>
+          Promise.resolve(fn(p.arg ?? "", ctxFor(p.agentId, p.history)))
           .catch((e: Error) => `tool error: ${e.message}`)
           .then((result) => {
             tc.result = result;
             tc.status = "done";
             onUpdate(p.agentId);
             if (p.history) continueAfterTool(p.agentId, p.history, p.name ?? "", p.arg ?? "", result);
-          });
+          }));
       }
     }     else { tc.status = "failed"; tc.result = "denied"; }
   }

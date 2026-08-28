@@ -117,11 +117,39 @@ console.log(`bot thử: ${BOT} (${bot.id})`);
  * tạo. Một con số ngủ cố định luôn sai theo một trong hai hướng: quá ngắn thì trượt, quá dài thì
  * mỗi lần chạy đắt thêm mà không mua được gì.
  */
-let row = null;
-for (let i = 0; i < 20 && !row; i += 1) { row = await boxOfText(BOT); if (!row) await wait(1000); }
-if (!row) { console.error(`không thấy "${BOT}" trong sidebar sau 20s — app đã nhận roster chưa?`); ws.close(); process.exit(1); }
-await clickAt(row.x, row.y);
-await wait(1500);
+/*
+ * Bấm vào hàng bot rồi **XÁC NHẬN đã mở đúng bot** — không bấm xong là tin.
+ *
+ * Lượt 20:47 ngày 28/08: script bấm, rồi gõ cả case 1 vào **E2E 20-09**, tức bot của lượt TRƯỚC.
+ * Bản ghi của bot mục tiêu đứng ở 0 entry, và vì mỗi case có hạn cứng 900s, cả lượt chạy sẽ mất
+ * gần sáu tiếng để phát hiện ra mình đang đo nhầm con bot. Monitor bắt được `case 1/23 — CHẠM HẠN
+ * CỨNG` và đó là toàn bộ dấu hiệu.
+ *
+ * Bằng chứng rẻ và chắc: khung soạn tin của app luôn ghi `Message <tên bot>` — nó là chính cái nhãn
+ * app dùng để nói cho người dùng biết họ đang gõ cho ai. Kiểm nó, và bấm lại nếu chưa đúng.
+ *
+ * Cùng loài với ba lỗi khác hôm nay: làm một hành động rồi giả định nó có tác dụng. Ở đây cái giá
+ * là một phép đo sai trông y như một phép đo chậm.
+ */
+const daMoDungBot = async () => {
+  const t = (await screenText()) ?? "";
+  return t.includes(`Message ${BOT}`);
+};
+
+let moDuoc = false;
+for (let lan = 0; lan < 6 && !moDuoc; lan += 1) {
+  let row = null;
+  for (let i = 0; i < 15 && !row; i += 1) { row = await boxOfText(BOT); if (!row) await wait(1000); }
+  if (!row) { await wait(1000); continue; }
+  await clickAt(row.x, row.y);
+  for (let i = 0; i < 6 && !moDuoc; i += 1) { await wait(1000); moDuoc = await daMoDungBot(); }
+}
+if (!moDuoc) {
+  console.error(`không mở được "${BOT}" sau 6 lần bấm — khung soạn tin không ghi "Message ${BOT}".`);
+  console.error("Dừng ở đây thay vì gõ vào một bot không biết là con nào: một phép đo sai tệ hơn không đo.");
+  ws.close(); process.exit(1);
+}
+await wait(1000);
 
 // ── kịch bản ───────────────────────────────────────────────────────────────────────────────────
 const data = JSON.parse(await readFile("docs/extracted/kich-ban-b2.json", "utf8"));
