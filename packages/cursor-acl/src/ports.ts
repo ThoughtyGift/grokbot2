@@ -145,6 +145,23 @@ export interface MediaPort {
   transcribe?(audio: Buffer, mimeType: string, language?: string): Promise<{ text: string; ms: number }>;
 }
 
+/**
+ * Mẫu bot — dựng một đội một lần, phát cho máy khác.
+ *
+ * Tuỳ chọn: thiếu cổng này thì bảy lệnh mẫu bot trả lời "chưa bật", chứ không phải 404 mềm — người
+ * dùng biết ngay thay vì bấm vào hư không. Hình dạng đối số trích từ bundle 0.29, xem
+ * `services/grokbot-backend/src/bot-templates.ts`.
+ */
+export interface BotTemplatesPort {
+  list(): unknown[];
+  forSourceAgent(sourceAgentId: string): unknown | null;
+  getVersion(shareId: string, version: number): unknown | null;
+  publish(shareId: string, version: number): unknown | null;
+  setVisibility(shareId: string, visibility: string): unknown | null;
+  remove(shareId: string): void;
+  createAgent(a: { shareId?: string; name?: string; avatarShape?: string; avatarColor?: string }): { agent: unknown } | null;
+}
+
 /** S9 memory. */
 export interface MemoryPort {
   getAgentMemories: Call;
@@ -295,6 +312,8 @@ export interface AclPorts {
   desktopTeach?: DesktopTeachPort;
   media: MediaPort;
   memory: MemoryPort;
+  /** Mẫu bot. Tuỳ chọn — thiếu thì bảy lệnh mẫu bot trả lời "chưa bật". */
+  botTemplates?: BotTemplatesPort;
   automations: AutomationsPort;
   connectors: ConnectorsPort;
   extensions: ExtensionsPort;

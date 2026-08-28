@@ -42,6 +42,7 @@ export const SHARED_ROOM_COMMANDS = [
 ] as const;
 
 const NO_RELAY = "Sharing needs a relay both installs can reach; this is a single local backend. Nothing was created.";
+const NO_TEMPLATES = "Chưa bật mẫu bot trên máy chủ này.";
 
 /**
  * The connector manifests, copied from the original's `src/shared/channels.ts`.
@@ -79,7 +80,7 @@ const idOf = (a: any): string =>
  * Only commands that are themselves the sole writer of a value use it — see `createGatewayRouter`.
  */
 export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel, payload: unknown) => void): Record<string, Call> {
-  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions } = ports;
+  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates } = ports;
   const push = (channel: WireChannel, payload: unknown) => { broadcast?.(channel, payload); };
 
   /**
@@ -511,6 +512,55 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         return { text: "", ms: 0 };
       }
     },
+    /*
+     * ── Mẫu bot ────────────────────────────────────────────────────────────────────────────────
+     *
+     * Bảy lệnh, hình dạng trích nguyên từ bundle 0.29 (kiểu trả lời cũng của client khai):
+     *
+     *   listBotTemplates             noArgs                    → array
+     *   getBotTemplateForSourceAgent {sourceAgentId}            → record-or-null
+     *   getBotTemplateVersion        {shareId,version}          → record
+     *   publishBotTemplate           {shareId,version}          → record
+     *   setBotTemplateVisibility     {shareId,visibility}       → record
+     *   deleteBotTemplate            {shareId}                  → void
+     *   createAgentFromTemplate      {shareId,agentId,name,avatarShape,avatarColor,
+     *                                 expectedActiveVersion}    → record
+     *
+     * Thiếu cổng `botTemplates` thì trả `{ok:false, reason}` — nói "chưa bật", chứ không phải để
+     * người dùng bấm vào hư không như 404 mềm.
+     */
+    listBotTemplates: () => botTemplates?.list() ?? [],
+    getBotTemplateForSourceAgent: (a) =>
+      botTemplates?.forSourceAgent(String((a as { sourceAgentId?: unknown })?.sourceAgentId ?? "")) ?? null,
+    getBotTemplateVersion: (a) => {
+      const arg = (a ?? {}) as { shareId?: unknown; version?: unknown };
+      return botTemplates?.getVersion(String(arg.shareId ?? ""), Number(arg.version) || 1) ?? null;
+    },
+    publishBotTemplate: (a) => {
+      const arg = (a ?? {}) as { shareId?: unknown; version?: unknown };
+      if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
+      return botTemplates.publish(String(arg.shareId ?? ""), Number(arg.version) || 1) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+    },
+    setBotTemplateVisibility: (a) => {
+      const arg = (a ?? {}) as { shareId?: unknown; visibility?: unknown };
+      if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
+      return botTemplates.setVisibility(String(arg.shareId ?? ""), String(arg.visibility ?? "team")) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+    },
+    deleteBotTemplate: (a) => {
+      botTemplates?.remove(String((a as { shareId?: unknown })?.shareId ?? ""));
+      return {};   // reply:"void"
+    },
+    createAgentFromTemplate: (a) => {
+      if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
+      const arg = (a ?? {}) as { shareId?: unknown; name?: unknown; avatarShape?: unknown; avatarColor?: unknown };
+      return botTemplates.createAgent({
+        shareId: String(arg.shareId ?? ""),
+        name: typeof arg.name === "string" ? arg.name : undefined,
+        avatarShape: typeof arg.avatarShape === "string" ? arg.avatarShape : undefined,
+        avatarColor: typeof arg.avatarColor === "string" ? arg.avatarColor : undefined,
+      }) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+    },
+
     readAttachmentImage: (a) => media.readAttachmentImage(a),
     readAttachmentText: (a) => media.readAttachmentText(a),
     readAttachmentChunk: (a) => media.readAttachmentChunk(a),

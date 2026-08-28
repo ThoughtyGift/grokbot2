@@ -78,6 +78,10 @@ import { startTeach, stopTeach, recordingState } from "./teach.js";
 import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktopRecordConfigured } from "./desktop-record.js";
 import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, authenticateMcpServer } from "./mcp.js";
 import { transcribe } from "./stt.js";
+import {
+  listBotTemplates, getBotTemplateForSourceAgent, getBotTemplateVersion, publishBotTemplate,
+  setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate,
+} from "./bot-templates.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -181,6 +185,19 @@ const ports: AclPorts = {
     transcribe,
   },
   memory: { getAgentMemories, deleteAgentMemory, clearAgentMemories },
+  /*
+   * Mẫu bot — nhóm 404 mềm lớn nhất còn lại của cổng box cho tới 28/08. Mẫu của một NHÓM chở theo
+   * mô tả từng thành viên, nên dựng lại được cả đội chứ không phải một cái phòng rỗng.
+   */
+  botTemplates: {
+    list: () => listBotTemplates(currentOwner()),
+    forSourceAgent: (id) => getBotTemplateForSourceAgent(id, currentOwner()),
+    getVersion: (shareId, version) => getBotTemplateVersion(shareId, version, currentOwner()),
+    publish: (shareId, version) => publishBotTemplate(shareId, version, currentOwner()),
+    setVisibility: (shareId, visibility) => setBotTemplateVisibility(shareId, visibility, currentOwner()),
+    remove: (shareId) => deleteBotTemplate(shareId, currentOwner()),
+    createAgent: (a) => createAgentFromTemplate(a, currentOwner()),
+  },
   automations: {
     forAgent: getAgentAutomationsForClient,
     forAgentClientShape: getAgentAutomationsForClient,

@@ -151,7 +151,7 @@ nhầm cả việc: `importChromeCookies` chẳng hạn là IPC app-local, **kh�
 | ~~`submitUserForm`~~ ✅ **28/08** | `.args({entryId:C(),values:f2e,agentId:C(),platform:z(wpn)})` | nhận đúng shape; ta chưa PHÁT `user-form` (xem §3.2) |
 | ~~`dismissUserForm`~~ ✅ **28/08** | `.args({entryId:C(),mode:mn("dismissal mode",["dismissed","escalated"])…})` | nt |
 | ~~cụm MCP ghi (10 lệnh)~~ ✅ **28/08** | mỗi cái xác nhận 1 hit `:v()` | 8 lệnh thật + 2 từ chối có lý do — xem hàng 4 ở §5 |
-| `createAgentFromTemplate` + cụm `listBotTemplates`/`publishBotTemplate`/… | `.args(zEr)` | cả bề mặt "mẫu bot" vắng bóng |
+| ~~cụm mẫu bot (7)~~ ✅ **28/08** | `zEr = {shareId,agentId,name,avatarShape,avatarColor,expectedActiveVersion}` | mẫu của NHÓM chở mô tả từng thành viên → dựng lại cả đội; bước TẠO của hãng không có trong client, xem ghi chú trong `bot-templates.ts` |
 | `injectChromeCookies` | `.args({cookies:Ie(xkr)})` | ← nửa **box** của tính năng cookie (§4.1 trong plan cũ); `importChromeCookies` mới là nửa app-IPC |
 | ~~`sendDraft` / `discardDraft`~~ ✅ **làm 28/08** | `.args({entryId,draft:LEr,agentId})` | **nút chết THẬT, đã sửa** — xem đính chính §3.1 |
 | ~~`transcribeAudio`~~ ✅ **28/08** | `.args({audioBase64,mimeType,language?})`, trả record — renderer rút đúng `{text}` | đã nối; proto có sẵn từ lâu, thiếu đúng đoạn đường cổng |

@@ -58,20 +58,26 @@ không regex phía ta: bản đếm tay đầu tiên bỏ sót 9 lệnh shared-r
 | | |
 |---|---|
 | methods in the 0.29 gateway table | **146** |
-| answered by grokbot2 | **129 (88%)** — 120 implemented + 9 shared-room commands answered with an explicit refusal |
-| unanswered → soft 404 | **17** |
+| answered by grokbot2 | **136 (93%)** — 127 implemented + 9 shared-room commands answered with an explicit refusal |
+| unanswered → soft 404 | **10** |
 
-The 17, grouped — a soft 404 means the button in the app does nothing at all, with no error:
+The 10, grouped — a soft 404 means the button in the app does nothing at all, with no error:
 
-- **bot templates (7)** — `listBotTemplates`, `publishBotTemplate`, `createAgentFromTemplate`,
-  `getBotTemplateVersion`, `getBotTemplateForSourceAgent`, `deleteBotTemplate`,
-  `setBotTemplateVisibility`
 - **voice calls (5)** — `getVoiceCall`, `nudgeVoiceCall`, `recordVoiceCall`,
   `readVoiceCallAgentContext`, `readVoiceCallSentMessages`
 - **`injectChromeCookies` (1)** — the box half of the cookie feature above
 - **assets / misc (4)** — `generateAgentAvatarImage`, `getAgentNotificationAvatar`,
   `getMcpPluginLogo`, `getAutomationWebhookCredential`
 
+> Closed 28/08: **bot templates (7)** — `listBotTemplates` · `getBotTemplateForSourceAgent` ·
+> `getBotTemplateVersion` · `publishBotTemplate` · `setBotTemplateVisibility` · `deleteBotTemplate` ·
+> `createAgentFromTemplate`. A template of a GROUP carries each member's description, so
+> `createAgentFromTemplate` rebuilds the whole team rather than an empty room — that is the point of
+> the feature. One inference is called out in `bot-templates.ts`: the vendor's CREATE step is not in
+> the client (no `createBotTemplate`, and `publishBotTemplate` carries no `sourceAgentId`, so their
+> server issues the `shareId`), therefore `getBotTemplateForSourceAgent` creates an unpublished draft
+> here instead of returning null.
+>
 > Closed 28/08: **`transcribeAudio`**. The proto answer had existed for ages, but 0.29 asks over the
 > **gateway** and that road was missing — so the composer's mic recorded, sent, and got silence. The
 > reply is a record and the renderer destructures exactly one field
