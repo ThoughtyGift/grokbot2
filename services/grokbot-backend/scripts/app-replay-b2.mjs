@@ -114,6 +114,8 @@ const report = ["# Phát lại kịch bản B2 **trong app** (gõ tay qua CDP)",
   "> Widget: chọn đúng đáp án app gốc đã chọn; không có thì chọn lựa chọn cuối (\"Thôi\").",
   "> Thẻ quyền: duyệt, trừ lệnh phá hoại — xem `NGUY_HIEM` trong script.", ""];
 let nWidget = 0, nPerm = 0, nSkip = 0, done = 0;
+/** Chữ ký các widget đã bấm — transcript giữ cả thẻ của lượt trước. */
+const daBam = new Set();
 
 for (const [i, c] of cases.entries()) {
   if (done >= MAX) break;
@@ -172,15 +174,26 @@ for (const [i, c] of cases.entries()) {
       stable = 0; continue;
     }
 
-    // widget
+    /*
+     * Widget — lấy cái CUỐI CÙNG, và chỉ bấm MỘT LẦN cho mỗi widget.
+     *
+     * Bản đầu dùng `querySelector` (cái ĐẦU TIÊN trong DOM) và không nhớ đã bấm gì. Transcript giữ
+     * cả widget của những lượt trước, nên nó bám vào một widget cũ và bấm mãi: lần chạy thử 3 case
+     * ghi `widget 240` — tức 240 cú bấm vào cùng một thẻ, trong khi cả ba case đều TRỐNG vì vòng
+     * lặp không bao giờ thoát ra để chờ câu trả lời thật.
+     *
+     * Hai điều sửa nó: lấy phần tử cuối (widget mới nhất), và ghi nhớ chữ ký của thẻ đã bấm.
+     */
     const w = await js(`(() => {
-      const f = document.querySelector(".sand-widget--choices");
+      const all = [...document.querySelectorAll(".sand-widget--choices")];
+      const f = all[all.length - 1];
       if (!f) return null;
       const opts = [...f.querySelectorAll(".sand-widget__options button")].map(b => (b.innerText||"").replace(/\\s+/g," ").trim());
       const head = f.closest('[class*="message-card"]')?.innerText?.split("\\n")[0] ?? "";
-      return { head, opts };
+      return { head, opts, sig: head + "|" + opts.join(",") };
     })()`);
-    if (w && w.opts.length) {
+    // `daBam` giữ chữ ký các thẻ đã bấm: transcript không xoá widget cũ, nên thiếu nó là bấm mãi.
+    if (w && w.opts.length && !daBam.has(w.sig)) {
       const want = (c.expected.find((e) => e.kind === "widget" && e.responded) || {}).responded ?? "";
       let idx = w.opts.length - 1;                                   // mặc định: lựa chọn cuối
       if (want) {
@@ -188,11 +201,20 @@ for (const [i, c] of cases.entries()) {
         const hit = w.opts.findIndex((o) => k.includes(o.replace(/^[A-Z]\s+/, "").toLowerCase()) || o.toLowerCase().includes(k.slice(0, 14)));
         if (hit >= 0) idx = hit;
       }
-      const ob = await js(`(() => {
-        const b = [...document.querySelectorAll(".sand-widget__options button")][${idx}];
-        if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y + r.height/2 };
-      })()`);
-      if (ob) { await clickAt(ob.x, ob.y); nWidget += 1; widgetPrompt = `${w.head} → chọn "${w.opts[idx]}"`; stable = 0; continue; }
+      const ob = await js(
+        "(() => { const all = [...document.querySelectorAll('.sand-widget--choices')];"
+        + " const f = all[all.length - 1]; if (!f) return null;"
+        + " const b = [...f.querySelectorAll('.sand-widget__options button')][" + idx + "];"
+        + " if (!b) return null; const r = b.getBoundingClientRect();"
+        + " return { x: r.x + r.width/2, y: r.y + r.height/2 }; })()",
+      );
+      if (ob) {
+        await clickAt(ob.x, ob.y);
+        daBam.add(w.sig);
+        nWidget += 1;
+        widgetPrompt = `${w.head} → chọn "${w.opts[idx]}"`;
+        stable = 0; continue;
+      }
     }
 
     const now = (await screenText()) ?? "";
