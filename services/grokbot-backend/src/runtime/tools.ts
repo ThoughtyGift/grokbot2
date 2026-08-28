@@ -14,6 +14,7 @@ import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { startTask, awaitTasks } from "../tasks.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
+import { allInstructions } from "../mcp-prefs.js";
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
@@ -934,10 +935,18 @@ TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEF
 const mcpProtocolFor = (owner: string): string => {
   const names = Object.keys(mcpServers(owner));
   if (names.length === 0) return "";
+  // Lời dặn riêng người dùng đặt cho từng server (`setMcpCustomInstructions`). Ghép vào ĐÂY mới là
+  // thật: lưu một chuỗi rồi không đưa vào lời nhắc thì cái ô kia chỉ là chỗ gõ chữ cho vui.
+  const notes = Object.entries(allInstructions(owner))
+    .filter(([id]) => names.includes(id))
+    .map(([id, text]) => `- ${id}: ${text}`);
+  const notesBlock = notes.length
+    ? "\n\nThe user set these rules for specific services — follow them:\n" + notes.join("\n")
+    : "";
   return "\n\nMCP: these services are already connected — " + names.join(", ") + ". " +
     "List a server's tools with TOOL_CALL: get_mcp_tools(<server name>), then call one with " +
     'TOOL_CALL: call_mcp_tool({"server":"…","tool_name":"…","tool_args":{…}}). ' +
-    "Prefer MCP over opening a browser when the service is already here.";
+    "Prefer MCP over opening a browser when the service is already here." + notesBlock;
 };
 
 // Browser actions are only offered when a box browser is actually configured — advertising
@@ -1126,9 +1135,15 @@ const PLUGIN_PROTOCOL =
   // bằng widget — và chỉ cài sau khi người dùng chọn. Bên mình từng nhảy thẳng vào setup_plugin.
   "WHEN THE PERSON ASKS whether a capability/plugin/MCP exists (rather than telling you to install " +
   "one): first LOOK — setup_plugin() for the catalog, get_mcp_tools for connected servers, your " +
-  "skills list — then answer with the REAL names you found (or say plainly nothing matches), and " +
-  "offer the choices with ask_question. Do NOT call setup_plugin with a plugin until the person " +
-  "has picked one.";
+  "skills list — then answer with the REAL names you found. " +
+  // Đo trong e2e-feature2: sau khi sửa auto-approve, bot ĐÃ rà trước và trả lời có tên thật, nhưng
+  // dừng ở đó — trong khi app gốc kết thúc lượt bằng một widget để người dùng bấm chọn (B2 case 5,
+  // 8, 15, 23). Nên nói rõ CÁCH KẾT THÚC lượt, không chỉ nói "hãy mời chọn".
+  "If you found one or more candidates, END that turn with " +
+  'TOOL_CALL: ask_question({"prompt":"…","options":[…]}) so they can pick — one option per candidate, ' +
+  'plus a "Thôi" option; add "multiSelect":true when several could be installed together. ' +
+  "If you found nothing that fits, say so plainly and do not raise a widget. " +
+  "Do NOT call setup_plugin with a plugin until the person has picked one.";
 
 const SKILL_WRITE_PROTOCOL = boxConfigured()
   ? "" +

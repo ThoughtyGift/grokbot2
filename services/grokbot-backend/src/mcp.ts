@@ -24,6 +24,7 @@ import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js
 import { oauthAccessToken, recordRefusal, refusalFor, oauthPortFor } from "./mcp-oauth.js";
 import { warmAuthUrl, refreshAccessToken } from "./oauth-client.js";
 import { currentOwner } from "./request-context.js";
+import { disabledToolsOf, isToolDisabled } from "./mcp-prefs.js";
 import { MCP_PROTOCOL_VERSION, START_TIMEOUT_MS, CALL_TIMEOUT_MS, type Transport } from "./mcp-shared.js";
 import { httpTransport } from "./mcp-http-transport.js";
 import { DEFAULT_USER } from "./auth.js";
@@ -355,7 +356,12 @@ export async function getMcpTools(arg: string, owner: string = currentOwner()): 
   for (const name of targets) {
     try {
       const s = await start(name, owner);
-      out.push(`${name}: ${s.tools.map((t) => t.name).join(", ") || "(không có tool)"}`);
+      // Tool người dùng đã tắt thì KHÔNG kể tên ra — xem mcp-prefs.ts. Giấu khỏi danh sách mới là
+      // một nửa; nửa kia nằm ở `callMcpTool`, vì model vẫn nhớ tên tool từ lượt trước.
+      const off = disabledToolsOf(name, owner);
+      const shown = s.tools.filter((t) => !off.includes(t.name));
+      const note = off.length ? ` (đã tắt ${off.length}: ${off.join(", ")})` : "";
+      out.push(`${name}: ${shown.map((t) => t.name).join(", ") || "(không có tool)"}${note}`);
     } catch (e) {
       out.push(`${name}: lỗi — ${(e as Error).message}`);
     }
@@ -496,6 +502,11 @@ export async function callMcpTool(arg: string, owner: string = currentOwner()): 
   const tool = String(spec?.tool_name ?? spec?.tool ?? spec?.name ?? "");
   const args = spec?.tool_args ?? spec?.arguments ?? spec?.args ?? {};
   if (!server || !tool) return 'call_mcp_tool cần {"server":"…","tool_name":"…","tool_args":{…}}';
+
+  // Chặn TẠI ĐÂY chứ không chỉ giấu khỏi danh sách: model nhớ tên tool từ lượt trước và vẫn gọi.
+  if (isToolDisabled(server, tool, owner)) {
+    return `(tool "${tool}" của ${server} đang bị người dùng tắt — dùng tool khác, hoặc bảo họ bật lại trong pane Plugins)`;
+  }
 
   try {
     const s = await start(server, owner);

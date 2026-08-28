@@ -359,6 +359,62 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     getEffectiveMcpPlugins: () =>
       pluginsArray(getEffectiveUserPluginsJson(extensions.mcpInstalledIds?.(), catalogEntries())),
     getMcpState: () => ({ servers: mcpServerRows([]) }),
+
+    /*
+     * ── Nửa GHI của MCP ────────────────────────────────────────────────────────────────────────
+     *
+     * Tới 28/08 mặt phẳng này chỉ có nửa đọc: pane Plugins vẽ ra được, nhưng Cài / Gỡ / Bật-tắt
+     * tool / Lời dặn đều gọi vào những lệnh không tồn tại → router trả 404 mềm, bấm không ra gì và
+     * không báo gì. Hình dạng đối số trích nguyên từ bundle 0.29:
+     *
+     *   installMcpEntry:v().args({entryId:C(),values:z(f2e),hasTeamConfiguredVariables:z(Se())})
+     *   updateMcpPluginInstall:v().args({pluginId:C(),values:f2e})
+     *   uninstallMcpPlugin:v().args({pluginId:C()})
+     *   listMcpServerTools:v().args({serverId:C()})
+     *   toggleMcpToolDisabled:v().args({serverId:C(),toolName:C()})
+     *   setMcpCustomInstructions:v().args({serverId:C(),instructions:C()})
+     *
+     * Thiếu cổng `mcpWrite` thì trả `{ok:false}` — nói KHÔNG, chứ không giả vờ thành công.
+     */
+    installMcpEntry: (a) => {
+      const w = extensions.mcpWrite;
+      const id = Number((a as { entryId?: unknown })?.entryId);
+      if (!w || !Number.isFinite(id)) return { ok: false };
+      const values = ((a as { values?: unknown })?.values ?? {}) as Record<string, string>;
+      return { ok: w.install(id, values) };
+    },
+    updateMcpPluginInstall: (a) => {
+      const w = extensions.mcpWrite;
+      const id = Number((a as { pluginId?: unknown })?.pluginId);
+      if (!w || !Number.isFinite(id)) return { ok: false };
+      const values = ((a as { values?: unknown })?.values ?? {}) as Record<string, string>;
+      return { ok: w.update(id, values) };
+    },
+    uninstallMcpPlugin: (a) => {
+      const w = extensions.mcpWrite;
+      const id = Number((a as { pluginId?: unknown })?.pluginId);
+      if (!w || !Number.isFinite(id)) return { ok: false };
+      return { ok: w.uninstall(id) };
+    },
+    listMcpServerTools: (a) => {
+      const w = extensions.mcpWrite;
+      const serverId = String((a as { serverId?: unknown })?.serverId ?? "");
+      if (!w || !serverId) return Promise.resolve({ serverId, tools: [] });
+      return w.listTools(serverId);
+    },
+    toggleMcpToolDisabled: (a) => {
+      const w = extensions.mcpWrite;
+      const serverId = String((a as { serverId?: unknown })?.serverId ?? "");
+      const toolName = String((a as { toolName?: unknown })?.toolName ?? "");
+      if (!w || !serverId || !toolName) return { serverId, toolName, disabled: false };
+      return w.toggleTool(serverId, toolName);
+    },
+    setMcpCustomInstructions: (a) => {
+      const w = extensions.mcpWrite;
+      const serverId = String((a as { serverId?: unknown })?.serverId ?? "");
+      if (!w || !serverId) return { serverId, instructions: "" };
+      return w.setInstructions(serverId, String((a as { instructions?: unknown })?.instructions ?? ""));
+    },
     // ── shared rooms: answered, and answered NO ──────────────────────────────
     //
     // All nine are declared in the renderer (`reply:"record"`, except `setSharedRoomTyping` which

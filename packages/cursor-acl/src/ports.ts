@@ -202,6 +202,27 @@ export interface ExtensionsPort {
    */
   mcpCatalogEntries?(): readonly unknown[];
   mcpInstalledIds?(): number[];
+  /**
+   * Nửa GHI của mặt phẳng MCP — cho tới 28/08 backend này chỉ có nửa đọc, nên pane Plugins hiện ra
+   * được nhưng mọi nút trong đó bấm không ra gì (router trả 404 mềm). Hình dạng đối số trích từ
+   * bundle 0.29, xem `docs/extracted/0-29-mapping.md`.
+   *
+   * Tuỳ chọn: một chỗ nhúng không quản lý plugin thì thiếu cả cụm này vẫn chạy được như cũ.
+   */
+  mcpWrite?: {
+    /** `installMcpEntry({entryId, values?})` — cài một mục từ danh mục. */
+    install(entryId: number, values: Record<string, string>): boolean;
+    /** `updateMcpPluginInstall({pluginId, values})` — đổi biến của plugin đã cài. */
+    update(pluginId: number, values: Record<string, string>): boolean;
+    /** `uninstallMcpPlugin({pluginId})` */
+    uninstall(pluginId: number): boolean;
+    /** `listMcpServerTools({serverId})` — kèm cờ đã tắt của từng tool. */
+    listTools(serverId: string): Promise<{ serverId: string; tools: { name: string; disabled: boolean }[] }>;
+    /** `toggleMcpToolDisabled({serverId, toolName})` — trả trạng thái SAU khi đổi. */
+    toggleTool(serverId: string, toolName: string): { serverId: string; toolName: string; disabled: boolean };
+    /** `setMcpCustomInstructions({serverId, instructions})` — chuỗi rỗng nghĩa là bỏ. */
+    setInstructions(serverId: string, instructions: string): { serverId: string; instructions: string };
+  };
 }
 
 /**

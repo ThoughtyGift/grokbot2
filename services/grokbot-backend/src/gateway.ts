@@ -31,7 +31,7 @@ import {
 } from "./directory/index.js";
 import { currentOwner, runWithOwner } from "./request-context.js";
 import { catalog as pluginCatalog } from "./plugin-catalog.js";
-import { installedIds } from "./plugins.js";
+import { installedIds, installPlugin, uninstallPlugin, setPluginVariables } from "./plugins.js";
 import { setBoxSecrets, boxSecretsStatus } from "./box-secrets.js";
 import {
   transcriptTail,
@@ -76,7 +76,8 @@ import {
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 import { startTeach, stopTeach, recordingState } from "./teach.js";
 import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktopRecordConfigured } from "./desktop-record.js";
-import { closeMcp, mcpServers, mcpServerStatus } from "./mcp.js";
+import { closeMcp, mcpServers, mcpServerStatus, getMcpTools } from "./mcp.js";
+import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody, clearUnknown,
@@ -211,6 +212,29 @@ const ports: AclPorts = {
      */
     mcpCatalogEntries: () => pluginCatalog(),
     mcpInstalledIds: () => installedIds(currentOwner()),
+    /*
+     * Nửa GHI. Ba lệnh đầu đã có sẵn hàm trong `plugins.ts` — cái thiếu suốt là ĐƯỜNG từ cổng vào
+     * chúng. Ba lệnh sau dùng kho tuỳ chọn theo người ở `mcp-prefs.ts`, và cả hai đều có tác dụng
+     * thật: tool tắt bị cắt khỏi `get_mcp_tools` LẪN `call_mcp_tool`, lời dặn được ghép vào lời
+     * nhắc hệ thống. Lưu một cờ mà không chỗ nào đọc thì nút vẫn chết như cũ.
+     */
+    mcpWrite: {
+      install: (entryId, values) => installPlugin(entryId, currentOwner(), values),
+      update: (pluginId, values) => { setPluginVariables(pluginId, values, currentOwner()); return true; },
+      uninstall: (pluginId) => uninstallPlugin(pluginId, currentOwner()),
+      listTools: async (serverId) => {
+        const owner = currentOwner();
+        const off = disabledToolsOf(serverId, owner);
+        // Đọc qua `getMcpTools` để đi đúng đường khởi động/handshake server, rồi tách tên ra.
+        const line = await getMcpTools(serverId, owner);
+        const body = line.startsWith(`${serverId}: `) ? line.slice(serverId.length + 2) : "";
+        const names = body.replace(/\s*\(đã tắt[^)]*\)\s*$/, "")
+          .split(",").map((s) => s.trim()).filter((s) => s && !s.startsWith("("));
+        return { serverId, tools: [...names, ...off].map((name) => ({ name, disabled: off.includes(name) })) };
+      },
+      toggleTool: (serverId, toolName) => toggleToolDisabled(serverId, toolName, currentOwner()),
+      setInstructions: (serverId, instructions) => setCustomInstructions(serverId, instructions, currentOwner()),
+    },
   },
   events: { subscribe },
   observe: {
