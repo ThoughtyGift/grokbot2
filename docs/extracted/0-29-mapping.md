@@ -141,7 +141,7 @@ nhầm cả việc: `importChromeCookies` chẳng hạn là IPC app-local, **kh�
 | `installMcpEntry` · `authenticateMcpServer` · `listMcpServerTools` · `toggleMcpToolDisabled` · `uninstallMcpPlugin` · `setMcpCustomInstructions` | mỗi cái xác nhận 1 hit `:v()` | MCP bên ta **chỉ đọc**: pane hiện được nhưng không cài / không xác thực / không bật-tắt tool từ trong app |
 | `createAgentFromTemplate` + cụm `listBotTemplates`/`publishBotTemplate`/… | `.args(zEr)` | cả bề mặt "mẫu bot" vắng bóng |
 | `injectChromeCookies` | `.args({cookies:Ie(xkr)})` | ← nửa **box** của tính năng cookie (§4.1 trong plan cũ); `importChromeCookies` mới là nửa app-IPC |
-| `sendDraft` / `discardDraft` | `.args({entryId,draft:LEr,agentId})` | ta có `email_draft`/`slack_draft` nhưng **0.29 stock không vẽ** hai type đó (§3) |
+| ~~`sendDraft` / `discardDraft`~~ ✅ **làm 28/08** | `.args({entryId,draft:LEr,agentId})` | **nút chết THẬT, đã sửa** — xem đính chính §3.1 |
 | `transcribeAudio` | `.args(qkr)` = `{audioBase64,mimeType,language?}` | ta có proto `TranscribeAudio` nhưng **chưa nối đường box-gateway** |
 | `generateAgentAvatarImage`, `getAgentNotificationAvatar`, `getMcpPluginLogo`, `getAutomationWebhookCredential` | — | phụ trợ |
 
@@ -173,6 +173,48 @@ Kye=["message","tool-call","send-message","user-attachment","notice","event"]
 | **`user-attachment`** `{file_path,file_name}` | ⬜ 0 | file người dùng gửi dạng entry gốc không hiện |
 | **`notice`** → `{role:"note"}` | ⬜ 0 | thông báo hệ thống trong transcript không vẽ |
 | `feedback` · `voice-call` | ⬜ 0 | |
+
+### 3.1 · Đính chính bản đầu — và chính chỗ sai này suýt giấu một lỗi đang sống
+
+Bản đầu của trang này viết *"0.29 stock **không vẽ** `email-draft`/`slack-draft`"*. **Sai.** Nó dựa
+trên `grep 'type==="email-draft"'` → 0 hit; nhưng renderer 0.29 không viết kiểu đó, nó dùng `switch`:
+
+```
+case"email-draft"      → 2 hit
+case"slack-draft"      → 2 hit
+case"listener-connect" → 1 hit
+```
+
+Danh sách message type **đầy đủ và chính thức** (mảng renderer dùng để lọc, chép nguyên văn):
+
+```
+QJt=["text","attachment","widget","cursor-agent","secret-request","user-form","email-draft",
+     "slack-draft","permission-request","connector","connectors","listener-connect",
+     "bot-template-share","auto-review-approval","local-tool-permission"]
+JJt=["message","user-attachment","notice","feedback","voice-call"]          ← entry kind
+ZJt=["name-changed","channel-connected","channel-disconnected","automation-changed"]  ← loại event
+```
+
+**Hệ quả thật:** ta CÓ phát thẻ nháp, client CÓ vẽ nó — nên hai nút Gửi/Bỏ trên thẻ gọi vào
+`sendDraft`/`discardDraft`, hai lệnh ta không có, và router trả **404 mềm**: bấm không ra gì, không
+báo lỗi, không ai biết. Nếu tin bản đầu thì ta đã xếp việc này xuống đáy danh sách. Đã sửa 28/08
+(`sendDraft` từ chối trung thực vì không có đường gửi; `discardDraft` bỏ thẻ thật).
+
+Hai loại event ta cũng chưa phát: `channel-connected` / `channel-disconnected`.
+
+### 3.2 · `user-form`: nhận thì được, phát thì chưa
+
+```
+electron-main:  sand_user_form:{client:!0,default:!1}          ← cờ mặc định TẮT
+renderer:       case"user-form":return t.formRequest.title
+                `${t}:user-form:${e.formRequest.fields.length}:${e.formRequest.title.length}`
+```
+
+Biết chắc: `{formRequest:{title, fields[]}}`. **Không** biết: shape từng phần tử `fields[]` — renderer
+chỉ đọc `.length`, và không có `fieldType`/`isSecret`/`placeholder` nào tra được (các hit
+`placeholder`/`inputType` đều là ruột ProseMirror). Nên ta **nhận** `submitUserForm`/`dismissUserForm`
+đúng hình dạng đối số đã trích, nhưng **không phát** `user-form` — đoán schema rồi phát ra là cách
+chắc chắn để thẻ hiện thành khoảng trắng.
 
 **Widget** — shape ta đã khớp gần hết (`prompt`/`helpText`/`options`/`allowCustom`/`dismissOnMoveOn`,
 option `{label,value?,description?,style:"default"|"primary"|"danger"}`), **thiếu đúng một trường**:
@@ -269,9 +311,9 @@ billing tự quản chính là nhánh **`url` (no:5)** — đúng như [[grokbot
 
 | # | Việc | Vì sao | Công |
 |---|---|---|---|
-| 1 | **Đọc `directAddressedAcceptance`** trong `sendPrompt` → chỉ thành viên được gọi tên nói, không thì cả phòng | client **đang gửi** cho ta (coverage.json:524) mà ta bỏ qua; hoàn thiện đúng phần 7.4.2 còn thiếu | nhỏ |
-| 2 | **`widget.multiSelect`** | 0.29 render thật; tính năng 2 cần chọn nhiều plugin | nhỏ |
-| 3 | **`submitUserForm` + `dismissUserForm`** | nút Submit của form đang chết lặng (404 mềm) | nhỏ, shape đã biết |
+| 1 | **Đọc `directAddressedAcceptance`** trong `sendPrompt` → chỉ thành viên được gọi tên nói, không thì cả phòng | client **đang gửi** cho ta (coverage.json:524) mà ta bỏ qua; hoàn thiện đúng phần 7.4.2 còn thiếu | ✅ **xong 28/08** |
+| 2 | **`widget.multiSelect`** | 0.29 render thật; tính năng 2 cần chọn nhiều plugin | ✅ **xong 28/08** |
+| 3 | **`submitUserForm` + `dismissUserForm`** | nút Submit của form đang chết lặng (404 mềm) | ✅ **xong 28/08** (+ `sendDraft`/`discardDraft` — nút chết thật) |
 | 4 | **Cụm MCP ghi** (`installMcpEntry`, `authenticateMcpServer`, `listMcpServerTools`, `toggleMcpToolDisabled`, `uninstallMcpPlugin`) | MCP bên ta mới chỉ đọc — khoảng trống hành vi lớn nhất của một mặt phẳng đã làm dở | vừa |
 | 5 | **`web_search`/`web_fetch`** | 0.29 có ba tool web hạng nhất; ta **không có tool web nào** | vừa |
 | 6 | Entry `notice` + `user-attachment` | renderer 0.29 đã biết vẽ, ta chưa phát | nhỏ |

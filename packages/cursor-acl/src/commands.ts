@@ -230,6 +230,14 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     respondToWidget: (a) => runtime.respondToWidget(a),
     submitSecret: (a) => runtime.submitSecret(a),
     dismissWidget: (a) => runtime.dismissWidget(a),
+    // Bó hành động transcript của 0.29 gồm đúng mười một lệnh; bốn cái dưới đây từng thiếu, nên
+    // router trả 404 mềm và nút trên thẻ bấm không ra gì. Hình dạng đối số trích từ bundle 0.29:
+    //   sendDraft:v().args({entryId:C(),draft:LEr,agentId:C()})
+    //   dismissUserForm:v().args({entryId:C(),mode:mn(...["dismissed","escalated"]),agentId:C(),platform:z(wpn)})
+    sendDraft: (a) => runtime.sendDraft(a),
+    discardDraft: (a) => runtime.discardDraft(a),
+    submitUserForm: (a) => runtime.submitUserForm(a),
+    dismissUserForm: (a) => runtime.dismissUserForm(a),
 
     // Every transcript reader the client can send. They differ only in name in the bundle; the
     // tail is the honest answer to all of them.

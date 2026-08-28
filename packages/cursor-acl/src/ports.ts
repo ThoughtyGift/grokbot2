@@ -82,6 +82,15 @@ export interface RuntimePort {
   respondToWidget: Call;
   submitSecret: Call;
   dismissWidget: Call;
+  /**
+   * Hai nút trên thẻ nháp. Thẻ thì backend CÓ phát và client 0.29 CÓ vẽ, nên thiếu hai lệnh này là
+   * hai nút chết thật — xem `sendDraft`/`discardDraft` trong runtime/turn.ts.
+   */
+  sendDraft: Call;
+  discardDraft: Call;
+  /** Thẻ form nhiều ô của 0.29. Ta chưa phát `user-form`, nhưng nhận thì phải nhận đúng. */
+  submitUserForm: Call;
+  dismissUserForm: Call;
   broadcastToAgents: Call;
   getSubagents: Call;
   /** Per-agent: the visible background-task tray, not a global list. */

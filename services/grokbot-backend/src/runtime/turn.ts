@@ -514,6 +514,113 @@ export function dismissWidget(a: { requestId?: string; agentId?: string }): Reco
   return {};
 }
 
+/**
+ * Tìm một entry theo id trong hộp thoại được chỉ, hoặc trong mọi hộp thoại nếu không thấy.
+ *
+ * Cùng lý do với `respondToWidget`: `agentId` client gửi không phải lúc nào cũng là chủ của entry
+ * (thẻ có thể nằm trong phòng, hoặc client gửi id của hội thoại đang mở).
+ */
+function findEntry(entryId: string | undefined, agentId: string): { entry: Entry; owner: string } | null {
+  if (!entryId) return null;
+  const direct = transcripts.get(agentId);
+  const hit = direct?.find((e) => e.id === entryId);
+  if (hit) return { entry: hit, owner: agentId };
+  for (const [id, list] of transcripts) {
+    const e = list.find((x) => x.id === entryId);
+    if (e) return { entry: e, owner: id };
+  }
+  return null;
+}
+
+const isDraft = (e: Entry): boolean =>
+  e.kind === "send-message" && (e.message.type === "email-draft" || e.message.type === "slack-draft");
+
+/**
+ * `discardDraft({entryId, agentId})` — nút Bỏ trên thẻ nháp.
+ *
+ * Thẻ nháp là thứ backend này CÓ phát (`email_draft`/`slack_draft` trong tools.ts) và client 0.29
+ * CÓ vẽ (`case"email-draft":` trong renderer). Nhưng hai nút trên thẻ thì gọi vào `sendDraft` /
+ * `discardDraft` — hai lệnh backend này không có, nên router trả 404 mềm và **bấm không có gì xảy
+ * ra**. Đây là nút chết thật, đang sống, chứ không phải giả định.
+ *
+ * Xoá hẳn entry chứ không đánh dấu: tôi đã tìm trong renderer 0.29 field trạng thái nháp
+ * (`draftSent`/`draftDiscarded`/`draftStatus`/`sentAt`…) và **không cái nào tồn tại**. Đánh một cờ
+ * mà renderer không đọc thì thẻ vẫn nằm đó y nguyên — tức nút vẫn "chết" dưới mắt người dùng, chỉ
+ * khác là ta tự nhủ đã xong. Thẻ biến mất thì rõ nghĩa trong MỌI renderer.
+ */
+export function discardDraft(a: { entryId?: string; id?: string; agentId?: string }): { ok: boolean } {
+  const found = findEntry(a.entryId ?? a.id, a.agentId ?? "");
+  if (!found || !isDraft(found.entry)) return { ok: false };
+  const list = transcripts.get(found.owner);
+  const at = list?.findIndex((e) => e.id === found.entry.id) ?? -1;
+  if (list && at >= 0) list.splice(at, 1);
+  onUpdate(found.owner);
+  return { ok: true };
+}
+
+/**
+ * `sendDraft({entryId, draft, agentId})` — nút Gửi trên thẻ nháp.
+ *
+ * **Từ chối, và nói ra vì sao.** Backend này không có đường gửi thư hay tin Slack nào: connector
+ * đều `coming-soon`, và chính lời nhắc của tool đã dặn model "hệ thống CHƯA gửi được, đừng nói là
+ * đã gửi". Trả `{ok:true}` ở đây là biến một lời dặn thành lời nói dối ngay tại chỗ người dùng tin
+ * nhất — cùng lý do `SHARED_ROOM_COMMANDS` chọn từ chối thay vì giả vờ thành công.
+ *
+ * Kèm một dòng vào hội thoại: một lệnh từ chối im lặng nhìn y hệt một nút hỏng, mà đó đúng là thứ
+ * ta đang đi sửa.
+ */
+export function sendDraft(a: { entryId?: string; id?: string; agentId?: string }): { ok: false; reason: string; message: string } {
+  const found = findEntry(a.entryId ?? a.id, a.agentId ?? "");
+  const owner = found?.owner ?? a.agentId ?? "";
+  const message = "Chưa gửi được: máy chủ này chưa nối hộp thư hay Slack nào. Bản nháp vẫn còn đây — "
+    + "copy đi gửi tay, hoặc nối connector rồi thử lại.";
+  if (owner && transcripts.has(owner)) {
+    tail(owner).push({ id: nextEntryId(), kind: "send-message", author: authorOf(owner),
+      message: { type: "text", content: message }, timestampMs: Date.now() });
+    onUpdate(owner);
+  }
+  return { ok: false, reason: "NO_TRANSPORT", message };
+}
+
+/**
+ * `submitUserForm` / `dismissUserForm` — thẻ form nhiều ô của 0.29.
+ *
+ * Hình dạng đối số trích được **chính xác** từ bundle 0.29:
+ *   `submitUserForm:v().args({entryId:C(),values:f2e,agentId:C(),platform:z(wpn)})`
+ *   `dismissUserForm:v().args({entryId:C(),mode:mn(...["dismissed","escalated"]),agentId:C(),platform:z(wpn)})`
+ *
+ * Nhưng backend này **chưa phát** message `user-form` bao giờ, và sẽ chưa phát: shape từng ô
+ * (`formRequest.fields[]`) KHÔNG trích được — renderer chỉ đọc `formRequest.title` và
+ * `fields.length`, còn cờ `sand_user_form` của hãng mặc định TẮT (tính năng ship ở dạng ngủ).
+ * Đoán schema đó rồi phát ra là cách chắc chắn để thẻ hiện thành khoảng trắng.
+ *
+ * Nên ở đây chỉ nhận: có form thật (từ một nguồn khác) thì ghi nhận và mở khoá lượt đang đỗ; không
+ * có thì trả `null` — đúng kiểu trả lời `record-or-null` mà client khai, chứ không phải 404.
+ */
+export function submitUserForm(a: { entryId?: string; agentId?: string; values?: Record<string, string> }): Entry | null {
+  const found = findEntry(a.entryId, a.agentId ?? "");
+  if (!found || found.entry.kind !== "send-message") return null;
+  const values = a.values && typeof a.values === "object" ? a.values : {};
+  // Giá trị form là thứ người dùng gõ — có thể là mật khẩu, khoá API. KHÔNG ghi giá trị vào bản
+  // ghi hội thoại (cùng lý do `submitSecret` cố ý không lưu); chỉ ghi ĐÃ điền những ô nào.
+  const names = Object.keys(values).filter((k) => typeof values[k] === "string" && values[k] !== "");
+  found.entry.respondedValue = names.join(", ");
+  tail(found.owner).push({ id: nextEntryId(), kind: "message", role: "user",
+    content: names.length ? `(đã điền: ${names.join(", ")})` : "(đã gửi biểu mẫu)", timestampMs: Date.now() });
+  onUpdate(found.owner);
+  const waiting = unpark("widget", found.owner);
+  if (waiting?.history) continueAfterTool(found.owner, waiting.history, "user_form", "", names.join(", "));
+  return found.entry;
+}
+
+export function dismissUserForm(a: { entryId?: string; agentId?: string; mode?: string }): Entry | null {
+  const found = findEntry(a.entryId, a.agentId ?? "");
+  if (!found || found.entry.kind !== "send-message") return null;
+  found.entry.widgetDismissed = true;
+  onUpdate(found.owner);
+  return found.entry;
+}
+
 // ── send ──────────────────────────────────────────────────────────────────────
 function reveal(target: Entry, full: string, agentId: string): void {
   if (process.env.GROKBOT2_PROGRESSIVE === "0") { setText(target, full); if (target.kind === "send-message") target.streaming = false; onUpdate(agentId); return; }
