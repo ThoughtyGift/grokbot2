@@ -1173,9 +1173,12 @@ const PEER_PROTOCOL =
    * Trước khi viết câu này tôi đã đo rằng luật cũ CÓ tới được model (giao thức tool 13.441
    * ký tự, câu đó nguyên vẹn) — nên đây không phải vá một lời nhắc không được đọc.
    */
-  "When you build a TEAM (two or more bots at once), finish the job: create_group with all of "
-  + "them and open it with the first task. A team with no room is a list of strangers — the "
-  + "room is the only place they can see each other work. " +
+  "When you build a TEAM (two or more bots at once), finish the job in THREE steps: create_agent "
+  + "for each member, create_group with all of them, then send the first task INTO the room with "
+  + 'message_agent({"to":"<room name>","content":"..."}) — the room name works as a target just '
+  + "like a bot name. Creating a room is not opening it: measured 28/08, the model created the "
+  + "group, reported to the user and stopped, leaving a room nobody had ever spoken in. Do not end "
+  + "the turn on the create_group result. " +
   'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
   "Give every bot you create a real description; never leave an empty one.";
 
