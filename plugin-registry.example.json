@@ -15,7 +15,8 @@
           "@modelcontextprotocol/server-memory"
         ]
       },
-      "logoUrl": "https://api.iconify.design/mdi/memory.svg?color=%23A78BFA&width=128"
+      "logoUrl": "https://api.iconify.design/mdi/memory.svg?color=%23A78BFA&width=128",
+      "category": "featured"
     },
     {
       "id": 10,
@@ -40,7 +41,8 @@
           "description": "GitHub → Settings → Developer settings → Personal access tokens. Give it the repo scope.",
           "required": true
         }
-      }
+      },
+      "category": "infrastructure"
     },
     {
       "id": 11,
@@ -71,7 +73,8 @@
           "title": "App Secret",
           "description": "Same page as the App ID."
         }
-      }
+      },
+      "category": "inbox and collaboration"
     },
     {
       "id": 12,
@@ -100,7 +103,8 @@
           "title": "Saved credentials file",
           "description": "Optional. Where the one-time sign-in stores its token."
         }
-      }
+      },
+      "category": "featured"
     },
     {
       "id": 14,
@@ -125,7 +129,8 @@
           "description": "notion.so/my-integrations → create one, then share the pages it may read with it.",
           "required": true
         }
-      }
+      },
+      "category": "documents and files"
     },
     {
       "id": 15,
@@ -140,7 +145,8 @@
           "-y",
           "@playwright/mcp@latest"
         ]
-      }
+      },
+      "category": "infrastructure"
     },
     {
       "id": 16,
@@ -170,7 +176,8 @@
           "title": "API key",
           "description": "n8n → Settings → API. Only needed to run workflows."
         }
-      }
+      },
+      "category": "agent orchestration"
     },
     {
       "id": 17,
@@ -193,7 +200,8 @@
           "title": "Folder the agent may use",
           "description": "One absolute path. The agent can read and write anything under it, and nothing outside."
         }
-      }
+      },
+      "category": "documents and files"
     },
     {
       "id": 18,
@@ -209,7 +217,8 @@
           "@upstash/context7-mcp"
         ]
       },
-      "logoUrl": "https://api.iconify.design/simple-icons/upstash.svg?color=%2300E9A3&width=128"
+      "logoUrl": "https://api.iconify.design/simple-icons/upstash.svg?color=%2300E9A3&width=128",
+      "category": "documents and files"
     },
     {
       "id": 19,
@@ -225,7 +234,8 @@
           "@modelcontextprotocol/server-sequential-thinking"
         ]
       },
-      "logoUrl": "https://api.iconify.design/mdi/head-cog-outline.svg?color=%237EE787&width=128"
+      "logoUrl": "https://api.iconify.design/mdi/head-cog-outline.svg?color=%237EE787&width=128",
+      "category": "agent orchestration"
     },
     {
       "id": 20,
@@ -237,7 +247,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "featured"
     },
     {
       "id": 21,
@@ -250,7 +261,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "facebook"
+      "platform": "facebook",
+      "category": "sales"
     },
     {
       "id": 22,
@@ -263,7 +275,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "instagram"
+      "platform": "instagram",
+      "category": "sales"
     },
     {
       "id": 23,
@@ -276,7 +289,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "tiktok"
+      "platform": "tiktok",
+      "category": "sales"
     },
     {
       "id": 24,
@@ -289,7 +303,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "youtube"
+      "platform": "youtube",
+      "category": "sales"
     },
     {
       "id": 25,
@@ -302,7 +317,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "linkedin"
+      "platform": "linkedin",
+      "category": "sales"
     },
     {
       "id": 26,
@@ -315,7 +331,8 @@
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
       },
-      "platform": "twitter"
+      "platform": "twitter",
+      "category": "sales"
     },
     {
       "id": 27,
@@ -339,7 +356,8 @@
       "credentials": {
         "SHOPIFY_ACCESS_TOKEN": "Admin API access token (Settings → Apps and sales channels → Develop apps)",
         "MYSHOPIFY_DOMAIN": "Tên miền store, ví dụ your-store.myshopify.com"
-      }
+      },
+      "category": "featured"
     },
     {
       "id": 28,
@@ -352,7 +370,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "inbox and collaboration"
     },
     {
       "id": 29,
@@ -365,7 +384,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "sales"
     },
     {
       "id": 30,
@@ -378,7 +398,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "sales"
     },
     {
       "id": 31,
@@ -391,7 +412,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "sales"
     },
     {
       "id": 32,
@@ -404,7 +426,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "sales"
     },
     {
       "id": 33,
@@ -417,7 +440,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "inbox and collaboration"
     },
     {
       "id": 34,
@@ -429,7 +453,8 @@
         "name": "zernio",
         "description": "mcp.zernio.com (remote MCP, Streamable HTTP)",
         "url": "https://mcp.zernio.com/mcp"
-      }
+      },
+      "category": "inbox and collaboration"
     }
   ]
 }
