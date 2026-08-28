@@ -50,6 +50,12 @@ export interface PluginEntry {
   /** https image for the row's icon. Any other scheme is rejected by the client's own fetcher. */
   logoUrl?: string;
   /**
+   * Nhóm hiển thị trong pane Plugins. Bỏ trống thì rơi về `"featured"` — xem `pluginJson`, và đọc
+   * kỹ chỗ đó trước khi bỏ trường này đi: thiếu nó, client 0.29 **sập cả pane**, không phải thiếu
+   * một dòng.
+   */
+  category?: string;
+  /**
    * The service this row connects, when its MCP server fronts several.
    *
    * One Zernio endpoint reaches Facebook, Instagram, TikTok and the rest, so the connector alone
@@ -99,6 +105,31 @@ function pluginJson(p: PluginEntry): Record<string, unknown> {
     ...("skill" in p && p.skill ? { skills: [{ name: p.skill.name, description: p.skill.description }] } : {}),
     ...("mcp" in p && p.mcp ? { mcpServers: [{ name: p.mcp.name, description: p.mcp.description }] } : {}),
     lifecycleState: "PLUGIN_LIFECYCLE_STATE_PUBLIC_LISTED",
+    /**
+     * `category` — thiếu trường này thì **cả pane Plugins sập**, không phải vẽ thiếu một dòng.
+     *
+     * Đo bằng cách bấm trong app 0.29 đã vá (28/08): pane hiện ra "This view failed to load."
+     * Console chỉ đúng chỗ, trong `assets/view-*.js`:
+     *
+     *     function _t(a){ return a.replace(/\S+/g, e => e.charAt(0).toUpperCase()+e.slice(1)) }
+     *     function Un(a){
+     *       if (a.marketplace != null) return { key: "team-plugins", … };
+     *       const e = _t(a.category);                       // ← a.category là undefined
+     *       return { key: `category:${a.category.toLowerCase()}`, title: e, … };
+     *     }
+     *
+     * Pane nhóm danh mục THEO `category`, không có đường thoát khi trường vắng: một `undefined`
+     * ném `TypeError` trong lúc dựng nhóm, error boundary của router bắt, và toàn bộ màn Plugins
+     * biến mất. Hai mươi lăm mục đều thiếu, nên nó sập ngay lần mở đầu tiên.
+     *
+     * `"featured"` là hằng số của chính renderer (`jt="featured"`), và nó xếp hạng 0 — tức nhóm
+     * hiện trên cùng. Danh mục ở đây do người dùng tự khai trong `plugin-registry.json`, chưa có
+     * phân loại thật, nên xếp tất cả vào nhóm đầu là đúng thay vì bịa ra dăm cái tên nhóm.
+     *
+     * Không có bài test tự động nào bắt được cái này: hợp đồng đếm tên lệnh, unit test gọi hàm.
+     * Chỉ có mở app ra bấm.
+     */
+    category: p.category?.trim() || "featured",
   };
 }
 
