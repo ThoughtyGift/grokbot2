@@ -405,8 +405,34 @@ TOOLS.create_routine = (arg, ctx) => {
   // through unchanged is what lets `listenerPlatform` recognise it and warn that nothing can fire it.
   const trigger = String(spec?.trigger ?? spec?.schedule ?? spec?.when ?? "0 9 * * *").trim();
   if (!automationCreateRef) return "(routine chưa sẵn sàng)";
-  const made = automationCreateRef(ctx.agentId, { name, prompt, trigger });
-  return made ? `đã tạo routine "${name}" — ${made}` : "(không tạo được routine)";
+  /*
+   * Routine gắn cho AI — mặc định là chính mình, nhưng phải chỉ được sang bot khác.
+   *
+   * Bản đầu cứng `ctx.agentId`. Đo 28/08: bot mẹ dựng đội ba con rồi tạo routine cho từng con —
+   * "Kho - Rà soát đơn và tồn kho", "CSKH - Rà soát chat…" — và **cả hai rơi vào bot mẹ**, đúng cái
+   * bot không bao giờ chạy chúng. Tên routine nói rõ nó dành cho con nào, nhưng mã không nghe.
+   *
+   * App gốc gắn routine vào từng con (ảnh chụp: Shopee Kho có "Hàng chờ lấy", Kế toán có "Nhật ký
+   * P và L tuần" — mỗi bảng Routines nằm trong panel của chính bot đó).
+   *
+   * Chỉ nhận bot CÙNG CHỦ: đặt lịch chạy trên bot của người khác là chiếm quyền dùng hạn mức của
+   * họ, không phải một tiện ích nhỏ.
+   */
+  const chiDinh = String(spec?.agent ?? spec?.for ?? spec?.bot ?? spec?.agentName ?? "").trim();
+  let target = ctx.agentId;
+  if (chiDinh) {
+    const chu = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+    const wanted = chiDinh.toLowerCase().replace(/^@/, "");
+    const mine = [...agents.values()].filter((a) => (ownerOf(a.id) ?? DEFAULT_USER.authId) === chu);
+    const hit = mine.find((a) => a.id === chiDinh)
+      ?? mine.find((a) => a.name.toLowerCase() === wanted)
+      ?? mine.find((a) => a.name.toLowerCase().includes(wanted));
+    if (!hit) return `(không thấy bot "${chiDinh}"; có: ${mine.map((a) => a.name).slice(0, 12).join(", ")})`;
+    target = hit.id;
+  }
+  const made = automationCreateRef(target, { name, prompt, trigger });
+  const cho = target === ctx.agentId ? "" : ` cho ${agents.get(target)?.name ?? target}`;
+  return made ? `đã tạo routine "${name}"${cho} — ${made}` : "(không tạo được routine)";
 };
 
 TOOLS.rename_agent = (arg, ctx) => {
@@ -1179,6 +1205,30 @@ const PEER_PROTOCOL =
   + "like a bot name. Creating a room is not opening it: measured 28/08, the model created the "
   + "group, reported to the user and stopped, leaving a room nobody had ever spoken in. Do not end "
   + "the turn on the create_group result. " +
+  /*
+   * Routine — và chỗ này trước đây chỉ có TÊN tool, không có gì khác.
+   *
+   * `create_routine` nằm trong danh sách tool gửi cho model, nhưng giao thức không hề nói định dạng
+   * `trigger` (đo 28/08: chuỗi "cron" và "schedule" đều 0 lần trong 13.962 ký tự giao thức). Model
+   * biết tool tồn tại mà không biết gọi thế nào — gần như chắc chắn nó sẽ không gọi.
+   *
+   * App gốc thì tạo bot LÀ tạo luôn routine cho bot đó, ảnh chụp từ máy người dùng:
+   *
+   *     Shopee Kho      "Hàng chờ lấy"        0 8,12,17,22 * * *
+   *     Shopee Kế toán  "Nhật ký P và L tuần" Every Monday at 9:30 AM
+   *                     "Chốt tháng Shopee"   ngày 1,2,3 hằng tháng 9:00
+   *     Shopee Ads      "Check ads sáng" / "Check ads 16h"   (Paused)
+   *
+   * Nhịp routine bám đúng nhịp công việc của từng con, và tên đặt bằng tiếng người dùng. Backend ta
+   * nhận đúng cron 5 trường như thế (`automations.ts` §15), nên đây là khoảng trống LỜI NHẮC chứ
+   * không phải thiếu năng lực — cùng loại với chuyện cái phòng không ai mở.
+   */
+  'TOOL_CALL: create_routine({"name":"Hàng chờ lấy","prompt":"việc phải làm mỗi lần chạy","trigger":"0 8,12,17,22 * * *","agent":"Kho"}) '
+  + "— cron 5 trường (phút giờ ngày tháng thứ), thêm \"CRON_TZ=Asia/Ho_Chi_Minh \" ở đầu nếu cần đúng múi giờ. "
+  + "Khi một bot có việc lặp theo nhịp (rà đơn mỗi ca, chốt sổ hằng tuần, xem số mỗi sáng), tạo routine cho nó "
+  + "ngay lúc dựng bot — đặt tên theo việc, và viết prompt như một lệnh giao cho chính con bot đó. "
+  + "Bỏ \"agent\" thì routine thuộc về CHÍNH BẠN; dựng routine cho một con trong đội thì phải nêu tên nó. "
+  + "Một bot có mô tả mà không có nhịp thì chỉ chạy khi bị hỏi. " +
   'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
   "Give every bot you create a real description; never leave an empty one.";
 
