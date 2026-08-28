@@ -113,7 +113,7 @@ const report = ["# Phát lại kịch bản B2 **trong app** (gõ tay qua CDP)",
   `> Chạy ${new Date().toISOString()} · bot thử \`${BOT}\` · nguồn kich-ban-b2.json`,
   "> Widget: chọn đúng đáp án app gốc đã chọn; không có thì chọn lựa chọn cuối (\"Thôi\").",
   "> Thẻ quyền: duyệt, trừ lệnh phá hoại — xem `NGUY_HIEM` trong script.", ""];
-let nWidget = 0, nPerm = 0, nSkip = 0, nHetGio = 0, done = 0;
+let nWidget = 0, nPerm = 0, nSkip = 0, nHetGio = 0, nTraLoi = 0, nIm = 0, done = 0;
 /** Chữ ký các widget đã bấm — transcript giữ cả thẻ của lượt trước. */
 const daBam = new Set();
 
@@ -130,20 +130,33 @@ for (const [i, c] of cases.entries()) {
   await wait(300);
   for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
 
-  // chờ lượt: xử lý widget/thẻ quyền ngay khi chúng hiện
   /*
-   * Hạn giờ theo VIỆC, không phải một con số chung cho mọi case.
+   * Chờ LƯỢT XONG, không chờ hết một cái đồng hồ tôi tự đặt.
    *
-   * Lượt chạy 28/08 trả "TRỐNG" ở case 9, 16, 18 — và cả ba đều là case kịch bản mong có
-   * **attachment**: dựng cả bộ quy trình, quay màn hình, sửa rồi quay lại. Đó là việc hàng phút,
-   * còn 240s là con số tôi chọn cho một câu trả lời chữ. "TRỐNG" ở đó gần như chắc chắn là đồng
-   * hồ của tôi hết, chứ không phải bot im.
+   * Bản trước đặt 240s mỗi case rồi bắn prompt kế tiếp. Ở turn.ts một prompt mới **huỷ lượt đang
+   * chạy** ("Abort whatever was still running for this bot before replacing it"), nên hết giờ
+   * không phải là bỏ qua — là GIẾT. Đọc lại transcript thật của lượt chạy 28/08: case 9, 10, 18
+   * không có lấy một entry nào, kể cả tool-call. Chúng không im; chúng bị case sau đạp chết.
+   *
+   * Và cái làm tôi không thấy: script đo bằng cách so độ dài `document.body.innerText`. Dòng
+   * trạng thái "is working" đổi cũng làm chuỗi dài ra, nên bốn case bị chấm điểm sai — case 8 và
+   * 23 bị gọi là TRỐNG dù có trả lời (case 8 còn ra đúng widget kịch bản mong), case 10 bị gọi là
+   * "có trả lời" dù không có gì. Màn hình là thứ dễ đo nhất và cũng dễ sai nhất.
+   *
+   * Nên chuyển sang hỏi BACKEND: lượt xong khi transcript đã dài ra và không entry nào còn
+   * `streaming`. Hạn cứng chỉ còn là lưới an toàn cho lượt treo, không phải nhịp làm việc.
    */
-  const choLau = (c.expected ?? []).some((e) => e.kind === "attachment");
-  const deadline = Date.now() + (choLau ? 600_000 : 240_000);
+  const HAN_CUNG = 900_000;
+  const deadline = Date.now() + HAN_CUNG;
+  const demEntry = async () => {
+    const tr = await gw("getAgentTranscript", { agentId: bot.id, id: bot.id });
+    const rows = tr?.transcript ?? tr?.entries ?? (Array.isArray(tr) ? tr : []);
+    return { n: rows.length, dangChay: rows.some((e) => e?.streaming === true) };
+  };
+  const truoc = (await demEntry()).n;
   let widgetPrompt = null, permTargets = [], last = "", stable = 0;
   let thuLai = 0;   // số lần bấm lại một thẻ báo "didn't go through"
-  let xong = false;   // thoát vì màn hình đứng yên, hay vì hết giờ?
+  let xong = false;   // lượt kết thúc thật, hay chạm hạn cứng?
   while (Date.now() < deadline) {
     await wait(3000);
 
@@ -246,33 +259,37 @@ for (const [i, c] of cases.entries()) {
       }
     }
 
-    const now = (await screenText()) ?? "";
-    if (now === last && now.length > before.length) { stable += 1; if (stable >= 3) { xong = true; break; } } else stable = 0;
-    last = now;
+    last = (await screenText()) ?? "";
+    /*
+     * Hai nhịp đứng yên liên tiếp mới tính là xong: một lần đọc trúng khe giữa hai entry thì
+     * `dangChay` tạm false trong khi lượt vẫn còn.
+     */
+    const d = await demEntry();
+    if (d.n > truoc && !d.dangChay) { stable += 1; if (stable >= 2) { xong = true; break; } } else stable = 0;
   }
 
+  const sau = await demEntry();
+  const themEntry = sau.n - truoc;
   const grown = (last.length > before.length ? last.slice(before.length) : "").replace(/\n{2,}/g, "\n").trim();
   /*
-   * Ba kết cục, không phải hai. Gộp "hết giờ khi bot còn đang gõ" chung với "bot không trả lời" là
-   * tự bịa ra một thất bại: báo cáo trước ghi bốn case TRỐNG, mà ít nhất ba trong số đó chỉ là đồng
-   * hồ của tôi ngắn hơn công việc. Chỉ thị "is working" của app là thứ phân biệt được.
+   * Kết cục đo bằng số entry backend ghi được, không bằng chuỗi trên màn hình. Đây là chỗ bản
+   * trước sai bốn case: chữ trên màn hình dài ra không có nghĩa là bot đã nói gì.
    */
-  const conChay = /\bis working\b|đang làm/i.test(last);
-  const ketCuc = grown ? "có trả lời" : (!xong && conChay ? "HẾT GIỜ (bot vẫn đang chạy)" : "TRỐNG");
-  if (ketCuc.startsWith("HẾT GIỜ")) nHetGio += 1;
+  const ketCuc = themEntry > 0 ? `có trả lời (${themEntry} entry)` : (xong ? "IM — không entry nào" : "CHẠM HẠN CỨNG");
+  if (themEntry > 0) nTraLoi += 1; else if (!xong) nHetGio += 1; else nIm += 1;
   console.log(`  case ${i + 1}/${cases.length}${widgetPrompt ? " [widget]" : ""}${permTargets.length ? " [thẻ]" : ""} — ${ketCuc}`);
   report.push(`### ${i + 1}. ⟵ ${c.input.replace(/\s+/g, " ").slice(0, 160)}`, "");
   if (widgetPrompt) report.push(`- **widget**: ${widgetPrompt}`);
   for (const p of permTargets) report.push(`- **thẻ quyền**: ${p}`);
-  report.push("", "```", (grown || (ketCuc === "TRỐNG" ? "(màn hình không đổi)" : "(hết giờ — bot vẫn đang chạy)")).slice(0, 1200), "```", "");
+  report.push("", "```", (grown || `(${ketCuc})`).slice(0, 1200), "```", "");
 }
 
-report.push("---", "", `**Tổng:** ${done} case · widget đã chọn ${nWidget} · thẻ quyền đã duyệt ${nPerm} · hết giờ ${nHetGio} · bỏ qua ${nSkip}`);
+report.push("---", "", `**Tổng:** ${done} case · widget đã chọn ${nWidget} · trả lời ${nTraLoi} · im ${nIm} · chạm hạn ${nHetGio} · thẻ quyền ${nPerm} · bỏ qua ${nSkip}`);
 const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
 await mkdir("docs/parity-runs", { recursive: true });
 const out = `docs/parity-runs/app-replay-${stamp}.md`;
 await writeFile(out, report.join("\n"), "utf8");
 console.log(`\nđã ghi ${out}`);
-console.log(`tổng: ${done} case, widget ${nWidget}, thẻ quyền ${nPerm}, hết giờ ${nHetGio}, bỏ qua ${nSkip}`);
+console.log(`tổng: ${done} case, widget ${nWidget}, trả lời ${nTraLoi}, im ${nIm}, chạm hạn ${nHetGio}, bỏ qua ${nSkip}`);
 ws.close();
 process.exit(0);
