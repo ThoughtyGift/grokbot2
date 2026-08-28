@@ -173,6 +173,43 @@ const data = JSON.parse(await readFile("docs/extracted/kich-ban-b2.json", "utf8"
 const sc = data.scenarios.find((s) => s.bot === "Test Clone");
 const cases = sc.cases.filter((c) => String(c.input ?? "").trim());
 
+/*
+ * Bong bóng này có phải câu TRẢ LỜI không, hay là một lời từ chối?
+ *
+ * ── Vì sao cần, và vì sao nó phải DỪNG cả lượt ──────────────────────────────────────────────────
+ *
+ * Lượt 21:11 ngày 28/08 báo "23 case, trả lời 23, im 0" — một kết quả hoàn hảo cho một lượt mà model
+ * chưa chạy lấy một lần. Khoá pool đã hết hạn mức, và mỗi case nhận đúng một bong bóng:
+ *
+ *     "You've hit your limit · resets 10:40pm (Asia/Saigon)"
+ *
+ * Phép đo lúc đó là "bản ghi có dài thêm không", nên nó chấm 23/23. Đây là lần thứ BA trong một
+ * ngày tôi đo nhầm thứ, mỗi lần một lớp vỏ mới: đầu tiên là độ dài chuỗi trên màn hình, rồi là toạ
+ * độ một cú bấm không tới nơi, giờ là số entry. Cùng một sai lầm — đo cái DỄ ĐO thay vì cái cần đo.
+ *
+ * Backend không giúp được ở đây: pool trả câu báo hạn mức như một câu trả lời bình thường, không
+ * mang tiền tố `[grokbot2] Pool error:` nào, nên không có cờ nào để đọc. Chỉ còn cách nhận mặt chữ.
+ *
+ * Và gặp rồi thì DỪNG, không đi tiếp: 23 case cùng một lời từ chối không phải dữ liệu xấu, nó là
+ * KHÔNG dữ liệu, và để nó chạy hết rồi ghi ra một file báo cáo là tự dựng bằng chứng giả.
+ */
+const KHONG_PHAI_TRA_LOI = [
+  /\[grokbot2\] Pool error:/i,
+  /\[grokbot2\] Chưa có key/i,
+  /\[grokbot2\] Pool trả về rỗng/i,
+  /hit your limit/i,
+  /rate.?limit/i,
+  /quota/i,
+];
+const loiCuaLuot = async () => {
+  const tr = await gw("getAgentTranscript", { agentId: bot.id, id: bot.id });
+  const rows = tr?.transcript ?? tr?.entries ?? (Array.isArray(tr) ? tr : []);
+  const cuoi = [...rows].reverse().find((e) => e?.message?.type === "text");
+  const noiDung = String(cuoi?.message?.content ?? "");
+  const hit = KHONG_PHAI_TRA_LOI.find((re) => re.test(noiDung));
+  return hit ? noiDung.replace(/\s+/g, " ").slice(0, 160) : null;
+};
+
 /** Lệnh KHÔNG được duyệt mù — kịch bản này sinh từ máy khác. */
 const NGUY_HIEM = /\brm\s+-rf|\bmkfs|\bdd\s+if=|shutdown|reboot|:\(\)\{|\bformat\b|>\s*\/dev\/sd/i;
 
@@ -345,6 +382,16 @@ for (const [i, c] of cases.entries()) {
   const ketCuc = themEntry > 0 ? `có trả lời (${themEntry} entry)` : (xong ? "IM — không entry nào" : "CHẠM HẠN CỨNG");
   if (themEntry > 0) nTraLoi += 1; else if (!xong) nHetGio += 1; else nIm += 1;
   console.log(`  case ${i + 1}/${cases.length}${widgetPrompt ? " [widget]" : ""}${permTargets.length ? " [thẻ]" : ""} — ${ketCuc}`);
+
+  // Model có thật sự chạy không? Nếu không, dừng NGAY — xem `KHONG_PHAI_TRA_LOI`.
+  const loi = await loiCuaLuot();
+  if (loi) {
+    console.error(`
+✋ DỪNG ở case ${i + 1}: model không chạy, bot chỉ trả lời:`);
+    console.error(`   ${loi}`);
+    console.error("   Lượt chạy này KHÔNG có giá trị đo. Không ghi báo cáo.");
+    ws.close(); process.exit(3);
+  }
   report.push(`### ${i + 1}. ⟵ ${c.input.replace(/\s+/g, " ").slice(0, 160)}`, "");
   if (widgetPrompt) report.push(`- **widget**: ${widgetPrompt}`);
   for (const p of permTargets) report.push(`- **thẻ quyền**: ${p}`);
