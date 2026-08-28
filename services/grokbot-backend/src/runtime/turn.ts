@@ -127,6 +127,7 @@ const ACTIVITY_TOOL: Record<string, string> = {
   create_group: "CreateAgent",
   watch_video: "Screenshot",
   create_skill: "Shell",
+  create_diagram: "Screenshot",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
   attach_image: "Screenshot",
@@ -341,7 +342,7 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
  * `create_agent` is deliberately NOT here. It is equally mis-described by that copy, but it brings
  * a new actor into the workspace rather than editing a label, so the call is the user's to make.
  */
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "watch_video", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "watch_video", "create_diagram", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
 
 /** Native `/v1` turns ask on write tools even when the stock app saved "always". */
 const askWriteThisTurn = new Set<string>();

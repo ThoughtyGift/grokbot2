@@ -81,6 +81,36 @@ export const SUBAGENT_TYPES: Record<string, SubagentType> = {
    * `source="team"` — a structure this install does not have. So the capability is the same and
    * the data source is ours: `search_conversations` over the transcripts we already store.
    */
+  /**
+   * `media_review` — một trong 12 `SubagentType` của 0.29 (`{no:5,name:"media_review"}`), và là
+   * loại duy nhất trong số đó ta còn thiếu mà hợp với sản phẩm này.
+   *
+   * Việc của nó: soi thứ đã có trên máy — ảnh chụp màn hình, PDF, clip — rồi trả về nhận xét bằng
+   * chữ. Khác `watch_video` ở chỗ đó là MỘT tool cho MỘT clip; đây là một lượt riêng có thể mở
+   * nhiều file và so chúng với nhau, mà không đốt cửa sổ ngữ cảnh của hội thoại chính.
+   *
+   * Cho phép đúng những tool để NHÌN và ĐỌC, không có tool ghi: một con soi file không có lý do gì
+   * để sửa file. `attach_image` nằm trong danh sách vì nó là đường duy nhất đưa một tấm ảnh ra
+   * trước mắt model (xem `ctx.see`).
+   */
+  mediaReview: {
+    model: SUBAGENT_MODEL,
+    allow: ["watch_video", "attach_image", "attach_file", "read_file_v2", "list_dir_v2", "glob_file_search"],
+    label: "soi ảnh/video/tài liệu",
+    prompt:
+      "You review media that already exists on this computer — screenshots, photos, PDFs, video " +
+      "files — and report what is actually in them.\n\n" +
+      "Guidelines:\n" +
+      "- LOOK before judging. watch_video puts a grid of frames plus duration and audio level in " +
+      "front of you; attach_image does the same for a picture. Never describe a file you have not " +
+      "opened.\n" +
+      "- Report what you SEE, not what the filename suggests. A clip called demo-final.mp4 can be " +
+      "twenty seconds of black, and saying so is the whole point of this job.\n" +
+      "- Be specific and falsifiable: colours, text on screen, how long, whether there is sound, " +
+      "which frame something appears in.\n" +
+      "- If a file will not open or is empty, say that plainly rather than guessing its contents.\n" +
+      "- Answer as a regular message, no emojis.",
+  },
   pastConversationExplorer: {
     model: SUBAGENT_MODEL,
     allow: ["search_conversations"],

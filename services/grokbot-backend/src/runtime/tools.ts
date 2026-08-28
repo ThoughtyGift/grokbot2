@@ -293,6 +293,43 @@ TOOLS.create_agent = (arg, ctx) => {
 };
 
 /**
+ * `create_diagram` — sơ đồ, vẽ bằng đúng đường 0.29 vẽ.
+ *
+ * Trích từ bundle: client KHÔNG có message type riêng cho sơ đồ (`"diagram"` = 0 hit trong danh
+ * sách type của renderer), nhưng có hẳn `mermaid.core-*.js` và các lớp CSS `mermaid-figure`,
+ * `mermaid-error`, `mermaid-expand`, `mermaid-diagram.png`. Tức sơ đồ chỉ là **markdown có khối
+ * ```mermaid** trong một bong bóng text bình thường.
+ *
+ * Nên tool này không dựng entry kiểu mới; nó phát đúng khối code đó. Lợi thêm: khi backend này
+ * phục vụ FE khác (grokbot-web), khối mermaid vẫn là markdown hợp lệ chứ không phải một shape lạ.
+ *
+ * Kiểm tối thiểu — chỉ chặn thứ chắc chắn vẽ ra `mermaid-error`: rỗng, hoặc không mở đầu bằng một
+ * từ khoá sơ đồ nào. Không cố phân tích cú pháp mermaid ở đây: thư viện của client mới là trọng
+ * tài, và một bộ kiểm nửa vời sẽ chặn nhầm sơ đồ hợp lệ.
+ */
+const MERMAID_KINDS = [
+  "graph", "flowchart", "sequenceDiagram", "classDiagram", "stateDiagram", "stateDiagram-v2",
+  "erDiagram", "journey", "gantt", "pie", "mindmap", "timeline", "gitGraph", "quadrantChart",
+  "requirementDiagram", "sankey-beta", "xychart-beta", "block-beta", "packet-beta", "architecture-beta",
+];
+
+TOOLS.create_diagram = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { code: unquote(arg) }; }
+  let code = String(spec?.code ?? spec?.mermaid ?? spec?.diagram ?? spec?.content ?? unquote(arg) ?? "").trim();
+  // Model hay gói sẵn trong ```mermaid — gỡ ra rồi bọc lại một lần, tránh khối lồng khối.
+  code = code.replace(/^```[a-zA-Z-]*\s*\n?/, "").replace(/\n?```$/, "").trim();
+  if (!code) return 'create_diagram cần {"code":"flowchart TD\\n  A[Bắt đầu] --> B[Xong]"} (cú pháp mermaid)';
+  const head = code.split(/\s|\n/)[0] ?? "";
+  if (!MERMAID_KINDS.some((k) => head === k || head.startsWith(k))) {
+    return `create_diagram: dòng đầu phải là loại sơ đồ mermaid (${MERMAID_KINDS.slice(0, 6).join(", ")}…), đang thấy "${head.slice(0, 30)}"`;
+  }
+  const title = String(spec?.title ?? "").trim();
+  ctx.note(`${title ? `**${title}**\n\n` : ""}\`\`\`mermaid\n${code}\n\`\`\``);
+  return `đã vẽ sơ đồ (${head})`;
+};
+
+/**
  * Bot tự dựng phòng chung — nửa còn lại của quy trình 0.29: tạo dàn bot xong thì mở nhóm cho cả
  * dàn (Shopee Ops sinh 06:37:38, đúng 7 giây sau con bot cuối). Thành viên nhận theo TÊN vì đó là
  * thứ model biết; tên chỉ được so trong dàn bot của CHÍNH CHỦ — id người khác không có đường vào.
@@ -1021,6 +1058,20 @@ const IMAGE_PROTOCOL =
   "chat by itself. The more specific the description (composition, colour, style), the closer the " +
   "result. This draws something new; for a picture that already exists on the web, use attach_image.";
 
+/**
+ * Sơ đồ được quảng cáo vô điều kiện: nó chỉ sinh ra chữ, không cần hộp, không cần khoá.
+ *
+ * Client 0.29 dựng sẵn mermaid trong bundle, nên khối ```mermaid hiện thành hình vẽ thật chứ không
+ * phải một đống chữ — đó là lý do đáng dạy model dùng thay vì tự kẻ bằng ký tự ASCII.
+ */
+const DIAGRAM_PROTOCOL =
+  "\n\nDIAGRAMS: when a flow, an architecture, a sequence of steps or a state machine is easier seen " +
+  "than described, draw it with " +
+  'TOOL_CALL: create_diagram({"title":"optional","code":"flowchart TD\\n  A[Start] --> B[Done]"}) — ' +
+  "the body is mermaid syntax and the app renders it as a real picture. Use it instead of drawing " +
+  "boxes out of ASCII characters. Keep it small: a diagram nobody can read at a glance is worse than " +
+  "a sentence.";
+
 const ASK_PROTOCOL =
   // "…if you need a decision first, ask with a widget rather than stalling." — the original's rule,
   // and `ask_question` is the widget it means.
@@ -1118,7 +1169,7 @@ const toolProtocolBase = (): string =>
   "single response. Write nothing after those lines. Tools: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". If no tool is needed, just answer. Once tool results come back, answer from them." +
-  BROWSER_PROTOCOL + IMAGE_PROTOCOL + VIDEO_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + IMAGE_PROTOCOL + VIDEO_PROTOCOL + DIAGRAM_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
 
 /** The tool protocol for one owner — the shared part plus that owner's MCP servers. */
 /**

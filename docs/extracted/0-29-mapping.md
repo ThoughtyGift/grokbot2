@@ -80,8 +80,8 @@ Cái ta chép được là **các mảnh dữ liệu** hãng đưa vào quyết 
 | | 0.29 | grokbot2 |
 |---|---|---|
 | Văn xuôi dạy model | **không có** (server bơm qua field proto) | có, và đúng vai — `prompt-base.ts`, `*_PROTOCOL` |
-| Danh mục tool | enum `CLIENT_SIDE_TOOL_V2_*` (56 mục), chỉ `{no,name}` | 26 tool trong `runtime/tools.ts` |
-| Bề mặt tool thứ hai | `SubagentType` oneof (12 mục) | `SUBAGENT_TYPES` (4 mục) |
+| Danh mục tool | enum `CLIENT_SIDE_TOOL_V2_*` (56 mục), chỉ `{no,name}` | **63 tool** đăng ký lúc chạy (đếm bằng `Object.keys(TOOLS)`, không phải grep) |
+| Bề mặt tool thứ hai | `SubagentType` oneof (12 mục) | `SUBAGENT_TYPES` (**5 mục** sau 28/08) |
 
 **`SubagentType` của 0.29 — trích đủ 12 mục, bằng chứng thật:**
 
@@ -97,16 +97,28 @@ Cái ta chép được là **các mảnh dữ liệu** hãng đưa vào quyết 
 | `bash` | 🟡 gộp vào `shell` | |
 | `watch_video` | ✅ **là TOOL bên ta** | + cờ `enable_watch_video_in_ide` — ta làm 28/08, trùng hướng hãng một cách độc lập |
 | `computer_use` | 🟡 là TOOL bên ta, không phải subagent | |
-| **`media_review`** | ⬜ **thiếu** | subagent đọc ảnh/PDF/media nói chung |
+| `media_review` | ✅ **28/08** `mediaReview` | subagent soi ảnh/PDF/clip; chỉ được các tool NHÌN và ĐỌC |
 | **`vm_setup_helper`** | ⬜ **thiếu** | ← đây là chỗ hãng đặt **tính năng 3** (dựng/cài phần mềm trên máy ảo) |
 | `debug` · `cursor_guide` · `custom` | ⬜ | `cursor_guide` là của IDE, không hợp sản phẩm ta |
 | — | `pastConversationExplorer` | của riêng ta |
 
-**Tool 0.29 có, ta chưa có** (đã kiểm: `grep TOOLS.` bên ta không có tool web nào):
+**Tool 0.29 có, ta chưa có** — *đã đếm lại bằng cách chạy thật:*
 
 ```
-CLIENT_SIDE_TOOL_V2_WEB_SEARCH · WEB_FETCH · DEEP_SEARCH · CREATE_DIAGRAM
+CLIENT_SIDE_TOOL_V2_DEEP_SEARCH · CREATE_DIAGRAM        ← thiếu thật
 ```
+
+> ⚠️ **Đính chính (28/08, bản đầu của trang này SAI).** Bản đầu ghi thêm `WEB_SEARCH` · `WEB_FETCH`
+> vào danh sách thiếu, kèm câu "ta không có tool web nào". Sai. Cả hai **đã có đủ** trong
+> `src/tools.ts` (`alwaysAvailable: true`, gọi `webSearch()`/`webFetch()` thật), cùng với
+> `list_mcp_resources` và `read_mcp_resource`.
+>
+> Vì sao sai: cả tôi lẫn tác nhân đọc bundle đều đếm bằng `grep "^TOOLS\."` — nhưng phần lớn tool
+> **không** gán trực tiếp, chúng nạp qua vòng `for (const [name, spec] of Object.entries(availableTools()))`.
+> Grep thấy 26, chạy thật thấy **63**.
+>
+> **Bài học, và nó lặp lại lần thứ ba trong ngày:** đếm bằng cách CHẠY, đừng đếm bằng cách đọc.
+> Một dòng đăng ký động là đủ để giấu 37 tool khỏi mắt grep — và suýt nữa tôi xây lại hai tool đã có.
 
 ⚠️ **`vm_setup_helper` không lộ cách cài**: `apt-get` 0 hit, `sudo` 0 hit, `install_package` 0 hit
 trong `electron-main`. Tức hãng cũng **không** ship logic cài đặt xuống client — nó nằm trong ảnh box
@@ -315,12 +327,12 @@ billing tự quản chính là nhánh **`url` (no:5)** — đúng như [[grokbot
 | 2 | **`widget.multiSelect`** | 0.29 render thật; tính năng 2 cần chọn nhiều plugin | ✅ **xong 28/08** |
 | 3 | **`submitUserForm` + `dismissUserForm`** | nút Submit của form đang chết lặng (404 mềm) | ✅ **xong 28/08** (+ `sendDraft`/`discardDraft` — nút chết thật) |
 | 4 | **Cụm MCP ghi** | MCP bên ta mới chỉ đọc — khoảng trống hành vi lớn nhất của một mặt phẳng đã làm dở | ✅ **xong 28/08 — 10/10**: 8 lệnh thật (`installMcpEntry` · `updateMcpPluginInstall` · `uninstallMcpPlugin` · `listMcpServerTools` · `toggleMcpToolDisabled` · `setMcpCustomInstructions` · `removeMcpServer` · `authenticateMcpServer`) + 2 từ chối có lý do (`renameMcpAccount`/`removeMcpAccount` — ở đây mỗi server chỉ có MỘT bộ đăng nhập, không có khái niệm nhiều tài khoản) |
-| 5 | **`web_search`/`web_fetch`** | 0.29 có ba tool web hạng nhất; ta **không có tool web nào** | vừa |
+| 5 | ~~`web_search`/`web_fetch`~~ | — | ❌ **HÀNG NÀY SAI**: cả hai đã có sẵn từ trước, xem đính chính §1 |
 | 6 | Entry `notice` + `user-attachment` | renderer 0.29 đã biết vẽ, ta chưa phát | ✅ **xong 28/08** |
 | 7 | `BackgroundShellSpawn` + `WriteShellStdin` ở daemon | kịch bản OBS/live cần lệnh chạy dài + gõ tiếp stdin | vừa |
 | 8 | `ErrorButton` nhánh `url` | nối nút trên màn chặn về trang thanh toán của mình | 🟡 **28/08 — nối bằng link markdown, không phải ErrorButton**: nút của hãng đi trong `CustomErrorDetails.buttons[]` (envelope LỖI RPC) và ta chưa dựng được đường chứng minh client đọc envelope đó từ backend này; link markdown thì có bằng chứng chạy trong bản ghi app gốc |
 | 9 | `injectChromeCookies` (nửa box) | gỡ nút thắt "5 bot đứng chờ đăng nhập Shopee" — **chỉ sau khi tách trình duyệt** | lớn |
-| 10 | `media_review` subagent · `create_diagram` | bù nốt bề mặt tool | vừa |
+| 10 | `media_review` · `create_diagram` · `deep_search` | ba thứ THẬT SỰ còn thiếu sau khi đếm lại | ✅ **28/08**: `create_diagram` (mermaid trong markdown — đúng đường 0.29 vẽ) + `media_review` (subagent, chỉ tool NHÌN/ĐỌC, không tool ghi). **Còn `deep_search`** — cần một nhà cung cấp tìm kiếm sâu, không phải chuyện nối dây |
 
 ---
 
