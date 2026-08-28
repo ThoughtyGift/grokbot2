@@ -28,7 +28,18 @@ const cases = JSON.parse(readFileSync("docs/extracted/kich-ban-b2.json", "utf8")
   .scenarios.find((s) => s.bot === "Test Clone").cases.filter((c) => String(c.input ?? "").trim());
 
 const moc = [];
-rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user") moc.push(i); });
+/*
+ * Mốc case phải giống HỆT `parity-b2.mjs`: tin người dùng GÕ VÀO KHUNG SOẠN.
+ *
+ * Đáp án widget (`respondToWidget`) và tin đến từ bot khác (`fromAgent`) cũng là entry `role:"user"`.
+ * Tôi đã sửa điều này trong `parity-b2.mjs` rồi QUÊN file anh em — nên từ case đầu tiên có widget
+ * trở đi, bảng này ghép câu trả lời của ta với câu hỏi KẾ TIẾP của kịch bản.
+ *
+ * Hậu quả không nhỏ: tôi đã đánh giá case 7 là "ngang app gốc" dựa trên một cặp lệch bậc, trong
+ * khi thật ra bot trả lời đúng câu được hỏi. Hai script đọc cùng một bản ghi thì phải cắt cùng một
+ * cách, nếu không cái thứ hai sẽ âm thầm bác kết luận của cái thứ nhất.
+ */
+rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user" && !e.fromAgent && e.clientNonce) moc.push(i); });
 const goi = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 moc.forEach((st, n) => {
