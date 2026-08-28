@@ -134,17 +134,41 @@ for (const [i, c] of cases.entries()) {
   while (Date.now() < deadline) {
     await wait(3000);
 
-    // thẻ xin quyền
+    /*
+     * Thẻ xin quyền — app có HAI loại, và bản đầu chỉ biết một.
+     *
+     *   per-tool : một lệnh cụ thể, nút "Allow" / "Allow once"
+     *   cấp app  : "Allow Grok Bot and all Bots to run commands on your local computer?"
+     *              với ba nút "Always allow" / "Allow once" / "Never"
+     *
+     * Luôn chọn **"Allow once"**, không bao giờ "Always allow": nút kia ghi một cài đặt ĐỨNG LẠI
+     * (`localToolPermission`) của người dùng, và một lượt chạy thử không có quyền đổi thiết lập máy
+     * của họ để tự cho mình đỡ phải bấm.
+     *
+     * Thẻ cũng có thể báo "Your answer didn't go through" — đo được khi backend đang tranh cổng.
+     * Gặp câu đó thì bấm lại, chứ đừng coi như đã duyệt xong.
+     */
     const perm = await js(`(() => {
-      const b = [...document.querySelectorAll("button")].find(x => /^(allow|cho phép|allow once)/i.test((x.innerText||"").trim()));
-      if (!b) return null;
-      const card = b.closest('[class*="message-card"]') || b.parentElement;
-      const r = b.getBoundingClientRect();
-      return { x: r.x + r.width/2, y: r.y + r.height/2, target: (card?.innerText || "").slice(0, 300) };
+      const btns = [...document.querySelectorAll("button")];
+      const pick = btns.find(x => /^allow once$/i.test((x.innerText||"").trim()))
+                || btns.find(x => /^(allow|cho phép)$/i.test((x.innerText||"").trim()));
+      if (!pick) return null;
+      const card = pick.closest('[class*="message-card"]') || pick.closest('[role="alert"]') || pick.parentElement?.parentElement;
+      const r = pick.getBoundingClientRect();
+      const txt = (card?.innerText || "").slice(0, 400);
+      return { x: r.x + r.width/2, y: r.y + r.height/2, target: txt, retry: /didn't go through|không gửi được/i.test(txt) };
     })()`);
     if (perm) {
-      if (NGUY_HIEM.test(perm.target)) { nSkip += 1; permTargets.push(`BỎ QUA (nguy hiểm): ${perm.target.slice(0, 90)}`); }
-      else { await clickAt(perm.x, perm.y); nPerm += 1; permTargets.push(perm.target.split("\n").slice(0, 2).join(" ").slice(0, 90)); }
+      if (NGUY_HIEM.test(perm.target)) {
+        nSkip += 1;
+        permTargets.push(`BỎ QUA (nguy hiểm): ${perm.target.replace(/\s+/g, " ").slice(0, 90)}`);
+        // Không bấm gì — nhưng cũng đừng quay vòng mãi trên cùng một thẻ.
+        await wait(3000);
+      } else {
+        await clickAt(perm.x, perm.y);
+        if (!perm.retry) { nPerm += 1; permTargets.push(perm.target.replace(/\s+/g, " ").slice(0, 90)); }
+        else permTargets.push(`(bấm lại sau khi app báo "didn't go through")`);
+      }
       stable = 0; continue;
     }
 
