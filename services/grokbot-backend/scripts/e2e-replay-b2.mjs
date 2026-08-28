@@ -9,10 +9,16 @@
  * thật trên box chung. Thẻ đang chờ CHÍNH LÀ kết quả ghi nhận — nó cho thấy bot mình chọn cùng
  * loại hành động với bot gốc, không cần thi hành.
  *
- * Kết quả: docs/parity-runs/b2-replay-<stamp>.md — bảng so từng cặp, kèm hai thước đo thô:
- *   - trả lời: bot mình có nói gì đó (text/widget/thẻ quyền) không
- *   - cùng nhịp tương tác: app gốc có widget/thẻ quyền thì bên mình cũng có (và ngược lại)
+ * Kết quả: docs/parity-runs/b2-replay-<stamp>.md — bảng so từng cặp, kèm ba thước đo:
+ *   - trả lời: bot mình có nói gì đó không
+ *   - mời chọn bằng widget: app gốc mở widget thì bên mình có mở không
+ *   - xin quyền chạy lệnh: app gốc dựng thẻ quyền thì bên mình có dựng không
  * Nội dung chữ thì người đọc tự so — hai model khác nhau không bao giờ trùng câu.
+ *
+ * Hai thước sau ĐO RIÊNG, và đó là bài học phải trả giá: bản đầu gộp chúng thành "cùng nhịp tương
+ * tác" rồi ra 2/6 — nhưng hai điểm ấy đến từ thẻ xin quyền của ta trùng chỗ vendor mở widget, chứ
+ * không phải ta cũng mời người dùng chọn. Sửa cho `setup_plugin()` khỏi phải xin phép (đúng) làm
+ * điểm rơi về 0/6, tức con số đầu là nhiễu. Gộp hai việc khác nhau thì một cái tăng che một cái giảm.
  *
  *   node services/grokbot-backend/scripts/e2e-replay-b2.mjs [--only "Test Clone"] [--max N]
  */
@@ -41,7 +47,16 @@ const killTree = (p) =>
     if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }).on("close", r);
     else { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } r(); }
   });
-const stop = async () => { for (const p of procs) await killTree(p); await rm(root, { recursive: true, force: true }); };
+const stop = async () => {
+  for (const p of procs) await killTree(p);
+  // Windows giữ khoá file SQLite một nhịp sau khi tiến trình chết — `rm` ngay sẽ EBUSY và làm cả
+  // lần chạy báo đỏ dù mọi phép đo đã xong và báo cáo đã ghi. Thử vài nhịp rồi thôi: rác trong
+  // thư mục tạm không đáng đánh đổi một kết quả sai.
+  for (let i = 0; i < 5; i += 1) {
+    try { await rm(root, { recursive: true, force: true }); return; }
+    catch { await wait(600); }
+  }
+};
 for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => void stop().then(() => process.exit(1)));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const NL = String.fromCharCode(10);
@@ -95,7 +110,19 @@ function oursOf(list) {
   }
   return out;
 }
-const interactive = (arr) => arr.some((x) => x.kind === "widget" || x.kind === "permission");
+/*
+ * ĐO RIÊNG hai thứ, vì gộp lại là tự lừa mình.
+ *
+ * Bản đầu tính "cùng nhịp tương tác" = có widget HOẶC thẻ xin quyền. Chạy lần 1 ra 2/6 — nhưng
+ * hai điểm đó đến từ thẻ xin quyền `setup_plugin` của ta TRÙNG CHỖ vendor mở widget, chứ không
+ * phải ta cũng mời người dùng chọn. Sửa cho `setup_plugin()` (chỉ liệt kê) khỏi phải xin phép là
+ * đúng, và điểm rơi về 0/6 — tức con số 2/6 ban đầu là nhiễu, còn 0/6 mới là sự thật về widget.
+ *
+ * Thẻ xin quyền = "cho tôi chạy lệnh này chứ?". Widget = "anh chọn hướng nào?". Hai việc khác
+ * nhau, đo chung thì một cái tăng che một cái giảm.
+ */
+const hasWidget = (arr) => arr.some((x) => x.kind === "widget");
+const hasPermission = (arr) => arr.some((x) => x.kind === "permission");
 const brief = (x) => {
   if (x.kind === "text") return `${x.author ? x.author + ": " : ""}${String(x.text).replace(/[ ]+/g, " ").slice(0, 160)}`;
   if (x.kind === "widget") return `[widget] ${x.prompt} — ${(x.options ?? []).join(" / ")}`;
@@ -114,7 +141,8 @@ report.push("");
 report.push(`> Chạy ${new Date().toISOString()} từ kich-ban-b2.json (xuất ${new Date(data.exportedAt).toISOString()}).`);
 report.push("> Thẻ xin quyền không được tự Allow — thẻ đang chờ là kết quả ghi nhận, không thi hành lệnh của kịch bản trên box thật.");
 report.push("");
-let nCases = 0, nAnswered = 0, nRhythm = 0, nRhythmApplicable = 0;
+let nCases = 0, nAnswered = 0;
+let nWidget = 0, nWidgetNeed = 0, nPerm = 0, nPermNeed = 0;
 
 for (const sc of data.scenarios) {
   if (ONLY && sc.bot !== ONLY) continue;
@@ -144,8 +172,8 @@ for (const sc of data.scenarios) {
     }
     const answered = ours.length > 0;
     nAnswered += answered ? 1 : 0;
-    const vendorInteractive = interactive(c.expected);
-    if (vendorInteractive) { nRhythmApplicable += 1; if (interactive(ours)) nRhythm += 1; }
+    if (hasWidget(c.expected)) { nWidgetNeed += 1; if (hasWidget(ours)) nWidget += 1; }
+    if (hasPermission(c.expected)) { nPermNeed += 1; if (hasPermission(ours)) nPerm += 1; }
     console.log(`  [${sc.bot}] case ${ci + 1}/${sc.cases.length} ${answered ? "ok" : "IM LẶNG"} (${ours.length} output)`);
     report.push(`### ${ci + 1}. ⟵ ${String(c.input).replace(/[ ]+/g, " ").slice(0, 200)}`);
     report.push("");
@@ -162,12 +190,17 @@ for (const sc of data.scenarios) {
 
 report.push("---");
 report.push("");
-report.push(`**Tổng:** ${nCases} case · bot mình trả lời ${nAnswered}/${nCases} · cùng nhịp tương tác ${nRhythm}/${nRhythmApplicable} (case app gốc có widget/thẻ quyền).`);
+report.push(`**Tổng:** ${nCases} case · bot mình trả lời ${nAnswered}/${nCases}`);
+report.push("");
+report.push(`- **Mời chọn bằng widget**: ${nWidget}/${nWidgetNeed} (case app gốc mở widget).`);
+report.push(`- **Xin quyền chạy lệnh**: ${nPerm}/${nPermNeed} (case app gốc dựng thẻ quyền).`);
+report.push("");
+report.push("Đo riêng có chủ ý: thẻ quyền là \"cho tôi chạy lệnh này chứ?\", widget là \"anh chọn hướng nào?\". Gộp chung thì một cái tăng che một cái giảm — đúng thứ đã xảy ra ở lần chạy đầu.");
 const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
 const OUTP = `docs/parity-runs/b2-replay-${stamp}.md`;
 await mkdir("docs/parity-runs", { recursive: true });
 await writeFile(OUTP, report.join(NL), "utf8");
 console.log(`${NL}đã ghi ${OUTP}`);
-console.log(`tổng: ${nCases} case, trả lời ${nAnswered}/${nCases}, cùng nhịp ${nRhythm}/${nRhythmApplicable}`);
+console.log(`tổng: ${nCases} case, trả lời ${nAnswered}/${nCases}, widget ${nWidget}/${nWidgetNeed}, thẻ quyền ${nPerm}/${nPermNeed}`);
 await stop();
 process.exit(0);
