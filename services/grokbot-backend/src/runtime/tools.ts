@@ -1157,6 +1157,25 @@ const PEER_PROTOCOL =
   'TOOL_CALL: create_agent({"agents":[{"name":"Kho","description":"vai trò + luật làm việc, viết kỹ như một bản SOP"}]}) — one entry per bot. ' +
   'TOOL_CALL: create_group({"name":"Ops","members":["Kho","Ads"]}) — a shared room; every member answers in turn when the user speaks there. ' +
   "A room is NOT a bot: never create_agent for something meant to hold members — create the member bots first, then create_group with their names. " +
+  /*
+   * Luật KHẲNG ĐỊNH, không phải cấm đoán — và đó là cả điểm sửa.
+   *
+   * Câu trên chỉ cấm "dựng một bot giả làm phòng". Đo ngày 28/08: model dựng 5 bot vai trò
+   * (Vận Hành Đơn, CSKH, Kho & Nhập Hàng, Marketing, Số Liệu) rồi DỪNG — không con nào
+   * "định để chứa thành viên" nên nó chẳng vi phạm gì, chỉ là không ai bảo nó mở phòng.
+   * Roster đo được: 14 bot, 0 group, 0 cạnh bot-nhắn-bot.
+   *
+   * App gốc làm ngược lại, và đó là ground truth chụp từ máy người dùng: `Shopee Ops` là
+   * một group 6 thành viên, mở đầu bằng "Hi. Dàn CS / Kho / Listing / Ads / Kế toán đây.
+   * Việc đầu tiên là gì?" rồi cả phòng bàn việc với nhau. Cái phòng KHÔNG phải phần thêm
+   * cho đẹp — nó là chỗ duy nhất mấy con bot đó biết đến sự tồn tại của nhau.
+   *
+   * Trước khi viết câu này tôi đã đo rằng luật cũ CÓ tới được model (giao thức tool 13.441
+   * ký tự, câu đó nguyên vẹn) — nên đây không phải vá một lời nhắc không được đọc.
+   */
+  "When you build a TEAM (two or more bots at once), finish the job: create_group with all of "
+  + "them and open it with the first task. A team with no room is a list of strangers — the "
+  + "room is the only place they can see each other work. " +
   'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
   "Give every bot you create a real description; never leave an empty one.";
 
