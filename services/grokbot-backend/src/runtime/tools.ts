@@ -19,6 +19,7 @@ import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
 import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
+import { createTemplateForAgent, publishBotTemplate } from "../bot-templates.js";
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
@@ -334,6 +335,33 @@ TOOLS.create_diagram = (arg, ctx) => {
  * dàn (Shopee Ops sinh 06:37:38, đúng 7 giây sau con bot cuối). Thành viên nhận theo TÊN vì đó là
  * thứ model biết; tên chỉ được so trong dàn bot của CHÍNH CHỦ — id người khác không có đường vào.
  */
+/**
+ * `share_bot_template` — đóng gói một bot (hoặc cả ĐỘI) thành mẫu để phát cho máy khác.
+ *
+ * Đường TẠO mẫu của hãng không có trong client (không có `createBotTemplate`, và
+ * `publishBotTemplate` chỉ mang `{shareId, version}`), nên đây là đường của TA — và cố ý là một
+ * tool chứ không phải một lần đọc: bản đầu tạo mẫu ngay khi pane đọc, và app thật hiện "Delete
+ * Template" trên mọi bot dù chưa ai chia sẻ gì.
+ *
+ * Mẫu của nhóm chở theo mô tả từng thành viên, nên máy nhận dựng lại được cả dàn.
+ */
+TOOLS.share_bot_template = (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
+  const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+  const wanted = String(spec?.agent ?? spec?.name ?? spec?.agentId ?? "").trim();
+  const mine = [...agents.values()].filter((a) => ownerOf(a.id) === owner);
+  const target = wanted
+    ? mine.find((a) => a.id === wanted) ?? mine.find((a) => a.name.toLowerCase() === wanted.toLowerCase())
+    : agents.get(ctx.agentId);
+  if (!target) return `(không thấy bot "${wanted}")`;
+  const tpl = runWithOwner(owner, () => createTemplateForAgent(target.id));
+  if (!tpl) return "(không tạo được mẫu cho bot này)";
+  const pub = runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
+  const n = pub?.snapshot.members.length ?? 0;
+  return `đã đóng gói "${target.name}" thành mẫu ${tpl.shareId}` + (n ? ` (kèm ${n} thành viên)` : "");
+};
+
 TOOLS.create_group = (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }

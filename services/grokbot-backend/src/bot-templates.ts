@@ -105,12 +105,34 @@ function snapshotOf(agentId: string): TemplateSnapshot | null {
 export const listBotTemplates = (owner: string = currentOwner()): BotTemplate[] => readAll(owner);
 
 /**
- * Mẫu của một bot — tạo bản nháp nếu chưa có. Xem ghi chú "suy luận DUY NHẤT" ở đầu file.
+ * Mẫu của một bot — CHỈ ĐỌC. Không có thì `null`.
  *
- * `null` khi bot không tồn tại hoặc không thuộc người gọi: `record-or-null` là kiểu client khai,
- * nên `null` là câu trả lời hợp lệ chứ không phải lỗi.
+ * ── Đây là chỗ tôi đã sai, và app thật chỉ ra ─────────────────────────────────────────────────
+ *
+ * Bản đầu tự tạo bản nháp ngay khi đọc (xem "suy luận DUY NHẤT" ở đầu file). Mở app 0.29 đã vá và
+ * bấm vào một bot thì thấy ngay hậu quả: **mọi bot đều hiện nút "Delete Template"** dù người dùng
+ * chưa chia sẻ gì. Renderer quyết định bằng đúng đoạn này:
+ *
+ *     const u = Dut({template, status, shareAvailable});
+ *     if (u === "hidden") return null;                  // không có mẫu → ẩn hẳn phần này
+ *     if (u === "delete" && template != null) …         // có mẫu → nút Delete Template
+ *
+ * Nó không phân biệt nháp với đã xuất bản ở nhánh đó — có record là ra nút xoá. Nên một lần đọc
+ * mà đẻ ra record là nói với người dùng rằng họ đã chia sẻ con bot, trong khi họ chưa.
+ *
+ * Đọc phải là đọc. Tạo mẫu đi bằng `createTemplateForAgent` (tool `share_bot_template`), tức chỉ
+ * khi có người thật sự muốn chia sẻ.
  */
 export function getBotTemplateForSourceAgent(sourceAgentId: string, owner: string = currentOwner()): BotTemplate | null {
+  if (!sourceAgentId) return null;
+  return readAll(owner).find((t) => t.sourceAgentId === sourceAgentId) ?? null;
+}
+
+/**
+ * Tạo mẫu cho một bot (hoặc nhóm), nếu chưa có. Đã có thì trả cái đang có — bấm chia sẻ hai lần
+ * không được đẻ ra hai mẫu.
+ */
+export function createTemplateForAgent(sourceAgentId: string, owner: string = currentOwner()): BotTemplate | null {
   if (!sourceAgentId) return null;
   const rows = readAll(owner);
   const found = rows.find((t) => t.sourceAgentId === sourceAgentId);

@@ -37,7 +37,7 @@ function doiShopee(owner: string) {
 test("vòng tròn cả ĐỘI: nhóm 2 bot có SOP → mẫu → dựng lại đủ người, đủ SOP", () => {
   sach();
   const g = doiShopee(A);
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(g.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(g.id))!;
   assert.equal(tpl.snapshot.isGroup, true);
   assert.deepEqual(tpl.snapshot.members.map((m) => m.name), ["Kho", "CS"]);
 
@@ -57,7 +57,7 @@ test("vòng tròn cả ĐỘI: nhóm 2 bot có SOP → mẫu → dựng lại đ
 test("bot lẻ cũng dựng lại được, kèm mô tả", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Kế toán", description: "GMV không phải tiền về." }));
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(bot.id))!;
   const made = as(A, () => T.createAgentFromTemplate({ shareId: tpl.shareId }))!;
   const rec = made.agent as { name: string; description?: string; isGroup?: boolean };
   assert.equal(rec.name, "Kế toán");
@@ -68,7 +68,7 @@ test("bot lẻ cũng dựng lại được, kèm mô tả", () => {
 test("mẫu mới là bản NHÁP — chưa xuất bản", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Nhap" }));
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(bot.id))!;
   // Máy trạng thái của renderer: activeVersion==null && published===false → chưa xuất bản.
   assert.equal(tpl.published, false);
   assert.equal(tpl.activeVersion, null);
@@ -78,7 +78,7 @@ test("mẫu mới là bản NHÁP — chưa xuất bản", () => {
 test("xuất bản chụp LẠI bot nguồn — sửa mô tả rồi bấm Publish phải ăn bản mới", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Doi", description: "bản cũ" }));
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(bot.id))!;
   as(A, () => updateAgent({ id: bot.id, description: "bản MỚI sau khi sửa" }));
   const pub = as(A, () => T.publishBotTemplate(tpl.shareId, 2))!;
   assert.match(pub.snapshot.description, /bản MỚI/, "mẫu phải là ảnh của bot HÔM NAY");
@@ -86,11 +86,11 @@ test("xuất bản chụp LẠI bot nguồn — sửa mô tả rồi bấm Publi
   assert.equal(pub.activeVersion, 2);
 });
 
-test("gọi lại cho cùng một bot trả về CÙNG mẫu, không đẻ thêm", () => {
+test("chia sẻ hai lần vẫn MỘT mẫu, không đẻ thêm", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Mot" }));
-  const t1 = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
-  const t2 = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const t1 = as(A, () => T.createTemplateForAgent(bot.id))!;
+  const t2 = as(A, () => T.createTemplateForAgent(bot.id))!;
   assert.equal(t1.shareId, t2.shareId);
   assert.equal(as(A, () => T.listBotTemplates()).length, 1);
 });
@@ -98,7 +98,7 @@ test("gọi lại cho cùng một bot trả về CÙNG mẫu, không đẻ thêm
 test("mẫu theo NGƯỜI — người B không thấy và không dựng được mẫu của A", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Rieng" }));
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(bot.id))!;
   assert.deepEqual(as(B, () => T.listBotTemplates()), []);
   assert.equal(as(B, () => T.getBotTemplateVersion(tpl.shareId, 1)), null);
   assert.equal(as(B, () => T.createAgentFromTemplate({ shareId: tpl.shareId })), null);
@@ -107,7 +107,7 @@ test("mẫu theo NGƯỜI — người B không thấy và không dựng đượ
 test("đổi tầm nhìn, và xoá", () => {
   sach();
   const bot = as(A, () => createAgent({ name: "Xoa" }));
-  const tpl = as(A, () => T.getBotTemplateForSourceAgent(bot.id))!;
+  const tpl = as(A, () => T.createTemplateForAgent(bot.id))!;
   assert.equal(as(A, () => T.setBotTemplateVisibility(tpl.shareId, "public"))?.visibility, "public");
   // Giá trị lạ phải rơi về "team", không được nhận bừa: đây là cờ quyết định ai đọc được mẫu.
   assert.equal(as(A, () => T.setBotTemplateVisibility(tpl.shareId, "ai-cung-doc"))?.visibility, "team");
@@ -123,6 +123,22 @@ test("shareId lạ / bot không tồn tại: trả null, không nổ", () => {
   assert.equal(as(A, () => T.setBotTemplateVisibility("tpl-ma", "team")), null);
   assert.equal(as(A, () => T.createAgentFromTemplate({ shareId: "tpl-ma" })), null);
   as(A, () => T.deleteBotTemplate("tpl-ma"));   // không được ném
+});
+
+test("ĐỌC là đọc: bot chưa chia sẻ thì trả null, KHÔNG tự đẻ mẫu", () => {
+  sach();
+  const bot = as(A, () => createAgent({ name: "Chua chia se" }));
+  // Bản đầu tự tạo nháp ở đây, và app thật hiện "Delete Template" trên mọi bot dù chưa ai chia sẻ.
+  // Renderer chỉ hỏi "có record không", không phân biệt nháp với đã xuất bản.
+  assert.equal(as(A, () => T.getBotTemplateForSourceAgent(bot.id)), null);
+  assert.deepEqual(as(A, () => T.listBotTemplates()), [], "đọc không được để lại dấu vết gì");
+});
+
+test("sau khi chia sẻ thì đọc mới thấy", () => {
+  sach();
+  const bot = as(A, () => createAgent({ name: "Da chia se" }));
+  const made = as(A, () => T.createTemplateForAgent(bot.id))!;
+  assert.equal(as(A, () => T.getBotTemplateForSourceAgent(bot.id))?.shareId, made.shareId);
 });
 
 test("dọn", () => { sach(); });

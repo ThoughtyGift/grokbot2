@@ -79,7 +79,7 @@ import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktop
 import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, authenticateMcpServer } from "./mcp.js";
 import { transcribe } from "./stt.js";
 import {
-  listBotTemplates, getBotTemplateForSourceAgent, getBotTemplateVersion, publishBotTemplate,
+  listBotTemplates, getBotTemplateForSourceAgent, createTemplateForAgent, getBotTemplateVersion, publishBotTemplate,
   setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate,
 } from "./bot-templates.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";

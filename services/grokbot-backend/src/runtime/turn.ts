@@ -128,6 +128,7 @@ const ACTIVITY_TOOL: Record<string, string> = {
   watch_video: "Screenshot",
   create_skill: "Shell",
   create_diagram: "Screenshot",
+  share_bot_template: "CreateAgent",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
   attach_image: "Screenshot",
