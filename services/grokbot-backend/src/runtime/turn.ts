@@ -968,7 +968,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     : String((hostSettingsRef() as { localToolPermission?: unknown }).localToolPermission ?? "ask");
   if (known && standing === "never") {
     const denied: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
-      message: { type: "local-tool-permission", ask: { status: "denied", target: `${name}(${arg})`, requestId } } };
+      message: { type: "local-tool-permission", ask: { status: "denied", action: "run-command", target: `${name}(${arg})`, requestId } } };
     t.push(denied);
     const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
     if (tc) { tc.status = "done"; tc.result = "(người dùng đã chặn công cụ chạy lệnh trên máy)"; }
@@ -982,7 +982,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
   }
 
   const card: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
-    message: { type: "local-tool-permission", ask: { status: known ? "pending" : "denied", target: `${name}(${arg})`, requestId } } };
+    message: { type: "local-tool-permission", ask: { status: known ? "pending" : "denied", action: "run-command", target: `${name}(${arg})`, requestId } } };
   t.push(card);
   if (known) pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: lower, arg, history });
   onUpdate(agentId);

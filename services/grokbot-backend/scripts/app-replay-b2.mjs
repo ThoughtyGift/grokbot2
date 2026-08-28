@@ -133,6 +133,7 @@ for (const [i, c] of cases.entries()) {
   // chờ lượt: xử lý widget/thẻ quyền ngay khi chúng hiện
   const deadline = Date.now() + 240_000;
   let widgetPrompt = null, permTargets = [], last = "", stable = 0;
+  let thuLai = 0;   // số lần bấm lại một thẻ báo "didn't go through"
   while (Date.now() < deadline) {
     await wait(3000);
 
@@ -166,10 +167,28 @@ for (const [i, c] of cases.entries()) {
         permTargets.push(`BỎ QUA (nguy hiểm): ${perm.target.replace(/\s+/g, " ").slice(0, 90)}`);
         // Không bấm gì — nhưng cũng đừng quay vòng mãi trên cùng một thẻ.
         await wait(3000);
+      } else if (perm.retry && ++thuLai > 3) {
+        /*
+         * Bỏ cuộc sau ba lần — thẻ này KHÔNG bao giờ nhận được câu trả lời, và giờ đã biết vì sao.
+         *
+         * Renderer chuyển `ask.action` xuống IPC main khi bấm "Allow once", và main validate nó.
+         * Backend của ta dựng ask thiếu đúng trường đó, nên main ném "must be local tool action,
+         * got undefined", lời hứa vỡ, và thẻ hiện "Your answer didn't go through" — câu đổ lỗi cho
+         * đường truyền trong khi lỗi nằm ở dữ liệu ta gửi. Xem `PermMsg` trong conversation/types.ts.
+         *
+         * Đã vá. Giữ lối thoát này lại vì một thẻ không bấm được KHÔNG được phép giết cả lượt chạy:
+         * ghi lại rồi đi tiếp vẫn đúng hơn là quay vòng cho tới hết giờ.
+         */
+        const x = await js("(() => { const b = [...document.querySelectorAll('button')]"
+          + ".find(e => /^(×|✕|close|dismiss)$/i.test((e.innerText||'').trim()) || e.getAttribute('aria-label') === 'Close');"
+          + " if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y + r.height/2 }; })()");
+        if (x) await clickAt(x.x, x.y);
+        permTargets.push("BỎ QUA: thẻ quyền không nhận trả lời sau 3 lần bấm");
+        nSkip += 1; thuLai = 0;
+        await wait(2000);
       } else {
         await clickAt(perm.x, perm.y);
-        if (!perm.retry) { nPerm += 1; permTargets.push(perm.target.replace(/\s+/g, " ").slice(0, 90)); }
-        else permTargets.push(`(bấm lại sau khi app báo "didn't go through")`);
+        if (!perm.retry) { nPerm += 1; thuLai = 0; permTargets.push(perm.target.replace(/\s+/g, " ").slice(0, 90)); }
       }
       stable = 0; continue;
     }

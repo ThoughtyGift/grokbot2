@@ -14,7 +14,23 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 process.env.GROKBOT2_ALLOW_WRITE = "1";
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "bot-templates");
+/**
+ * Thư mục kho — phải suy y hệt phần cài đặt, tức đọc `GROKBOT2_DATA_DIR` TRƯỚC.
+ *
+ * Trước đây dòng này suy đường dẫn từ vị trí module, và đó là một cái bẫy có hai nửa. Phiên trước
+ * tôi vá nửa thứ nhất (phần cài đặt) mà để nguyên nửa này, nên kết quả TỆ HƠN lúc chưa vá:
+ *
+ *   - phần cài đặt ghi vào thư mục tạm mà runner dựng   → đúng
+ *   - `sach()` ở đây đi xoá `.data/` THẬT của người dùng → mỗi lần chạy test là một lần xoá
+ *   - thư mục tạm không bao giờ được dọn                → rác dồn giữa các bài, và bài
+ *     "đọc không được để lại dấu vết gì" đỏ vì đọc trúng rác của bài trước
+ *
+ * Mười bài đỏ chỉ là triệu chứng; cái mất là dữ liệu. Vá một nửa một cái bẫy thì cái bẫy vẫn còn,
+ * chỉ khác là nó không còn báo động nữa.
+ */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR
+  ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+const DIR = join(DATA_DIR, "bot-templates");
 const sach = (): void => { try { rmSync(DIR, { recursive: true, force: true }); } catch { /* chưa có */ } };
 
 const { runWithOwner: as } = await import("./request-context.js");

@@ -42,7 +42,7 @@ test("permission card maps to pending tool-call", () => {
   const e: Entry = {
     id: "e4", seq: 4, kind: "send-message",
     author: { id: "agent-1", name: "Claude" },
-    message: { type: "local-tool-permission", ask: { status: "pending", target: "web_search", requestId: "req-9" } },
+    message: { type: "local-tool-permission", ask: { status: "pending", action: "run-command", target: "web_search", requestId: "req-9" } },
     timestampMs: 4,
   };
   const n = toNativeEntry(e);
@@ -133,7 +133,7 @@ test("permission card folds into the preceding tool-call", () => {
   const perm: Entry = {
     id: "p1", seq: 2, kind: "send-message",
     author: { id: "agent-1", name: "Claude" },
-    message: { type: "local-tool-permission", ask: { status: "pending", target: "create_agent", requestId: "req-1" } },
+    message: { type: "local-tool-permission", ask: { status: "pending", action: "run-command", target: "create_agent", requestId: "req-1" } },
     timestampMs: 2,
   };
   const page = toNativeTranscriptPage([tool, perm], false);

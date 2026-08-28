@@ -244,10 +244,52 @@ Trường khác 0.29 đọc mà ta chưa trả: `branched` (dấu phân nhánh),
 (affordance `bot_share`), roster `isSharedRoom`/`remoteRoom`/`sharedRoomId`/`harness`.
 Không cái nào làm **vỡ** render — đều falsy → mất tính năng, không lỗi.
 
-**Đã khớp:** `local-tool-permission` (`ask.status/target/requestId`), nhóm
+**Đã khớp:** nhóm
 (`subtitle:s.isGroup?…memberIds.length`, `icon:{type:"group"}`), tác giả từng bot trong phòng
 (`send-message.author` → `member:${t.author.id}`), `fromAgent`/`toAgent`, `description`+`purpose`,
 `notifyOnUpdatesEnabled`.
+
+### 3.x — `local-tool-permission`: thiếu MỘT trường, chết CẢ cái thẻ
+
+Mục này trước đây nằm trong danh sách "đã khớp", với ba trường `ask.status/target/requestId`. Sai.
+Trường thứ tư — `action` — không phải để hiển thị, nó là **đối số bắt buộc của một lệnh IPC**, và
+thiếu nó thì nút Allow trên thẻ bấm bao nhiêu lần cũng vô ích.
+
+Chuỗi đầy đủ, trích nguyên văn bundle 0.29 (`n$t`):
+
+```js
+resolution === "allow-once"
+  → recordApproval(requestId, ask.action, ask.target)   // → IPC main: recordLocalToolApproval
+  → resolveLocalToolPermission({entryId, requestId, resolution, agentId})   // → CỔNG của ta
+```
+
+Lời gọi thứ nhất đi vào **tiến trình main của chính app**, không ra mạng. Đo trong app đang chạy
+(28/08), gọi tay hai lần chỉ khác đúng trường này:
+
+```
+action=undefined      → NÉM  edge/invalid-args: recordLocalToolApproval:
+                             args.action: must be local tool action, got undefined
+action="run-command"  → OK
+```
+
+Lời hứa vỡ ở lệnh thứ nhất, `.catch(()=>b({kind:"failed"}))` bắt, và thẻ hiện
+**"Your answer didn't go through. Check your connection and try again."**
+
+Tập giá trị hợp lệ: `["run-command","send-input","read-file","list-directory","write-file"]`.
+
+**Hai bài học, cái thứ hai đắt hơn:**
+
+1. Câu báo lỗi **nói dối về nguyên nhân**. Nó nói "connection", nên tôi đi bắt gói mạng — cho một
+   lời gọi chưa bao giờ rời khỏi renderer. Không có gì để bắt, và "không bắt được gì" lúc đó bị đọc
+   nhầm thành "client không gọi gì cả".
+2. Từ chỗ đó tôi kết luận thẻ thuộc cụm `GrokBotUserComputer` ta cố ý không phục vụ, tức
+   **"không sửa được"** — và suýt ghi kết luận đó vào mã. Nó sai hoàn toàn: lỗi nằm trong dữ liệu
+   CHÍNH TA gửi, và sửa hết đúng một trường. Một triệu chứng khớp với "tính năng chưa làm" không
+   chứng minh được rằng tính năng đó chưa làm.
+
+Điều duy nhất phân giải được là gọi thẳng hàm đó với hai giá trị rồi so — chứ không phải suy từ
+triệu chứng. Kiểu `PermMsg` giờ để `action` **bắt buộc**, nên trình biên dịch chặn: lần thêm trường
+đó đã làm đỏ ngay hai fixture test đang thiếu.
 
 ---
 

@@ -9,7 +9,34 @@ export interface Base { id: string; timestampMs: number; reactions?: Reaction[];
 export interface Author { id: string; name: string }
 
 export type TextMsg = { type: "text"; content: string };
-export type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; target: string; requestId: string } };
+/**
+ * `action` KHÔNG phải trang trí — thiếu nó thì cả cái thẻ chết.
+ *
+ * Đo được 28/08 trong app 0.29 đang chạy. Renderer chuyển thẳng `ask.action` xuống IPC của tiến
+ * trình main khi người dùng bấm "Allow once":
+ *
+ *     recordApproval(requestId, ask.action, ask.target)   →  recordLocalToolApproval
+ *
+ * và main VALIDATE nó. Gọi tay hai lần, chỉ khác đúng trường này:
+ *
+ *     action=undefined      → NÉM  "recordLocalToolApproval: args.action: must be local tool
+ *                                   action, got undefined"
+ *     action="run-command"  → OK
+ *
+ * Lời hứa `n$t(...)` vỡ, `.catch(()=>b({kind:"failed"}))` bắt, và thẻ hiện
+ * **"Your answer didn't go through. Check your connection and try again."** — một câu đổ lỗi cho
+ * đường truyền trong khi đường truyền không liên quan gì. Bấm bao nhiêu lần cũng thế.
+ *
+ * Tôi từng đoán sai chỗ này: đoán rằng thẻ thuộc cụm `GrokBotUserComputer` ta cố ý không phục vụ,
+ * nên "không sửa được". Sai hoàn toàn — backend của ta chưa bao giờ bị gọi tới, vì lời gọi chết ở
+ * trong chính app trước khi ra khỏi renderer. Không có request nào để mà bắt, và đó đúng là lý do
+ * lần bắt gói trước không thấy gì.
+ *
+ * Tập giá trị hợp lệ, nguyên văn bundle 0.29:
+ *     ["run-command","send-input","read-file","list-directory","write-file"]
+ */
+export type LocalToolAction = "run-command" | "send-input" | "read-file" | "list-directory" | "write-file";
+export type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; action: LocalToolAction; target: string; requestId: string } };
 export type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending" | "approved" | "denied"; summary: string; requestId: string } };
 export type ListenerConnectMsg = { type: "listener-connect"; platform: string; reason: string };
 export type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
