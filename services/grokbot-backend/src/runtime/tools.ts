@@ -1257,7 +1257,29 @@ const PEER_PROTOCOL =
   + "Bỏ \"agent\" thì routine thuộc về CHÍNH BẠN; dựng routine cho một con trong đội thì phải nêu tên nó. "
   + "Một bot có mô tả mà không có nhịp thì chỉ chạy khi bị hỏi. " +
   'TOOL_CALL: rename_agent({"from":"New Bot","to":"Manager"}) — drop "from" to rename yourself. ' +
-  "Give every bot you create a real description; never leave an empty one.";
+  /*
+   * Mô tả bot: đo từ NĂM mô tả thật của app gốc, không phải lời khuyên chung.
+   *
+   * `docs/extracted/chat-goc-0.29.md` giữ nguyên văn mô tả của Kho, CS, Ads, Listing, Kế toán.
+   * Cả năm cùng một khuôn, và khuôn đó khác hẳn thứ bot ta viết ra. Ta viết một CHỨC DANH
+   * ("Bot quản lý quảng cáo Shopee Ads … cho shop lớn"); app gốc viết một BẢN SOP có ngưỡng:
+   *
+   *   "Bạn là Kho/Fulfill Shopee của shop khanh duy (VN, vận chuyển SPX). Việc: … Cutoff GMT+7:
+   *    đơn trước 18:00 phải Chuẩn bị hàng tốt nhất trước 19:00 và bàn giao trước 23:59 … Mục tiêu
+   *    LSR < 3%, NFR < 2%, FHR ≥ 90% … Không pack khi hết tồn. Trả lời tiếng Việt, checklist."
+   *
+   * Thành phần số 6 đáng chú ý nhất: mỗi mô tả nói rõ KHI NÀO gọi bot nào ("Hết hàng thì báo
+   * Kho/Listing", "tồn 0 + báo Ads pause"). Đó là lý do bot bên hãng nhắn nhau thường xuyên mà
+   * không ai bảo — luật bàn giao nằm trong chính nhân cách của chúng, không nằm trong lời nhắc
+   * chung. Bot ta chưa con nào có dòng đó, và đúng là chúng chỉ nhắn nhau khi bị ép.
+   */
+  "Every bot you create needs a description written as its STANDING ORDERS, not a job title. "
+  + "Address it as \"Bạn là …\" and name whose shop/team it serves. Then, as far as the person has "
+  + "told you: what it does; the NUMBERS it works to (cutoffs, targets, limits, how often it "
+  + "checks); what it must never do; when to stop and ask the owner; WHICH OTHER BOT it hands to "
+  + "and on what trigger; and how to answer (language, format). The handoff line is what makes a "
+  + "team talk to each other instead of working alone. "
+  + "Do not invent numbers the person never gave you — leave that part out and say you left it out.";
 
 /**
  * Scaffolding from the first spike — `calc`, `echo` and friends. They stay callable so the

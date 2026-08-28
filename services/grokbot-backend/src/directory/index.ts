@@ -100,6 +100,8 @@ function summarise(a: AgentRecord): RosterRow {
     snapshotEpoch: EPOCH,
     snapshotSeq: rosterSeq,
     description: a.description ?? "",
+    // Ô Label: renderer chỉ dựng nó khi trường TỒN TẠI, nên gửi "" chứ không bỏ trống.
+    title: a.title ?? "",
     ...(a.description ? { purpose: a.description } : {}),
     path: `/agents/${a.id}`,
     createdAt: a.createdAtMs,
@@ -209,12 +211,14 @@ export function setGroupMembers(
 }
 
 export function updateAgent(
-  a: { id?: string; agentId?: string; name?: string; description?: string; profile?: { name?: string; description?: string } },
+  a: { id?: string; agentId?: string; name?: string; description?: string; title?: string; profile?: { name?: string; description?: string; title?: string } },
 ): AgentRecord | null {
   const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const name = a.profile?.name ?? a.name;
   const description = a.profile?.description ?? a.description;
   if (typeof description === "string") rec.description = description;
+  const title = a.profile?.title ?? a.title;
+  if (typeof title === "string") rec.title = title;
   if (typeof name === "string" && name.length > 0 && name !== rec.name) {
     pushTranscriptEvent(rec.id, { type: "name-changed", from: rec.name, to: name });
     rec.name = name;

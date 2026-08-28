@@ -89,6 +89,18 @@ export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
   avatarDataUrl?: string; avatarVersion?: string; notificationsEnabled?: boolean; notifyOnUpdates?: boolean;
   description?: string;
+  /**
+   * Ô "Label" trong Settings của bot — app gốc gọi trường này là `title`.
+   *
+   * Renderer chỉ DỰNG ô đó khi trường tồn tại: `mq(t) = !t.isGroup && t.title !== void 0`, và ô
+   * nhập lấy `initialValue: n.title` với placeholder "Research, marketing, admin" (`Pqtvzz`).
+   * `AgentRecord` của ta không có trường này, nên ô Label chưa bao giờ hiện — thấy rõ khi đặt hai
+   * ảnh Settings cạnh nhau: app gốc có Name / Label / Description, ta chỉ có Name / Description.
+   *
+   * Để chuỗi rỗng chứ KHÔNG bỏ trống: `undefined` làm renderer ẩn hẳn ô, còn `""` cho ra một ô
+   * trống người dùng gõ được — đó mới là hành vi tương đương.
+   */
+  title?: string;
   isRunning?: boolean;
   isComposingMessage?: boolean;
   isRetrying?: boolean;
