@@ -3,6 +3,82 @@
 Extracted from the Grok Bot `0.20.0` client bundle (`host-main.cjs`, `electron-main/main.cjs`,
 renderer). ConnectRPC over HTTP/1.1, binary protobuf; transport `connect-es/1.6.1`.
 
+**0.29 addendum:** the three-plane split below and the gateway coverage numbers were measured
+against `0.29.0` (fresh extract of the installed `app.asar`). Everything else on this page is still
+the 0.20 reading unless it says otherwise. Full 0.29 map:
+[docs/extracted/0-29-mapping.md](extracted/0-29-mapping.md).
+
+---
+
+## The client speaks on THREE planes — do not mix them
+
+This is the first thing to get right, because a method on the wrong plane is a method you either
+implement for nothing or wait for forever. Grep the client bundle and there are exactly two JSON
+method tables plus the proto services:
+
+```
+Xa("gateway",{methods:{ …   ← 146 methods   BOX GATEWAY   → this is what grokbot2 /gw must answer
+Xa("main",{methods:{    …   ← 152 methods   APP IPC       → Grok Bot.exe answers itself, in-process
+typeName:"aiserver.v1.GrokBotService" (+ AiService · DashboardService · SandBoxService · Keyring …)
+                            ← ConnectRPC    VENDOR RPC    → goes to the vendor's servers
+```
+
+| plane | who answers | our job |
+|---|---|---|
+| **Box gateway** `POST /gw/api/<method>` | the box | **all of it** — see coverage below |
+| **App IPC** | `Grok Bot.exe` itself, never leaves the process | **none**. Implementing these is wasted work |
+| **Vendor RPC** (ConnectRPC proto) | vendor backend | only the bootstrap subset we fake — see *Bootstrap gates* |
+
+### The example that makes the split concrete: Chrome cookies
+
+The "log in once, let the bots reuse the session" feature is **split across two planes**, which is
+why treating it as one backend feature goes nowhere:
+
+| method | plane | meaning |
+|---|---|---|
+| `listChromeProfiles` · `importChromeCookies` · `putCookieOriginGrants` | **app IPC** | read cookies out of the Chrome on the USER'S machine, and hold the allow-list of sites. Never reaches any backend. |
+| `injectChromeCookies` | **box gateway** | push those cookies into the box's Chrome. **This half is ours**, and it is still missing. |
+
+So: no amount of backend work implements `importChromeCookies` — the app already does it — while
+`injectChromeCookies` will never appear on its own. Get the plane wrong and you build the half that
+was never yours.
+
+### Gateway coverage, measured
+
+Đo lại bất cứ lúc nào — đừng tin con số dán trong doc:
+
+```
+node services/grokbot-backend/scripts/gateway-coverage.mjs --bundle <asar>/dist/electron-main/main.cjs
+```
+
+Nó đọc bảng `Xa("gateway")` thẳng từ bundle và **import** bảng lệnh của ta để đếm khoá thật. Cố ý
+không regex phía ta: bản đếm tay đầu tiên bỏ sót 9 lệnh shared-room đăng ký bằng
+`Object.fromEntries(...)` và báo thiếu 27 thay vì 18. Số dưới đây là kết quả của lần chạy 28/08:
+
+| | |
+|---|---|
+| methods in the 0.29 gateway table | **146** |
+| answered by grokbot2 | **128 (88%)** — 119 implemented + 9 shared-room commands answered with an explicit refusal |
+| unanswered → soft 404 | **18** |
+
+The 18, grouped — a soft 404 means the button in the app does nothing at all, with no error:
+
+- **bot templates (7)** — `listBotTemplates`, `publishBotTemplate`, `createAgentFromTemplate`,
+  `getBotTemplateVersion`, `getBotTemplateForSourceAgent`, `deleteBotTemplate`,
+  `setBotTemplateVisibility`
+- **voice calls (5)** — `getVoiceCall`, `nudgeVoiceCall`, `recordVoiceCall`,
+  `readVoiceCallAgentContext`, `readVoiceCallSentMessages`
+- **`injectChromeCookies` (1)** — the box half of the cookie feature above
+- **`transcribeAudio` (1)** — we have the `TranscribeAudio` proto and `stt.ts`, but the client 0.29
+  asks over the **gateway**, and that road is not connected
+- **assets / misc (4)** — `generateAgentAvatarImage`, `getAgentNotificationAvatar`,
+  `getMcpPluginLogo`, `getAutomationWebhookCredential`
+
+> Answering **NO** counts as answered. `SHARED_ROOM_COMMANDS` return
+> `{ok:false, reason:"Sharing needs a relay both installs can reach…"}` rather than a 404 or a
+> cheerful `{}`; the comment in `commands.ts` says why — *faking success is worse than refusing*.
+> The user finds out immediately instead of wondering why nothing happened.
+
 ## Key numbers
 
 | | |
