@@ -1189,7 +1189,19 @@ const VIDEO_PROTOCOL = boxConfigured()
   ? String.fromCharCode(10) + String.fromCharCode(10) +
     "WATCHING VIDEO: to actually SEE a video file on your computer (one you recorded, downloaded, or " +
     "produced), call " +
-    'TOOL_CALL: watch_video({"path":"/workspace/clip.mp4"}) — you get duration, resolution, audio ' +
+    /*
+   * Ví dụ dùng đường TƯƠNG ĐỐI, vì `/workspace` không còn tồn tại.
+   *
+   * Box chạy per-user: mỗi người một gốc `/home/gb2u00N/workspace`, không phải `/workspace` chung
+   * như trước. Đo trong lượt E2E 28/08: `list_dir_v2("/workspace")` trả `path escapes root`, và bot
+   * phải lách bằng `run_terminal_command_v2` để xem thư mục của chính nó.
+   *
+   * `watch_video` thì KHÔNG đi qua phép kiểm đó — nó dựng một lệnh shell, nên đường tuyệt đối vẫn
+   * chạy (cùng lượt đó nó xem được `/tmp/e2e_test_v2.mp4`). Nhưng một ví dụ trỏ vào thư mục không
+   * tồn tại vẫn dạy model một bản đồ sai về nơi nó đang đứng, và cái bản đồ sai đó là thứ làm hỏng
+   * các tool file khác.
+   */
+  'TOOL_CALL: watch_video({"path":"clip.mp4"}) — đường dẫn tương đối gốc làm việc; you get duration, resolution, audio ' +
     "loudness, and a grid of evenly-spaced frames placed before your eyes. ALWAYS watch your own " +
     "output before telling the user it is good — a black or silent clip is something you must catch " +
     "yourself, then fix and re-check."
