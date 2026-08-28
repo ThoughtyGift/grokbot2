@@ -40,6 +40,11 @@ export interface PluginEntry {
   displayName: string;
   description: string;
   /**
+   * Nhóm hiển thị trong pane Plugins (chữ thường). Hàng chip lọc sinh ra từ đúng trường này, và
+   * thiếu nó thì client 0.29 **sập cả pane** — xem `pluginJson` trong `bootstrap-plugins.ts`.
+   */
+  category?: string;
+  /**
    * The service this row connects, when its MCP server fronts several.
    *
    * Six rows here install the same Zernio endpoint, so the connector cannot say which service the
@@ -122,6 +127,20 @@ function parse(raw: unknown): PluginEntry[] {
         ? { skill: { ...p.skill, description: p.skill.description ?? "" } }
         : {}),
       ...(typeof p.logoUrl === "string" && /^https:\/\//i.test(p.logoUrl) ? { logoUrl: p.logoUrl } : {}),
+      /*
+       * `category` — nhóm hiển thị trong pane Plugins, và hàng chip lọc sinh ra từ chính nó.
+       *
+       * Chỗ này là một cái bẫy im lặng: hàm trên **lọc trắng** danh sách trường, dựng một object
+       * mới chứ không sao chép cả hàng. Thêm `category` vào `plugin-registry.json` mà quên dòng
+       * này thì nó bị vứt trên đường đi — registry có, client không thấy, và không ai báo lỗi gì.
+       *
+       * Chuẩn hoá về chữ thường: renderer tự viết hoa từng chữ để làm tiêu đề nhóm
+       * (`_t(a.category)`), nhưng khoá nhóm lại là `category:${a.category.toLowerCase()}`. Để lẫn
+       * "Design" và "design" là hai nhóm cùng tên nằm cạnh nhau.
+       */
+      ...(typeof p.category === "string" && p.category.trim()
+        ? { category: p.category.trim().toLowerCase() }
+        : {}),
       // Lower-cased and stripped: it becomes an `account_key` on the wire and is matched against
       // what the connector reports, so "Instagram" and "instagram" must not be two platforms.
       ...(typeof p.platform === "string" && /^[a-z0-9_]+$/i.test(p.platform)
