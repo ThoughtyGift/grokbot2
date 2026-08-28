@@ -159,7 +159,16 @@ for (const sc of data.scenarios) {
     await gw("sendPrompt", { agentId, content: c.input });
     // Chờ lượt lắng: không còn streaming, đã có gì đó (text/widget/thẻ), và đứng yên 2 nhịp.
     let ours = [], stable = 0, lastLen = -1;
-    const deadline = Date.now() + (sc.isGroup ? 240_000 : 100_000);
+    /*
+     * Hạn chờ một lượt.
+     *
+     * Bản đầu để 100s cho hội thoại thường, và lần chạy 28/08 báo case 9 ("xây quy trình vận hành
+     * sàn Shopee chuyên nghiệp") là IM LẶNG. Nhìn cột app gốc thì thấy ngay nghi vấn: bên đó trả
+     * SÁU output kèm một file `shopee-ops-sop.md` — tức đây là lượt dài nhất trong cả kịch bản.
+     * Một phép đo cắt ngang lượt rồi ghi "không trả lời" là phép đo nói dối, và nó nói dối đúng
+     * vào những câu hỏi khó nhất, tức những câu đáng đo nhất.
+     */
+    const deadline = Date.now() + 240_000;
     while (Date.now() < deadline) {
       await wait(2500);
       const now = (await entriesOf(agentId)).slice(before);

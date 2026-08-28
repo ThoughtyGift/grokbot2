@@ -30,10 +30,10 @@
  * chỉ nhận `{shareId, version}` — không mang `sourceAgentId`. Nghĩa là bên hãng `shareId` do máy
  * chủ cấp, và client chỉ bao giờ xuất bản một thứ máy chủ đã biết. Đường đó không nằm trong app.
  *
- * **Suy luận DUY NHẤT của file này, nói rõ ra:** `getBotTemplateForSourceAgent` sẽ **tạo bản nháp
- * nếu chưa có** rồi trả về, thay vì trả `null`. Đó là lệnh duy nhất mang `sourceAgentId`, và
- * `published:false` đọc đúng thành "chưa xuất bản" theo chính máy trạng thái ở trên. Nếu sau này đo
- * được rằng hãng trả `null` ở đây, chỗ cần sửa là đúng một dòng.
+ * Từng có một suy luận ở đây — `getBotTemplateForSourceAgent` tự tạo bản nháp khi chưa có — và
+ * **app thật đã bác nó trong cùng ngày**: mọi bot hiện nút "Delete Template" dù chưa ai chia sẻ.
+ * Xem ghi chú tại chính hàm đó. Giờ tạo mẫu đi qua `createTemplateForAgent`, tức chỉ khi có người
+ * thật sự muốn chia sẻ (tool `share_bot_template`).
  *
  * ── `snapshot` là của TA ────────────────────────────────────────────────────────────────────────
  *
@@ -48,7 +48,16 @@ import { currentOwner } from "./request-context.js";
 import { agents } from "./chat/state.js";
 import { createAgent, createGroup } from "./directory/index.js";
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "bot-templates");
+/**
+ * Nơi kho này ghi.
+ *
+ * Đọc `GROKBOT2_DATA_DIR` TRƯỚC — `mcp.ts` đã ghi cảnh báo về đúng cái bẫy này: đường dẫn suy từ vị
+ * trí module thì nó đi theo mã và **bỏ qua mọi biến cách ly của bài test**, nên một lần chạy thử
+ * ghi thẳng vào `.data` thật của người dùng. Đo được ngày 28/08: các lần chạy E2E để lại mẫu bot
+ * rác trong kho thật, và một trong số đó làm chính bài test sau đó đọc nhầm.
+ */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+const DIR = join(DATA_DIR, "bot-templates");
 const safe = (authId: string): string => authId.replace(/[^A-Za-z0-9_-]/g, "_");
 const fileFor = (owner: string): string => join(DIR, `${safe(owner)}.json`);
 

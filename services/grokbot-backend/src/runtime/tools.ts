@@ -1311,11 +1311,30 @@ const desktopParagraph = (info: { width: number; height: number; dpi: number } |
  * Chỉ nói khi thật sự đáng: ba việc độc lập chạy nối đuôi là ba lần chờ, còn một việc thì giao nền
  * rồi ngồi chờ ngay lập tức lại chậm hơn làm thẳng.
  */
+/**
+ * Các loại subagent — và vì sao phải liệt kê ở đây.
+ *
+ * `task_v2` nhận `subagent_type`, nhưng lời nhắc chưa bao giờ NÓI có những loại nào. Đo được
+ * (e2e-today, 28/08): hỏi thẳng "có subagent nào soi ảnh/video không", bot trả lời **"Không, mình
+ * không có subagent chuyên biệt kiểu 'soi ảnh'"** — và nó nói THẬT, vì nó không được cho biết.
+ * Năm loại tồn tại trong `SUBAGENT_TYPES` mà model không gọi được loại nào ngoài mặc định.
+ *
+ * Sinh từ chính `SUBAGENT_TYPES` chứ không chép tay: thêm một loại mà quên sửa chuỗi ở đây là
+ * quay lại đúng cái lỗi này, chỉ khác cái tên.
+ */
+const subagentTypeList = (): string =>
+  Object.entries(SUBAGENT_TYPES).map(([k, v]) => `"${k}" (${v.label})`).join(", ");
+
 const TASK_PROTOCOL =
   "\n\nVIỆC SONG SONG: khi có NHIỀU việc độc lập nhau, giao từng việc bằng " +
   'TOOL_CALL: task({"task_description":"…","task_title":"…","async":true}) — mỗi lệnh trả về một mã. ' +
   'Giao hết rồi gọi TOOL_CALL: await_task({"ids":["task-1","task-2"]}) một lần để lấy tất cả. ' +
-  "Chỉ có MỘT việc thì đừng dùng async: giao nền rồi chờ ngay còn chậm hơn làm thẳng.";
+  "Chỉ có MỘT việc thì đừng dùng async: giao nền rồi chờ ngay còn chậm hơn làm thẳng." +
+  "\n\nGIAO CHO MỘT CHUYÊN GIA: một việc gọn nhưng ngốn nhiều bước đọc/nhìn thì giao cho subagent " +
+  'bằng TOOL_CALL: task_v2({"subagent_type":"…","prompt":"…"}) — nó chạy trong cửa sổ ngữ cảnh RIÊNG ' +
+  "và chỉ trả về kết luận, nên hội thoại chính không bị lấp bởi mấy chục bước trung gian. " +
+  `Các loại dùng được: ${subagentTypeList()}. ` +
+  "Chỉ dùng đúng những tên trên; không có tên nào hợp thì tự làm.";
 
 const toolProtocolFor = (owner: string): string =>
   toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);

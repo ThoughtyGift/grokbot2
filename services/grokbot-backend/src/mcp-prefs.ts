@@ -27,7 +27,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentOwner } from "./request-context.js";
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "mcp-prefs");
+/**
+ * Nơi kho này ghi.
+ *
+ * Đọc `GROKBOT2_DATA_DIR` TRƯỚC — `mcp.ts` đã ghi cảnh báo về đúng cái bẫy này: đường dẫn suy từ vị
+ * trí module thì nó đi theo mã và **bỏ qua mọi biến cách ly của bài test**, nên một lần chạy thử
+ * ghi thẳng vào `.data` thật của người dùng. Đo được ngày 28/08: các lần chạy E2E để lại mẫu bot
+ * rác trong kho thật, và một trong số đó làm chính bài test sau đó đọc nhầm.
+ */
+const DATA_DIR = process.env.GROKBOT2_DATA_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
+const DIR = join(DATA_DIR, "mcp-prefs");
 
 /** Cùng phép lọc tên file với box-secrets/displays — một danh tính không được thoát ra khỏi tên file. */
 const safe = (authId: string): string => authId.replace(/[^A-Za-z0-9_-]/g, "_");

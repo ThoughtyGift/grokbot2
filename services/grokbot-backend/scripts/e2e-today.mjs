@@ -124,7 +124,12 @@ console.log("\nmedia_review (subagent)");
 const a3 = (await gw("createAgent", { name: "Soi Media" })).agent;
 const t3 = await ask(a3.id, "Trên máy của bạn có subagent nào chuyên soi ảnh/video/tài liệu không? Kể tên các loại subagent bạn gọi được, đúng tên.");
 const txt3 = textIn(t3);
-check("model biết có loại subagent soi media", /media[_ ]?review|soi ảnh|soi video/i.test(txt3), txt3.slice(0, 220));
+// Bài này TỪNG xanh vì lý do sai: bot nói "KHÔNG, mình không có subagent kiểu 'soi ảnh'" và regex
+// khớp đúng cụm đó — trong một câu phủ định. Cùng cái bẫy đã mắc với "không câm như clip kia".
+// Giờ đòi đúng TÊN loại, và chặn câu phủ định.
+const noiKhong = /(không|chưa)\s+(có|hỗ trợ)/i.test(txt3);
+check("model kể được TÊN loại subagent soi media", /mediaReview|media_review/i.test(txt3) && !noiKhong,
+  (noiKhong ? "[bot đang nói KHÔNG có] " : "") + txt3.slice(0, 220));
 console.log(`      bot: ${txt3.replace(/\s+/g, " ").slice(0, 180)}`);
 
 console.log(`\n${pass} ok, ${fail} fail`);
