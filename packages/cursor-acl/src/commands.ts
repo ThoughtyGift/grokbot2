@@ -415,6 +415,29 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       if (!w || !serverId) return { serverId, instructions: "" };
       return w.setInstructions(serverId, String((a as { instructions?: unknown })?.instructions ?? ""));
     },
+    removeMcpServer: (a) => {
+      const w = extensions.mcpWrite;
+      const serverId = String((a as { serverId?: unknown })?.serverId ?? "");
+      if (!w || !serverId) return { ok: false, reason: "thiếu serverId" };
+      return w.removeServer(serverId);
+    },
+    authenticateMcpServer: (a) => {
+      const w = extensions.mcpWrite;
+      const serverId = String((a as { serverId?: unknown })?.serverId ?? "");
+      if (!w || !serverId) return { ok: false, serverId, reason: "thiếu serverId" };
+      return w.authenticate(serverId, (a as { forceReauth?: unknown })?.forceReauth === true);
+    },
+
+    /*
+     * `renameMcpAccount` / `removeMcpAccount` — TỪ CHỐI, vì backend này không có khái niệm "account".
+     *
+     * 0.29 cho một server nhiều tài khoản (`{serverId, accountKey, newAccountKey}`); ở đây mỗi
+     * server có đúng một bộ thông tin đăng nhập. Trả `{ok:true}` cho một thao tác không tồn tại là
+     * để người dùng tin rằng họ vừa đổi được thứ gì đó — cùng lý do `SHARED_ROOM_COMMANDS` chọn
+     * nói KHÔNG. Có ngày thêm nhiều tài khoản thì hai lệnh này là chỗ để cắm vào.
+     */
+    renameMcpAccount: () => ({ ok: false, reason: "mỗi server ở đây chỉ có một bộ đăng nhập — chưa có nhiều tài khoản để đổi tên" }),
+    removeMcpAccount: () => ({ ok: false, reason: "mỗi server ở đây chỉ có một bộ đăng nhập — dùng removeMcpServer nếu muốn bỏ hẳn server" }),
     // ── shared rooms: answered, and answered NO ──────────────────────────────
     //
     // All nine are declared in the renderer (`reply:"record"`, except `setSharedRoomTyping` which

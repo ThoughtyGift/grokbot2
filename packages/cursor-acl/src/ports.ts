@@ -222,6 +222,10 @@ export interface ExtensionsPort {
     toggleTool(serverId: string, toolName: string): { serverId: string; toolName: string; disabled: boolean };
     /** `setMcpCustomInstructions({serverId, instructions})` — chuỗi rỗng nghĩa là bỏ. */
     setInstructions(serverId: string, instructions: string): { serverId: string; instructions: string };
+    /** `removeMcpServer({serverId})` — chỉ ghi vào cấu hình do backend quản, xem mcp.ts. */
+    removeServer(serverId: string): { ok: boolean; reason?: string };
+    /** `authenticateMcpServer({serverId, forceReauth?})` — mở luồng OAuth cho server http. */
+    authenticate(serverId: string, forceReauth: boolean): { ok: boolean; serverId: string; authUrl?: string; status?: string; reason?: string };
   };
 }
 

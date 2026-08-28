@@ -17,12 +17,12 @@
  * start lazily on first use and are reused, because `npx -y <server>` costs seconds.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSpecSecrets, missingArgSecrets, warnMissing } from "./secrets.js";
-import { oauthAccessToken, recordRefusal, refusalFor, oauthPortFor } from "./mcp-oauth.js";
-import { warmAuthUrl, refreshAccessToken } from "./oauth-client.js";
+import { oauthAccessToken, recordRefusal, refusalFor, oauthPortFor, lastRedirect } from "./mcp-oauth.js";
+import { warmAuthUrl, refreshAccessToken, authUrlFor } from "./oauth-client.js";
 import { currentOwner } from "./request-context.js";
 import { disabledToolsOf, isToolDisabled } from "./mcp-prefs.js";
 import { MCP_PROTOCOL_VERSION, START_TIMEOUT_MS, CALL_TIMEOUT_MS, type Transport } from "./mcp-shared.js";
@@ -144,6 +144,62 @@ export function mcpServers(owner: string = currentOwner()): Record<string, Serve
 }
 
 export const isMcpConfigured = (owner: string = currentOwner()): boolean => Object.keys(mcpServers(owner)).length > 0;
+
+/**
+ * `removeMcpServer({serverId})` — bỏ một server khỏi cấu hình của người gọi.
+ *
+ * **Chỉ ghi vào file do backend quản** (`.data/mcp/<authId>.json`). Với danh tính mặc định,
+ * `configPathFor` trỏ tới `.mcp.json` ở gốc repo — file BẠN tự viết tay, giữ token thật, và có thể
+ * mang thứ tự/ghi chú riêng. Viết đè lên đó là sửa thứ mình không tạo ra, nên ở đây từ chối và nói
+ * rõ đường tự sửa. Từ chối kèm lý do hơn hẳn một `{ok:true}` rồi âm thầm dựng lại file của người khác.
+ */
+export function removeMcpServer(name: string, owner: string = currentOwner()): { ok: boolean; reason?: string } {
+  const path = configPathFor(owner);
+  if (path === CONFIG) {
+    return { ok: false, reason: `${CONFIG} là file bạn tự giữ — mở ra xoá mục "${name}" giúp, mình không viết đè lên nó.` };
+  }
+  if (!existsSync(path)) return { ok: false, reason: "chưa có cấu hình MCP nào" };
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as { mcpServers?: Record<string, unknown> };
+    const servers = parsed?.mcpServers;
+    if (!servers || typeof servers !== "object" || !(name in servers)) return { ok: false, reason: `không có server "${name}"` };
+    const { [name]: _gone, ...rest } = servers;
+    writeFileSync(path, `${JSON.stringify({ ...parsed, mcpServers: rest }, null, 2)}\n`, { mode: 0o600 });
+    // Tiến trình đang chạy của server vừa bỏ phải chết theo, nếu không nó sống tiếp tới khi restart.
+    closeMcp();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/**
+ * `authenticateMcpServer({serverId, forceReauth?})` — mở luồng đăng nhập cho một server từ xa.
+ *
+ * Chỉ có nghĩa với server **http**: server stdio chạy bằng lệnh trên máy, không có OAuth nào để
+ * bắt đầu — nói thẳng thay vì trả một URL rỗng.
+ *
+ * `forceReauth` KHÔNG xoá token cũ: `clearOAuth` xoá của MỌI server thuộc người đó, nên "đăng nhập
+ * lại GitHub" sẽ đá người dùng ra khỏi Notion và Slack cùng lúc. Token mới ghi đè khi luồng hoàn tất
+ * là đủ.
+ */
+export function authenticateMcpServer(
+  name: string, opts: { forceReauth?: boolean } = {}, owner: string = currentOwner(),
+): { ok: boolean; serverId: string; authUrl?: string; status?: string; reason?: string } {
+  const spec = mcpServers(owner)[name];
+  if (!spec) return { ok: false, serverId: name, reason: `không có server "${name}"` };
+  if (!spec.url) return { ok: false, serverId: name, reason: `"${name}" chạy bằng lệnh trên máy (stdio) — không có đăng nhập nào để mở` };
+  if (!opts.forceReauth && oauthAccessToken(spec.url, owner)) {
+    return { ok: true, serverId: name, status: "already-authenticated" };
+  }
+  const redirectUri = lastRedirect(owner);
+  if (!redirectUri) return { ok: false, serverId: name, reason: "chưa biết địa chỉ quay về (redirect URI) — mở pane Plugins một lần để client gửi nó xuống" };
+  const authUrl = authUrlFor(spec.url, redirectUri, owner);
+  // `authUrlFor` dựng URL ở nền: lần gọi đầu trả undefined, lần sau có. Nói đúng như vậy.
+  return authUrl
+    ? { ok: true, serverId: name, authUrl, status: "authorize" }
+    : { ok: true, serverId: name, status: "preparing" };
+}
 
 function rpc(s: Live, method: string, params?: unknown): Promise<any> {
   const id = ++s.nextId;

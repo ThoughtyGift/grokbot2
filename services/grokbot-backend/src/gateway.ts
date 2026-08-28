@@ -76,7 +76,7 @@ import {
 import { getAgentMemories, deleteAgentMemory, clearAgentMemories } from "./memory.js";
 import { startTeach, stopTeach, recordingState } from "./teach.js";
 import { startDesktopRecording, stopDesktopTeach, desktopRecordingState, desktopRecordConfigured } from "./desktop-record.js";
-import { closeMcp, mcpServers, mcpServerStatus, getMcpTools } from "./mcp.js";
+import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, authenticateMcpServer } from "./mcp.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -234,6 +234,8 @@ const ports: AclPorts = {
       },
       toggleTool: (serverId, toolName) => toggleToolDisabled(serverId, toolName, currentOwner()),
       setInstructions: (serverId, instructions) => setCustomInstructions(serverId, instructions, currentOwner()),
+      removeServer: (serverId) => removeMcpServer(serverId, currentOwner()),
+      authenticate: (serverId, forceReauth) => authenticateMcpServer(serverId, { forceReauth }, currentOwner()),
     },
   },
   events: { subscribe },
