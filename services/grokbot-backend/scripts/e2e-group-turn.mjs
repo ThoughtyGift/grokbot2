@@ -108,6 +108,29 @@ check("hỏi riêng Kho thì chỉ Kho trả lời", khoSolo.length > 0 && khoSo
 const adsQuiet = spoken(await entries(ads.id)).filter((e) => e.author?.id === ads.id).length;
 console.log(`      (Ads có ${adsQuiet} câu trong kênh riêng — chỉ để đối chiếu)`);
 
+// ── gọi ĐÍCH DANH trong phòng: chỉ người được gọi nói ────────────────────────
+// Luật của ta (docs/extracted/0-29-mapping.md §0.1): thuật toán của hãng chạy server-side nên
+// không chép được; cái đo được là client gửi `directAddressedAcceptance` và hợp đồng phòng của họ
+// chở peers[]/is_self — tức có chọn người nói. Ở đây đo hệ quả người dùng thấy: gọi tên Ads thì
+// Kho phải IM, và đó cũng là chỗ tiết kiệm hạn mức pool.
+const beforeCall = spoken(await entries(g.id));
+const nKhoBefore = beforeCall.filter((e) => e.author?.id === kho.id).length;
+const nAdsBefore = beforeCall.filter((e) => e.author?.id === ads.id).length;
+await gw("sendPrompt", { agentId: g.id, content: "Ads ơi, ngân sách hôm nay thế nào? Một câu thôi.", directAddressedAcceptance: true });
+let sAfter = [];
+for (let i = 0; i < 60; i += 1) {
+  await wait(2000);
+  sAfter = spoken(await entries(g.id));
+  if (sAfter.filter((e) => e.author?.id === ads.id).length > nAdsBefore) break;
+}
+const nKhoAfter = sAfter.filter((e) => e.author?.id === kho.id).length;
+const nAdsAfter = sAfter.filter((e) => e.author?.id === ads.id).length;
+check("gọi tên Ads thì Ads trả lời", nAdsAfter > nAdsBefore, `Ads ${nAdsBefore} -> ${nAdsAfter}`);
+// Chờ thêm một nhịp để chắc Kho không nói muộn.
+await wait(8000);
+const nKhoFinal = spoken(await entries(g.id)).filter((e) => e.author?.id === kho.id).length;
+check("gọi tên Ads thì Kho IM", nKhoFinal === nKhoBefore, `Kho ${nKhoBefore} -> ${nKhoFinal} (đáng lẽ không đổi)`);
+
 console.log(`\n${pass} ok, ${fail} fail`);
 await stop();
 process.exit(fail ? 1 : 0);
