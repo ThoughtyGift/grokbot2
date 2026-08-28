@@ -224,6 +224,29 @@ const daBam = new Set();
 for (const [i, c] of cases.entries()) {
   if (done >= MAX) break;
   done += 1;
+  /*
+   * Xác nhận lại ĐÚNG BOT trước MỖI case, không chỉ lúc đầu.
+   *
+   * Đo 29/08: case 10 bảo bot dựng đội, nó tạo 5 bot con — và app tự chuyển sang con vừa tạo
+   * (`selectAgent(newId)` sau `createAgent`). Case 11 rơi thẳng vào `Báo Cáo Tổng Hợp`; bản ghi bot
+   * thử đứng nguyên ở 10 tin, còn script ngồi chờ một lượt nó chưa bao giờ mở.
+   *
+   * Bản trước tôi đã thêm phép xác nhận — nhưng chỉ chạy MỘT LẦN lúc đầu rồi tin mãi. Cùng hình
+   * dạng với ba lỗi khác trong đợt này: vá bước đầu, bỏ bước lặp. Giao diện đổi giữa chừng là
+   * chuyện bình thường; giả định nó đứng yên mới là chuyện bất thường.
+   */
+  for (let lan = 0; lan < 5 && !(await daMoDungBot()); lan += 1) {
+    const r = await boxOfText(BOT);
+    if (r) { await clickAt(r.x, r.y); await wait(1500); }
+    else await wait(1500);
+  }
+  if (!(await daMoDungBot())) {
+    console.error(`
+✋ DỪNG ở case ${i + 1}: app đang mở bot khác và không quay lại được "${BOT}".`);
+    console.error("   Gõ tiếp là đo nhầm con bot — dừng còn hơn.");
+    ws.close(); process.exit(4);
+  }
+
   const before = (await screenText()) ?? "";
 
   const box = await boxOf('[contenteditable="true"]');
