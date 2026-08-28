@@ -8,7 +8,7 @@ const TIMEOUT_MS = (): number => Number(process.env.GROKBOT2_BOX_TIMEOUT_MS ?? 9
 
 export class BoxUnavailable extends Error {}
 
-export async function daemonCall<T = unknown>(op: string, args: Record<string, unknown> = {}): Promise<T> {
+export async function daemonCall<T = unknown>(op: string, args: Record<string, unknown> = {}, owner = ""): Promise<T> {
   const base = BASE();
   if (!base) {
     throw new BoxUnavailable(
@@ -21,7 +21,14 @@ export async function daemonCall<T = unknown>(op: string, args: Record<string, u
   try {
     const res = await fetch(`${base.replace(/\/+$/, "")}/${op}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...(TOKEN() ? { authorization: `Bearer ${TOKEN()}` } : {}) },
+      headers: {
+        "content-type": "application/json",
+        ...(TOKEN() ? { authorization: `Bearer ${TOKEN()}` } : {}),
+        // Chặng cuối của danh tính. Rỗng thì KHÔNG gửi, để box báo lỗi rõ ràng thay vì nhận một
+        // header rỗng rồi đoán — `osUserFor` trong exec-router cố ý ném khi không có owner, và
+        // đoán ở đây sẽ biến một lỗi cách ly thành một lỗi im lặng.
+        ...(owner ? { "x-grokbot2-owner": owner } : {}),
+      },
       body: JSON.stringify(args),
       signal: ctl.signal,
     });

@@ -26,7 +26,25 @@ async function viaComputer<T>(op: string, args: Record<string, unknown>): Promis
   try {
     const res = await fetch(`${base}/internal/exec`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        /*
+         * Ai đang gọi — và đây là chỗ nó từng RƠI MẤT.
+         *
+         * `viaDaemon` ngay bên dưới có header này, kèm nguyên một comment giải thích vì sao phải
+         * luôn gửi: "thiếu nó lúc box đã bật thì mọi công cụ hỏng cùng lúc". Đường này thì không
+         * có — và khi box bật `GROKBOT2_PER_USER=1`, đúng điều đó xảy ra.
+         *
+         * Đo ngày 28/08 trong lượt E2E thật: mọi lời gọi `run_terminal_command_v2` trả
+         * `per-user mode: request carried no owner`, nên bot không chạy được một lệnh nào trên box
+         * của chính nó. Ba case kịch bản cần quay màn hình đều hụt attachment vì lý do này, và
+         * nhìn từ ngoài nó giống hệt "bot kém hơn app gốc".
+         *
+         * Bài học: một comment đúng chỉ bảo vệ được đúng nhánh mà nó đứng cạnh. Hai đường ra cùng
+         * một cái box thì phải mang cùng một danh tính, nếu không cái nào chưa dùng sẽ mục.
+         */
+        "x-grokbot2-owner": currentOwner(),
+      },
       body: JSON.stringify({ op, args }),
       signal: AbortSignal.timeout(timeout),
     });

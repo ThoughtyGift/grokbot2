@@ -88,7 +88,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         ? body.args as Record<string, unknown>
         : {};
       try {
-        const result = await daemonCall(op, args);
+        // Danh tính đi kèm suốt chặng: box ở chế độ per-user chọn tài khoản hệ điều hành theo
+        // header này. Tiến trình này chỉ chuyển tiếp, không tự đặt ra một danh tính nào.
+        const owner = String(req.headers["x-grokbot2-owner"] ?? "");
+        const result = await daemonCall(op, args, owner);
         json(res, result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
