@@ -25,8 +25,9 @@ app gốc.**
 | Description vào lời nhắc hệ thống | nền của 1 và 2 | ✅ **28/08** | `prompt-persona.test.ts` |
 | Bot xem video, tự chấm đầu ra | 3L | ✅ **28/08** | `e2e-watch-video.mjs` 8/8 — clip đen: bot tự thấy 'đen tuyền, -91 dB'; clip testsrc: tả đúng dải màu |
 | Bot tự cài phần mềm trên box (OBS…) | 3 | ⬜ hạ tầng, làm sau 3L | — |
-| Lời nhắc "bộ não" gợi ý skill/MCP/plugin | 2 | ⬜ | — |
-| Chạy lại kịch bản B2 (24 case, 7 bot) | khép vòng | 🟡 **lần 1: 28/08** — lặp lại sau mỗi tính năng | `b2-replay-2026-08-27-22-25.md`: trả lời 24/24, cùng nhịp tương tác 2/6 |
+| Sơ đồ · mẫu bot · subagent soi media | mở rộng | ✅ **28/08** | `e2e-today.mjs` **9/9**: model TỰ gọi `create_diagram` (khối `flowchart`), TỰ gọi `share_bot_template` (mẫu chở 2 thành viên kèm SOP, dựng lại ra nhóm đủ người), và kể được tên `mediaReview` |
+| Lời nhắc "bộ não" gợi ý skill/MCP/plugin | 2 | ✅ **28/08** | `e2e-feature2` A1/A2 xanh; và đo **trong app thật**: bot rà danh mục, kể tên thật theo 3 nhóm, kết thúc bằng widget A–F + ô tự gõ |
+| Chạy lại kịch bản B2 (24 case) | khép vòng | 🟡 **lần 3: 28/08** | qua CỔNG: trả lời **24/24**, widget 1/5, thẻ quyền 0/2 (`b2-replay-2026-08-28-10-50.md`). Bốn case widget còn lại là **khoảng trống danh mục**, không phải hành vi. Trong APP: `app-replay-b2.mjs` đang chạy lần đầu |
 
 ---
 
