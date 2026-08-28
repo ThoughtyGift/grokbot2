@@ -30,6 +30,64 @@ export function setPresence(agentId: string, patch: Partial<Pick<AgentRecord, "i
   if (changed) { rosterChanged(agentId); persist(); }
 }
 
+/**
+ * Ai đã thật sự nhắn tin với bot này — cạnh LIỀN trong đồ thị bot của app.
+ *
+ * ── Vì sao trường này không được để rỗng ────────────────────────────────────────────────────────
+ *
+ * `conversationPartnerIds` là trường renderer ĐỌC và VALIDATE: `Sue(t.conversationPartnerIds)` bắt
+ * buộc là mảng, sai kiểu thì cả dòng roster bị loại. Nó nuôi đúng một tính năng, và app tự mô tả
+ * bằng lời của nó:
+ *
+ *     "Bots and groups, linked by who has messaged whom (solid) and group membership (dashed)."
+ *     "Solid links are real agent-to-agent message history; dashed links are group membership."
+ *
+ * Hardcode `[]` không làm vỡ gì — nó chỉ khiến mọi cạnh liền biến mất, tức đồ thị nói rằng chưa
+ * con bot nào từng nhắn cho con nào. Đó là loại sai tệ nhất: trông như dữ liệu thật.
+ *
+ * Đây là lần thứ BA cùng một lỗi trong cùng hàm `summarise`, và hai lần trước đã có comment cảnh
+ * báo ngay bên trên: `isGroup` từng hardcode `false`, `memberIds` từng hardcode `[]`, cả hai đứng
+ * sau `...a` nên đè lên sự thật của record. Cái bẫy không nằm ở từng dòng mà ở hình dạng của hàm:
+ * spread rồi ghi đè thì mọi hằng số bỏ quên đều im lặng thắng dữ liệu thật.
+ *
+ * ── Nhớ tạm theo độ dài bản ghi ─────────────────────────────────────────────────────────────────
+ *
+ * `summarise` chạy cho MỌI dòng mỗi lần đẩy roster, nên quét cả bản ghi mỗi lần là O(bot × entry).
+ * Bản ghi chỉ dài thêm, không bao giờ ngắn đi, nên độ dài là khoá nhớ tạm đủ dùng và không bao giờ
+ * trả về đáp án cũ.
+ */
+const partnerCache = new Map<string, { n: number; ids: string[] }>();
+
+function partnersOf(agentId: string): string[] {
+  const t = transcripts.get(agentId);
+  if (!t || t.length === 0) return [];
+  const hit = partnerCache.get(agentId);
+  let ids: string[];
+  if (hit && hit.n === t.length) {
+    ids = hit.ids;
+  } else {
+    const found = new Set<string>();
+    for (const e of t) {
+      if (e.kind !== "message") continue;
+      for (const id of [e.fromAgent?.id, e.toAgent?.id]) if (id && id !== agentId) found.add(id);
+    }
+    ids = [...found];
+    partnerCache.set(agentId, { n: t.length, ids });
+  }
+  /*
+   * Lọc theo roster HIỆN TẠI ở lúc đọc, không ở lúc quét — và đây là chỗ bản đầu sai.
+   *
+   * Bản đầu lọc `agents.has(id)` ngay trong vòng quét rồi nhớ tạm kết quả. Nhưng nhớ tạm khoá theo
+   * ĐỘ DÀI bản ghi, mà xoá bot B không làm bản ghi của bot A dài thêm một dòng nào — nên A giữ mãi
+   * một cạnh trỏ tới con bot không còn tồn tại. App cho bấm vào node để mở nó
+   * ("Click a node to open it"), nên cạnh đó là một cú bấm mở ra trang trống.
+   *
+   * Quét là việc đắt và đáng nhớ tạm; lọc là việc rẻ trên một danh sách vài phần tử và phải làm
+   * lại mỗi lần. Bài `directory-partners.test.ts` khoá đúng ca này.
+   */
+  return ids.filter((id) => agents.has(id));
+}
+
 function summarise(a: AgentRecord): RosterRow {
   const t = transcripts.get(a.id);
   const updatedAt = t?.length ? t[t.length - 1].timestampMs : a.createdAtMs;
@@ -56,7 +114,7 @@ function summarise(a: AgentRecord): RosterRow {
     lastMessageId: last ? last.id : null,
     awaitingUserResponse: a.awaitingUserResponse ?? null,
     memberIds: a.memberIds ?? [],  // hardcode [] cũ từng đè danh sách thành viên thật
-    conversationPartnerIds: [],
+    conversationPartnerIds: partnersOf(a.id),
     lastEntry: lastEntry ?? null,
     isRunningTurn: a.isRunning === true,
   };

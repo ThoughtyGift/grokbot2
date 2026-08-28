@@ -29,12 +29,34 @@ const BOT = argOf("--bot", `E2E ${new Date().toISOString().slice(11, 16)}`);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const token = readFileSync(join(HERE, "..", ".data", "gateway-token.txt"), "utf8").trim();
-const gw = (m, b = {}) =>
-  fetch(`http://127.0.0.1:8788/gw/api/${m}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify(b),
-  }).then((r) => r.json());
+/*
+ * Gọi cổng, CHỊU ĐƯỢC một nhịp backend vắng mặt.
+ *
+ * `pnpm backend` chạy ở chế độ watch: sửa một file nguồn là bốn tiến trình nạp lại, và trong vài
+ * giây đó mọi fetch trả ECONNREFUSED. Bản trước không bắt, nên một lượt chạy 40 phút chết ở case 7
+ * vì tôi sửa `directory/index.ts` ở phiên làm việc song song. Mất cả lượt đo vì một nhịp nạp lại
+ * là cái giá không đáng, và lỗi mạng thoáng qua thì ở đâu cũng có.
+ *
+ * Thử lại tối đa năm lần, giãn dần. Hết năm lần vẫn hỏng thì mới NÉM — im lặng nuốt lỗi ở đây sẽ
+ * biến "backend chết hẳn" thành "mọi case đều im", đúng kiểu kết quả sai mà trông như dữ liệu.
+ */
+const gw = async (m, b = {}) => {
+  let cuoi;
+  for (let i = 0; i < 5; i += 1) {
+    try {
+      const r = await fetch(`http://127.0.0.1:8788/gw/api/${m}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(b),
+      });
+      return await r.json();
+    } catch (e) {
+      cuoi = e;
+      await new Promise((s) => setTimeout(s, 2000 * (i + 1)));
+    }
+  }
+  throw cuoi;
+};
 
 // ── CDP ────────────────────────────────────────────────────────────────────────────────────────
 const targets = await (await fetch("http://127.0.0.1:9222/json/list")).json();
