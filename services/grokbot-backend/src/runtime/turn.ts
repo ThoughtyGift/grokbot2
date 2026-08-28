@@ -931,7 +931,26 @@ export function sendPrompt(args: SendArgs) {
   // Gọi tên ai thì chỉ người đó nói; không gọi ai thì cả phòng — xem `namedMembers`.
   const called = namedMembers(text, roomMembers);
   const members = called.length ? called : roomMembers;
-  if (members.length && !args.fromAgent) {
+  /*
+   * Ai được quyền MỞ một vòng nói trong phòng.
+   *
+   * Luật 2 ở trên nói "trả lời của bot KHÔNG kích hoạt bot khác", và nó đúng — nhưng đo ngày 28/08
+   * cho thấy nó chặn rộng hơn mức cần: một con bot NGOÀI phòng cũng không mở nổi phòng. Lượt E2E
+   * dựng ra `Vận Hành Shopee` với 4 thành viên rồi để đó, **bản ghi phòng 0 entry**, vì
+   * `messageAgent` gửi kèm `fromAgent` nên fan-out tắt. Tôi đã thêm vào lời nhắc luật "dựng đội
+   * xong thì mở phòng bằng việc đầu tiên" mà không kiểm runtime có cho phép không — nó không cho.
+   *
+   * Phân biệt đúng chỗ: cái sinh ra vòng lặp là THÀNH VIÊN trả lời trong phòng rồi kích hoạt các
+   * thành viên khác. Một con bot ở NGOÀI phòng nói vào thì về bản chất giống hệt người dùng nói —
+   * nó mở đúng một vòng, và vòng đó không tự nuôi nó.
+   *
+   * App gốc cho cả thành viên mở vòng (ảnh chụp: `Test Clone` là thành viên, mở lời, cả phòng đáp),
+   * nhưng họ có bộ điều phối phía server với `is_winding_down` + `deadline_ms` để dừng. Ta không có
+   * bộ đó, nên giữ vế chặt: thành viên nói thì KHÔNG kích hoạt ai. `MAX_HOPS` vẫn chặn chuỗi dài.
+   */
+  const nguoiGoi = args.fromAgent?.id;
+  const laThanhVien = nguoiGoi != null && members.includes(nguoiGoi);
+  if (members.length && !laThanhVien) {
     // Bong bóng rỗng dựng sẵn ở trên là của con ĐẦU TIÊN; những con sau tự dựng bong bóng riêng.
     void (async () => {
       for (let i = 0; i < members.length; i++) {
