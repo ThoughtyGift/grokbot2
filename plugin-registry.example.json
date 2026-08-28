@@ -104,7 +104,7 @@
           "description": "Optional. Where the one-time sign-in stores its token."
         }
       },
-      "category": "featured"
+      "category": "inbox and collaboration"
     },
     {
       "id": 14,
@@ -146,7 +146,7 @@
           "@playwright/mcp@latest"
         ]
       },
-      "category": "infrastructure"
+      "category": "featured"
     },
     {
       "id": 16,
