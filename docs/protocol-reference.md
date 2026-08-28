@@ -78,6 +78,18 @@ The 17, grouped — a soft 404 means the button in the app does nothing at all, 
 > (`function hGt(t){const{text:e}=t;return{text:e}}`), so the handler always returns `{text, ms}` and
 > never throws: no transcriber installed and broken audio are both "heard nothing", while an error
 > escaping to the gateway is a mic button that dies without a word.
+>
+> **Đo thật, không phải suy luận** (28/08, không cần pool — whisper chạy cục bộ). Dùng giọng đọc
+> Windows (SAPI) sinh một WAV rồi đẩy qua đúng con đường base64 → ACL → `stt.ts` → faster-whisper:
+>
+> ```
+> vào : WAV đọc câu "Hello, this is a microphone test for the composer."
+> ra  : {"text":"Hello, this is a microphone test for the composer.","ms":4727}
+> ```
+>
+> Nguyên văn từng chữ. Và một giây im lặng ra `{"text":"","ms":284}` — đúng như phải thế, chứ không
+> phải lỗi. Máy này có `.venv-stt` với `faster-whisper 1.2.1`; máy không cài thì cùng đường đó trả
+> `{text:""}` và người dùng gõ tay.
 
 > Answering **NO** counts as answered. `SHARED_ROOM_COMMANDS` return
 > `{ok:false, reason:"Sharing needs a relay both installs can reach…"}` rather than a 404 or a
