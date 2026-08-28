@@ -92,6 +92,14 @@ const boxOf = (sel) => js(
  * Hàm tìm chạy trơn tru và luôn trả `null`, còn script thì báo "không thấy trong sidebar" trong khi
  * tên bot nằm ngay đó. Loại lỗi im lặng nhất: không ném, không log, chỉ trả sai.
  */
+/*
+ * Kéo vào khung nhìn TRƯỚC khi đọc toạ độ, và bỏ qua thứ vẫn nằm ngoài.
+ *
+ * `getBoundingClientRect` trả toạ độ cho cả phần tử đã cuộn khuất, và `Input.dispatchMouseEvent`
+ * bắn ra ngoài viewport thì không trúng gì cả — im lặng, không lỗi. Sidebar hôm nay có 16 bot, bot
+ * vừa tạo nằm dưới nếp gấp, nên script "bấm" vào một toạ độ âm rồi tưởng đã mở đúng bot: lượt 20:47
+ * gõ cả case 1 vào bot của lượt trước.
+ */
 const boxOfText = (text) => js(
   "(() => { const want = " + JSON.stringify(String(text).toLowerCase()) + ";"
   + " const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);"
@@ -100,7 +108,9 @@ const boxOfText = (text) => js(
   + "   let el = n.parentElement;"
   + "   while (el && !(el.getBoundingClientRect().width || el.getBoundingClientRect().height)) el = el.parentElement;"
   + "   if (!el) continue;"
+  + "   el.scrollIntoView({ block: \"center\" });"
   + "   const r = el.getBoundingClientRect();"
+  + "   if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;"
   + "   return { x: r.x + r.width/2, y: r.y + r.height/2 };"
   + " } return null; })()",
 );
@@ -131,9 +141,16 @@ console.log(`bot thử: ${BOT} (${bot.id})`);
  * Cùng loài với ba lỗi khác hôm nay: làm một hành động rồi giả định nó có tác dụng. Ở đây cái giá
  * là một phép đo sai trông y như một phép đo chậm.
  */
+/*
+ * Bot nào đang mở — đo bằng nhãn panel phải `"<tên bot>'s screen"`.
+ *
+ * Bản đầu kiểm `"Message <tên bot>"` vì bản dựng của hãng vẽ thế trong khung soạn tin. Đo trên app
+ * của ta: chuỗi đó KHÔNG có trong `innerText` (placeholder là aria-label `"Prompt"`), nên phép kiểm
+ * luôn sai và guard chặn cả những lần bấm đúng. Nhãn `'s screen` thì có thật, đo được.
+ */
 const daMoDungBot = async () => {
   const t = (await screenText()) ?? "";
-  return t.includes(`Message ${BOT}`);
+  return t.includes(`${BOT}'s screen`);
 };
 
 let moDuoc = false;
@@ -145,7 +162,7 @@ for (let lan = 0; lan < 6 && !moDuoc; lan += 1) {
   for (let i = 0; i < 6 && !moDuoc; i += 1) { await wait(1000); moDuoc = await daMoDungBot(); }
 }
 if (!moDuoc) {
-  console.error(`không mở được "${BOT}" sau 6 lần bấm — khung soạn tin không ghi "Message ${BOT}".`);
+  console.error(`không mở được "${BOT}" sau 6 lần bấm — màn hình không ghi "${BOT}'s screen".`);
   console.error("Dừng ở đây thay vì gõ vào một bot không biết là con nào: một phép đo sai tệ hơn không đo.");
   ws.close(); process.exit(1);
 }
