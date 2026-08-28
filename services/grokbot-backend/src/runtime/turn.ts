@@ -22,6 +22,7 @@ import type { Entry, SendArgs, SubagentRow, ToolCtx } from "../conversation/type
 import {
   agents, transcripts, inflight, compaction, persist, park, unpark, pending,
   nextEntryId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef, ownsAgent,
+  bindIntroduce,
 } from "../chat/state.js";
 import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
@@ -784,7 +785,8 @@ export function sendPrompt(args: SendArgs) {
   }
 
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
-  t.push(userEntry);
+  // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
+  if (!args.silent) t.push(userEntry);
 
   // Show what the user attached, instead of only the text they typed alongside it.
   //
@@ -856,7 +858,12 @@ export function sendPrompt(args: SendArgs) {
   // message(role=user, len 0), message(role=user, attachment), then the error bubble.
   // Naming the attachment above fixes that case; this guard covers what is left: a message with
   // no text and nothing attached, which would fail the same way for the same reason.
-  if (history[history.length - 1]?.role !== "user") {
+  if (args.silent) {
+    // Lời nhắc im lặng không có trong bản ghi, nên `historyFor` không thể thấy nó — phải đưa vào
+    // đây. Không dựa vào guard bên dưới: guard chỉ chạy khi lượt cuối không phải của người, mà một
+    // bản ghi kết bằng tin người dùng sẽ nuốt mất lời nhắc mà không báo gì.
+    history.push({ role: "user", content: text.trim() || `[tin nhắn rỗng]` });
+  } else if (history[history.length - 1]?.role !== "user") {
     history.push({ role: "user", content: text.trim() || `[tin nhắn rỗng]` });
   }
   const image = readImageAttachment(attachmentsOf(args));
@@ -1426,6 +1433,50 @@ export function runToolForTest(agentId: string, name: string, arg: string): Prom
 }
 
 
+
+/**
+ * Lời tự giới thiệu của một bot vừa được tạo — cơ chế tự chủ DUY NHẤT mà client app gốc được quyền.
+ *
+ * ── Hợp đồng phía client, nguyên văn bundle 0.29 ────────────────────────────────────────────────
+ *
+ *     kickstartAwaitingFirstMessage: async N => {
+ *       d(N);                                              // vào tập "đang chờ tin đầu"
+ *       R = await t.kickstartAgent(N);
+ *       R?.isIntroductionInFlight === false && ( … f(N) )   // CHỈ khi === false mới rời chờ
+ *     }
+ *
+ * Chú ý phép so sánh: `=== false`, không phải falsy. Backend này trước đây trả một record không
+ * mang trường đó, nên `undefined === false` là sai và `f(N)` không bao giờ chạy — **bot mới nằm mãi
+ * trong trạng thái "awaiting first message"**. Nó không chỉ là "bot không tự giới thiệu"; là client
+ * kẹt ở một trạng thái không có gì gỡ.
+ *
+ * Nên hàm này phải trả lời được cả hai vế, và trả lời THẬT:
+ *
+ *   mở được lượt  → `true`,  client tiếp tục chờ, rồi bot nói
+ *   không mở được → `false`, client rời trạng thái chờ ngay
+ *
+ * Vế thứ hai quan trọng ngang vế thứ nhất. Trả `true` rồi không nói gì cũng treo client y hệt cũ.
+ *
+ * ── Vì sao `silent` ────────────────────────────────────────────────────────────────────────────
+ *
+ * App gốc chỉ gửi cờ `kickstart_requested`; bản ghi không có câu hỏi nào. Dùng `sendPrompt` thường
+ * sẽ để lại một câu "hãy tự giới thiệu" đứng tên NGƯỜI DÙNG trong bản ghi của chính họ.
+ */
+export function introduceAgent(agentId: string): boolean {
+  const rec = agents.get(agentId);
+  if (!rec) return false;
+  // Chỉ giới thiệu khi bản ghi còn trống. Kickstart nghĩa là "tạo bot mà chưa gõ gì"; gọi lại trên
+  // một hội thoại đang có nội dung sẽ chèn một lời chào vào giữa câu chuyện.
+  if ((transcripts.get(agentId) ?? []).length > 0) return false;
+  if (isAgentRunning(agentId)) return false;
+  const mo = (rec.description ?? "").trim();
+  const loiNhac = mo
+    ? `Bạn vừa được tạo với mô tả: "${mo}". Hãy tự giới thiệu ngắn gọn với người dùng bằng tiếng Việt: bạn làm được gì trong phạm vi mô tả đó, và đề nghị một việc đầu tiên cụ thể. Đừng liệt kê công cụ, đừng hỏi lại nhiều — tối đa ba câu.`
+    : `Bạn vừa được tạo và chưa có mô tả nào. Hãy chào người dùng ngắn gọn bằng tiếng Việt và hỏi họ muốn bạn phụ trách việc gì. Tối đa hai câu.`;
+  const r = sendPrompt({ agentId, content: loiNhac, silent: true }) as { accepted?: boolean };
+  return r?.accepted === true;
+}
+bindIntroduce(introduceAgent);
 
 turnHooks.sendPrompt = sendPrompt;
 turnHooks.messageAgent = messageAgent;

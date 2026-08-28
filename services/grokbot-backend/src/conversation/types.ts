@@ -147,6 +147,15 @@ export interface SendArgs {
   fromAgent?: { id: string; name: string };
   /** Native FE: write tools ask even if the stock app stored localToolPermission=always. */
   askWriteTools?: boolean;
+  /**
+   * Lời nhắc tới được model nhưng KHÔNG hiện thành tin của người dùng trong bản ghi.
+   *
+   * Cần cho lời tự giới thiệu lúc tạo bot: app gốc chỉ gửi cờ `kickstart_requested` rồi bot nói,
+   * bản ghi không có câu hỏi nào cả. Nếu ta dùng `sendPrompt` thường thì bản ghi sẽ mọc ra một câu
+   * kiểu "hãy tự giới thiệu" đứng tên NGƯỜI DÙNG — đặt lời vào miệng họ trong chính bản ghi của họ,
+   * và bản ghi thì sống mãi.
+   */
+  silent?: boolean;
   /** X6.3: entry được trả lời. Backend tra tên + trích đoạn từ transcript, caller chỉ gửi id. */
   replyToEntryId?: string;
   /**

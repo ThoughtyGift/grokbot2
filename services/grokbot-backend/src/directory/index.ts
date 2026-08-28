@@ -8,7 +8,7 @@ import { publish } from "../events.js";
 import { AUTH_ID } from "../identity/index.js";
 import { currentOwner } from "../request-context.js";
 import {
-  agents, transcripts, inflight, persist, EPOCH, automationCleanupRef, nextAgentId,
+  agents, transcripts, inflight, persist, EPOCH, automationCleanupRef, nextAgentId, introduceRef,
 } from "../chat/state.js";
 import { lastEntryOf, transcriptContains, pushTranscriptEvent } from "../conversation/index.js";
 import type { AgentRecord, RosterRow } from "../conversation/types.js";
@@ -347,7 +347,32 @@ export function searchAgents(a: { query?: string; q?: string; text?: string; inc
     rec.name.toLowerCase().includes(q) || transcriptContains(rec.id, q));
 }
 
-export function kickstartAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
+/**
+ * Bot vừa tạo mà người dùng chưa gõ gì — app gốc cho bot tự giới thiệu.
+ *
+ * ── Cái bẫy nằm ở phép so sánh `=== false` ──────────────────────────────────────────────────────
+ *
+ * Client 0.29 (`kickstartAwaitingFirstMessage`):
+ *
+ *     R = await t.kickstartAgent(N);
+ *     R?.isIntroductionInFlight === false && ( … clearAwaitingFirstMessage(N) )
+ *
+ * Không phải falsy — **đúng bằng `false`**. Bản trước của hàm này chỉ `rec.unread = false; return rec`,
+ * tức trả một record không mang trường đó, nên `undefined === false` là sai và trạng thái chờ không
+ * bao giờ được gỡ: **mọi bot mới kẹt vĩnh viễn trong "awaiting first message"**. Một no-op trông vô
+ * hại đã treo giao diện, và nó treo im lặng — không lỗi, không log, chỉ là một cái spinner không tắt.
+ *
+ * Nên hàm phải trả lời thật cả hai vế. `true` khi lượt đã bắt đầu; `false` khi không, để client rời
+ * trạng thái chờ NGAY. Trả `true` cho chắc rồi không nói gì thì treo y hệt cũ, chỉ khác cái cớ.
+ *
+ * `introduceRef` chứ không import thẳng `runtime/turn`: cùng lý do với `automationCleanupRef`.
+ */
+export function kickstartAgent(
+  a: { id?: string; agentId?: string },
+): (AgentRecord & { isIntroductionInFlight: boolean }) | null {
   const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
-  rec.unread = false; persist(); return rec;
+  rec.unread = false;
+  const batDau = introduceRef ? introduceRef(rec.id) === true : false;
+  persist();
+  return { ...rec, isIntroductionInFlight: batDau };
 }

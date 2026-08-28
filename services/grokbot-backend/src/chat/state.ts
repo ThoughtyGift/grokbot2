@@ -91,6 +91,16 @@ let automationCleanupRef: ((agentId: string) => void) | null = null;
 export function bindAutomationCleanup(fn: (agentId: string) => void): void { automationCleanupRef = fn; }
 export { automationCleanupRef };
 
+/**
+ * Mở lượt tự giới thiệu cho một bot vừa tạo. Trả `true` nếu lượt THẬT SỰ bắt đầu.
+ *
+ * Là ref chứ không phải import thẳng vì `directory` không được phụ thuộc vào `runtime/turn` —
+ * cùng lý do và cùng khuôn với `automationCleanupRef` ngay trên.
+ */
+let introduceRef: ((agentId: string) => boolean) | null = null;
+export function bindIntroduce(fn: (agentId: string) => boolean): void { introduceRef = fn; }
+export { introduceRef };
+
 export const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
 
 function migrate(e: any, agentName: string): Entry | null {
