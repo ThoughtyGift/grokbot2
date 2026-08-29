@@ -62,6 +62,20 @@ if (!existsSync(CONTRACT)) {
 }
 const contract = JSON.parse(readFileSync(CONTRACT, "utf8"));
 
+/*
+ * Bảng lệnh đọc riêng, KHÔNG lấy từ ảnh chụp hợp đồng.
+ *
+ * Hai file cùng giữ một danh sách và chúng đã trôi xa nhau: `box-host-contract.json` là ảnh của
+ * **0.20** (120 lệnh), bảng thật của 0.30 có **147**. Gate đọc file cũ nên báo PASS 10/10 trong khi
+ * 12 lệnh client gửi được không ai trả lời.
+ */
+const CMDS = join(REPO, "docs", "extracted", "gateway-commands.json");
+if (!existsSync(CMDS)) {
+  console.error(`no command table at ${CMDS} — run: node scripts/extract-gateway.mjs <asar-dir>`);
+  process.exit(2);
+}
+const bangLenh = JSON.parse(readFileSync(CMDS, "utf8")).commands.map((c) => c.name ?? String(c));
+
 /**
  * The contract's paths are relative to the gateway base the host is mounted on; this backend
  * serves them under `/gw`. `/api/<cmd>` is the one exception in shape only — same prefix.
@@ -247,10 +261,20 @@ if (want("commands")) {
   // missed four pushes behind helpers), hence: ask the code, never its text.
   const implemented = new Set(Object.keys(buildCommands(ACL_PORT_STUB)));
   const refusals = new Set(SHARED_ROOM_COMMANDS);
-  const skipped = new Set(contract.intentionallySkipped);
-  const missing = contract.gatewayCommands
-    .map((c) => c.name)
-    .filter((n) => !implemented.has(n) && !skipped.has(n));
+  // Cùng lý do: suy từ bảng MỚI, không lấy danh sách bỏ-qua đóng băng trong ảnh chụp 0.20.
+  const skipped = new Set(bangLenh.filter((n) => /Room|SharedRoom/.test(n)));
+  /*
+   * Danh sách lệnh lấy từ `gateway-commands.json`, KHÔNG từ ảnh chụp hợp đồng.
+   *
+   * Hai file cùng giữ một danh sách, và chúng đã trôi xa nhau: `box-host-contract.json` là ảnh của
+   * **0.20** (120 lệnh), trong khi bảng thật của 0.30 có **147**. Phép kiểm này đọc file cũ nên
+   * báo PASS 10/10 trong lúc 12 lệnh client gửi được không ai trả lời — một cái gate xanh vì nó
+   * chấm ta so với một mục tiêu đã dịch chuyển từ mười phiên bản trước.
+   *
+   * `gateway-commands.json` là file có đúng một nhiệm vụ: giữ bảng lệnh, và `extract-gateway.mjs`
+   * làm mới nó theo từng phiên bản app. Đọc thẳng từ đó thì hết một nguồn sự thật thứ hai để trôi.
+   */
+  const missing = bangLenh.filter((n) => !implemented.has(n) && !skipped.has(n));
 
   record("commands", "every command is implemented or deliberately skipped", [], missing,
     missing.length ? `${missing.length} command(s) the client can send and we do not handle` : undefined);

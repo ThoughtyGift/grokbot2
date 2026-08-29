@@ -1,58 +1,98 @@
 /**
- * Extract the gateway command table from `src/host/gateway-protocol.ts` in main.cjs.
+ * Trích bảng lệnh gateway của client.
  *
- * This is the authority, and it is better than anything inferred: the electron-main bundle
- * is NOT minified, so the table survives with its real names — every command the client can
- * send, and which ones take a body. Coverage measured against the renderer's method list was
- * a guess by comparison.
+ *   node extract-gateway.mjs <thư-mục-asar-đã-giải-nén> [thư-mục-ra]
  *
- *   node extract-gateway.mjs <main.cjs> [outDir]
+ * ── Nguồn, và hai lần tôi lấy nhầm ──────────────────────────────────────────────────────────────
+ *
+ * Bảng thật nằm trong `dist/electron-main/main.cjs`, khai báo:
+ *
+ *     dl("gateway",{methods:{ getTranscript:C().noArgs, getAgentTranscript:C().args(Ar), … }})
+ *
+ * **Lần hỏng thứ nhất:** bản trước neo vào hằng `SAND_GATEWAY_COMMANDS`. Hằng đó không còn tồn tại
+ * — không có ở 0.29, không có ở 0.30. Script hỏng lặng lẽ từ đó, và `gateway-commands.json` trong
+ * repo vẫn là bảng **0.20** (120 lệnh) suốt hai phiên bản. Gate contract vẫn báo PASS, vì nó chấm ta
+ * so với chính cái file cũ ấy: một extractor hỏng im lặng nguy hiểm hơn không có extractor, vì nó
+ * vẫn phát ra một con số trông y như đo được.
+ *
+ * **Lần hỏng thứ hai (của tôi, hôm nay):** tôi thay bằng bảng `{args:"…",reply:"…"}` bên renderer.
+ * Nó chạy, ra 122 lệnh, và guard "ít hơn 100 thì báo lỗi" cho qua. Nhưng đó là một tập CON — diff
+ * với bảng cũ cho thấy `getAgentTranscript`, `getHostSettings`, `uploadAttachment` "biến mất", những
+ * lệnh app gọi mỗi ngày. Con số hợp lý là cách một phép đo sai sống sót lâu nhất.
+ *
+ * Nên: neo vào bảng THẬT, và kiểm bằng những lệnh không thể vắng mặt thay vì bằng một ngưỡng đếm.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-const src = readFileSync(process.argv[2], "utf8").replace(/\\n/g, "\n");
+const root = process.argv[2];
 const outDir = process.argv[3] ?? ".";
+if (!root || !existsSync(root)) { console.error("cần <thư-mục-asar-đã-giải-nén>"); process.exit(1); }
 
-/** Slice one `var NAME = { … };` object out of the module. */
-function objectAfter(name) {
-  const at = src.indexOf(`var ${name} = {`);
-  if (at < 0) return null;
-  const open = src.indexOf("{", at);
-  let depth = 0;
-  for (let i = open; i < src.length; i += 1) {
-    if (src[i] === "{") depth += 1;
-    else if (src[i] === "}") { depth -= 1; if (depth === 0) return src.slice(open, i + 1); }
+const main = join(root, "dist", "electron-main", "main.cjs");
+if (!existsSync(main)) { console.error(`không thấy ${main}`); process.exit(1); }
+const src = readFileSync(main, "utf8");
+
+/*
+ * Neo bỏ TÊN HÀM. `dl` là tên đã minify: 0.30 gọi `dl("gateway",…)`, 0.29 gọi tên khác, và bản sau
+ * sẽ lại khác nữa. Phần bền là chuỗi literal `"gateway"` cùng hình dạng `{methods:{` ngay sau nó —
+ * đúng luật số 1 của `extract-contract.mjs`: neo vào chuỗi, đừng neo vào tên đã minify.
+ */
+/*
+ * Duyệt MỌI chỗ khớp, chọn bảng có đủ xương sống — đừng lấy chỗ đầu tiên.
+ *
+ * 0.29 có một chỗ khác cũng khớp `("gateway",{methods:{` nhưng là bảng của thứ khác; lấy chỗ đầu
+ * tiên thì ra một bảng không có `getAgentTranscript` nào. Guard xương sống bên dưới bắt được, và
+ * đây là cách sửa đúng: chọn theo NỘI DUNG, không theo thứ tự xuất hiện.
+ */
+const XUONG_SONG = ["getAgentTranscript", "getHostSettings", "setHostSettings", "sendPrompt",
+                    "listAgents", "createAgent", "uploadAttachment", "readAttachmentImage"];
+
+/** Cắt đúng object `methods` bằng cách cân ngoặc, không đoán độ dài. */
+function bangTai(at) {
+  const open = src.indexOf("{methods:", at) + "{methods:".length;
+  let depth = 0, end = open;
+  for (; end < src.length; end += 1) {
+    if (src[end] === "{") depth += 1;
+    else if (src[end] === "}") { depth -= 1; if (depth === 0) break; }
   }
-  return null;
+  const table = src.slice(open, end + 1);
+  return [...new Map(
+    // Tên helper cũng bị minify — 0.29 dùng `v()`, 0.30 dùng `C()`. Khớp mọi định danh.
+    [...table.matchAll(/([a-zA-Z][a-zA-Z0-9]*):\w+\(\)\.(noArgs|args)/g)]
+      .map((m) => [m[1], { name: m[1], takesBody: m[2] === "args" }]),
+  ).values()];
 }
 
-const parse = (body) =>
-  body
-    ? [...body.matchAll(/^\s{2}([A-Za-z0-9_]+):\s*\(api(?:,\s*(body))?\)/gm)]
-        .map((m) => ({ name: m[1], takesBody: Boolean(m[2]) }))
-    : [];
+const moNeo = [...src.matchAll(/\("gateway",\{methods:\{/g)].map((m) => m.index);
+if (moNeo.length === 0) { console.error('không thấy mỏ neo ("gateway",{methods:{ — bảng lại đổi hình dạng'); process.exit(2); }
 
-const commands = parse(objectAfter("SAND_GATEWAY_COMMANDS"));
-const slim = parse(objectAfter("SAND_GATEWAY_SLIM_COMMANDS"));
+let commands = [];
+for (const at of moNeo) {
+  const c = bangTai(at);
+  if (XUONG_SONG.every((n) => c.some((x) => x.name === n))) { commands = c; break; }
+  if (c.length > commands.length) commands = c;
+}
+commands.sort((a, b) => a.name.localeCompare(b.name));
 
-if (!commands.length) {
-  console.error("SAND_GATEWAY_COMMANDS not found — is this the electron-main bundle?");
-  process.exit(1);
+/*
+ * Kiểm bằng lệnh KHÔNG THỂ vắng mặt, không bằng ngưỡng đếm.
+ *
+ * Một ngưỡng ("ít nhất 100 lệnh") cho qua đúng cái lỗi hôm nay: 122 lệnh của một tập con nghe rất
+ * hợp lý. Mấy lệnh dưới đây là xương sống — thiếu bất kỳ cái nào nghĩa là ta đang đọc nhầm bảng.
+ */
+const thieu = XUONG_SONG.filter((n) => !commands.some((c) => c.name === n));
+if (thieu.length) {
+  console.error(`đọc nhầm bảng: thiếu lệnh xương sống ${thieu.join(", ")} — KHÔNG ghi đè`);
+  process.exit(3);
 }
 
-const payload = {
-  source: process.argv[2],
-  note: "The client's own command table, from an unminified bundle. This is the authority on what the gateway must answer.",
-  counts: { commands: commands.length, slim: slim.length, withBody: commands.filter((c) => c.takesBody).length },
+const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+writeFileSync(join(outDir, "gateway-commands.json"), `${JSON.stringify({
+  source: main,
+  appVersion: version,
+  note: 'Bảng `dl("gateway",{methods:{…}})` trong electron-main — thứ client thật sự gọi.',
+  counts: { commands: commands.length, withBody: commands.filter((c) => c.takesBody).length },
   commands,
-  slimCommands: slim,
-};
-
-mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, "gateway-commands.json"), JSON.stringify(payload, null, 2));
-
-console.log(`commands      : ${commands.length}`);
-console.log(`  take a body : ${payload.counts.withBody}`);
-console.log(`slim variants : ${slim.length}`);
-console.log(`\nwrote ${join(outDir, "gateway-commands.json")}`);
+}, null, 2)}\n`);
+console.log(`${version}: ${commands.length} lệnh, ${commands.filter((c) => c.takesBody).length} có body`);

@@ -1,162 +1,22 @@
 {
-  "source": "C:/Users/admin/Desktop/grokbot-fe-current/dist/electron-main/main.cjs",
-  "note": "The client's own command table, from an unminified bundle. This is the authority on what the gateway must answer.",
+  "source": "C:\\Users\\admin\\AppData\\Local\\Temp\\claude\\c--Users-admin-Desktop-grokbot2\\bf8880a4-255a-4cbd-8035-9251205cf105\\scratchpad\\asar030\\dist\\electron-main\\main.cjs",
+  "appVersion": "0.30.0",
+  "note": "Bảng `dl(\"gateway\",{methods:{…}})` trong electron-main — thứ client thật sự gọi.",
   "counts": {
-    "commands": 120,
-    "slim": 0,
-    "withBody": 97
+    "commands": 147,
+    "withBody": 125
   },
   "commands": [
     {
-      "name": "getTranscript",
-      "takesBody": false
-    },
-    {
-      "name": "getAgentTranscript",
+      "name": "addOwnAgentToSharedRoom",
       "takesBody": true
     },
     {
-      "name": "getAgentTranscriptPage",
+      "name": "authenticateMcpServer",
       "takesBody": true
     },
     {
-      "name": "openAgentWindowed",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentTranscriptWindow",
-      "takesBody": true
-    },
-    {
-      "name": "openAgentTail",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentTranscriptTail",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentThread",
-      "takesBody": true
-    },
-    {
-      "name": "sendPrompt",
-      "takesBody": true
-    },
-    {
-      "name": "promptAcceptanceStatus",
-      "takesBody": true
-    },
-    {
-      "name": "respondToWidget",
-      "takesBody": true
-    },
-    {
-      "name": "resolveAutoReviewApproval",
-      "takesBody": true
-    },
-    {
-      "name": "resolveLocalToolPermission",
-      "takesBody": true
-    },
-    {
-      "name": "dismissWidget",
-      "takesBody": true
-    },
-    {
-      "name": "submitSecret",
-      "takesBody": true
-    },
-    {
-      "name": "reactToMessage",
-      "takesBody": true
-    },
-    {
-      "name": "appendConnectorCard",
-      "takesBody": true
-    },
-    {
-      "name": "listAgents",
-      "takesBody": false
-    },
-    {
-      "name": "countAgents",
-      "takesBody": false
-    },
-    {
-      "name": "searchAgents",
-      "takesBody": true
-    },
-    {
-      "name": "searchMedia",
-      "takesBody": true
-    },
-    {
-      "name": "createAgent",
-      "takesBody": true
-    },
-    {
-      "name": "kickstartAgent",
-      "takesBody": true
-    },
-    {
-      "name": "requestDiskSaverAudit",
-      "takesBody": true
-    },
-    {
-      "name": "createGroup",
-      "takesBody": true
-    },
-    {
-      "name": "setGroupMembers",
-      "takesBody": true
-    },
-    {
-      "name": "updateAgent",
-      "takesBody": true
-    },
-    {
-      "name": "deleteAgent",
-      "takesBody": true
-    },
-    {
-      "name": "deleteAgents",
-      "takesBody": true
-    },
-    {
-      "name": "duplicateAgent",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentUnread",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentNotificationsEnabled",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentNotifyOnUpdates",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentHiddenFromSidebar",
-      "takesBody": true
-    },
-    {
-      "name": "openAgent",
-      "takesBody": true
-    },
-    {
-      "name": "setWindowFocused",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentMemories",
-      "takesBody": true
-    },
-    {
-      "name": "deleteAgentMemory",
+      "name": "broadcastToAgents",
       "takesBody": true
     },
     {
@@ -164,28 +24,40 @@
       "takesBody": true
     },
     {
-      "name": "getAgentAutomations",
+      "name": "clearTrays",
+      "takesBody": false
+    },
+    {
+      "name": "completeMcpOAuth",
       "takesBody": true
     },
     {
-      "name": "listAllAutomations",
+      "name": "connectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "countAgents",
       "takesBody": false
     },
     {
-      "name": "isAgentNetworkEnabled",
-      "takesBody": false
+      "name": "createAgent",
+      "takesBody": true
     },
     {
-      "name": "isGlobalSearchEnabled",
-      "takesBody": false
+      "name": "createAgentAutomation",
+      "takesBody": true
     },
     {
-      "name": "isEgressTunnelAvailable",
-      "takesBody": false
+      "name": "createAgentFromTemplate",
+      "takesBody": true
     },
     {
-      "name": "getSharingState",
-      "takesBody": false
+      "name": "createAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "createGroup",
+      "takesBody": true
     },
     {
       "name": "createRoomFromAgent",
@@ -196,43 +68,7 @@
       "takesBody": true
     },
     {
-      "name": "joinSharedRoom",
-      "takesBody": true
-    },
-    {
-      "name": "respondToRoomJoinRequest",
-      "takesBody": true
-    },
-    {
       "name": "createSharedRoom",
-      "takesBody": true
-    },
-    {
-      "name": "addOwnAgentToSharedRoom",
-      "takesBody": true
-    },
-    {
-      "name": "removeOwnAgentFromSharedRoom",
-      "takesBody": true
-    },
-    {
-      "name": "setSharedRoomTyping",
-      "takesBody": true
-    },
-    {
-      "name": "leaveSharedRoom",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentAutomationEnabled",
-      "takesBody": true
-    },
-    {
-      "name": "createAgentAutomation",
-      "takesBody": true
-    },
-    {
-      "name": "updateAgentAutomation",
       "takesBody": true
     },
     {
@@ -240,27 +76,11 @@
       "takesBody": true
     },
     {
-      "name": "runAgentAutomationNow",
+      "name": "deleteAgentMemory",
       "takesBody": true
     },
     {
-      "name": "broadcastToAgents",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentWorkflows",
-      "takesBody": true
-    },
-    {
-      "name": "createAgentWorkflow",
-      "takesBody": true
-    },
-    {
-      "name": "updateAgentWorkflow",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentWorkflowEnabled",
+      "name": "deleteAgents",
       "takesBody": true
     },
     {
@@ -268,7 +88,187 @@
       "takesBody": true
     },
     {
-      "name": "runAgentWorkflowNow",
+      "name": "deleteBotTemplate",
+      "takesBody": true
+    },
+    {
+      "name": "discardDraft",
+      "takesBody": true
+    },
+    {
+      "name": "disconnectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "dismissTray",
+      "takesBody": true
+    },
+    {
+      "name": "dismissUserForm",
+      "takesBody": true
+    },
+    {
+      "name": "dismissWidget",
+      "takesBody": true
+    },
+    {
+      "name": "duplicateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "ensureForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "generateAgentAvatarImage",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAutomations",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAvatar",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentChannels",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentMemories",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentNotificationAvatar",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentThread",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscript",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptPage",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptTail",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptWindow",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentWorkflows",
+      "takesBody": true
+    },
+    {
+      "name": "getAsyncTasks",
+      "takesBody": true
+    },
+    {
+      "name": "getAutomationWebhookCredential",
+      "takesBody": true
+    },
+    {
+      "name": "getBotTemplateExportPolicy",
+      "takesBody": false
+    },
+    {
+      "name": "getBotTemplateForSourceAgent",
+      "takesBody": true
+    },
+    {
+      "name": "getBotTemplateVersion",
+      "takesBody": true
+    },
+    {
+      "name": "getBoxSecretsStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getCloudAgentInfo",
+      "takesBody": true
+    },
+    {
+      "name": "getConversationOutline",
+      "takesBody": true
+    },
+    {
+      "name": "getEffectiveMcpPlugins",
+      "takesBody": false
+    },
+    {
+      "name": "getForeverBoxStatus",
+      "takesBody": true
+    },
+    {
+      "name": "getHostSettings",
+      "takesBody": false
+    },
+    {
+      "name": "getHostStatus",
+      "takesBody": true
+    },
+    {
+      "name": "getListenerConnectUrl",
+      "takesBody": true
+    },
+    {
+      "name": "getListenerIntegrations",
+      "takesBody": false
+    },
+    {
+      "name": "getMcpCatalog",
+      "takesBody": false
+    },
+    {
+      "name": "getMcpPluginLogo",
+      "takesBody": true
+    },
+    {
+      "name": "getMcpState",
+      "takesBody": false
+    },
+    {
+      "name": "getPluginSyncStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getSharingState",
+      "takesBody": false
+    },
+    {
+      "name": "getSkillPublishTargets",
+      "takesBody": false
+    },
+    {
+      "name": "getSubagents",
+      "takesBody": true
+    },
+    {
+      "name": "getTeachRecordingStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getTranscript",
+      "takesBody": false
+    },
+    {
+      "name": "getTrays",
+      "takesBody": false
+    },
+    {
+      "name": "getVoiceCall",
+      "takesBody": true
+    },
+    {
+      "name": "handBackForeverBox",
       "takesBody": true
     },
     {
@@ -280,167 +280,95 @@
       "takesBody": true
     },
     {
+      "name": "injectChromeCookies",
+      "takesBody": true
+    },
+    {
+      "name": "installMcpEntry",
+      "takesBody": true
+    },
+    {
+      "name": "interruptAgentRun",
+      "takesBody": true
+    },
+    {
+      "name": "isEgressTunnelAvailable",
+      "takesBody": false
+    },
+    {
+      "name": "isGlobalSearchEnabled",
+      "takesBody": false
+    },
+    {
+      "name": "joinSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "kickstartAgent",
+      "takesBody": true
+    },
+    {
+      "name": "leaveSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "listAgents",
+      "takesBody": false
+    },
+    {
+      "name": "listAllAutomations",
+      "takesBody": false
+    },
+    {
+      "name": "listBotTemplates",
+      "takesBody": false
+    },
+    {
+      "name": "listBoxMcpServers",
+      "takesBody": true
+    },
+    {
+      "name": "listMcpServerTools",
+      "takesBody": true
+    },
+    {
+      "name": "nudgeVoiceCall",
+      "takesBody": true
+    },
+    {
+      "name": "openAgent",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentTail",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentWindowed",
+      "takesBody": true
+    },
+    {
       "name": "portAgentLocalSkills",
       "takesBody": true
     },
     {
-      "name": "getConversationOutline",
+      "name": "promptAcceptanceStatus",
       "takesBody": true
     },
     {
-      "name": "skillsCatalog",
-      "takesBody": false
-    },
-    {
-      "name": "syncPluginSkills",
-      "takesBody": false
-    },
-    {
-      "name": "getPluginSyncStatus",
-      "takesBody": false
-    },
-    {
-      "name": "getSkillPublishTargets",
-      "takesBody": false
+      "name": "publishBotTemplate",
+      "takesBody": true
     },
     {
       "name": "publishSkill",
       "takesBody": true
     },
     {
-      "name": "resyncPublishedSkill",
+      "name": "reactToMessage",
       "takesBody": true
     },
     {
-      "name": "unpublishSkill",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentChannels",
-      "takesBody": true
-    },
-    {
-      "name": "connectChannel",
-      "takesBody": true
-    },
-    {
-      "name": "disconnectChannel",
-      "takesBody": true
-    },
-    {
-      "name": "refreshChannel",
-      "takesBody": true
-    },
-    {
-      "name": "getListenerIntegrations",
-      "takesBody": false
-    },
-    {
-      "name": "getListenerConnectUrl",
-      "takesBody": true
-    },
-    {
-      "name": "getSubagents",
-      "takesBody": true
-    },
-    {
-      "name": "getAsyncTasks",
-      "takesBody": true
-    },
-    {
-      "name": "setAgentAvatarBytes",
-      "takesBody": true
-    },
-    {
-      "name": "getAgentAvatar",
-      "takesBody": true
-    },
-    {
-      "name": "getForeverBoxStatus",
-      "takesBody": true
-    },
-    {
-      "name": "getCloudAgentInfo",
-      "takesBody": true
-    },
-    {
-      "name": "ensureForeverBox",
-      "takesBody": true
-    },
-    {
-      "name": "resetForeverBox",
-      "takesBody": true
-    },
-    {
-      "name": "updateForeverBox",
-      "takesBody": true
-    },
-    {
-      "name": "autoUpdateBoxNow",
-      "takesBody": false
-    },
-    {
-      "name": "snapshotBoxStoreNow",
-      "takesBody": true
-    },
-    {
-      "name": "getBoxStoreStatus",
-      "takesBody": false
-    },
-    {
-      "name": "clearBoxStoreNow",
-      "takesBody": false
-    },
-    {
-      "name": "updateHostNow",
-      "takesBody": true
-    },
-    {
-      "name": "getHostStatus",
-      "takesBody": false
-    },
-    {
-      "name": "setBoxMigrating",
-      "takesBody": true
-    },
-    {
-      "name": "prepareBoxForRecreate",
-      "takesBody": false
-    },
-    {
-      "name": "resumeBoxAfterRecreate",
-      "takesBody": true
-    },
-    {
-      "name": "handBackForeverBox",
-      "takesBody": true
-    },
-    {
-      "name": "startTeachRecording",
-      "takesBody": true
-    },
-    {
-      "name": "stopTeachRecording",
-      "takesBody": true
-    },
-    {
-      "name": "getTeachRecordingStatus",
-      "takesBody": false
-    },
-    {
-      "name": "getTrays",
-      "takesBody": false
-    },
-    {
-      "name": "dismissTray",
-      "takesBody": true
-    },
-    {
-      "name": "clearTrays",
-      "takesBody": false
-    },
-    {
-      "name": "uploadAttachment",
+      "name": "readAttachmentChunk",
       "takesBody": true
     },
     {
@@ -452,31 +380,19 @@
       "takesBody": true
     },
     {
-      "name": "readAttachmentChunk",
+      "name": "readVoiceCallAgentContext",
       "takesBody": true
     },
     {
-      "name": "getHostSettings",
-      "takesBody": false
-    },
-    {
-      "name": "setHostSettings",
+      "name": "readVoiceCallSentMessages",
       "takesBody": true
     },
     {
-      "name": "setBoxSecrets",
+      "name": "recordVoiceCall",
       "takesBody": true
     },
     {
-      "name": "getBoxSecretsStatus",
-      "takesBody": false
-    },
-    {
-      "name": "completeMcpOAuth",
-      "takesBody": true
-    },
-    {
-      "name": "requestWebAuthnCeremony",
+      "name": "refreshChannel",
       "takesBody": true
     },
     {
@@ -484,9 +400,200 @@
       "takesBody": true
     },
     {
-      "name": "listBoxMcpServers",
+      "name": "removeMcpAccount",
+      "takesBody": true
+    },
+    {
+      "name": "removeMcpServer",
+      "takesBody": true
+    },
+    {
+      "name": "removeOwnAgentFromSharedRoom",
+      "takesBody": true
+    },
+    {
+      "name": "renameMcpAccount",
+      "takesBody": true
+    },
+    {
+      "name": "requestDiskSaverAudit",
+      "takesBody": true
+    },
+    {
+      "name": "requestWebAuthnCeremony",
+      "takesBody": true
+    },
+    {
+      "name": "resolveAutoReviewApproval",
+      "takesBody": true
+    },
+    {
+      "name": "resolveLocalToolPermission",
+      "takesBody": true
+    },
+    {
+      "name": "resolveVirtualCardApproval",
+      "takesBody": true
+    },
+    {
+      "name": "respondToRoomJoinRequest",
+      "takesBody": true
+    },
+    {
+      "name": "respondToWidget",
+      "takesBody": true
+    },
+    {
+      "name": "resyncPublishedSkill",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentAutomationNow",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentWorkflowNow",
+      "takesBody": true
+    },
+    {
+      "name": "searchAgents",
+      "takesBody": true
+    },
+    {
+      "name": "searchMedia",
+      "takesBody": true
+    },
+    {
+      "name": "sendDraft",
+      "takesBody": true
+    },
+    {
+      "name": "sendPrompt",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAutomationEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAvatarBytes",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentHiddenFromSidebar",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotificationsEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotifyOnUpdates",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentUnread",
+      "takesBody": true
+    },
+    {
+      "name": "setBotTemplateVisibility",
+      "takesBody": true
+    },
+    {
+      "name": "setBoxSecrets",
+      "takesBody": true
+    },
+    {
+      "name": "setGroupMembers",
+      "takesBody": true
+    },
+    {
+      "name": "setHostSettings",
+      "takesBody": true
+    },
+    {
+      "name": "setMcpCustomInstructions",
+      "takesBody": true
+    },
+    {
+      "name": "setSharedRoomTyping",
+      "takesBody": true
+    },
+    {
+      "name": "setWindowFocused",
+      "takesBody": true
+    },
+    {
+      "name": "skillsCatalog",
+      "takesBody": false
+    },
+    {
+      "name": "startTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "stopTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "submitSecret",
+      "takesBody": true
+    },
+    {
+      "name": "submitUserForm",
+      "takesBody": true
+    },
+    {
+      "name": "syncPluginSkills",
+      "takesBody": false
+    },
+    {
+      "name": "toggleMcpToolDisabled",
+      "takesBody": true
+    },
+    {
+      "name": "transcribeAudio",
+      "takesBody": true
+    },
+    {
+      "name": "uninstallMcpPlugin",
+      "takesBody": true
+    },
+    {
+      "name": "unpublishSkill",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "updateForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "updateHostNow",
+      "takesBody": true
+    },
+    {
+      "name": "updateMcpPluginInstall",
+      "takesBody": true
+    },
+    {
+      "name": "uploadAttachment",
+      "takesBody": true
+    },
+    {
+      "name": "voteFeedback",
       "takesBody": true
     }
-  ],
-  "slimCommands": []
+  ]
 }
