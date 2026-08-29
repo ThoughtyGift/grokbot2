@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { startScheduler, pokeTick } from "./scheduler.js";
 import { handleSlackEvent } from "./slack.js";
 import { handleGitHubEvent } from "./github.js";
+import { handleAutomationWebhook } from "./webhook.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 try {
@@ -61,6 +62,17 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     if (url.startsWith("/slack/events") && method === "POST") {
       const body = await parseBody(req);
       const out = await handleSlackEvent(body);
+      json(res, out.body, out.status);
+      return;
+    }
+    // Webhook cua routine. Than co the KHONG phai JSON (nhieu he thong gui form hay text tran),
+    // nen doc tho roi de `contextFrom` lo — `parseBody` nem tren than khong phai JSON, va nem o day
+    // se bien mot webhook hop le thanh 400 chi vi nguoi gui khong dat content-type.
+    if (url.startsWith("/hooks/automation/") && method === "POST") {
+      const raw = (await readBody(req)).toString("utf8");
+      let than: unknown = raw;
+      try { than = raw.length ? JSON.parse(raw) : {}; } catch { /* giu nguyen van */ }
+      const out = await handleAutomationWebhook(url, req.headers, than);
       json(res, out.body, out.status);
       return;
     }

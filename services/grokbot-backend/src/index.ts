@@ -33,7 +33,7 @@ import { handleGateway, hostHealth, handleBootstrapRpc } from "./gateway.js";
 import { saveNow, persistenceInfo } from "./store.js";
 import { runtimeHealth } from "./brain.js";
 import { chatSnapshot } from "./chat/state.js";
-import { startScheduler, opsHealth, tick, dueIds, routinesForOps, fireById, fireListeners } from "./automations.js";
+import { startScheduler, opsHealth, tick, dueIds, routinesForOps, fireById, fireListeners, fireByWebhook } from "./automations.js";
 import { reportBoxConfig, computerHealth } from "./forever-box.js";
 import { browserProbe, isBrowserConfigured } from "./browser.js";
 import { reportMcpConfig, closeMcp } from "./mcp.js";
@@ -265,6 +265,18 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
           : undefined;
         const n = fireListeners(String(bodyJ.platform ?? ""), String(bodyJ.context ?? ""), ev);
         return json({ ok: true, fired: n });
+      }
+      // Webhook của routine. Ops nhận POST công khai rồi chuyển vào đây, vì KHOÁ nằm ở BFF (sqlite)
+      // và ops không được đụng sqlite (ADR-P4-2). Đặt TRƯỚC `/internal/ops/fire` vì nhánh kia dùng
+      // `startsWith` nên nó nuốt luôn mọi đường bắt đầu bằng "fire".
+      if (url.startsWith("/internal/ops/fire-webhook") && req.method === "POST") {
+        const ket = fireByWebhook(
+          String(bodyJ.automationId ?? ""),
+          String(bodyJ.key ?? ""),
+          typeof bodyJ.context === "string" ? bodyJ.context : undefined,
+        );
+        const ma = ket === "ok" ? 200 : ket === "sai-khoa" ? 401 : ket === "dang-tat" ? 409 : 404;
+        return json({ ok: ket === "ok", reason: ket }, ma);
       }
       if (url.startsWith("/internal/ops/fire") && req.method === "POST") {
         const trigger = bodyJ.trigger === "event" || bodyJ.trigger === "manual" ? bodyJ.trigger : "schedule";

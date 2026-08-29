@@ -599,6 +599,9 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     // object, not our cron string), the mutating ones included: the editor reads `trigger.type`
     // off what it stored, and sending the raw record is what crashed it on click.
     getAgentAutomations: (a) => automations.forAgentClientShape(a),
+    // Tra thang, KHONG boc qua toClientShape: day la ban ghi {url,key} chu khong phai mot routine.
+    // `null` -> {} de client thay mot doi tuong khong co `url`, va nem dung cho no doi.
+    getAutomationWebhookCredential: (a) => automations.webhookCredential?.(a) ?? {},
     listAllAutomations: () => automations.listAll().map(automations.toClientShape),
     setAgentAutomationEnabled: (a) => automations.setEnabled(a).map(automations.toClientShape),
     createAgentAutomation: (a) => automations.create(a).map(automations.toClientShape),

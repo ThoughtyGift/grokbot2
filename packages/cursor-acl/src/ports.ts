@@ -186,6 +186,13 @@ export interface AutomationsPort {
   setEnabled(args: any): unknown[];
   runNow: Call;
   forAgentClientShape(args: any): unknown;
+  /**
+   * `getAutomationWebhookCredential` — dia chi + khoa de goi routine tu ngoai.
+   *
+   * `null` khi khong tim thay routine. `key: null` nghia la DANG DUC: client hoi lai moi 2s,
+   * qua 15 lan thi bo cuoc. `url` rong thi renderer NEM, nen khong duoc tra chuoi rong.
+   */
+  webhookCredential?(args: any): { url: string; key: string | null } | null;
 }
 
 /** S11 connectors — inbound webhooks and the two long-poll channels. */

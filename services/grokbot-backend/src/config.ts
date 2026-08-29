@@ -70,6 +70,24 @@ export const config = {
   get opsUrl() {
     return process.env.GROKBOT2_OPS_URL ?? "";
   },
+  /**
+   * Địa chỉ NGOÀI nhìn thấy được — dùng để dựng URL webhook cho routine.
+   *
+   * Người ta dán URL này vào một hệ thống khác (Zapier, một job CI, một form), nên nó phải là địa
+   * chỉ từ bên ngoài gọi được. Ta không tự đoán ra được: đặt `GROKBOT2_PUBLIC_URL=https://...` khi
+   * chạy sau tên miền.
+   *
+   * Không đặt thì trả về cửa ops đang chạy — đúng cho máy nhà, và người dùng nhìn URL `127.0.0.1`
+   * là biết ngay cần đặt biến. Trả chuỗi rỗng thì tệ hơn: renderer NÉM khi `url` rỗng, nên bảng
+   * webhook sẽ hỏng thay vì nói ra điều gì.
+   */
+  get publicUrl(): string {
+    const dat = process.env.GROKBOT2_PUBLIC_URL?.trim();
+    if (dat) return dat.replace(/\/$/, "");
+    const ops = process.env.GROKBOT2_OPS_URL?.trim();
+    if (ops) return ops.replace(/\/$/, "");
+    return `http://127.0.0.1:${process.env.GROKBOT2_OPS_PORT ?? 8791}`;
+  },
   poolUrl: process.env.CLAUDE_POOL_URL ?? "https://admin.halcion.vn/v1/claude",
   model: process.env.GROKBOT2_MODEL ?? process.env.CLAUDE_MODEL ?? "gemini-3.7-flash",
   /**

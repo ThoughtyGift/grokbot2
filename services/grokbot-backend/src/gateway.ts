@@ -68,6 +68,7 @@ import {
   deleteAgentAutomation,
   setAgentAutomationEnabled,
   runAgentAutomationNow,
+  automationWebhookCredential,
 } from "./automations.js";
 import { foreverBoxStatus, handBackBox, beginComputerUse, endComputerUse } from "./forever-box.js";
 import {
@@ -208,6 +209,7 @@ const ports: AclPorts = {
     remove: deleteAgentAutomation,
     setEnabled: setAgentAutomationEnabled,
     runNow: runAgentAutomationNow,
+    webhookCredential: automationWebhookCredential,
   },
   connectors: {
     handleSlackEvent,

@@ -17,6 +17,8 @@
  */
 import { agentExists, sendPrompt, persist, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationRefine, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { config } from "./config.js";
 
 export interface Automation {
   id: string;
@@ -48,6 +50,15 @@ export interface Automation {
    * ops có chạy cũng không đánh thức nổi ai.
    */
   triggerSpec?: Record<string, unknown>;
+  /**
+   * Bí mật của webhook — chỉ đúc khi ai đó thật sự hỏi (`getAutomationWebhookCredential`).
+   *
+   * KHÔNG BAO GIỜ được đi ra ngoài qua `toClientAutomation`: hàm đó trải `...rec`, nên thêm một
+   * trường bí mật vào đây là nó lọt vào MỌI câu trả lời `getAgentAutomations` và
+   * `listAllAutomations` — rộng hơn hẳn cái lệnh dành riêng cho nó. Chỗ xoá nằm ngay trong
+   * `toClientAutomation`, và `automations-webhook.test.ts` khoá điều đó.
+   */
+  webhookKey?: string;
 }
 
 /**
@@ -376,8 +387,11 @@ function triggerObject(rawTrigger: string, spec?: Record<string, unknown>): Reco
 
 export function toClientAutomation(rec: Automation): Record<string, unknown> {
   const trigger = triggerObject(rec.trigger, rec.triggerSpec);
+  // `webhookKey` bị bỏ ở đây và chỉ ở đây. `...rec` bên dưới trải cả bản ghi, nên bí mật nào nằm
+  // trên record mà không bị gỡ là bí mật ấy đi theo mọi lần liệt kê routine.
+  const { webhookKey: _bimat, ...cong } = rec;
   return {
-    ...rec,
+    ...cong,
     trigger,
     schedule: rec.trigger,
     scheduleDescription: rec.triggerDescription,
@@ -466,6 +480,56 @@ export function updateAgentAutomation(a: { id?: string; agentId?: string; automa
     automationsChanged(agentId);
   }
   return listFor(agentId);
+}
+
+/**
+ * `getAutomationWebhookCredential({id, automationId})` — địa chỉ + khoá để gọi routine từ ngoài.
+ *
+ * Hợp đồng đọc thẳng từ renderer 0.30, không đoán:
+ *
+ *     const K = await getAutomationWebhookCredential({id, automationId});
+ *     if (typeof K.url != "string" || K.url.length === 0 || (K.key !== null && typeof K.key != "string")) throw;
+ *     K.key !== null  -> {kind:"ready", url, key}    và NGỪNG hỏi lại
+ *     K.key === null  -> {kind:"minting", url}       hỏi lại mỗi 2s, quá 15 lần thì {kind:"failed"}
+ *
+ * Tức `key: null` nghĩa là "đang đúc, hỏi lại sau" — bên hãng đúc bất đồng bộ trên hộp. Ta đúc
+ * ngay tại chỗ nên không bao giờ trả `null`, và bảng của client nhảy thẳng sang "ready" ở lần hỏi
+ * đầu tiên. `url` rỗng thì renderer NÉM, nên nhánh nào cũng phải trả một địa chỉ thật.
+ */
+export function automationWebhookCredential(
+  a: { id?: string; agentId?: string; automationId?: string },
+): { url: string; key: string | null } | null {
+  const agentId = agentIdOf(a);
+  const rec = listFor(agentId).find((x) => x.id === a?.automationId);
+  if (!rec) return null;
+  if (!rec.webhookKey) {
+    // 32 byte ngẫu nhiên. Khoá này là thứ DUY NHẤT chặn người lạ chạy routine của người khác, nên
+    // nó phải từ nguồn ngẫu nhiên mật mã, không phải Math.random.
+    rec.webhookKey = randomBytes(32).toString("base64url");
+    persist();
+  }
+  return { url: `${config.publicUrl}/hooks/automation/${encodeURIComponent(rec.id)}`, key: rec.webhookKey };
+}
+
+/**
+ * Ops gọi vào đây khi có POST tới `/hooks/automation/<id>`.
+ *
+ * So khoá bằng `timingSafeEqual` chứ không bằng `===`: so chuỗi thường thoát ra ở ký tự lệch đầu
+ * tiên, và một người gọi lại nhiều lần đo được thời gian đó để dò dần từng ký tự.
+ *
+ * Trả về lý do chứ không phải boolean, vì ops cần phân biệt 404 với 401 — và vì "không bắn được"
+ * mà không nói tại sao là thứ khiến người ta ngồi đoán.
+ */
+export function fireByWebhook(
+  automationId: string, key: string, context?: string,
+): "ok" | "khong-thay" | "sai-khoa" | "dang-tat" {
+  const rec = [...byAgent.values()].flat().find((x) => x.id === automationId);
+  if (!rec || !rec.webhookKey) return "khong-thay";
+  const a = Buffer.from(String(key ?? ""), "utf8");
+  const b = Buffer.from(rec.webhookKey, "utf8");
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return "sai-khoa";
+  if (!rec.isEnabled) return "dang-tat";
+  return fireById(automationId, "event", context) ? "ok" : "khong-thay";
 }
 
 export function deleteAgentAutomation(a: { id?: string; agentId?: string; automationId?: string }): Automation[] {
