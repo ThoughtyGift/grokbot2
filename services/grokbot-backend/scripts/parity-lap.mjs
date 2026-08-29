@@ -83,7 +83,7 @@ const motLuot = (n) => new Promise((res) => {
   p.stderr.on("data", (d) => { out += d; });
   p.on("close", (code) => {
     const id = (out.match(/agent-\d+/) ?? [null])[0];
-    if (!id) return res(null);
+    if (!id) return res({ id: null, catCuoi: false, out });
     // Mã 3 = hết hạn mức giữa chừng.
     //
     // Trước đây bỏ CẢ lượt. Đo được đêm 29/08 vì sao thế là quá tay: lượt 1 chạy được 18/23 case
@@ -91,9 +91,9 @@ const motLuot = (n) => new Promise((res) => {
     // có phân bố. Giữ phần đo được — trừ case cuối, vì lý do ở khối chú thích trên.
     if (code === 3) {
       console.log(`\n  lượt ${n}: hết hạn mức giữa chừng — GIỮ phần đo được, bỏ case cuối`);
-      return res({ id, catCuoi: true });
+      return res({ id, catCuoi: true, out });
     }
-    res({ id, catCuoi: false });
+    res({ id, catCuoi: false, out });
   });
 });
 
@@ -112,6 +112,25 @@ const nghi = async (n) => {
   await new Promise((r) => setTimeout(r, NGHI_PHUT * 60 * 1000));
 };
 
+/**
+ * In ra vì sao một lượt không đo được gì.
+ *
+ * Bài này chỉ echo dòng stdout CUỐI của mỗi mẩu, và stderr thì nuốt hoàn toàn. Đêm 30/08 ba lượt
+ * liên tiếp hiện đúng `không case nào đo được — bỏ` và không một chữ nào nói tại sao; phải chạy tay
+ * `app-replay-b2.mjs` mới đọc được câu thật:
+ *
+ *     không mở được "LAP1-…" sau 6 lần bấm — màn hình không ghi "LAP1-…'s screen".
+ *
+ * (Khung máy tính bên phải bị thu lại, nên mốc xác thực biến mất và replay từ chối đo — đúng chỗ
+ * nó phải từ chối.) Một bài đo im lặng khi hỏng thì lần sau lại mù y hệt.
+ */
+const vachLyDo = (out) => {
+  const dong = String(out ?? "").split(/\r?\n/).map((l) => l.replace(/\r/g, "").trim()).filter(Boolean);
+  if (!dong.length) { console.log("     (tiến trình không in ra gì)"); return; }
+  console.log("     ── replay nói ──");
+  for (const l of dong.slice(-8)) console.log(`     ${l.slice(0, 160)}`);
+};
+
 const dem = [];
 let vuaChamHan = false;
 for (let n = 1; n <= LAN; n += 1) {
@@ -121,20 +140,22 @@ for (let n = 1; n <= LAN; n += 1) {
   // đọc transcript cũng bắt buộc: bot thử nằm trong đám sắp xoá.
   const truoc = new Set((await roster()).map((a) => a.id));
   const luot = await motLuot(n);
-  vuaChamHan = luot?.catCuoi === true;
-  if (luot) {
+  vuaChamHan = luot.catCuoi === true;
+  let co = [];
+  if (luot.id) {
     const t = await gw("getAgentTranscript", { agentId: luot.id, id: luot.id });
     const rows = t?.transcript ?? t?.entries ?? (Array.isArray(t) ? t : []);
     const moc = [];
     rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user" && !e.fromAgent && e.clientNonce) moc.push(i); });
-    const co = moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget"));
+    co = moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget"));
     if (luot.catCuoi) co.pop();
-    if (co.length) {
-      dem.push(co);
-      console.log(`\n  lượt ${n}: ${co.length}/${cases.length} case đo được${luot.catCuoi ? " (đã bỏ case cuối)" : ""}`);
-    } else {
-      console.log(`\n  lượt ${n}: không case nào đo được — bỏ`);
-    }
+  }
+  if (co.length) {
+    dem.push(co);
+    console.log(`\n  lượt ${n}: ${co.length}/${cases.length} case đo được${luot.catCuoi ? " (đã bỏ case cuối)" : ""}`);
+  } else {
+    console.log(`\n  lượt ${n}: không case nào đo được — bỏ`);
+    vachLyDo(luot.out);
   }
   // Chạy cả khi lượt bị bỏ: một lượt hết hạn mức vẫn kịp tạo bot, và bỏ qua dọn ở đúng nhánh đó là
   // cách roster lặng lẽ phình ra sau mỗi lần chạy hỏng.
