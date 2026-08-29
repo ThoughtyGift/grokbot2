@@ -208,11 +208,28 @@ export function queueRequest(name: ChannelName, frame: unknown): void {
  */
 const dangCho = new Map<string, (frame: Record<string, unknown>) => void>();
 
-/** Chờ khung trả lời mang đúng `requestId`. Hết giờ thì trả `null` chứ không treo mãi. */
-export function waitForResponse(requestId: string, timeoutMs: number): Promise<Record<string, unknown> | null> {
+/**
+ * Chờ khung trả lời mang đúng `requestId`. Hết giờ thì trả mảng rỗng chứ không treo mãi.
+ *
+ * `xong` quyết định khi nào đủ. Một thao tác đọc trả đúng một khung, nhưng shell là LUỒNG: khung
+ * đầu chỉ là `{"shellStream":{"start":…}}`, còn stdout và mã thoát tới ở các khung sau cho tới
+ * `streamClose`. Lấy khung đầu rồi thôi là mất sạch đầu ra — đo được đúng như vậy.
+ */
+export function waitForResponse(
+  requestId: string,
+  timeoutMs: number,
+  xong: (frame: Record<string, unknown>, daCo: Record<string, unknown>[]) => boolean = () => true,
+): Promise<Record<string, unknown>[]> {
   return new Promise((res) => {
-    const hen = setTimeout(() => { dangCho.delete(requestId); res(null); }, timeoutMs);
-    dangCho.set(requestId, (frame) => { clearTimeout(hen); dangCho.delete(requestId); res(frame); });
+    const gom: Record<string, unknown>[] = [];
+    const hen = setTimeout(() => { dangCho.delete(requestId); res(gom); }, timeoutMs);
+    dangCho.set(requestId, (frame) => {
+      gom.push(frame);
+      if (!xong(frame, gom)) return;
+      clearTimeout(hen);
+      dangCho.delete(requestId);
+      res(gom);
+    });
   });
 }
 

@@ -83,10 +83,17 @@ function serverMessage(op: LocalOp, machineId: string, execId: string): Record<s
   if (op.kind === "shell") {
     return {
       ...base,
-      shellArgs: {
+      // `shellArgs` KHÔNG có handler trong daemon — nó tự nói: "No handler found for server message
+      // of type shellArgs". Hai tên thật là `shellStreamArgs` và `backgroundShellSpawnArgs`, xác
+      // nhận bởi `shellWorkingDirectoryTarget`:
+      //     if (r.case !== "shellStreamArgs" && r.case !== "backgroundShellSpawnArgs") return "unset";
+      // và `cwd:"unset"` ta nhận về lần đầu chính là dòng đó trả lời cho case sai.
+      shellStreamArgs: {
         command: op.command,
         workingDirectory: op.cwd ?? cwdCuaMay.get(machineId) ?? "",
-        timeout: Math.round(Math.min(op.timeoutMs ?? 30_000, MAX_TIMEOUT_MS) / 1000),
+        // MILI-GIÂY, không phải giây. Gửi `30` tưởng là 30s thì daemon huỷ lệnh sau 48ms và trả
+        // `{"exit":{"aborted":true,"abortReason":"SHELL_ABORT_REASON_TIMEOUT"}}` — đo được đúng vậy.
+        timeout: Math.min(op.timeoutMs ?? 30_000, MAX_TIMEOUT_MS),
         toolCallId: execId,
       },
     };
@@ -147,8 +154,20 @@ export async function runOnUserComputer(
     ...(opts.approvalId ? { approvalId: opts.approvalId } : {}),
   });
 
-  const khung = await waitForResponse(requestId, timeoutMs);
-  if (!khung) {
+  /*
+   * Shell là LUỒNG; đọc/liệt kê thì một khung là xong.
+   *
+   * Khung đầu của shell chỉ là `{"shellStream":{"start":{"sandboxPolicy":…}}}`. Đầu ra thật và mã
+   * thoát tới ở các khung sau, và daemon đóng luồng bằng `streamClose` (hoặc `throw` nếu hỏng).
+   */
+  const laShell = op.kind === "shell";
+  const khungs = await waitForResponse(requestId, timeoutMs, (f) => {
+    if (!laShell) return true;
+    const m = thanCua(f);
+    return m != null && ("streamClose" in m || "throw" in m);
+  });
+
+  if (!khungs.length) {
     return {
       ok: false,
       error: `máy tính của bạn không trả lời trong ${Math.round(timeoutMs / 1000)}s`
@@ -156,23 +175,70 @@ export async function runOnUserComputer(
     };
   }
 
-  // Khung trả lời cũng mang `kind`: hello · client · control · file · file-error · ping.
-  const kind = String(khung.kind ?? "");
-  if (kind === "file-error") return { ok: false, error: JSON.stringify(khung).slice(0, 300) };
+  const cuoiCung = khungs[khungs.length - 1];
+  const cwd = cuoiCung.cwdState ?? khungs.find((f) => typeof f.cwdState === "string" && f.cwdState !== "unset")?.cwdState;
+  if (typeof cwd === "string" && cwd && cwd !== "unset") cwdCuaMay.set(machineId, cwd);
+  const keo = typeof cwd === "string" && cwd && cwd !== "unset" ? { cwd } : {};
 
-  const cwd = khung.cwdState;
-  if (typeof cwd === "string" && cwd) cwdCuaMay.set(machineId, cwd);
-  const keo = typeof cwd === "string" && cwd ? { cwd } : {};
-
-  // `clientMessage`/`controlMessage` là phần thân; tên trường chưa đo được chắc nên nhận nhiều
-  // biến thể và, cùng lắm, trả nguyên khung — thà đưa lên thứ đọc được còn hơn nuốt mất.
-  const than = khung.clientMessage ?? khung.controlMessage ?? khung.message ?? khung.messageJson;
-  if (typeof than === "string") {
-    try { return { ok: true, data: JSON.parse(than), ...keo }; } catch { return { ok: true, data: than, ...keo }; }
+  const thans = khungs.map(thanCua).filter((x): x is Record<string, unknown> => x != null);
+  const nem = thans.find((m) => m.throw != null);
+  if (nem) return { ok: false, error: String((nem.throw as Record<string, unknown>)?.error ?? "lỗi không rõ").slice(0, 500), ...keo };
+  if (khungs.some((f) => String(f.kind ?? "") === "file-error")) {
+    return { ok: false, error: JSON.stringify(khungs[khungs.length - 1]).slice(0, 300), ...keo };
   }
-  if (than != null) return { ok: true, data: than, ...keo };
-  return { ok: true, data: khung, ...keo };
+
+  if (!laShell) return { ok: true, data: thans[0] ?? cuoiCung, ...keo };
+  return { ok: true, data: gomLuongShell(thans), ...keo };
 }
 
-/** Máy người dùng có đang nối không — nơi gọi cần biết để nói câu từ chối cho tử tế. */
+/** Thân bên trong một khung trả lời — daemon gói nó dưới vài tên khác nhau tuỳ loại khung. */
+function thanCua(f: Record<string, unknown>): Record<string, unknown> | null {
+  const t = f.clientMessage ?? f.controlMessage ?? f.message ?? f.messageJson;
+  if (typeof t === "string") { try { return JSON.parse(t) as Record<string, unknown>; } catch { return null; } }
+  if (t != null && typeof t === "object") return t as Record<string, unknown>;
+  // Khung `client` phẳng: chính nó đã là thân (đo được: `{"id":6,"shellStream":{…}}`).
+  return "shellStream" in f || "readResult" in f || "lsResult" in f || "throw" in f || "streamClose" in f
+    ? f : null;
+}
+
+/**
+ * Ghép các khung `shellStream` thành một kết quả đọc được.
+ *
+ * Hình dạng từng nhánh đo bằng chính luồng thật, không đoán: khung `start` mang `sandboxPolicy`,
+ * còn stdout/stderr/exit là các nhánh riêng. Nhánh nào chưa gặp thì giữ nguyên trong `khac` để lần
+ * sau còn đọc được nó là gì, thay vì nuốt mất.
+ */
+function gomLuongShell(thans: Record<string, unknown>[]): Record<string, unknown> {
+  let out = "", err = "";
+  let exitCode: number | undefined;
+  let cwdSau: string | undefined;
+  let huy: string | undefined;
+  const khac: unknown[] = [];
+  for (const m of thans) {
+    const st = m.shellStream as Record<string, unknown> | undefined;
+    // `heartbeat` là nhịp giữ luồng của daemon, không phải đầu ra — bỏ qua, đừng báo là lạ.
+    if (!st) { if (!("streamClose" in m) && !("heartbeat" in m)) khac.push(m); continue; }
+    for (const [k, v] of Object.entries(st)) {
+      const val = v as Record<string, unknown>;
+      if (k === "stdout") out += String(val?.data ?? val?.text ?? val?.chars ?? "");
+      else if (k === "stderr") err += String(val?.data ?? val?.text ?? val?.chars ?? "");
+      else if (k === "exit" || k === "exited") {
+        exitCode = Number(val?.code ?? val?.exitCode ?? 0);
+        // `cwd` về ở ĐÂY, không ở `cwdState`: {"exit":{"cwd":"C:\Users\admin",…}}
+        if (typeof val?.cwd === "string" && val.cwd) cwdSau = val.cwd;
+        if (val?.aborted === true) huy = String(val.abortReason ?? "aborted");
+      }
+      else if (k !== "start") khac.push({ [k]: v });
+    }
+  }
+  return {
+    stdout: out, stderr: err,
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(cwdSau ? { cwd: cwdSau } : {}),
+    ...(huy ? { aborted: huy } : {}),
+    ...(khac.length ? { khungChuaHieu: khac.slice(0, 6) } : {}),
+  };
+}
+
+/** Máy người dùng có đang nối không, và nó tự khai là máy nào — cho nơi gọi nói câu từ chối tử tế. */
 export { userComputerConnected, connectedMachine } from "./channels.js";
