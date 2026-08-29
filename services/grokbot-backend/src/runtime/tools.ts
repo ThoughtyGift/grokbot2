@@ -565,7 +565,29 @@ TOOLS.watch_video = async (arg, ctx) => {
   const probe = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
     command: `ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of default=noprint_wrappers=1 ${q}`,
   });
-  if (probe.exitCode !== 0) return `Không mở được ${path}: ${probe.stderr.trim().slice(0, 300) || "ffprobe lỗi"}`;
+  if (probe.exitCode !== 0) {
+    /*
+     * Hỏng thì phải nói ĐỨNG Ở ĐÂU, không chỉ "No such file or directory".
+     *
+     * Đo ngày 30/08 trên một lượt thật: bot quay xong video, gọi `watch_video("rec/e2e_rec.mp4")`,
+     * nhận đúng câu "No such file or directory" rồi đoán lại ba lần — mỗi lần nói y hệt "để mình
+     * tìm file rồi xem", nên nhìn từ ngoài giống hệt một con bot đang bịa.
+     *
+     * Nguyên nhân thật: mọi lệnh chạy trong `/home/<user>/workspace`, còn bot viết đường dẫn tương
+     * đối theo `$HOME`. Nó không có cách nào biết điều đó, vì không tool nào nói ra. Một vòng gọi
+     * thêm ở nhánh HỎNG (hiếm) đổi lấy việc model tự sửa được ngay lần sau — rẻ.
+     */
+    const loi = probe.stderr.trim().slice(0, 300) || "ffprobe lỗi";
+    if (!path.startsWith("/")) {
+      const o = await boxCall<{ stdout: string }>("exec", { command: "pwd" }).catch(() => null);
+      const cwd = o?.stdout?.trim();
+      if (cwd) {
+        return `Không mở được ${path}: ${loi}\n(đường dẫn TƯƠNG ĐỐI, và lệnh đang đứng ở ${cwd} — `
+          + `dùng đường tuyệt đối, hoặc tính lại từ thư mục này.)`;
+      }
+    }
+    return `Không mở được ${path}: ${loi}`;
+  }
   const dur = Number((probe.stdout.match(/duration=([0-9.]+)/) ?? [])[1]) || 0;
   const w = (probe.stdout.match(/width=([0-9]+)/) ?? [])[1] ?? "?";
   const h = (probe.stdout.match(/height=([0-9]+)/) ?? [])[1] ?? "?";
