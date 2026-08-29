@@ -691,12 +691,43 @@ export function dismissUserForm(a: { entryId?: string; agentId?: string; mode?: 
 }
 
 // ── send ──────────────────────────────────────────────────────────────────────
-function reveal(target: Entry, full: string, agentId: string): void {
+/**
+ * Bong bóng nào đang được hiện dần, và cờ để dừng nó.
+ *
+ * `reveal` là một chuỗi `setTimeout` tự lên lịch, chạy khoảng một giây. Trước đây nó KHÔNG có đường
+ * huỷ, và đó là một cuộc đua thật — đo được trên bản ghi ngày 29/08:
+ *
+ *   dòng 1231  reveal(bubble, r.text)      nhịp đầu chạy ngay, ~23 nhịp còn lại rải trong ~1 giây
+ *   dòng 1378  setText(bubble, spoken)     gỡ `TOOL_CALL: …` ra khỏi chữ hiển thị
+ *   rồi        nhịp cuối của reveal        setText(target, full) — GHI LẠI TOÀN VĂN, streaming=false
+ *
+ * Kết quả trên màn hình: nguyên `TOOL_CALL: edit_file_v2({…7,6 KB JSON…})` nằm trong bong bóng chat,
+ * đã chốt (`streaming=false`) nên không tự sửa. Chỉ `reveal` mới ghi toàn văn kèm `streaming=false`,
+ * nên nó là bên ghi cuối.
+ */
+const dangHien = new WeakMap<Entry, { dung: boolean }>();
+
+/**
+ * Dừng hiện dần trên bong bóng này. Gọi TRƯỚC mọi lần tự tay đặt lại chữ cho nó.
+ *
+ * Xuất ra cùng `reveal` chỉ để `reveal-race.test.ts` đo được cuộc đua bằng đồng hồ giả. Không có
+ * đường nào khác: đây là một lỗi THEO THỜI GIAN, và đọc mã thì lần trước đã đọc qua nó rồi.
+ */
+export function stopReveal(target: Entry): void {
+  const s = dangHien.get(target);
+  if (s) s.dung = true;
+}
+
+export function reveal(target: Entry, full: string, agentId: string): void {
+  stopReveal(target);                       // một lượt mới đè lượt cũ, không để hai chuỗi cùng ghi
   if (process.env.GROKBOT2_PROGRESSIVE === "0") { setText(target, full); if (target.kind === "send-message") target.streaming = false; onUpdate(agentId); return; }
   const tokens = full.match(/\S+\s*/g) ?? [full];
   const per = Math.max(1, Math.ceil(tokens.length / 24));
+  const trangThai = { dung: false };
+  dangHien.set(target, trangThai);
   let i = 0;
   const tick = (): void => {
+    if (trangThai.dung) return;
     i += per;
     if (i >= tokens.length) { setText(target, full); if (target.kind === "send-message") target.streaming = false; onUpdate(agentId); return; }
     setText(target, tokens.slice(0, i).join("")); onUpdate(agentId); setTimeout(tick, 45);
@@ -1311,15 +1342,19 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // as a barrier. Only the FIRST batch runs now — its results go back to the model, which re-issues
   // whatever is left. That keeps approval and browser ordering exactly as they were while turning a
   // read-two-files request into one round trip instead of two.
-  const calls = r.calls ?? parseToolCalls(textOf(bubble), isKnownTool);
+  // `r.text` chứ không phải `textOf(bubble)`: bong bóng lúc này có thể mới hiện được một phần, và
+  // một lời gọi cắt dở thì không cân ngoặc — bóc ra 0 lời gọi rồi rơi vào nhánh "cắt giữa chừng"
+  // trong khi model thật sự đã gửi đủ.
+  const calls = r.calls ?? parseToolCalls(r.text ?? textOf(bubble), isKnownTool);
   if (!calls.length) {
     // A `TOOL_CALL:` that did not parse means it was cut off mid-arguments (a big ask_question runs
     // past the token limit) or malformed. Left alone, the raw `TOOL_CALL: ask_question({…` shows on
     // screen as JSON — the reported bug. Never show that: strip from the last TOOL_CALL onward so only
     // the prose remains, and retry the turn ONCE so the model can reissue the call whole. The retry is
     // budgeted by the same MAX_TOOL_STEPS as any other continuation, so it cannot loop.
-    if ((r.incomplete ?? hasIncompleteToolCall(textOf(bubble), isKnownTool)) && history) {
-      const spoken = textOf(bubble).replace(/TOOL_CALL:[\s\S]*$/, "").trim();
+    if ((r.incomplete ?? hasIncompleteToolCall(r.text ?? textOf(bubble), isKnownTool)) && history) {
+      stopReveal(bubble);
+      const spoken = (r.text ?? textOf(bubble)).replace(/TOOL_CALL:[\s\S]*$/, "").trim();
       const step = (toolSteps.get(agentId) ?? 0) + 1;
       if (step < MAX_TOOL_STEPS) {
         toolSteps.set(agentId, step);
@@ -1375,7 +1410,14 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // A pattern anchored to the end of the reply removes only the last call, leaving the earlier ones
   // rendered to the user as raw `TOOL_CALL:` lines; and a global pattern would have to re-solve the
   // balanced-parenthesis problem the parser already solved.
-  const spoken = calls.reduce((text, c) => text.replace(c.raw, ""), textOf(bubble)).trim();
+  // Dừng hiện dần TRƯỚC khi đặt lại chữ, kẻo nhịp cuối của nó ghi lại toàn văn kèm `TOOL_CALL:`.
+  stopReveal(bubble);
+  // Gỡ trên VĂN BẢN ĐẦY ĐỦ của model, không phải trên chữ đang hiện dở.
+  //
+  // `textOf(bubble)` giữa lúc reveal chạy là một chuỗi CẮT DỞ, nên `replace(c.raw, "")` không khớp
+  // và trả về nguyên bản — im lặng, vì `String.replace` không báo khi không tìm thấy.
+  const dayDu = r.text ?? textOf(bubble);
+  const spoken = calls.reduce((text, c) => text.replace(c.raw, ""), dayDu).trim();
   if (spoken) {
     setText(bubble, spoken);
     if (bubble.kind === "send-message") bubble.streaming = false;
