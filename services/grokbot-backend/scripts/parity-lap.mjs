@@ -35,9 +35,24 @@ const cases = JSON.parse(readFileSync("docs/extracted/kich-ban-b2.json", "utf8")
   .scenarios.find((s) => s.bot === "Test Clone").cases.filter((c) => String(c.input ?? "").trim());
 const mongWidget = cases.map((c) => (c.expected ?? []).some((e) => e.kind === "widget"));
 
+/**
+ * Dọn bot do CHÍNH bài này tạo ra, và chỉ chúng.
+ *
+ * Bản trước xoá sạch mọi bot. Nó viết ra hôm roster chỉ có bot thử, và hôm đó đúng — nhưng nó là
+ * một quả mìn: chạy lại vào ngày người ta đã có việc thật trên máy thì mất cả *CSKH*, *Vận Hành
+ * Đơn*, *Ads & Khuyến Mãi*. Một bài ĐO không được có quyền xoá thứ nó không tạo ra.
+ *
+ * Roster còn bot khác thì thanh bên dài hơn, nhưng phép đo không hỏng: `app-replay-b2.mjs` kiểm
+ * "<BOT>'s screen" trước từng case và DỪNG nếu mở nhầm bot — nên rủi ro ở đây là dừng ồn ào, chứ
+ * không phải đo nhầm im lặng.
+ */
 const donDep = async () => {
   const r = await gw("listAgents", {});
-  for (const a of (Array.isArray(r) ? r : r.agents ?? [])) await gw("deleteAgents", { id: a.id });
+  const all = Array.isArray(r) ? r : r.agents ?? [];
+  const cuaBai = all.filter((a) => /^LAP\d+-/.test(String(a.name ?? "")));
+  for (const a of cuaBai) await gw("deleteAgents", { id: a.id });
+  const giuLai = all.length - cuaBai.length;
+  console.log(`  dọn ${cuaBai.length} bot của bài này, giữ nguyên ${giuLai} bot khác`);
 };
 
 /** Chạy một lượt, trả về id bot thử (hoặc null nếu lượt không có giá trị đo). */

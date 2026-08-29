@@ -21,8 +21,7 @@ bảng lệnh ACL chạy thật.
 ```
 cuộc gọi thoại (5)   getVoiceCall · nudgeVoiceCall · recordVoiceCall
                      readVoiceCallAgentContext · readVoiceCallSentMessages
-lẻ (7)               getAutomationWebhookCredential   ← webhook cho routine
-                     resolveVirtualCardApproval       ← thẻ ảo, mới ở 0.30
+lẻ (6)               resolveVirtualCardApproval       ← thẻ ảo, mới ở 0.30
                      injectChromeCookies              ← nhập cookie Chrome
                      getBotTemplateExportPolicy       ← chính sách xuất mẫu
                      generateAgentAvatarImage · getAgentNotificationAvatar · getMcpPluginLogo
@@ -80,8 +79,12 @@ proto-*.json, ui-*.json  không ghi phiên bản
 **① `secret-request` + `user-form`** — ruột đã có, chỉ thiếu thẻ. Rẻ nhất, và đóng một mẫu lỗi đã
 gặp ba lần (khai báo mà không ai điền).
 
-**② `getAutomationWebhookCredential` + routine webhook** — `automations.ts` đã đủ CRUD, `fire()`,
-`matchesEvent()`. 0.30 nói rõ hình dạng: mỗi routine một URL + một header bí mật.
+**② `getAutomationWebhookCredential` + routine webhook** — ~~còn thiếu~~ **XONG 2026-08-29**
+(`c7b2bff`). Nhóm automations giờ đủ 8/8. Hợp đồng lấy từ renderer chứ không đoán: `{url, key}`,
+`key: null` nghĩa là "đang đúc, hỏi lại mỗi 2s, quá 15 lần thì bỏ" — ta đúc ngay nên luôn trả khoá
+thật. Cửa nhận `POST /hooks/automation/<id>` đặt ở ops, khoá so ở BFF vì ops không đụng sqlite.
+Chi tiết trong commit; điểm đáng nhớ là `toClientAutomation` trải `...rec` nên bí mật phải gỡ TAY
+tại đó, và có bài test giữ.
 
 **③ Trích lại `routes`/`auth`/`channels` theo 0.30** — bị chặn vì 0.30 thay router if-chain bằng bộ
 điều phối theo đăng ký. Chưa đo được kích thước; phải khảo sát trước khi hứa.
