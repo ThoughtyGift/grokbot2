@@ -41,6 +41,7 @@ const EMPTY: Record<ChannelName, string> = {
   webauthn: JSON.stringify({ frames: [] }),
 };
 
+/** `timer` là setTimeout cho long-poll JSON, hoặc setInterval giữ nhịp cho luồng SSE. */
 interface Waiter { res: ServerResponse; timer: NodeJS.Timeout }
 
 interface Channel {
@@ -70,11 +71,53 @@ export const isChannelEnabled = (_name: ChannelName): boolean => true;
 export function parkRequests(name: ChannelName, res: ServerResponse): void {
   const ch = channels[name];
 
+  /*
+   * `local-exec` là SSE, không phải long-poll JSON.
+   *
+   * Đây là chỗ đã nuốt mọi yêu cầu của ta trong im lặng. Daemon đọc luồng này theo khối SSE:
+   *
+   *     dispatchEventBlock(e){
+   *       const r = e.split("\n").filter(i => i.startsWith("data:")).map(i => i.slice(5).trim());
+   *       if (r.length === 0) return;                    // ← không có dòng `data:` thì BỎ QUA
+   *       try { n = tge(JSON.parse(r.join("\n"))) } catch { console.error("dropping…"); return }
+   *     }
+   *
+   * và vòng đọc tách khối theo `\n\n`. Ta thì trả một thân `{"requests":[…]}` rồi đóng — không
+   * dòng `data:` nào, nên daemon bỏ qua không một lời rồi nối lại. Đo được đúng như vậy: hàng đợi
+   * rút về 0, `parkedPolls` trở lại 1, và không khung trả lời nào.
+   *
+   * `webauthn` giữ nguyên đường JSON: chưa đo được nó, và đoán hai lần một lúc là cách không biết
+   * cái nào hỏng.
+   */
+  if (name === "local-exec") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      // Luồng này chạy sau proxy nào cũng không được gom đệm, kẻo khung nằm lại trong bộ đệm.
+      "x-accel-buffering": "no",
+    });
+    const waiter: Waiter = {
+      res,
+      // Giữ mở, không hết giờ. Nhịp giữ nhịp là dòng chú thích SSE (`:`), daemon bỏ qua nó vì
+      // không bắt đầu bằng `data:`.
+      timer: setInterval(() => { try { res.write(":\n\n"); } catch { /* đứt rồi */ } }, PARK_MS),
+    };
+    ch.waiters.add(waiter);
+    res.on("close", () => { clearInterval(waiter.timer); ch.waiters.delete(waiter); });
+    // Việc đã xếp hàng từ trước lúc nối: đẩy ra ngay.
+    if (ch.queue.length) {
+      const batch = ch.queue.splice(0, ch.queue.length);
+      for (const f of batch) { try { res.write(`data: ${JSON.stringify(f)}\n\n`); } catch { ch.queue.unshift(f); } }
+    }
+    return;
+  }
+
   // Work already waiting: answer at once. (Never happens today; correct when it does.)
   if (ch.queue.length > 0) {
     const batch = ch.queue.splice(0, ch.queue.length);
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(name === "webauthn" ? { frames: batch } : { requests: batch }));
+    res.end(JSON.stringify({ frames: batch }));
     return;
   }
 
@@ -134,15 +177,23 @@ export const connectedMachine = (): UserMachine | null => (userComputerConnected
  */
 export function queueRequest(name: ChannelName, frame: unknown): void {
   const ch = channels[name];
-  ch.queue.push(frame);
   const waiter = [...ch.waiters][0];
-  if (!waiter) return;                     // chưa ai nối — nằm chờ trong hàng đợi
+  if (!waiter) { ch.queue.push(frame); return; }   // chưa ai nối — nằm chờ trong hàng đợi
+
+  // SSE: ghi vào luồng đang mở và GIỮ nó mở. Đóng luồng sau mỗi khung là bắt daemon nối lại mỗi
+  // lệnh, và tệ hơn, khung tiếp theo không có đường đi cho tới khi nó nối xong.
+  if (name === "local-exec") {
+    try { waiter.res.write(`data: ${JSON.stringify(frame)}\n\n`); } catch { ch.queue.push(frame); }
+    return;
+  }
+
+  ch.queue.push(frame);
   ch.waiters.delete(waiter);
   clearTimeout(waiter.timer);
   const batch = ch.queue.splice(0, ch.queue.length);
   try {
     waiter.res.writeHead(200, { "content-type": "application/json" });
-    waiter.res.end(JSON.stringify(name === "webauthn" ? { frames: batch } : { requests: batch }));
+    waiter.res.end(JSON.stringify({ frames: batch }));
   } catch {
     // Poll đã đứt giữa chừng: trả việc lại hàng đợi cho lần nối sau, đừng nuốt.
     ch.queue.unshift(...batch);
