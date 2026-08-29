@@ -1,0 +1,217 @@
+{
+  "extractedFrom": "dist/{node-agent-coordinator,local-exec-daemon,electron-main}/main.cjs",
+  "appVersion": "0.30.0",
+  "note": "Host không còn được đóng gói từ 0.29. Đây là hợp đồng PHÍA GỌI: đường client gọi và tên kênh client nhận.",
+  "anchors": {
+    "channels": "transcript:\"transcript\"",
+    "aliases": "\"agents-workflow\":\"workflows\""
+  },
+  "channels": [
+    "agent-activity",
+    "agent-upserted",
+    "agents",
+    "async-tasks",
+    "automations",
+    "box-disk-pressure",
+    "computer-action",
+    "forever-box",
+    "host-settings",
+    "mcp-auth",
+    "mcp-servers",
+    "outline",
+    "sharing",
+    "subagents",
+    "teach-recording",
+    "transcript",
+    "tray",
+    "workflows"
+  ],
+  "channelAliases": {
+    "agents-workflow": "workflows",
+    "agents-automation": "automations",
+    "mcp-servers-updated": "mcp-servers",
+    "mcp-auth-completed": "mcp-auth"
+  },
+  "boxRoutes": [
+    {
+      "path": "/api",
+      "box": true,
+      "bang": "tiền tố lệnh gateway — `/api/<tên lệnh>`"
+    },
+    {
+      "path": "/events",
+      "box": true,
+      "bang": "luồng SSE"
+    },
+    {
+      "path": "/health",
+      "box": true,
+      "bang": "thăm dò sức khoẻ"
+    },
+    {
+      "path": "/webauthn/requests",
+      "box": true,
+      "bang": "hằng số `ly=\"/webauthn/requests\"` cạnh bộ đọc khung ceremony"
+    },
+    {
+      "path": "/webauthn/responses",
+      "box": true,
+      "bang": "hằng số `dy=\"/webauthn/responses\"`"
+    },
+    {
+      "path": "/cookie-origin-approval/requests",
+      "box": true,
+      "bang": "hằng số `yp=` cạnh \"Chrome cookie approval could not be completed on this computer.\" — MỚI ở 0.29"
+    },
+    {
+      "path": "/cookie-origin-approval/responses",
+      "box": true,
+      "bang": "hằng số `gp=`, cùng cặp với trên"
+    },
+    {
+      "path": "/local-exec/requests",
+      "box": true,
+      "bang": "trong local-exec-daemon; đường hầm ngược về box"
+    },
+    {
+      "path": "/local-exec/responses",
+      "box": true,
+      "bang": "cùng cặp"
+    },
+    {
+      "path": "/cancel",
+      "box": false,
+      "bang": "máy chủ loopback OAuth của chính client: `bE=\"/cancel\"` cạnh \"OAuth login superseded by a newer attempt\" và content-type text/html"
+    },
+    {
+      "path": "/oauth/return",
+      "box": false,
+      "bang": "cũng là loopback OAuth trên máy người dùng"
+    },
+    {
+      "path": "/vnc.html",
+      "box": false,
+      "bang": "trang của máy chủ VNC trên box, không phải gateway của ta"
+    },
+    {
+      "path": "/mcps",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon"
+    },
+    {
+      "path": "/mcps/",
+      "box": false,
+      "bang": "cùng cái trên, dạng có gạch cuối khi ghép chuỗi"
+    },
+    {
+      "path": "/properties",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon"
+    },
+    {
+      "path": "/dup",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon, không phải route HTTP"
+    },
+    {
+      "path": "/sand-box/local-exec-connection",
+      "box": false,
+      "bang": "tiền tố `/sand-box/` là MÁY CHỦ CỦA HÃNG, không phải box — cùng họ với `/sand-box/local-exec-daemon-credential` trong electron-main, nơi client xin giấy phép cho daemon"
+    }
+  ],
+  "boxRoutesKhongPhaiCuaTa": [
+    {
+      "path": "/cancel",
+      "box": false,
+      "bang": "máy chủ loopback OAuth của chính client: `bE=\"/cancel\"` cạnh \"OAuth login superseded by a newer attempt\" và content-type text/html"
+    },
+    {
+      "path": "/oauth/return",
+      "box": false,
+      "bang": "cũng là loopback OAuth trên máy người dùng"
+    },
+    {
+      "path": "/vnc.html",
+      "box": false,
+      "bang": "trang của máy chủ VNC trên box, không phải gateway của ta"
+    },
+    {
+      "path": "/mcps",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon"
+    },
+    {
+      "path": "/mcps/",
+      "box": false,
+      "bang": "cùng cái trên, dạng có gạch cuối khi ghép chuỗi"
+    },
+    {
+      "path": "/properties",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon"
+    },
+    {
+      "path": "/dup",
+      "box": false,
+      "bang": "nội bộ local-exec-daemon, không phải route HTTP"
+    },
+    {
+      "path": "/sand-box/local-exec-connection",
+      "box": false,
+      "bang": "tiền tố `/sand-box/` là MÁY CHỦ CỦA HÃNG, không phải box — cùng họ với `/sand-box/local-exec-daemon-credential` trong electron-main, nơi client xin giấy phép cho daemon"
+    }
+  ],
+  "duongLa": [],
+  "paths": {
+    "coordinator": [
+      "/api",
+      "/cancel",
+      "/cookie-origin-approval/requests",
+      "/cookie-origin-approval/responses",
+      "/events",
+      "/health",
+      "/oauth/return",
+      "/vnc.html",
+      "/webauthn/requests",
+      "/webauthn/responses"
+    ],
+    "localExecDaemon": [
+      "/dup",
+      "/local-exec/requests",
+      "/local-exec/responses",
+      "/mcps",
+      "/mcps/",
+      "/properties",
+      "/sand-box/local-exec-connection"
+    ],
+    "electronMain": [
+      "/B/UTx",
+      "/auth/cursor_dev_session_token",
+      "/auth/logout",
+      "/auth/poll",
+      "/cancel",
+      "/dup",
+      "/e3cNV",
+      "/grok-bot/link",
+      "/index",
+      "/loginDeepControl",
+      "/oauth/return",
+      "/oauth/token",
+      "/properties",
+      "/rgstr",
+      "/sand-box/local-exec-daemon-credential",
+      "/sand/feedback",
+      "/sand/link",
+      "/v1/bot-template",
+      "/v1/open",
+      "/v1/plugin/add",
+      "/v1/settings",
+      "/v1/sidebar",
+      "/vnc.html"
+    ]
+  },
+  "auth": {
+    "khongTaiTrichDuoc": true,
+    "lyDo": "client ánh xạ 401/403 sang lỗi bằng MÃ TRẠNG THÁI (case 401: D.Unauthenticated) và không đọc thân; chuỗi trong auth401 của 0.20 là lời của host, không phải thứ client kiểm."
+  }
+}

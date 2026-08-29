@@ -25,6 +25,11 @@ export const WIRE_CHANNELS = [
   "transcript", "agents", "agent-upserted", "tray", "workflows", "subagents", "async-tasks",
   "automations", "mcp-servers", "forever-box", "teach-recording", "box-disk-pressure",
   "computer-action", "outline", "sharing", "host-settings",
+  // Hai tên 0.29/0.30 thêm vào, trích 2026-08-29 từ bảng kênh trong `node-agent-coordinator`
+  // (`extract-host-0-30.mjs`). Danh sách này tồn tại để một push mới PHẢI chọn trong tập, nên nó
+  // thiếu tên là đúng cái bẫy nó sinh ra để chặn. Không cái nào có producer bên ta — xem
+  // NO_DATA_CHANNELS bên dưới.
+  "agent-activity", "mcp-auth",
 ] as const;
 export type WireChannel = (typeof WIRE_CHANNELS)[number];
 
@@ -55,9 +60,16 @@ export const PUSHED_CHANNELS = [
  *   workflows          `LOCAL_WORKFLOWS`, a constant stub row
  *   sharing            `{rooms: []}` — no relay exists (roadmap F5 decides relay vs honest refusal)
  *   box-disk-pressure  no producer anywhere in the repo
+ *   agent-activity     0.29+ only; tên có trong bảng client, chưa đo được nó vẽ gì
+ *   mcp-auth           0.29+ only; ta báo OAuth MCP xong bằng `mcp-servers` (rộng hơn, vẫn đúng)
  */
 export const NO_DATA_CHANNELS = [
   "tray", "workflows", "sharing", "box-disk-pressure",
+  // Hai tên mới của 0.29/0.30. Có mặt trong bảng kênh client CHẤP NHẬN, chưa có gì bên ta để gửi:
+  //   agent-activity   client có tên kênh, ta chưa đo được nó vẽ gì — chưa đủ để hứa một payload
+  //   mcp-auth         bí danh `mcp-auth-completed`; ta đã có luồng OAuth MCP nhưng báo xong bằng
+  //                    `mcp-servers`, nên đây là kênh hẹp hơn chứ không phải tính năng thiếu
+  "agent-activity", "mcp-auth",
 ] as const satisfies readonly WireChannel[];
 
 /**

@@ -86,8 +86,13 @@ thật. Cửa nhận `POST /hooks/automation/<id>` đặt ở ops, khoá so ở 
 Chi tiết trong commit; điểm đáng nhớ là `toClientAutomation` trải `...rec` nên bí mật phải gỡ TAY
 tại đó, và có bài test giữ.
 
-**③ Trích lại `routes`/`auth`/`channels` theo 0.30** — bị chặn vì 0.30 thay router if-chain bằng bộ
-điều phối theo đăng ký. Chưa đo được kích thước; phải khảo sát trước khi hứa.
+**③ Trích lại `routes`/`auth`/`channels` theo 0.30** — ~~bị chặn~~ **XONG 2026-08-29**. Chặn thật,
+nhưng không phải vì router đổi hình dạng: từ 0.29 hãng **bỏ hẳn `dist/host`**, nên không còn router
+nào trong gói để đọc. Trích lại từ phía GỌI (`node-agent-coordinator` + `local-exec-daemon`):
+`extract-host-0-30.mjs` → `host-contract-0-30.json`. Kênh 16→18, `/prepare-upgrade` và `/avatars/`
+biến mất, `/cookie-origin-approval/*` xuất hiện, nhóm `auth` không tái trích được VÀ không cần (đo:
+client ánh xạ 401 bằng mã trạng thái, không đọc thân). Chi tiết:
+[0-30-routes-auth-kenh.md](../extracted/0-30-routes-auth-kenh.md).
 
 **④ Cụm voice-call (5 lệnh)** — khối lớn nhất còn lại, nhưng giá trị với người dùng này chưa rõ.
 

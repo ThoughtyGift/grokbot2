@@ -25,7 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { gwHeaders } from "./gw-auth.mjs";
-import { PUSHED_CHANNELS, NO_DATA_CHANNELS, SHARED_ROOM_COMMANDS, buildCommands } from "@grokbot2/cursor-acl";
+import { WIRE_CHANNELS, PUSHED_CHANNELS, NO_DATA_CHANNELS, SHARED_ROOM_COMMANDS, buildCommands } from "@grokbot2/cursor-acl";
 /** Enumerating the table only touches `ports` inside the handlers it returns. */
 const ACL_PORT_STUB = new Proxy({}, { get: () => new Proxy(() => {}, { get: () => () => {}, apply: () => ({}) }) });
 
@@ -61,6 +61,22 @@ if (!existsSync(CONTRACT)) {
   process.exit(1);
 }
 const contract = JSON.parse(readFileSync(CONTRACT, "utf8"));
+
+// ── hợp đồng 0.29/0.30 ────────────────────────────────────────────────────────
+//
+// Tập tên hợp lệ lấy từ HỢP ĐỒNG MỚI NHẤT đọc được, không phải từ 0.20.
+//
+// `box-host-contract.json` bóc từ `dist/host` của 0.20 và liệt kê 16 kênh. 0.29/0.30 bỏ hẳn thư
+// mục ấy, nhưng bảng kênh client CHẤP NHẬN vẫn đọc được ở `node-agent-coordinator` — và nó có 18:
+// thêm `agent-activity` và `mcp-auth`, không bỏ cái nào. Chấm bằng danh sách 16 thì hai tên mới bị
+// coi là sai trong khi client nhận chúng bình thường.
+//
+// Dựng lại bằng: node scripts/extract-host-0-30.mjs --dist <thư mục dist>
+const C30_FILE = join(REPO, "docs", "extracted", "host-contract-0-30.json");
+const c30 = existsSync(C30_FILE) ? JSON.parse(readFileSync(C30_FILE, "utf8")) : null;
+const NHAN = [...new Set([...contract.eventChannels, ...(c30?.channels ?? [])])];
+const BI_DANH = { ...(contract.channelAliases ?? {}), ...(c30?.channelAliases ?? {}) };
+
 
 /*
  * Bảng lệnh đọc riêng, KHÔNG lấy từ ảnh chụp hợp đồng.
@@ -290,7 +306,37 @@ if (want("commands")) {
   }
 }
 
-// ── event channels ────────────────────────────────────────────────────────────
+/**
+ * Route 0.29/0.30 mà 0.20 không có — và những khoảng trống ĐÃ KHAI BÁO.
+ *
+ * `/prepare-upgrade` và `/avatars/<id>` biến mất khỏi cả hai bundle mới (đo: 0 lần xuất hiện), nên
+ * chúng không còn là hợp đồng. Ngược lại `/cookie-origin-approval/*` xuất hiện — đó là nửa HTTP của
+ * `injectChromeCookies`, lệnh gateway ta cũng chưa có.
+ *
+ * Khoảng trống đã khai báo được chấm bằng "route này phải 404", KHÔNG phải bằng một dấu tích cho
+ * không. Nếu ai đó cài một nửa rồi để nó trả 200 rỗng, bài này đỏ — mà đó đúng là lúc cần đỏ.
+ */
+const ROUTE_CHUA_LAM = {
+  "/cookie-origin-approval/requests": "nửa HTTP của injectChromeCookies — lệnh gateway cũng chưa có",
+  "/cookie-origin-approval/responses": "cùng cặp với trên",
+};
+if (want("routes") && c30) {
+  const cuaBox = c30.boxRoutes.filter((r) => r.box && !r.path.startsWith("/api"));
+  const daBiet = new Set(contract.routes.map((r) => r.path.replace("/<param>", "")));
+  for (const r of cuaBox) {
+    if (daBiet.has(r.path)) continue;                       // vòng probe ở trên lo rồi
+    const rr = await req("POST", `${GW}${r.path}`, { body: {} });
+    const ly = ROUTE_CHUA_LAM[r.path];
+    if (ly) {
+      record("routes", `${r.path} (${c30.appVersion}) chưa cài — phải 404, không giả vờ phục vụ`,
+        404, rr.status, ly);
+      continue;
+    }
+    record("routes", `${r.path} (${c30.appVersion}) có người trả lời`, true, rr.status !== 404 && rr.status !== 0,
+      `route mới của client mà backend không có — thêm vào ROUTE_CHUA_LAM kèm lý do, hoặc cài nó`);
+  }
+}
+
 if (want("channels")) {
   // Read the hub's OWN declared list, not a regex over its source.
   //
@@ -302,14 +348,25 @@ if (want("channels")) {
   const broadcasts = [...PUSHED_CHANNELS].sort();
   record("channels", "backend broadcasts at least one channel", true, broadcasts.length > 0);
   for (const ch of broadcasts) {
-    const ok = contract.eventChannels.includes(ch);
+    const ok = NHAN.includes(ch);
     record("channels", `broadcast("${ch}") is a channel the coordinator accepts`, true, ok,
       ok ? undefined
-         : `not in the 16-entry table — silently dropped. Valid: ${contract.eventChannels.join(", ")}`);
+         : `not in the ${NHAN.length}-entry table — silently dropped. Valid: ${NHAN.join(", ")}`);
+  }
+  // Chiều ngược lại, và đây là chiều đã hụt: hãng THÊM một tên thì ta phải biết.
+  //
+  // `WIRE_CHANNELS` tồn tại để một push mới phải chọn trong tập thay vì tự đặt tên. Danh sách ấy
+  // đứng ở 16 tên của 0.20 suốt hai phiên bản, nên `agent-activity` và `mcp-auth` không ai thấy —
+  // và không bài chấm nào kêu, vì mọi bài đều chấm theo chiều "ta phát có hợp lệ không".
+  if (c30) {
+    const thieu = c30.channels.filter((ch) => !WIRE_CHANNELS.includes(ch));
+    record("channels", `WIRE_CHANNELS phủ hết ${c30.channels.length} kênh của ${c30.appVersion}`,
+      true, thieu.length === 0,
+      thieu.length ? `thiếu: ${thieu.join(", ")} — thêm vào WIRE_CHANNELS kèm lý do` : undefined);
   }
   // The three families whose wire name differs. Emitting the family name looks right and is
   // dropped exactly as `roster` was, so name them explicitly.
-  for (const [family, channel] of Object.entries(contract.channelAliases ?? {})) {
+  for (const [family, channel] of Object.entries(BI_DANH)) {
     record("channels", `does not broadcast the family name "${family}"`, false, broadcasts.includes(family),
       `the wire name is "${channel}"`);
   }
