@@ -48,6 +48,7 @@ import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
 import { closeTeach } from "./teach.js";
+import { runOnUserComputer, userComputerConnected } from "./local-exec.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -265,6 +266,27 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
           : undefined;
         const n = fireListeners(String(bodyJ.platform ?? ""), String(bodyJ.context ?? ""), ev);
         return json({ ok: true, fired: n });
+      }
+      /*
+       * Chẩn đoán "máy của người dùng" — chạy một việc qua local-exec và trả nguyên kết quả.
+       *
+       * Cần một cửa ở TRONG tiến trình này vì hàng đợi `local-exec` nằm ở bộ nhớ của nó: long-poll
+       * do daemon giữ là với server đang chạy, nên một script tsx riêng import `local-exec.ts` chỉ
+       * dựng một hàng đợi thứ hai, rỗng, không ai nghe.
+       *
+       * Chỉ loopback (server này bind 127.0.0.1), và KHÔNG tự xin quyền — nó gửi thẳng, nên chỉ
+       * dùng để trả lời câu "máy có nối và có chạy được không". Đường cho model đi qua tool, và
+       * tool mới là chỗ dựng thẻ xin quyền.
+       */
+      if (url.startsWith("/internal/ops/local-exec") && req.method === "POST") {
+        const kind = String(bodyJ.kind ?? "shell");
+        if (kind !== "shell" && kind !== "read" && kind !== "ls") return json({ error: "kind phải là shell|read|ls" }, 400);
+        if (!userComputerConnected()) return json({ ok: false, error: "máy của người dùng không nối (app Grok Bot chưa mở?)" }, 409);
+        const op = kind === "shell" ? { kind: "shell" as const, command: String(bodyJ.command ?? "") }
+          : kind === "read" ? { kind: "read" as const, path: String(bodyJ.path ?? "") }
+          : { kind: "ls" as const, path: String(bodyJ.path ?? "") };
+        const r = await runOnUserComputer(op, { timeoutMs: Number(bodyJ.timeoutMs) || 30_000 });
+        return json(r, r.ok ? 200 : 502);
       }
       // Webhook của routine. Ops nhận POST công khai rồi chuyển vào đây, vì KHOÁ nằm ở BFF (sqlite)
       // và ops không được đụng sqlite (ADR-P4-2). Đặt TRƯỚC `/internal/ops/fire` vì nhánh kia dùng

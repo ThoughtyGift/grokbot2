@@ -93,6 +93,92 @@ export function parkRequests(name: ChannelName, res: ServerResponse): void {
 }
 
 /**
+ * Máy của người dùng có đang nối không.
+ *
+ * "Nối" = có một long-poll đang treo trên `local-exec/requests`. Đo được ngày 30/08:
+ * `parkedPolls: 1` trong khi `queued: 0, submitted: 0` — daemon chờ suốt mà ta chưa từng gửi việc.
+ *
+ * Nơi gọi cần biết để nói câu từ chối cho tử tế: "máy bạn đang tắt app" khác hẳn "lệnh chạy hỏng".
+ */
+export const userComputerConnected = (): boolean => channels["local-exec"].waiters.size > 0;
+
+/**
+ * Máy người dùng vừa tự khai gì — lấy từ khung `hello` daemon gửi ngay khi nối.
+ *
+ * Đo được nguyên văn ngày 30/08:
+ *
+ *     {"kind":"hello","label":"DESKTOP-7D2FJG8","computerId":"ae95f374-…",
+ *      "localRoot":"C:\\Users\\admin","terminalsFolder":"C:\\Users\\admin\\terminals",
+ *      "supervised":true,"variant":"sand"}
+ *
+ * `label` chính là chuỗi bảng Setting → Computer của app gốc hiển thị, và `computerId` là thứ mọi
+ * yêu cầu phải mang theo — daemon so `machineId` trước khi nhận việc (`localToolApprovalCovers`).
+ */
+export interface UserMachine {
+  computerId: string;
+  label: string;
+  localRoot?: string;
+  terminalsFolder?: string;
+  supervised?: boolean;
+  variant?: string;
+  seenAtMs: number;
+}
+let mayNguoiDung: UserMachine | null = null;
+export const connectedMachine = (): UserMachine | null => (userComputerConnected() ? mayNguoiDung : null);
+
+/**
+ * Đẩy một khung yêu cầu vào hàng đợi, đánh thức một poll đang treo nếu có.
+ *
+ * Trước đây hàng đợi luôn rỗng vì không có ai sinh ra việc — chú thích đầu tệp nói đúng như vậy.
+ * Giờ `local-exec.ts` sinh việc, nên nhánh "trả ngay cho poll đang chờ" mới thật sự chạy.
+ */
+export function queueRequest(name: ChannelName, frame: unknown): void {
+  const ch = channels[name];
+  ch.queue.push(frame);
+  const waiter = [...ch.waiters][0];
+  if (!waiter) return;                     // chưa ai nối — nằm chờ trong hàng đợi
+  ch.waiters.delete(waiter);
+  clearTimeout(waiter.timer);
+  const batch = ch.queue.splice(0, ch.queue.length);
+  try {
+    waiter.res.writeHead(200, { "content-type": "application/json" });
+    waiter.res.end(JSON.stringify(name === "webauthn" ? { frames: batch } : { requests: batch }));
+  } catch {
+    // Poll đã đứt giữa chừng: trả việc lại hàng đợi cho lần nối sau, đừng nuốt.
+    ch.queue.unshift(...batch);
+  }
+}
+
+/**
+ * Ai đang chờ trả lời, theo `requestId`.
+ *
+ * Tách khỏi `received` (vốn chỉ là bộ đệm chẩn đoán, giới hạn 20 mục): một câu trả lời tới muộn
+ * sau khi bộ đệm đã cuộn qua thì vẫn phải đánh thức đúng người chờ.
+ */
+const dangCho = new Map<string, (frame: Record<string, unknown>) => void>();
+
+/** Chờ khung trả lời mang đúng `requestId`. Hết giờ thì trả `null` chứ không treo mãi. */
+export function waitForResponse(requestId: string, timeoutMs: number): Promise<Record<string, unknown> | null> {
+  return new Promise((res) => {
+    const hen = setTimeout(() => { dangCho.delete(requestId); res(null); }, timeoutMs);
+    dangCho.set(requestId, (frame) => { clearTimeout(hen); dangCho.delete(requestId); res(frame); });
+  });
+}
+
+/** Khung trả lời có thể tới lẻ hoặc theo lô, và tên trường thì tuỳ bộ mã hoá — nhận cả hai. */
+function tanRa(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
+  if (payload && typeof payload === "object") {
+    const o = payload as Record<string, unknown>;
+    for (const k of ["responses", "frames", "requests"]) {
+      if (Array.isArray(o[k])) return o[k] as Record<string, unknown>[];
+    }
+    return [o];
+  }
+  return [];
+}
+
+/**
  * Accept a `responses` POST.
  *
  * The host's handler parses the body, hands it to the channel and answers `{ok:true}` — it does
@@ -110,6 +196,38 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
   ch.submitted += 1;
   ch.received.push({ atMs: Date.now(), payload });
   while (ch.received.length > MAX_RECEIVED) ch.received.shift();
+  // Đánh thức người đang chờ. `requestId` là tên protobuf-JSON; `request_id` là dạng snake_case —
+  // nhận cả hai vì bộ mã hoá bên kia có thể đổi mà ta không biết.
+  for (const f of tanRa(payload)) {
+    // `hello` là lời tự khai của máy, không phải trả lời cho ai — nhớ lại để dùng làm `machineId`.
+    if (name === "local-exec" && f.kind === "hello" && typeof f.computerId === "string") {
+      mayNguoiDung = {
+        computerId: f.computerId,
+        label: String(f.label ?? f.computerId),
+        ...(typeof f.localRoot === "string" ? { localRoot: f.localRoot } : {}),
+        ...(typeof f.terminalsFolder === "string" ? { terminalsFolder: f.terminalsFolder } : {}),
+        ...(typeof f.supervised === "boolean" ? { supervised: f.supervised } : {}),
+        ...(typeof f.variant === "string" ? { variant: f.variant } : {}),
+        seenAtMs: Date.now(),
+      };
+      console.log(`[grokbot2] [local-exec] máy người dùng nối vào: ${mayNguoiDung.label} (${mayNguoiDung.computerId})`);
+      /*
+       * Đáp lễ `welcome`.
+       *
+       * Bộ khung yêu cầu có sẵn một nhánh `{kind:"welcome", providerId}` không mang `requestId` —
+       * tức nó không phải một việc, mà là lời xác nhận "đã ghi nhận máy này". Khung `welcome` cũng
+       * có trong giao thức webauthn y hệt, nên đây là bắt tay chung của cả hai kênh.
+       *
+       * Đo trước khi thêm: gửi thẳng `exec` sau `hello` thì daemon nuốt im, không một khung trả lời
+       * nào — kể cả khi `machineId` đã đúng.
+       */
+      queueRequest(name, { kind: "welcome", providerId: mayNguoiDung.computerId });
+      continue;
+    }
+    const id = String(f.requestId ?? f.request_id ?? "");
+    const goi = id && dangCho.get(id);
+    if (goi) goi(f);
+  }
   return { ok: true };
 }
 

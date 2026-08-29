@@ -1,0 +1,592 @@
+{
+  "extractedFrom": "C:/cai029/resources/app/dist/local-exec-daemon/main.cjs",
+  "note": "Giao thức cho bot chạy lệnh / đọc tệp / điều khiển chuột-bàn phím trên MÁY NGƯỜI DÙNG. Bóc từ bộ mô tả protobuf nhúng trong daemon; tên kiểu message giải qua bản đồ biến->typeName.",
+  "soMessage": 691,
+  "messagesUserComputer": {
+    "aiserver.v1.CancelGrokBotUserComputerRequestRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "request_id",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerClientMessage": [
+      {
+        "no": 1,
+        "name": "message_json",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerControlMessage": [
+      {
+        "no": 1,
+        "name": "message_json",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "cwd_state",
+        "kind": "scalar",
+        "type": "string",
+        "optional": true
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerDownload": [
+      {
+        "no": 1,
+        "name": "path",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "approval_id",
+        "kind": "scalar",
+        "type": "string",
+        "optional": true
+      },
+      {
+        "no": 3,
+        "name": "authorized_by_standing",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerExec": [
+      {
+        "no": 1,
+        "name": "server_message_json",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "approval_id",
+        "kind": "scalar",
+        "type": "string",
+        "optional": true
+      },
+      {
+        "no": 3,
+        "name": "authorized_by_standing",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerFile": [
+      {
+        "no": 1,
+        "name": "data",
+        "kind": "scalar",
+        "type": "bytes"
+      },
+      {
+        "no": 2,
+        "name": "seq",
+        "kind": "scalar",
+        "type": "uint32"
+      },
+      {
+        "no": 3,
+        "name": "last",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerFileError": [
+      {
+        "no": 1,
+        "name": "error",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerHello": [
+      {
+        "no": 1,
+        "name": "label",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "local_root",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 3,
+        "name": "terminals_folder",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 4,
+        "name": "standing",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 5,
+        "name": "supervised",
+        "kind": "scalar",
+        "type": "bool"
+      },
+      {
+        "no": 6,
+        "name": "variant",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 7,
+        "name": "server_authoritative",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerPresence": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "hello",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerHello"
+      },
+      {
+        "no": 3,
+        "name": "last_seen_at_ms",
+        "kind": "scalar",
+        "type": "int64"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerQueuedRequest": [
+      {
+        "no": 1,
+        "name": "id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "frame",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerRequestFrame"
+      },
+      {
+        "no": 3,
+        "name": "enqueued_at_ms",
+        "kind": "scalar",
+        "type": "int64"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerRequestFrame": [
+      {
+        "no": 1,
+        "name": "request_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "exec",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerExec",
+        "oneof": "frame"
+      },
+      {
+        "no": 3,
+        "name": "upload",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerUpload",
+        "oneof": "frame"
+      },
+      {
+        "no": 4,
+        "name": "download",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerDownload",
+        "oneof": "frame"
+      },
+      {
+        "no": 5,
+        "name": "retire_approval",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerRetireApproval",
+        "oneof": "frame"
+      },
+      {
+        "no": 6,
+        "name": "cancel",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerCancel",
+        "oneof": "frame"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerResponseFrame": [
+      {
+        "no": 1,
+        "name": "request_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "client",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerClientMessage",
+        "oneof": "frame"
+      },
+      {
+        "no": 3,
+        "name": "control",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerControlMessage",
+        "oneof": "frame"
+      },
+      {
+        "no": 4,
+        "name": "file",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerFile",
+        "oneof": "frame"
+      },
+      {
+        "no": 5,
+        "name": "file_error",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerFileError",
+        "oneof": "frame"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerRetireApproval": [
+      {
+        "no": 1,
+        "name": "approval_id",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.GrokBotUserComputerUpload": [
+      {
+        "no": 1,
+        "name": "path",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "approval_id",
+        "kind": "scalar",
+        "type": "string",
+        "optional": true
+      },
+      {
+        "no": 3,
+        "name": "data",
+        "kind": "scalar",
+        "type": "bytes"
+      },
+      {
+        "no": 4,
+        "name": "authorized_by_standing",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.IssueGrokBotUserComputerCredentialRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.IssueGrokBotUserComputerCredentialResponse": [
+      {
+        "no": 1,
+        "name": "credential",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "expires_at_ms",
+        "kind": "scalar",
+        "type": "int64"
+      },
+      {
+        "no": 3,
+        "name": "server_authoritative",
+        "kind": "scalar",
+        "type": "bool"
+      }
+    ],
+    "aiserver.v1.ListGrokBotUserComputersResponse": [
+      {
+        "no": 1,
+        "name": "computers",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerPresence",
+        "repeated": true
+      }
+    ],
+    "aiserver.v1.OpenGrokBotUserComputerRequestRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "frame",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerRequestFrame"
+      },
+      {
+        "no": 3,
+        "name": "idempotency_key",
+        "kind": "scalar",
+        "type": "string"
+      }
+    ],
+    "aiserver.v1.PollGrokBotUserComputerRequestsRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "credential",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 3,
+        "name": "ack_ids",
+        "kind": "scalar",
+        "type": "string",
+        "repeated": true
+      },
+      {
+        "no": 4,
+        "name": "limit",
+        "kind": "scalar",
+        "type": "uint32"
+      }
+    ],
+    "aiserver.v1.PollGrokBotUserComputerRequestsResponse": [
+      {
+        "no": 1,
+        "name": "requests",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerQueuedRequest",
+        "repeated": true
+      }
+    ],
+    "aiserver.v1.ResolveGrokBotLocalToolPermissionRequest": [
+      {
+        "no": 1,
+        "name": "agent_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "entry_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 3,
+        "name": "request_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 4,
+        "name": "resolution",
+        "kind": "enum",
+        "type": "l"
+      }
+    ],
+    "aiserver.v1.ResolveGrokBotLocalToolPermissionResponse": [
+      {
+        "no": 1,
+        "name": "dispatched",
+        "kind": "scalar",
+        "type": "bool"
+      },
+      {
+        "no": 2,
+        "name": "workflow_id",
+        "kind": "scalar",
+        "type": "string",
+        "optional": true
+      },
+      {
+        "no": 3,
+        "name": "refusal",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotHarnessRefusal",
+        "optional": true
+      }
+    ],
+    "aiserver.v1.SubmitGrokBotUserComputerResponsesRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "credential",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 3,
+        "name": "frames",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerResponseFrame",
+        "repeated": true
+      }
+    ],
+    "aiserver.v1.SubmitGrokBotUserComputerResponsesResponse": [
+      {
+        "no": 1,
+        "name": "accepted_count",
+        "kind": "scalar",
+        "type": "uint32"
+      }
+    ],
+    "aiserver.v1.WatchGrokBotUserComputerConnected": [
+      {
+        "no": 1,
+        "name": "pending_request_count",
+        "kind": "scalar",
+        "type": "uint32"
+      }
+    ],
+    "aiserver.v1.WatchGrokBotUserComputerHeartbeat": [
+      {
+        "no": 1,
+        "name": "pending_request_count",
+        "kind": "scalar",
+        "type": "uint32"
+      }
+    ],
+    "aiserver.v1.WatchGrokBotUserComputerRequestsEvent": [
+      {
+        "no": 1,
+        "name": "connected",
+        "kind": "message",
+        "type": "aiserver.v1.WatchGrokBotUserComputerConnected",
+        "oneof": "event"
+      },
+      {
+        "no": 2,
+        "name": "notify",
+        "kind": "message",
+        "type": "aiserver.v1.WatchGrokBotUserComputerNotify",
+        "oneof": "event"
+      },
+      {
+        "no": 3,
+        "name": "heartbeat",
+        "kind": "message",
+        "type": "aiserver.v1.WatchGrokBotUserComputerHeartbeat",
+        "oneof": "event"
+      }
+    ],
+    "aiserver.v1.WatchGrokBotUserComputerRequestsRequest": [
+      {
+        "no": 1,
+        "name": "machine_id",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 2,
+        "name": "credential",
+        "kind": "scalar",
+        "type": "string"
+      },
+      {
+        "no": 3,
+        "name": "hello",
+        "kind": "message",
+        "type": "aiserver.v1.GrokBotUserComputerHello"
+      }
+    ]
+  },
+  "thaoTac": {
+    "adoptArgs": "adoptResult",
+    "agentStoreConflictArgs": "agentStoreConflictResult",
+    "backgroundShellSpawnArgs": "backgroundShellSpawnResult",
+    "writeShellStdinArgs": "writeShellStdinResult",
+    "canvasDiagnosticsArgs": "canvasDiagnosticsResult",
+    "computerUseArgs": "computerUseResult",
+    "conversationSearchArgs": "conversationSearchResult",
+    "deleteArgs": "deleteResult",
+    "diagnosticsArgs": "diagnosticsResult",
+    "fetchArgs": "fetchResult",
+    "grepArgs": "grepResult",
+    "executeHookArgs": "executeHookResult",
+    "lsArgs": "lsResult",
+    "mcpArgs": "mcpResult",
+    "listMcpResourcesExecArgs": "listMcpResourcesExecResult",
+    "readMcpResourceExecArgs": "readMcpResourceExecResult",
+    "mcpStateExecArgs": "mcpStateExecResult",
+    "mcpAllowlistPrecheckArgs": "mcpAllowlistPrecheckResult",
+    "miniSweAgentBashArgs": "miniSweAgentBashResult",
+    "piBashArgs": "piBashResult",
+    "piEditArgs": "piEditResult",
+    "piFindArgs": "piFindResult",
+    "piGrepArgs": "piGrepResult",
+    "piLsArgs": "piLsResult",
+    "piReadArgs": "piReadResult",
+    "piWriteArgs": "piWriteResult",
+    "readArgs": "readResult",
+    "redactedReadArgs": "redactedReadResult",
+    "shellArgs": "shellResult",
+    "shellStreamArgs": "shellStream",
+    "writeArgs": "writeResult",
+    "recordScreenArgs": "recordScreenResult",
+    "requestContextArgs": "requestContextResult",
+    "shellAllowlistPrecheckArgs": "shellAllowlistPrecheckResult",
+    "forceBackgroundShellArgs": "forceBackgroundShellResult",
+    "smartModeClassifierArgs": "smartModeClassifierResult",
+    "subagentArgs": "subagentResult",
+    "subagentAwaitArgs": "subagentAwaitResult",
+    "forceBackgroundSubagentArgs": "forceBackgroundSubagentResult",
+    "webFetchAllowlistPrecheckArgs": "webFetchAllowlistPrecheckResult"
+  },
+  "quyenCuaThaoTac": {
+    "shellStreamArgs": "run-command",
+    "backgroundShellSpawnArgs": "run-command",
+    "forceBackgroundShellArgs": "run-command",
+    "writeShellStdinArgs": "send-input",
+    "readArgs": "read-file",
+    "redactedReadArgs": "read-file",
+    "lsArgs": "list-directory"
+  }
+}
