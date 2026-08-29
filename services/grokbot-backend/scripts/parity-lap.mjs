@@ -68,54 +68,111 @@ const donSauLuot = async (truoc) => {
   console.log(`  dọn ${moc.length} bot lượt này tạo ra, giữ nguyên ${con.length - moc.length} bot có sẵn`);
 };
 
-/** Chạy một lượt, trả về id bot thử (hoặc null nếu lượt không có giá trị đo). */
+/**
+ * Chạy một lượt. Trả `{id, catCuoi}`, hoặc `null` nếu không đo được gì.
+ *
+ * `catCuoi` là chỗ tinh tế. `app-replay-b2.mjs` IN kết cục của case rồi MỚI kiểm hạn mức
+ * (`loiCuaLuot()`), nên khi hết hạn mức giữa chừng thì case cuối cùng nó in ra chính là case đã
+ * nhận bong bóng *"You've hit your limit"* — và bong bóng ấy vẫn được đếm thành "có trả lời
+ * (N entry)". Giữ nó lại là đưa một câu từ chối vào phân bố như thể là hành vi của bot.
+ */
 const motLuot = (n) => new Promise((res) => {
   const p = spawn("node", ["services/grokbot-backend/scripts/app-replay-b2.mjs", "--bot", `LAP${n}-${Date.now().toString(36).slice(-4)}`], { shell: true });
   let out = "";
   p.stdout.on("data", (d) => { out += d; process.stdout.write(`  ${String(d).split("\n").filter(Boolean).pop() ?? ""}\r`); });
   p.stderr.on("data", (d) => { out += d; });
   p.on("close", (code) => {
-    // Mã 3 = model không chạy (hết hạn mức). Lượt đó KHÔNG được gộp vào phân bố — gộp một lượt
-    // toàn bong bóng từ chối là tự pha loãng dữ liệu bằng thứ không phải dữ liệu.
-    if (code === 3) { console.log(`\n  lượt ${n}: model không chạy — BỎ, không gộp`); return res(null); }
-    res((out.match(/agent-\d+/) ?? [null])[0]);
+    const id = (out.match(/agent-\d+/) ?? [null])[0];
+    if (!id) return res(null);
+    // Mã 3 = hết hạn mức giữa chừng.
+    //
+    // Trước đây bỏ CẢ lượt. Đo được đêm 29/08 vì sao thế là quá tay: lượt 1 chạy được 18/23 case
+    // rồi bị vứt sạch, lượt 2 và 3 chết ở case 1, và ba lượt liên tiếp như vậy thì không bao giờ
+    // có phân bố. Giữ phần đo được — trừ case cuối, vì lý do ở khối chú thích trên.
+    if (code === 3) {
+      console.log(`\n  lượt ${n}: hết hạn mức giữa chừng — GIỮ phần đo được, bỏ case cuối`);
+      return res({ id, catCuoi: true });
+    }
+    res({ id, catCuoi: false });
   });
 });
 
+/**
+ * Nghỉ giữa hai lượt, nhưng CHỈ khi lượt vừa rồi chạm hạn mức.
+ *
+ * Hạn mức của pool hồi theo cửa sổ trượt chứ không khoá cả ngày — đo 29/08: 23:30 cạn, 23:57 trả
+ * lời lại bình thường. Nên ba lượt chạy liền nhau thì lượt 1 đốt hết phần còn lại rồi lượt 2 và 3
+ * chết ở case 1, và cái đó KHÔNG phải dữ liệu, chỉ là ba lần đâm vào cùng một bức tường.
+ *
+ * Chạy tốt thì không nghỉ: bức tường chưa tới thì không có gì để chờ.
+ */
+const NGHI_PHUT = Number((argv[argv.indexOf("--nghi") + 1] ?? "12")) || 12;
+const nghi = async (n) => {
+  console.log(`  nghỉ ${NGHI_PHUT} phút cho hạn mức hồi rồi mới vào lượt ${n}…`);
+  await new Promise((r) => setTimeout(r, NGHI_PHUT * 60 * 1000));
+};
+
 const dem = [];
+let vuaChamHan = false;
 for (let n = 1; n <= LAN; n += 1) {
+  if (vuaChamHan) await nghi(n);
   console.log(`\n── lượt ${n}/${LAN} ──`);
   // Chụp roster TRƯỚC, dọn SAU. Dọn trước thì không biết cái gì là của lượt này, mà dọn sau khi
   // đọc transcript cũng bắt buộc: bot thử nằm trong đám sắp xoá.
   const truoc = new Set((await roster()).map((a) => a.id));
-  const id = await motLuot(n);
-  if (id) {
-    const t = await gw("getAgentTranscript", { agentId: id, id });
+  const luot = await motLuot(n);
+  vuaChamHan = luot?.catCuoi === true;
+  if (luot) {
+    const t = await gw("getAgentTranscript", { agentId: luot.id, id: luot.id });
     const rows = t?.transcript ?? t?.entries ?? (Array.isArray(t) ? t : []);
     const moc = [];
     rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user" && !e.fromAgent && e.clientNonce) moc.push(i); });
-    dem.push(moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget")));
-    console.log(`\n  lượt ${n}: ${moc.length} case đo được`);
+    const co = moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget"));
+    if (luot.catCuoi) co.pop();
+    if (co.length) {
+      dem.push(co);
+      console.log(`\n  lượt ${n}: ${co.length}/${cases.length} case đo được${luot.catCuoi ? " (đã bỏ case cuối)" : ""}`);
+    } else {
+      console.log(`\n  lượt ${n}: không case nào đo được — bỏ`);
+    }
   }
   // Chạy cả khi lượt bị bỏ: một lượt hết hạn mức vẫn kịp tạo bot, và bỏ qua dọn ở đúng nhánh đó là
   // cách roster lặng lẽ phình ra sau mỗi lần chạy hỏng.
   await donSauLuot(truoc);
 }
 
-if (dem.length < 2) { console.log("\nchưa đủ hai lượt hợp lệ — không gộp được phân bố"); process.exit(2); }
-console.log(`\n\n### Phân bố qua ${dem.length} lượt hợp lệ\n`);
-console.log("| case | app gốc mời chọn | ta mời chọn (số lượt) | đọc là |");
+if (dem.length < 2) { console.log("\nchưa đủ hai lượt có dữ liệu — không gộp được phân bố"); process.exit(2); }
+
+/*
+ * Mẫu số theo TỪNG CASE, không phải theo số lượt.
+ *
+ * Lượt dở chỉ đo tới case k. Nếu vẫn chia cho tổng số lượt thì các case sau k bị tính là "không có
+ * widget" ở lượt ấy — nhưng chúng có được ĐO đâu; chúng vắng mặt. Nhầm "vắng mặt" thành "không" là
+ * cách một case đúng bị đọc thành "ổn định THIẾU" rồi ai đó đi sửa một thứ không hỏng.
+ */
+console.log(`\n\n### Phân bố qua ${dem.length} lượt (${dem.map((d) => d.length).join(", ")} case)\n`);
+console.log("| case | app gốc mời chọn | ta mời chọn | đọc là |");
 console.log("|---|---|---|---|");
 let onDinhSai = 0;
+let thieuDuLieu = 0;
 cases.forEach((c, i) => {
-  const co = dem.filter((d) => d[i]).length;
+  const doDuoc = dem.filter((d) => i < d.length);
   const want = mongWidget[i];
-  const ondinh = co === 0 || co === dem.length;
+  if (doDuoc.length < 2) {
+    thieuDuLieu += 1;
+    console.log(`| ${i + 1} | ${want ? "có" : "không"} | ${doDuoc.length} lượt đo | CHƯA ĐỦ DỮ LIỆU |`);
+    return;
+  }
+  const co = doDuoc.filter((d) => d[i]).length;
+  const ondinh = co === 0 || co === doDuoc.length;
   const doc = !ondinh ? "DAO ĐỘNG — một lượt không kết luận được"
     : want && co === 0 ? "ổn định THIẾU"
-    : !want && co === dem.length ? "ổn định THỪA"
+    : !want && co === doDuoc.length ? "ổn định THỪA"
     : "ổn định đúng";
   if (ondinh && doc.startsWith("ổn định T")) onDinhSai += 1;
-  console.log(`| ${i + 1} | ${want ? "có" : "không"} | ${co}/${dem.length} | ${doc} |`);
+  console.log(`| ${i + 1} | ${want ? "có" : "không"} | ${co}/${doDuoc.length} | ${doc} |`);
 });
 console.log(`\nlệch ỔN ĐỊNH (đáng sửa): ${onDinhSai} case · phần còn lại là nhiễu hoặc đã đúng`);
+if (thieuDuLieu) {
+  console.log(`chưa đủ dữ liệu: ${thieuDuLieu} case — dưới hai lượt thì không phân biệt được ổn định với dao động`);
+}
