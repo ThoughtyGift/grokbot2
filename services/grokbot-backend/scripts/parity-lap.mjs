@@ -46,13 +46,26 @@ const mongWidget = cases.map((c) => (c.expected ?? []).some((e) => e.kind === "w
  * "<BOT>'s screen" trước từng case và DỪNG nếu mở nhầm bot — nên rủi ro ở đây là dừng ồn ào, chứ
  * không phải đo nhầm im lặng.
  */
-const donDep = async () => {
+const roster = async () => {
   const r = await gw("listAgents", {});
-  const all = Array.isArray(r) ? r : r.agents ?? [];
-  const cuaBai = all.filter((a) => /^LAP\d+-/.test(String(a.name ?? "")));
-  for (const a of cuaBai) await gw("deleteAgents", { id: a.id });
-  const giuLai = all.length - cuaBai.length;
-  console.log(`  dọn ${cuaBai.length} bot của bài này, giữ nguyên ${giuLai} bot khác`);
+  return Array.isArray(r) ? r : r.agents ?? [];
+};
+
+/**
+ * Dọn đúng những bot LƯỢT NÀY sinh ra, và chỉ chúng.
+ *
+ * Lọc theo TÊN thì không đủ. Kịch bản b2 có case bảo bot tự lập đội, nên một lượt để lại cả
+ * `LAP1-z758` lẫn *Vận Hành Đơn*, *CSKH*, *Ads & Khuyến Mãi*, *Sản Phẩm & Nội Dung*, *Báo Cáo* —
+ * trùng tên y hệt bot thật của người dùng. Đo được: sau đúng một lượt, roster đi từ 6 lên 13, và
+ * người dùng có hai con *CSKH* không biết con nào là của mình.
+ *
+ * So theo ID trước/sau thì không cần đoán tên gì cả: cái gì không có trước lượt là của lượt.
+ */
+const donSauLuot = async (truoc) => {
+  const con = await roster();
+  const moc = con.filter((a) => !truoc.has(a.id));
+  for (const a of moc) await gw("deleteAgents", { id: a.id });
+  console.log(`  dọn ${moc.length} bot lượt này tạo ra, giữ nguyên ${con.length - moc.length} bot có sẵn`);
 };
 
 /** Chạy một lượt, trả về id bot thử (hoặc null nếu lượt không có giá trị đo). */
@@ -72,15 +85,21 @@ const motLuot = (n) => new Promise((res) => {
 const dem = [];
 for (let n = 1; n <= LAN; n += 1) {
   console.log(`\n── lượt ${n}/${LAN} ──`);
-  await donDep();
+  // Chụp roster TRƯỚC, dọn SAU. Dọn trước thì không biết cái gì là của lượt này, mà dọn sau khi
+  // đọc transcript cũng bắt buộc: bot thử nằm trong đám sắp xoá.
+  const truoc = new Set((await roster()).map((a) => a.id));
   const id = await motLuot(n);
-  if (!id) continue;
-  const t = await gw("getAgentTranscript", { agentId: id, id });
-  const rows = t?.transcript ?? t?.entries ?? (Array.isArray(t) ? t : []);
-  const moc = [];
-  rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user" && !e.fromAgent && e.clientNonce) moc.push(i); });
-  dem.push(moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget")));
-  console.log(`\n  lượt ${n}: ${moc.length} case đo được`);
+  if (id) {
+    const t = await gw("getAgentTranscript", { agentId: id, id });
+    const rows = t?.transcript ?? t?.entries ?? (Array.isArray(t) ? t : []);
+    const moc = [];
+    rows.forEach((e, i) => { if (e.kind === "message" && e.role === "user" && !e.fromAgent && e.clientNonce) moc.push(i); });
+    dem.push(moc.map((st, k) => rows.slice(st + 1, moc[k + 1] ?? rows.length).some((e) => e?.message?.type === "widget")));
+    console.log(`\n  lượt ${n}: ${moc.length} case đo được`);
+  }
+  // Chạy cả khi lượt bị bỏ: một lượt hết hạn mức vẫn kịp tạo bot, và bỏ qua dọn ở đúng nhánh đó là
+  // cách roster lặng lẽ phình ra sau mỗi lần chạy hỏng.
+  await donSauLuot(truoc);
 }
 
 if (dem.length < 2) { console.log("\nchưa đủ hai lượt hợp lệ — không gộp được phân bố"); process.exit(2); }
