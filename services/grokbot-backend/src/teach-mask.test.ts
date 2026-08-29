@@ -70,8 +70,9 @@ test("ô khoá / token", () => {
 });
 
 test("ô THƯỜNG không bị che — bước dạy việc phải replay được", () => {
-  for (const a of [{ name: "email" }, { name: "search" }, { name: "quantity" },
-                   { name: "address" }, { placeholder: "Tìm sản phẩm" }, { name: "sku" }]) {
+  const thuong: Record<string, string>[] = [{ name: "email" }, { name: "search" }, { name: "quantity" },
+    { name: "address" }, { placeholder: "Tìm sản phẩm" }, { name: "sku" }];
+  for (const a of thuong) {
     assert.equal(dung.oNhayCam(o(a)), false, `không được che ${JSON.stringify(a)}`);
   }
 });

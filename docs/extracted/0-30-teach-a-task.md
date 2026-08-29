@@ -103,3 +103,132 @@ NÓI RA và ĐỪNG tạo skill"*. Ta không có chỗ nào từ chối.
 3. **Từ chối tạo routine** khi phần lớn bước là điền ô nhạy cảm, và nói rõ lý do.
 
 Điểm 2 là điểm đáng làm nhất: nó không phụ thuộc trang web đặt tên ô ra sao.
+
+---
+
+# Đo thật: chạy lại đúng bài 24h.com.vn trên app local
+
+> 2026-08-29. Kịch bản lấy từ ảnh chụp app gốc của người dùng, dựng lại nguyên xi trên trình duyệt
+> của bot (`agent-619`) qua CDP, bằng sự kiện chuột/phím thật chứ không phải `el.click()`.
+> Bộ lái: `scratchpad/teach-e2e-24h.mjs`. Routine sinh ra: *Việc đã dạy — 08-29 08:11*.
+
+Dựng: mở Google → gõ `24h` → Enter → bấm kết quả 24h.com.vn → bấm một bài trên trang chủ.
+
+## Hai đầu ra, cạnh nhau
+
+**App gốc** — skill tên `Read 24h.com.vn news`:
+
+> Các bước: mở Chrome, gõ `24h` rồi Enter, bấm kết quả 24h.com.vn, mở bài nổi bật trên trang chủ,
+> đọc. **Skill chạy thẳng vào `https://www.24h.com.vn/` (ổn định hơn search Google).**
+
+**Của ta** — routine `Việc đã dạy — 08-29 08:11`, 8 bước:
+
+```
+1. mở https://www.google.com/search?q=24h&sca_esv=625aac17…&ei=aZOSavrRIpyA…  (≈700 ký tự)
+2. mở https://www.google.com/
+3. bấm `#ti6dpd`
+4. mở https://www.google.com/search?q=24h&sca_esv=625aac17…&ei=CpSSar2cIZ2Z…  (≈700 ký tự)
+5. bấm `.zReHs` ("Tin tức bóng đá, thể thao, giải trí | Đọc tin tức 24h mới nh")  (selector yếu)
+6. mở https://www.24h.com.vn/
+7. bấm `.d-block` ("Xôn xao hình ảnh xốp trong cống Lỉnh ở Bắc Ninh, chính quyền")  (selector yếu)
+8. mở https://www.24h.com.vn/tin-tuc-trong-ngay/xon-xao-hinh-anh-xop-…-c46a1790607.html
+```
+
+## Ba lỗi đo được
+
+### ① Bộ ghi không nghe bàn phím — mất luôn thứ quan trọng nhất
+
+`teach.ts` gài đúng **hai** listener: `click` (dòng 119) và `change` (dòng 175). Không có
+`keydown`. Nên `24h` — chữ duy nhất người dạy gõ vào, cái quyết định bài này là bài gì — **không có
+trong routine**. Không một bước `điền` nào. Enter cũng không.
+
+`Step.act` khai báo `"key"` nhưng **không chỗ nào sinh ra nó**, và `stepsToPrompt` cũng không có
+nhánh đọc nó: một nhánh chết, trông như đã làm.
+
+Vì sao `change` không cứu được: Google chặn Enter bằng JS và tự điều hướng, nên ô tìm kiếm không
+bao giờ `blur` để `change` kịp bắn.
+
+### ② Điều hướng bị ghi thành hành động
+
+Bước 4, 6, 8 là **hệ quả** của bước bấm ngay trước, không phải việc ai làm. Ghi lại chúng khiến
+routine vừa thừa vừa giòn: bước 4 mở lại một URL kết quả Google mang `ei`/`ved` đã hết hạn.
+
+Nặng hơn là **bước 1**: đó là nơi tab đang đứng sẵn từ lần chạy trước, không ai mở nó trong buổi
+dạy cả. `stepsToPrompt` đã bỏ `about:` và `data:` vì đúng lý do này (dòng 272), nhưng một URL `http`
+còn sót lại từ phiên trước thì lọt qua.
+
+### ③ Không khái quát hoá
+
+App gốc **nhận ra** đường qua Google là đường yếu và viết skill đi thẳng vào `24h.com.vn`. Ta chép
+lại đúng đường vòng, và ghim cả một bài cụ thể (bước 8) — hôm sau bài đó trôi khỏi trang chủ.
+
+Tên cũng vậy: `Read 24h.com.vn news` nói việc gì; `Việc đã dạy — 08-29 08:11` nói lúc mấy giờ.
+
+## Một giả thuyết của tôi đã sai
+
+Tôi đoán `#ti6dpd` ở bước 3 là id ngẫu nhiên mỗi lần tải của Google — tức trường hợp tệ nhất: bộ
+chọn xếp hạng "id" (hạng tin nhất, không kèm cảnh báo) nhưng thực chất vỡ ngay lần sau. **Đo 3 lần
+tải lại: `#ti6dpd` cả ba lần.** Không phải lỗi. Bỏ khỏi danh sách.
+
+## Gốc rễ: ta chép, họ hiểu
+
+| | ta (`teach.ts`) | app gốc 0.30 |
+|---|---|---|
+| ai viết ra sản phẩm | **code** — `stepsToPrompt()` | **model**, trong một lượt riêng |
+| model tham gia | **không một lần nào** (`callPool`: 0 lần trong `teach.ts`) | xem hết video + đối chiếu lịch sử Chrome |
+| đầu vào | sự kiện DOM | video + lịch sử duyệt web |
+| khái quát hoá | không có chỗ nào để xảy ra | có, và nói rõ lý do đổi đường |
+
+`desktop-record.ts` có gọi model, nhưng chỉ để **tả từng mẩu ảnh một** (`describeCrops`) — không ai
+đọc toàn buổi dạy. Nên khoảng cách không nằm ở prompt hay ở tool: nằm ở chỗ **không có lượt model
+nào đọc bản ghi**.
+
+## Thứ tự vá đề nghị
+
+1. **Nghe `keydown`** — gom phím thành một bước `type`, ghi riêng phím chức năng (Enter/Tab/Escape),
+   và thêm nhánh `key` vào `stepsToPrompt`. Rẻ nhất, bịt lỗ to nhất.
+2. **Bỏ bước `navigate` nào xảy ra ngay sau một `click`** (trong ~2 giây) — nó là hệ quả. Và bỏ
+   bước `navigate` đầu tiên nếu nó chỉ là nơi tab đang đứng lúc bật ghi.
+3. **Cho một lượt model đọc danh sách bước** rồi tự đặt tên + viết lại thành việc, thay vì
+   `stepsToPrompt` chép thẳng. Đây là chỗ khái quát hoá có thể xảy ra.
+
+## Sau khi vá ① và ② — đo lại đúng bài đó
+
+```
+1. mở https://www.google.com/
+2. bấm `#ti6dpd`
+3. điền `#ti6dpd` = "24h"
+4. nhấn Enter
+5. bấm `.zReHs` ("Tin tức bóng đá, thể thao, giải trí | Đọc tin tức 24h mới nh")  (selector yếu)
+6. bấm `.d-block` ("Xôn xao hình ảnh xốp trong cống Lỉnh ở Bắc Ninh, chính quyền")  (selector yếu)
+```
+
+Mười bước ghi được → sáu việc. Đặt cạnh câu app gốc kể lại — *"mở Chrome, gõ `24h` rồi Enter, bấm
+kết quả 24h.com.vn, mở bài nổi bật trên trang chủ"* — thì khớp từng nhịp.
+
+### Vá ① hoá ra phải nghe `input`, không phải `keydown`
+
+Bản vá đầu nghe `keydown` và gom phím lại. Chạy E2E: `nhấn Enter` xuất hiện, **bước điền vẫn mất**.
+
+Đầu tiên tưởng bộ ghi còn lỗi. Không phải: bộ lái E2E gõ bằng CDP `type:"char"`, thứ **không sinh
+ra `keydown`** (Enter lọt vì nó gửi `rawKeyDown`). Tức lỗi nằm ở dụng cụ đo, không ở vật được đo.
+
+Nhưng nó chỉ ra một lỗ thật hơn: **dán** cũng không sinh `keydown`. Tự điền của trình duyệt và IME
+tiếng Việt cũng vậy. Mà dán chính là cách người ta nhập khoá API và số thẻ — đúng thứ phần che
+sinh ra để bắt, và nếu bộ ghi không thấy ô đó thì phần che không có gì để che.
+
+Nên đổi sang nghe `input`, thứ bắn cho cả bốn đường. `keydown` chỉ còn lo Enter/Tab/Escape.
+
+## Còn lại một khoảng cách, và nó là quyết định kiến trúc
+
+Ba thứ app gốc có mà vá xong vẫn chưa có:
+
+| | ta | app gốc |
+|---|---|---|
+| tên | `Việc đã dạy — 08-29 08:31` | `Read 24h.com.vn news` |
+| đường đi | chép nguyên đường vòng qua Google | **đổi sang đi thẳng `24h.com.vn`**, và nói lý do |
+| bài cụ thể | ghim bài hôm nay | hiểu là "bài nổi bật", không ghim |
+
+Cả ba đều là **khái quát hoá**, và không luật nào trong `stepsToPrompt` làm được — vì không có ai
+đọc buổi dạy. Muốn có thì phải cho **một lượt model** đọc danh sách bước rồi tự đặt tên và viết
+lại. Đó là chỗ duy nhất còn lại, và nó tốn một lượt gọi pool mỗi lần lưu bài dạy.

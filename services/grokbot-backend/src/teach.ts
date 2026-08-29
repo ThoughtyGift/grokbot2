@@ -44,6 +44,10 @@ export interface Step {
   /** Giá trị đã bị che vì nhạy cảm — bên lưu đếm để quyết định có tạo routine không. */
   masked?: boolean;
   url?: string;
+  /** Phím chức năng: Enter/Tab/Escape. Chỉ có ở bước `key`. */
+  key?: string;
+  /** Lúc backend nhận được bước, để phân biệt điều hướng do người mở với điều hướng do cú bấm. */
+  t?: number;
 }
 
 /** One recording at a time: the pane is modal and the box has one screen. */
@@ -116,7 +120,14 @@ const RECORDER = `(() => {
     steps.push(step);
     out(step);
   };
+  // Ô đang được gõ vào, và hàm xả nó thành một bước. Khai báo trước listener 'click' vì listener đó
+  // gọi 'xaGo'; thân hàm được gán ở dưới, cạnh phần bàn phím mà nó thuộc về.
+  let dangGo = null;
+  let xaGo = () => {};
   document.addEventListener("click", (e) => {
+    // Gõ xong rồi bấm đi chỗ khác là cách rời một ô phổ biến nhất, và \`change\` không phải lúc nào
+    // cũng bắn. Xả chữ đang gõ TRƯỚC cú bấm để thứ tự các bước đúng như người đã làm.
+    xaGo();
     const t = actionable(e.target);
     const s = sel(t);
     push({ act: "click", sel: s.sel, quality: s.quality, text: (t.textContent || "").trim().slice(0, 60) });
@@ -172,8 +183,8 @@ const RECORDER = `(() => {
   };
   const giaTriNhayCam = (v) => laSoThe(v) || laKhoa(v);
 
-  document.addEventListener("change", (e) => {
-    const t = e.target;
+  /** Ghi giá trị một ô thành bước 'fill', che nếu nhạy cảm. Dùng chung cho 'change' và bàn phím. */
+  const ghiO = (t) => {
     const s = sel(t);
     const raw = String(t && t.value != null ? t.value : "");
     if (oNhayCam(t) || giaTriNhayCam(raw)) {
@@ -182,6 +193,41 @@ const RECORDER = `(() => {
       return;
     }
     push({ act: "fill", sel: s.sel, quality: s.quality, value: raw.slice(0, 120) });
+  };
+  document.addEventListener("change", (e) => { dangGo = null; ghiO(e.target); }, true);
+
+  /*
+   * Bàn phím.
+   *
+   * Bản trước chỉ nghe 'click' và 'change'. Đo trên bài 24h.com.vn: người dạy gõ "24h" rồi Enter, và
+   * routine sinh ra KHÔNG có bước điền nào — mất đúng chữ quyết định bài đó là bài gì. Lý do là
+   * Google chặn Enter bằng JS rồi tự điều hướng, nên ô tìm kiếm không bao giờ blur để 'change' bắn.
+   *
+   * Không ghi từng phím một: ba mươi bước "gõ chữ n" thì không ai đọc nổi. Thay vào đó nhớ ô đang
+   * được gõ, rồi XẢ nó thành một bước 'fill' khi người ta rời ô — bằng Enter/Tab/Escape, hoặc bằng
+   * một cú bấm. Xả qua 'ghiO' nên vẫn đi qua đúng bộ lọc che.
+   */
+  const PHIM_ROI = { Enter: "Enter", Tab: "Tab", Escape: "Escape" };
+  xaGo = () => {
+    const t = dangGo;
+    dangGo = null;
+    if (t && String(t.value != null ? t.value : "")) ghiO(t);
+  };
+  // Nghe 'input' chứ KHÔNG phải 'keydown' để biết ô nào đang được nhập.
+  //
+  // 'keydown' chỉ thấy người gõ từng phím. Nó bỏ sót DÁN, tự điền của trình duyệt, và IME tiếng
+  // Việt — mà dán chính là cách người ta nhập khoá API và số thẻ, đúng những thứ phần che ở trên
+  // sinh ra để bắt. 'input' bắn cho cả bốn.
+  document.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t && "value" in t) dangGo = t;
+  }, true);
+  // Bàn phím chỉ còn lo phím RỜI ô: chúng vừa là bước riêng, vừa là lúc xả chữ đang gõ.
+  document.addEventListener("keydown", (e) => {
+    const ten = PHIM_ROI[e.key];
+    if (!ten) return;
+    xaGo();
+    push({ act: "key", key: ten });
   }, true);
   push({ act: "navigate", url: location.href });
 })()`;
@@ -205,7 +251,10 @@ export async function startTeach(agentId: string): Promise<TeachState> {
     try {
       const step = JSON.parse(String(params.payload)) as Step;
       // A cap, because a page with a mousemove-happy widget could otherwise grow this without end.
-      if (steps.length < 300) steps.push(step);
+      // Mốc giờ đóng ở ĐÂY chứ không phải trong trang: một cú bấm làm trang đổi thì `window` cũ mất,
+      // và bước điều hướng theo sau lại do document mới đóng dấu — hai đồng hồ khác nhau. Backend là
+      // chỗ duy nhất thấy cả hai bước bằng cùng một đồng hồ.
+      if (steps.length < 300) steps.push({ ...step, t: Date.now() });
     } catch { /* not our payload */ }
   });
   try {
@@ -258,10 +307,43 @@ async function finish(agentId: string): Promise<void> {
  * and a value, so the steps are given in those terms, and the weak selectors are called out so the
  * agent looks at the page instead of trusting `.btn` blindly.
  */
+/**
+ * Điều hướng này có phải HỆ QUẢ của bước trước không?
+ *
+ * Bấm một link rồi trang đổi — cú bấm là việc người ta làm, còn URL mới là kết quả. Ghi cả hai thì
+ * routine vừa thừa vừa giòn: đo trên bài 24h.com.vn, bước "mở lại URL kết quả Google" mang theo
+ * `ei`/`ved` đã hết hạn, chép lại chỉ để hỏng.
+ *
+ * Mốc giờ do backend đóng lúc nhận bước. Thiếu mốc giờ thì tin vào thứ tự, vì thứ tự là thứ duy
+ * nhất còn lại.
+ */
+function laHeQua(nav: Step, truoc: Step | undefined): boolean {
+  if (!truoc || (truoc.act !== "click" && truoc.act !== "key")) return false;
+  if (nav.t == null || truoc.t == null) return true;
+  return nav.t - truoc.t < 3000;
+}
+
 export function stepsToPrompt(steps: Step[]): string {
   const lines: string[] = [];
   let n = 0;
-  for (const s of steps) {
+  // Bước `navigate` ĐẦU TIÊN là nơi tab đang đứng lúc bật ghi, không ai mở nó trong buổi dạy. Lần
+  // chạy đo được ghi nguyên URL kết quả Google còn sót từ phiên trước thành "bước 1". Nhánh
+  // `about:`/`data:` bên dưới đã chặn đúng ý này rồi, nhưng một URL http sót lại thì lọt qua.
+  /*
+   * Bước 0 là nơi tab đang đứng lúc bật ghi — bộ ghi đóng nó ngay lúc gài, trước khi sự kiện nào
+   * kịp bắn. Nhưng KHÔNG phải lúc nào cũng bỏ được: nếu người dạy đã mở sẵn trang cần dạy rồi mới
+   * bật ghi thì đó chính là điểm bắt đầu, bỏ đi là routine không biết mở ở đâu.
+   *
+   * Chỉ bỏ khi nó bị THAY THẾ ngay: bước kế tiếp cũng là một điều hướng, nghĩa là người ta đi chỗ
+   * khác luôn và nơi xuất phát không còn nghĩa gì. Đó đúng là ca đo được trên bài 24h.com.vn — tab
+   * còn nằm ở URL kết quả Google của phiên trước, rồi buổi dạy mở google.com đè lên.
+   */
+  const boDau = steps[0]?.act === "navigate" && steps[1]?.act === "navigate";
+  let truoc: Step | undefined;
+  for (const [i, s] of steps.entries()) {
+    if (i === 0 && boDau) continue;
+    if (s.act === "navigate" && laHeQua(s, truoc)) continue;
+    truoc = s;
     const q = (s as { quality?: string }).quality;
     const weak = q === "class" || q === "tag" ? "  (selector yếu — kiểm lại trên trang trước khi bấm)" : "";
     if (s.act === "navigate" && s.url) {
@@ -278,6 +360,9 @@ export function stepsToPrompt(steps: Step[]): string {
     }
     if (s.act === "click") { lines.push(`${++n}. bấm \`${s.sel}\`${s.text ? ` ("${s.text}")` : ""}${weak}`); continue; }
     if (s.act === "fill") { lines.push(`${++n}. điền \`${s.sel}\` = "${s.value ?? ""}"${weak}`); continue; }
+    // Nhánh này từng thiếu, và `act:"key"` chỉ tồn tại trong khai báo kiểu — một nhánh chết trông
+    // như đã làm xong. Không có nó thì Enter biến mất khỏi mọi bài dạy có tìm kiếm.
+    if (s.act === "key" && s.key) { lines.push(`${++n}. nhấn ${s.key}`); continue; }
   }
   if (!lines.length) return "";
   return [

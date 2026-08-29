@@ -7,6 +7,12 @@ dist/
 # secrets — NEVER commit
 .env
 .env.local
+# Bản sao lưu và bản nháp của .env cũng mang đúng những khoá ấy, mà hai dòng trên không bắt được:
+# đo ngày 2026-08-29 thì `.env.bak-2026-08-28` (35 dòng) và `services/grokbot-backend/._env.mts`
+# (15 dòng) đều nằm trần trong repo, mỗi file vài dòng có dạng khoá. Một `git add .` là đưa lên hết.
+.env.*
+!.env.example
+._env*
 *-key.txt
 pool-key.txt
 anthropic-key.txt
