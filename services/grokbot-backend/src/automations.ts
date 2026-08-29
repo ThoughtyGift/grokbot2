@@ -15,7 +15,7 @@
  * `spec.trigger` is a 5-field cron string with an optional `CRON_TZ=`/`TZ=` prefix,
  * exactly what the client's own parser accepts.
  */
-import { agentExists, sendPrompt, persist, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
+import { agentExists, sendPrompt, persist, bindAutomationsSnapshot, bindAutomationCreate, bindAutomationRefine, bindAutomationCleanup, automationsChanged, isAgentRunning, pushTranscriptEvent, pushListenerConnect } from "./chat.js";
 import { loadState } from "./store.js";
 
 export interface Automation {
@@ -295,6 +295,15 @@ bindAutomationsSnapshot(all);
 bindAutomationCreate((agentId, spec) => {
   const list = createAgentAutomation({ id: agentId, spec });
   return list[list.length - 1]?.triggerDescription ?? null;
+});
+// Và cho `teach.ts` sửa lại bài dạy nó vừa lưu, sau khi model đọc xong buổi dạy và đặt được tên
+// thật cho việc. Tìm từ CUỐI lên: nếu hai bài dạy trùng tên trong cùng một phút thì bài cần sửa
+// luôn là bài mới nhất.
+bindAutomationRefine((agentId, name, patch) => {
+  const rec = [...listFor(agentId)].reverse().find((x) => x.name === name);
+  if (!rec) return false;
+  updateAgentAutomation({ id: agentId, automationId: rec.id, spec: patch });
+  return true;
 });
 // And drop an agent's routines when the agent is deleted, so the scheduler stops trying to fire them.
 bindAutomationCleanup((agentId) => { if (byAgent.delete(agentId)) persist(); });

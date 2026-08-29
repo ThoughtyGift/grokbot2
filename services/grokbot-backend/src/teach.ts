@@ -21,8 +21,10 @@
  * browser reaches us as pixels over VNC and nothing more, so it cannot be taught this way.
  */
 import { cdpForAgent, onCdpEvent } from "./browser.js";
-import { automationCreateRef } from "./chat/state.js";
+import { automationCreateRef, automationRefineRef } from "./chat/state.js";
 import { publish } from "./events.js";
+import { callPool } from "@grokbot2/pool-client";
+import { config, loadPoolKey } from "./config.js";
 
 /** The client's own limit (`600 * 1e3` in the bundle). Sending a different one desynchronises its countdown. */
 const MAX_DURATION_MS = 600_000;
@@ -380,7 +382,149 @@ export function stepsToPrompt(steps: Step[]): string {
  * A save with nothing recorded creates nothing: an empty routine would sit in the panel looking
  * like a taught task and do nothing when run. `discardedBecauseEmpty` is what the caller reports.
  */
-export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number }> {
+// ── Cho một lượt model đọc lại buổi dạy ────────────────────────────────────────────────────────
+//
+// Đây là chỗ khác app gốc sâu nhất. Của ta: `stepsToPrompt()` CHÉP bản ghi ra chữ, không ai đọc.
+// App gốc: một lượt model xem hết video rồi mới viết skill — nên nó đặt được tên cho việc, nhận ra
+// đường đi vòng và đổi sang đường thẳng, và hiểu "bài nổi bật" thay vì ghim bài của hôm nay.
+//
+// Đo trên bài 24h.com.vn: app gốc ra `Read 24h.com.vn news` đi thẳng vào trang chủ; ta ra
+// `Việc đã dạy — 08-29 08:31` đi vòng qua Google. Không luật nào trong `stepsToPrompt` bù được,
+// vì khái quát hoá cần người đọc.
+
+/**
+ * Rút bản ghi thành lời cho MODEL đọc — khác `stepsToPrompt` ở chỗ giữ lại MỌI thứ.
+ *
+ * `stepsToPrompt` bỏ điều hướng hệ quả vì đó không phải việc ai làm. Model thì CẦN chúng: chính
+ * chúng nói một cú bấm dẫn tới đâu, và không biết đích đến thì không thể rút ngắn đường đi.
+ */
+export function stepsForModel(steps: Step[]): string {
+  const out: string[] = [];
+  steps.forEach((s, i) => {
+    const n = i + 1;
+    if (s.act === "navigate") {
+      const vi = i === 0 ? "nơi tab đang đứng lúc bật ghi"
+        : laHeQua(s, steps[i - 1]) ? "trang tự chuyển tới sau thao tác trên"
+        : "người tự mở";
+      out.push(`${n}. [${vi}] ${s.url ?? ""}`);
+      return;
+    }
+    if (s.act === "click") { out.push(`${n}. [bấm] ${s.sel}${s.text ? ` — chữ trên đó: "${s.text}"` : ""}`); return; }
+    if (s.act === "fill") {
+      out.push(`${n}. [điền] ${s.sel} = ${s.masked ? "(giá trị nhạy cảm, đã che ngay lúc ghi)" : `"${s.value ?? ""}"`}`);
+      return;
+    }
+    if (s.act === "key" && s.key) out.push(`${n}. [phím] ${s.key}`);
+  });
+  return out.join("\n");
+}
+
+const LUAT_HOC = [
+  "Đây là bản ghi thao tác của một người đang DẠY VIỆC cho bot bằng cách tự làm mẫu trong trình duyệt.",
+  "Việc của bạn: đặt tên cho việc đó, và viết lại thành các bước để lần sau bot tự làm.",
+  "",
+  "Trả lời DUY NHẤT bằng JSON, không kèm chữ nào khác:",
+  '{"ten":"...","buoc":["...","..."],"ghiChu":"..."}',
+  "",
+  "Luật:",
+  "- ten: nói việc đó LÀM GÌ. Tiếng Việt, tối đa 60 ký tự, KHÔNG chứa ngày giờ.",
+  "- buoc: chỉ dùng thông tin có trong bản ghi. TUYỆT ĐỐI không thêm bước không ai làm.",
+  "- Dòng [trang tự chuyển tới] là hệ quả của thao tác ngay trên nó, không phải việc ai làm — đừng",
+  "  chép nó thành một bước. Nhưng HÃY dùng nó để biết một cú bấm dẫn tới đâu.",
+  "- Được RÚT NGẮN đường đi khi bản ghi cho thấy đích đến: nếu người ta tìm trên Google rồi bấm vào",
+  "  một trang, hãy đi thẳng vào trang đó. Nói lý do trong ghiChu.",
+  "- Nếu một bước bám vào nội dung của HÔM NAY (một bài báo cụ thể, một đơn cụ thể), hãy viết thành",
+  '  mô tả chung ("bài đầu tiên trên trang chủ") thay vì ghim đúng nội dung đó.',
+  "- Giá trị đã che thì viết <cần người điền>. Đừng đoán.",
+  "- ghiChu: MỘT câu về chỗ bạn đã đổi so với bản ghi thô, hoặc chuỗi rỗng nếu giữ nguyên.",
+].join("\n");
+
+/**
+ * Đọc câu trả lời model.
+ *
+ * Trả `null` cho mọi thứ không chắc chắn. Bài dạy thô đã lưu xong trước khi lượt này chạy, nên từ
+ * chối một câu trả lời đáng ngờ chỉ mất phần đẹp; nhận bừa thì hỏng cả routine mà không ai biết.
+ */
+export function docKetQuaHoc(text: string): { name: string; prompt: string } | null {
+  const raw = String(text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  const dau = raw.indexOf("{");
+  const cuoi = raw.lastIndexOf("}");
+  if (dau < 0 || cuoi <= dau) return null;
+  let o: { ten?: unknown; buoc?: unknown; ghiChu?: unknown };
+  try { o = JSON.parse(raw.slice(dau, cuoi + 1)); } catch { return null; }
+
+  const ten = String(o?.ten ?? "").trim();
+  if (!ten || ten.length > 80) return null;
+  // Một cái tên toàn ngày giờ chính là thứ lượt này sinh ra để thay.
+  if (/\d{1,2}[-/:]\d{2}/.test(ten)) return null;
+
+  const buoc = Array.isArray(o?.buoc)
+    ? o.buoc.map((x) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  if (!buoc.length || buoc.length > 40) return null;
+  if (buoc.some((b) => b.length > 300)) return null;
+
+  const ghiChu = String(o?.ghiChu ?? "").trim();
+  // Model hay tự đánh số lại; bỏ số của nó rồi đánh số của mình, kẻo ra "1. 1. mở …".
+  const dong = buoc.map((b, i) => `${i + 1}. ${b.replace(/^\d+[.)]\s*/, "")}`);
+  return {
+    name: ten,
+    prompt: [
+      "Làm lại việc sau trong trình duyệt (dùng các tool browser_*):",
+      "",
+      ...dong,
+      ...(ghiChu ? ["", `Ghi chú từ lúc học: ${ghiChu}`] : []),
+      "",
+      "Nếu một bước không khớp trang thật thì DỪNG và nói rõ bước nào, đừng đoán bước tiếp theo.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Buổi dạy này chủ yếu là nhập thông tin bí mật?
+ *
+ * Luật của app gốc: *"If the demonstration was mostly entering credentials, say so and do not
+ * create a skill."* Lý do thực tế chứ không phải lo xa: mọi giá trị bắt được đều đã bị che ngay
+ * lúc ghi, nên routine ấy KHÔNG replay được — nó chỉ còn là một bản ghi rằng ai đó đã đăng nhập.
+ *
+ * Ngưỡng cố ý dè dặt. Đăng nhập một lần rồi làm mười việc vẫn là bài dạy tốt, nên chỉ từ chối khi
+ * số ô bí mật nhiều bằng hoặc hơn TOÀN BỘ việc làm được.
+ */
+export function chuYeuLaBiMat(steps: Step[]): boolean {
+  const che = steps.filter((s) => s.act === "fill" && s.masked).length;
+  if (!che) return false;
+  const viecThat = steps.filter((s) => s.act === "click" || (s.act === "fill" && !s.masked)).length;
+  return che >= viecThat;
+}
+
+/**
+ * Chạy NỀN, sau khi routine thô đã lưu.
+ *
+ * Không chặn câu trả lời của `stopTeach`: ở client câu trả lời CHÍNH LÀ trạng thái của pane, nên
+ * giữ nó lại vài chục giây là pane đứng ở "đang ghi" trong khi máy đã dừng. Và lưu trước rồi sửa
+ * sau còn có nghĩa là model hỏng, hết hạn mức, hay mất mạng thì bài dạy vẫn còn nguyên.
+ */
+async function hocNen(agentId: string, tenTho: string, steps: Step[]): Promise<void> {
+  const key = loadPoolKey();
+  if (!key || !automationRefineRef) return;
+  try {
+    const r = await callPool(
+      [{ role: "user", content: `${LUAT_HOC}\n\nBản ghi:\n${stepsForModel(steps)}` }],
+      { url: config.poolUrl, key, model: config.model, maxTokens: 1200, timeoutMs: 60_000 },
+    );
+    if (!r.ok || !r.text) { console.warn("[grokbot2] [teach] model không trả lời; giữ bản ghi thô"); return; }
+    const dep = docKetQuaHoc(r.text);
+    if (!dep) { console.warn("[grokbot2] [teach] câu trả lời model không dùng được; giữ bản ghi thô"); return; }
+    const ok = automationRefineRef(agentId, tenTho, { name: dep.name, prompt: dep.prompt });
+    console.log(ok
+      ? `[grokbot2] [teach] đã đặt tên việc: "${dep.name}"`
+      : `[grokbot2] [teach] không tìm thấy routine "${tenTho}" để sửa; giữ bản ghi thô`);
+  } catch (e) {
+    console.warn(`[grokbot2] [teach] học lỗi, giữ bản ghi thô: ${(e as Error).message}`);
+  }
+}
+
+export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number; refused?: string }> {
   const id = active?.agentId ?? agentId ?? "default";
   const run = active;
   if (run) { clearTimeout(run.timer); run.off(); active = null; pushState(); }
@@ -394,6 +538,12 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
   const prompt = stepsToPrompt(steps);
   if (!prompt) return { ...IDLE, steps: 0 };
   if (!automationCreateRef) return { ...IDLE, steps: steps.length };
+  if (chuYeuLaBiMat(steps)) {
+    const ly = "buổi dạy này gần như chỉ có nhập thông tin bí mật, nên tôi không lưu thành routine:"
+      + " mọi giá trị đều đã bị che, chạy lại sẽ không điền được gì.";
+    console.warn(`[grokbot2] [teach] từ chối lưu cho ${id}: chủ yếu là thông tin bí mật`);
+    return { ...IDLE, steps: steps.length, refused: ly };
+  }
 
   // "manual" is the trigger for a routine with no schedule: the Routines panel lists it, Run fires
   // it, and the scheduler has nothing to match — which is what a taught task wants until somebody
@@ -402,6 +552,8 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
   // The creator answers with the trigger's description ("manual"), which is not what the caller
   // asked; it wants to know WHAT was saved.
   automationCreateRef(id, { name, prompt, trigger: "manual" });
+  // Rồi mới nhờ model đặt tên và viết lại — nền, không chặn câu trả lời này. Xem `hocNen`.
+  void hocNen(id, name, steps);
   return { ...IDLE, saved: name, steps: steps.length };
 }
 

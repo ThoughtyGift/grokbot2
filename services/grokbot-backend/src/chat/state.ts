@@ -87,6 +87,19 @@ export function bindAutomationCreate(fn: (agentId: string, spec: { name: string;
 }
 export { automationCreateRef };
 
+/**
+ * Sửa lại một routine vừa tạo — `teach.ts` dùng sau khi model đọc xong buổi dạy.
+ *
+ * Tìm theo TÊN chứ không theo id, vì `bindAutomationCreate` ở trên trả về mô tả trigger
+ * ("manual") chứ không phải id, và đổi hợp đồng đó thì đụng cả `create_routine` lẫn bản ghi
+ * desktop. Trả `true` nếu thật sự sửa được.
+ */
+let automationRefineRef: ((agentId: string, name: string, patch: { name?: string; prompt?: string }) => boolean) | null = null;
+export function bindAutomationRefine(fn: (agentId: string, name: string, patch: { name?: string; prompt?: string }) => boolean): void {
+  automationRefineRef = fn;
+}
+export { automationRefineRef };
+
 let automationCleanupRef: ((agentId: string) => void) | null = null;
 export function bindAutomationCleanup(fn: (agentId: string) => void): void { automationCleanupRef = fn; }
 export { automationCleanupRef };

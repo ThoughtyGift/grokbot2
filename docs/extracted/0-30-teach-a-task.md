@@ -232,3 +232,59 @@ Ba thứ app gốc có mà vá xong vẫn chưa có:
 Cả ba đều là **khái quát hoá**, và không luật nào trong `stepsToPrompt` làm được — vì không có ai
 đọc buổi dạy. Muốn có thì phải cho **một lượt model** đọc danh sách bước rồi tự đặt tên và viết
 lại. Đó là chỗ duy nhất còn lại, và nó tốn một lượt gọi pool mỗi lần lưu bài dạy.
+
+---
+
+# ③ đã làm: một lượt model đọc buổi dạy
+
+Khoảng cách còn lại ở trên không đóng được bằng luật, vì khái quát hoá cần người đọc. Nên thêm
+đúng thứ app gốc có: **một lượt model** đọc bản ghi rồi tự đặt tên và viết lại.
+
+## Đo, cùng bài đó
+
+| | trước | sau |
+|---|---|---|
+| tên | `Việc đã dạy — 08-29 08:47` | `Mở bài đầu tiên trên trang chủ 24h.com.vn` |
+| bước 1 | `mở https://www.google.com/` | `Mở trực tiếp https://www.24h.com.vn/` |
+| bài | ghim `…xon-xao-c46a1790607.html` | "bài viết đầu tiên trên trang chủ" |
+| lý do đổi | không có | *"vì bản ghi cho thấy đó là đích đến"* |
+
+Đặt cạnh app gốc — *"Skill chạy thẳng vào `https://www.24h.com.vn/` (ổn định hơn search Google)"* —
+thì cùng một kết luận, và cùng một lý do.
+
+## Bốn chỗ cố ý làm khác đi
+
+**Lưu trước, sửa sau.** Routine thô lưu xong rồi lượt model mới chạy, ở nền. Hai lý do: ở client
+câu trả lời của `stopTeach` **chính là trạng thái** của pane, giữ nó vài chục giây là pane đứng ở
+"đang ghi" trong khi máy đã dừng; và model hỏng, hết hạn mức hay mất mạng thì bài dạy vẫn còn
+nguyên. Không có đường nào để lượt này làm mất một bài dạy.
+
+**Model đọc bản ghi ĐẦY ĐỦ, bot đọc bản đã lọc.** `stepsToPrompt` bỏ điều hướng hệ quả vì đó không
+phải việc ai làm — nhưng chính chúng nói cú bấm dẫn tới đâu. Bỏ luôn với model là bỏ khả năng rút
+ngắn đường đi. Nên `stepsForModel` giữ lại tất cả và **gắn nhãn**: `[trang tự chuyển tới]`,
+`[nơi tab đang đứng lúc bật ghi]`, `[người tự mở]`.
+
+**Nghi ngờ thì từ chối.** `docKetQuaHoc` trả `null` cho JSON hỏng, tên rỗng, tên vẫn là ngày giờ,
+không bước nào, quá 40 bước, một bước quá 300 ký tự. Bản thô đang dùng được, nên nhận bừa thì tệ
+hơn bỏ qua.
+
+**Che ở nguồn nên lượt này an toàn sẵn.** Giá trị nhạy cảm bị thay bằng `***` ngay trong trang, nên
+model không bao giờ nhìn thấy nó — không cần luật "đừng nhắc lại bí mật", vì không có gì để nhắc.
+
+## Và luật từ chối của app gốc
+
+> *"If the demonstration was mostly entering credentials, say so and do not create a skill."*
+
+Đã có: `chuYeuLaBiMat()`. Ngưỡng cố ý dè dặt — đăng nhập một lần rồi làm mười việc vẫn là bài dạy
+tốt, nên chỉ từ chối khi số ô bí mật **nhiều bằng hoặc hơn toàn bộ việc làm được**. Lý do không
+phải lo xa mà rất thực: mọi giá trị đều đã bị che, nên routine ấy chạy lại cũng không điền được gì.
+
+## Còn lại gì so với 0.30
+
+| | trạng thái |
+|---|---|
+| ghi bằng video màn hình (ffmpeg) | **không** — ta ghi sự kiện DOM; `desktop-record.ts` lo phần ngoài trình duyệt |
+| đối chiếu lịch sử Chrome | **không** — bản ghi DOM đã có đích đến rồi, nên chưa cần |
+| hàng đợi + `flock` + lease hết hạn | **không** — ta cho phép đúng một bản ghi mỗi lúc |
+| sản phẩm là skill `sand-workflow:<id>` | **không** — của ta là routine |
+| đề nghị chạy thử, không bao giờ tự chạy | **có** phần sau (`trigger: "manual"`, không gì tự kích) |

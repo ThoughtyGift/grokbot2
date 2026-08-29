@@ -26,6 +26,7 @@ export {
   bindHostSettings,
   bindAutomationsSnapshot,
   bindAutomationCreate,
+  bindAutomationRefine,
   bindAutomationCleanup,
   transcriptEpoch,
   automationsChanged,
