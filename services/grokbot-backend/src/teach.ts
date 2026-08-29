@@ -41,6 +41,8 @@ export interface Step {
   sel?: string;
   text?: string;
   value?: string;
+  /** Giá trị đã bị che vì nhạy cảm — bên lưu đếm để quyết định có tạo routine không. */
+  masked?: boolean;
   url?: string;
 }
 
@@ -119,11 +121,67 @@ const RECORDER = `(() => {
     const s = sel(t);
     push({ act: "click", sel: s.sel, quality: s.quality, text: (t.textContent || "").trim().slice(0, 60) });
   }, true);
+  /*
+   * Che thông tin nhạy cảm — và vì sao KHÔNG che theo hình dạng số.
+   *
+   * Bản trước chỉ che 'input[type=password]'. Mọi ô khác ghi nguyên văn, cắt 120 ký tự — rồi bản
+   * ghi ấy thành một routine SỐNG MÃI, đọc được từ bảng Routines. Ô OTP hầu như luôn là
+   * 'type="text"'; khoá API dán vào ô text cũng vậy; số thẻ trên phần lớn trang thanh toán cũng vậy.
+   *
+   * App gốc 0.30 nói rõ phạm vi trong skill 'learn-from-demonstration': "passwords, one-time codes,
+   * API keys, financial account numbers, and private personal details".
+   *
+   * Nhưng có một đánh đổi thật: che một giá trị THẬT thì bước đó không replay được nữa. Nên chỉ che
+   * theo **tín hiệu mạnh** — ô tự khai là gì ('type', 'autocomplete', tên/nhãn), hoặc giá trị mang
+   * dấu hiệu không thể nhầm (tiền tố khoá, số thẻ qua Luhn). KHÔNG che một dãy 4–8 chữ số trần: nó
+   * có thể là mã OTP, mà cũng có thể là số lượng, năm, mã bưu chính — che nó là làm hỏng những bài
+   * dạy bình thường để đổi lấy một trường hợp hiếm.
+   */
+  const nhanO = (t) => {
+    let s = "";
+    for (const k of ["name", "id", "placeholder", "aria-label", "autocomplete"]) {
+      const v = t.getAttribute && t.getAttribute(k);
+      if (v) s += " " + v;
+    }
+    return s.toLowerCase();
+  };
+  const oNhayCam = (t) => {
+    if (!t) return false;
+    if (t.type === "password") return true;
+    const ac = ((t.getAttribute && t.getAttribute("autocomplete")) || "").toLowerCase();
+    if (/one-time-code|cc-number|cc-csc|cc-exp|current-password|new-password/.test(ac)) return true;
+    return /otp|one.?time|verif|passcode|\bpin\b|cvv|cvc|card.?number|creditcard|iban|account.?number|routing|api.?key|apikey|secret|token/.test(nhanO(t));
+  };
+  /** Luhn — số thẻ hợp lệ thì không thể là số lượng hay năm. */
+  const laSoThe = (v) => {
+    const d = String(v).replace(/[\s-]/g, "");
+    if (!/^[0-9]{13,19}$/.test(d)) return false;
+    let sum = 0, alt = false;
+    for (let i = d.length - 1; i >= 0; i--) {
+      let n = +d[i];
+      if (alt) { n *= 2; if (n > 9) n -= 9; }
+      sum += n; alt = !alt;
+    }
+    return sum % 10 === 0;
+  };
+  const laKhoa = (v) => {
+    const x = String(v).trim();
+    if (/^(sk-|hal_|ghp_|gho_|github_pat_|xox[abprs]-|AKIA|ASIA|AIza|Bearer\s)/i.test(x)) return true;
+    // Chuỗi dài không có khoảng trắng, lẫn cả chữ lẫn số: dạng của khoá dán vào, không phải câu chữ.
+    return x.length >= 32 && !/\s/.test(x) && /[0-9]/.test(x) && /[A-Za-z]/.test(x);
+  };
+  const giaTriNhayCam = (v) => laSoThe(v) || laKhoa(v);
+
   document.addEventListener("change", (e) => {
     const t = e.target;
-    if (t && (t.type === "password")) { const s = sel(t); push({ act: "fill", sel: s.sel, quality: s.quality, value: "***" }); return; }
     const s = sel(t);
-    push({ act: "fill", sel: s.sel, quality: s.quality, value: String(t && t.value != null ? t.value : "").slice(0, 120) });
+    const raw = String(t && t.value != null ? t.value : "");
+    if (oNhayCam(t) || giaTriNhayCam(raw)) {
+      // 'masked' để bên lưu đếm được — xem 'desktop_teach_stop'.
+      push({ act: "fill", sel: s.sel, quality: s.quality, value: "***", masked: true });
+      return;
+    }
+    push({ act: "fill", sel: s.sel, quality: s.quality, value: raw.slice(0, 120) });
   }, true);
   push({ act: "navigate", url: location.href });
 })()`;
