@@ -285,6 +285,49 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     setAgentAvatarBytes: (a) => directory.setAgentAvatarBytes(a),
     getAgentAvatar: (a) => directory.getAgentAvatar(a),
 
+    /*
+     * Ba lệnh ảnh còn thiếu — đo 31/08 bằng cách đối chiếu hợp đồng 0.30 với bảng này.
+     *
+     * 20 lệnh trong hợp đồng chưa có handler, nhưng 14 trong số đó nằm sau cờ tính năng TẮT ở
+     * client (`grok_bot_multiplayer` cho 9 lệnh phòng chung, `sand_voice_call` cho 5 lệnh gọi
+     * thoại) — làm chúng thì client cũng không gọi. Ba lệnh ảnh này thì khác: renderer nhắc tới
+     * mỗi cái 3 lần và không cờ nào chắn.
+     */
+
+    /** Avatar cho thông báo hệ thống. Cùng nguồn với avatar thường — client chỉ hỏi ở ngữ cảnh khác. */
+    getAgentNotificationAvatar: (a) => directory.getAgentAvatar(a),
+
+    /**
+     * Vẽ avatar từ một câu mô tả.
+     *
+     * Client chờ về ảnh, không phải một lời hứa — nên nếu không vẽ được thì trả chuỗi rỗng (đúng
+     * hình dạng `getAgentAvatar` trả khi bot chưa có avatar) chứ không ném: chỗ gọi nó là nút
+     * "tạo ảnh" trong màn hình sửa bot, và một ngoại lệ ở đây thành lỗi đỏ giữa form.
+     */
+    generateAgentAvatarImage: async (a) => {
+      const moTa = String(a?.description ?? "").trim();
+      if (!moTa || !ports.media?.generateImage) return { avatarDataUrl: "", avatarVersion: "" };
+      const r = await ports.media.generateImage(moTa).catch(() => null);
+      return { avatarDataUrl: r ?? "", avatarVersion: r ? String(Date.now()) : "" };
+    },
+
+    /**
+     * Tải hộ logo của một plugin MCP.
+     *
+     * Đây là một PROXY, và lý do nó tồn tại nằm ở phía client: renderer không tải được ảnh từ
+     * origin lạ (parity.md §2u — ảnh CDN hiện "Couldn't load image"), nên host tải hộ rồi trả
+     * data URL. Cùng lý do với `attach_image` bên tool.
+     *
+     * Chỉ http/https và chỉ ảnh: một `url` đến từ catalog là dữ liệu ngoài, và một proxy nhận mọi
+     * giao thức là một cửa để dò mạng nội bộ.
+     */
+    getMcpPluginLogo: async (a) => {
+      const u = String(a?.url ?? "").trim();
+      if (!u || !ports.media?.fetchImage) return { dataUrl: "" };
+      const r = await ports.media.fetchImage(u).catch(() => null);
+      return { dataUrl: r ?? "" };
+    },
+
     // Opening a conversation is what marks it read — doing it here rather than making the client
     // send a second call matches what the sidebar already assumes. `openAgentWindowed` is the
     // detached-window variant: same payload, only the frame differs, and the frame is the app's

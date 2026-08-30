@@ -143,6 +143,20 @@ export interface MediaPort {
    * chữ nào", còn 404 thì cái nút quay xong và im lặng.
    */
   transcribe?(audio: Buffer, mimeType: string, language?: string): Promise<{ text: string; ms: number }>;
+  /**
+   * Vẽ một ảnh từ mô tả, trả về data URL. Dùng cho `generateAgentAvatarImage`.
+   *
+   * Tuỳ chọn: chỗ nhúng không có bộ vẽ ảnh vẫn phải trả lời được, và câu trả lời đúng khi đó là
+   * avatar rỗng — nút "tạo ảnh" nằm giữa một form, nên nó phải im lặng chứ không được nổ.
+   */
+  generateImage?(description: string): Promise<string | null>;
+  /**
+   * Tải hộ một ảnh từ URL ngoài, trả về data URL. Dùng cho `getMcpPluginLogo`.
+   *
+   * Là PROXY chứ không phải tiện nghi: renderer không tải nổi ảnh từ origin lạ (parity.md §2u),
+   * nên host phải tải hộ. Bên triển khai chịu trách nhiệm chặn địa chỉ nội bộ.
+   */
+  fetchImage?(url: string): Promise<string | null>;
 }
 
 /**

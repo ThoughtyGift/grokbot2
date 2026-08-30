@@ -90,6 +90,7 @@ import {
 } from "./observe.js";
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, connectedMachines } from "./channels.js";
 import { mayChoBang, datTen, datQuyen } from "./may-da-biet.js";
+import { veAvatar, taiAnh } from "./anh-cho-client.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
 import { handleGitHubEvent } from "./github-events.js";
@@ -185,6 +186,9 @@ const ports: AclPorts = {
     stageFile,
     stagedCount,
     transcribe,
+    // Ba lệnh ảnh của hợp đồng 0.30 — xem `anh-cho-client.ts` để biết vì sao đúng ba lệnh này.
+    generateImage: veAvatar,
+    fetchImage: taiAnh,
   },
   memory: { getAgentMemories, deleteAgentMemory, clearAgentMemories },
   /*

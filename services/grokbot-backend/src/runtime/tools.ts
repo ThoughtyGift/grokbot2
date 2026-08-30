@@ -537,7 +537,7 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
  * them are. Unresolvable is treated as internal: the fetch would fail anyway, and defaulting a
  * security check to "allow" on an error is how these fences stop working quietly.
  */
-async function isInternalHost(hostname: string): Promise<boolean> {
+export async function isInternalHost(hostname: string): Promise<boolean> {
   const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
   let addrs: string[];
