@@ -91,6 +91,7 @@ import {
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, connectedMachines } from "./channels.js";
 import { mayChoBang, datTen, datQuyen } from "./may-da-biet.js";
 import { veAvatar, taiAnh } from "./anh-cho-client.js";
+import { tiemCookieVaoBox } from "./cookie-chrome.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
 import { handleGitHubEvent } from "./github-events.js";
@@ -156,6 +157,8 @@ const ports: AclPorts = {
     handBack: handBackBox,
     beginUse: beginComputerUse,
     endUse: endComputerUse,
+    // Cây cầu phiên đăng nhập: client đọc cookie ở máy người dùng, ta tiêm vào trình duyệt box.
+    injectCookies: (ds) => tiemCookieVaoBox(ds as never),
   },
   // Teach a task: record a demonstration in the box's browser, save it as a routine — see teach.ts.
   teach: {

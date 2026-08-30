@@ -103,6 +103,16 @@ export interface ComputerPort {
   handBack: Call;
   beginUse(agentId: string): void | Promise<void>;
   endUse(agentId: string): void | Promise<void>;
+  /**
+   * Chở phiên đăng nhập từ Chrome của NGƯỜI DÙNG sang trình duyệt của box.
+   *
+   * Client đọc cookie ở máy họ rồi gửi xuống; ta tiêm vào box. Đây là cây cầu duy nhất để bot làm
+   * được việc thật trên các trang cần đăng nhập — box là máy trắng, không tài khoản nào sẵn.
+   *
+   * Tuỳ chọn: chỗ nhúng không có trình duyệt vẫn phải trả lời được, và câu trả lời đúng khi đó là
+   * `{injected:0, sites:0}` — client đọc `m?.injected ?? 0` rồi tự báo "empty".
+   */
+  injectCookies?(cookies: unknown[]): Promise<{ injected: number; sites: number }>;
 }
 
 /**

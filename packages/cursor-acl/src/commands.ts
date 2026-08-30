@@ -295,6 +295,27 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      */
 
     /** Avatar cho thông báo hệ thống. Cùng nguồn với avatar thường — client chỉ hỏi ở ngữ cảnh khác. */
+    /**
+     * Chở phiên đăng nhập từ Chrome của người dùng sang trình duyệt của box.
+     *
+     * Hình dạng trả về đọc từ chỗ CLIENT dùng nó, không đoán:
+     *
+     *     let m = d === 0 ? undefined : await n.injectChromeCookies({cookies: a});
+     *     let f = m?.injected ?? 0;
+     *     let p = f > 0 ? m?.sites ?? 0 : NGt(a);
+     *
+     * Nên `{injected, sites}`, và trả 0 khi không làm được thay vì ném — `injected: 0` làm client
+     * báo "empty" bằng lời của nó, còn một ngoại lệ ở đây thành lỗi đỏ không ai đọc nổi.
+     *
+     * Đây là lệnh cuối trong hợp đồng 0.30 mà client GỌI ĐƯỢC thật: 15 lệnh còn thiếu khác đều
+     * nằm sau cờ tính năng client tự tắt.
+     */
+    injectChromeCookies: async (a) => {
+      const ds = Array.isArray((a as { cookies?: unknown[] })?.cookies) ? (a as { cookies: unknown[] }).cookies : [];
+      if (!ds.length || !computer.injectCookies) return { injected: 0, sites: 0 };
+      return computer.injectCookies(ds).catch(() => ({ injected: 0, sites: 0 }));
+    },
+
     getAgentNotificationAvatar: (a) => directory.getAgentAvatar(a),
 
     /**
