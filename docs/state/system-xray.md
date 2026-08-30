@@ -1,5 +1,9 @@
 # X-QUANG HỆ THỐNG GROKBOT2
 
+> **Trạng thái mới nhất KHÔNG ở đây.** Tài liệu này đo 25/08. Số hiện tại nằm ở
+> [docs/TRANG-THAI.md](../TRANG-THAI.md). Giữ file này vì nó làm một việc khác và làm tốt: giải
+> thích hệ thống cho người KHÔNG rành kỹ thuật.
+
 Viết cho người **không rành kỹ thuật**. Mọi con số dưới đây **đo từ hệ đang chạy** ngày
 25/08/2026, không phải đọc code đoán ra. Chỗ nào không đo được thì ghi thẳng **KHÔNG CHẮC CHẮN**.
 

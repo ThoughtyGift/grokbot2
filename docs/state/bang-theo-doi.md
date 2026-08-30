@@ -1,5 +1,9 @@
 # BẢNG THEO DÕI — một chỗ duy nhất
 
+> **Trạng thái mới nhất KHÔNG ở đây.** Tài liệu này đo 25–27/08 và đã lệch. Số hiện tại nằm ở
+> [docs/TRANG-THAI.md](../TRANG-THAI.md) (đo lại bằng một lệnh). Giữ file này làm tài liệu SÂU:
+> lộ trình, danh sách việc chi tiết, ghi chép từng phase.
+
 Gộp X-quang · lộ trình · danh sách việc · E2E vào **một tài liệu để theo dõi**. Mọi thứ ở đây đo từ
 hệ đang chạy ngày **25/08/2026**. Tài liệu sâu nằm chỗ khác (xem §6) — chỗ này chỉ giữ **trạng thái
 và việc**, để không phải mở tám file mới biết đang ở đâu.

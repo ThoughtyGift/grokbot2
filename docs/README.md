@@ -18,7 +18,8 @@ Ba loại tài liệu, đừng lẫn:
 
 | Bạn đang muốn | Đọc |
 |---|---|
-| **Biết còn phải làm gì — mở cái này trước** | [state/bang-theo-doi.md](state/bang-theo-doi.md) |
+| **Đang ở đâu, còn gì — mở cái này trước** | [TRANG-THAI.md](TRANG-THAI.md) — một chỗ duy nhất, đo lại bằng `scripts/trang-thai.mjs` |
+| lộ trình + việc chi tiết (tài liệu sâu) | [state/bang-theo-doi.md](state/bang-theo-doi.md) |
 | **Ngày đầu làm việc trên repo** | [onboarding.md](onboarding.md) |
 | Hiểu hệ thống trong 10 phút | [architecture.md](architecture.md) |
 | Biết đang làm tới đâu | [../ROADMAP.md](../ROADMAP.md) → [roadmap.md](../ROADMAP.md) |

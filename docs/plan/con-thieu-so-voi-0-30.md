@@ -1,5 +1,9 @@
 # Còn thiếu gì so với app gốc 0.30 — đo, không đoán
 
+> **Con số mới nhất KHÔNG ở đây.** Tài liệu này đo 29/08; bảng lệnh thiếu đã đổi (17, và 15 trong
+> số đó nằm sau cờ client đang tắt). Xem [docs/TRANG-THAI.md](../TRANG-THAI.md) §2. Giữ file này
+> vì cách CHIA LOẠI của nó vẫn đúng: thiếu năng lực · thiếu dữ liệu · không thuộc về ta.
+
 > Đo 2026-08-29 trên `asar029` + `asar030` đã giải nén. Mỗi con số dưới đây có một lệnh sinh ra nó;
 > không mục nào là ước lượng.
 
