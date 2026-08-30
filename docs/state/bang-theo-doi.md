@@ -18,10 +18,10 @@ khiển được **cả box Linux lẫn máy Windows thật** của người dù
 được. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang tắt**.
 
 ```
-lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 (15 cái client tự tắt)
+lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 đều client tự tắt
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
-mã             70 file test · 80 file nguồn · 523 bài xanh · typecheck sạch
+mã             72 file test · 82 file nguồn · 529 bài xanh · typecheck sạch
 parity         21/23 ổn định qua 3 lượt · 20 bản ghi phát lại
 bản vá client  6 bản, `--verify` còn nguyên
 ```
@@ -38,6 +38,7 @@ bản vá client  6 bản, `--verify` còn nguyên
 | lái Chrome trên máy | ✅ | mở · đọc · bấm · gõ · chụp, cửa sổ riêng cổng 9333 |
 | cài phần mềm **portable** | ✅ | bot tự tải + bung + chạy OBS 32.2.2, `obs64` PID 27156 |
 | cài phần mềm **cần admin** | ❌ | daemon `KHONG-ELEVATED`; app gốc **cũng chặn cứng** trên Windows |
+| bot tự soát hành động | ✅ | routine + điều hướng: chặn đúng ca app gốc bắt, cho qua ca hợp lệ |
 
 Vì sao **không** thêm đường nâng quyền — đo từ chính daemon của hãng:
 [nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md).
@@ -81,6 +82,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | # | việc | chặn bởi | kiểm bằng |
 |---|---|---|---|
 | 1 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
+| 1b | Mở lớp tự soát sang `subagent` | — | ca thứ ba app gốc bắt; hai ca đầu đã xong |
 | 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
 | 3 | Box qua hầm từ máy khác (`T3`) | như trên | — |
 | 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
