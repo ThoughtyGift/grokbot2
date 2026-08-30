@@ -1,1249 +1,168 @@
 # BẢNG THEO DÕI — một chỗ duy nhất
 
-> **Trạng thái mới nhất KHÔNG ở đây.** Tài liệu này đo 25–27/08 và đã lệch. Số hiện tại nằm ở
-> [docs/TRANG-THAI.md](../TRANG-THAI.md) (đo lại bằng một lệnh). Giữ file này làm tài liệu SÂU:
-> lộ trình, danh sách việc chi tiết, ghi chép từng phase.
+> Số đo **31/08/2026**. Chạy lại: `node services/grokbot-backend/scripts/trang-thai.mjs`
+>
+> Đây là chỗ trả lời **"đang ở đâu, còn gì"**. Tài liệu sâu nằm chỗ khác — xem §9.
 
-Gộp X-quang · lộ trình · danh sách việc · E2E vào **một tài liệu để theo dõi**. Mọi thứ ở đây đo từ
-hệ đang chạy ngày **25/08/2026**. Tài liệu sâu nằm chỗ khác (xem §6) — chỗ này chỉ giữ **trạng thái
-và việc**, để không phải mở tám file mới biết đang ở đâu.
-
-Chạy lại phần đo: `node services/grokbot-backend/scripts/self-xray.mjs`
+Tài liệu này từng dài 1.249 dòng, trong đó một mục tên *"Cửa cấp token"* chiếm 567 dòng và bên
+trong nó là nhật ký của cả chặng 4 → 8; thứ tự mục là 3 → 3d → 3g → 3f → 3e → 3c → 3b. Bản này giữ
+**kết luận và bài học**, bỏ nhật ký: chuyện đã xong thì một dòng là đủ, còn cái bẫy nó để lại mới
+đáng chép nguyên văn. Bản cũ vẫn nằm trong lịch sử git nếu cần tra.
 
 ---
 
 ## 1 · Hôm nay đang ở đâu
 
-*Số đo lại ngày **27/08**. Bản trước ghi ngày 25–26/08 và đã lệch khá xa — chép lại đây thay vì sửa
-từng dòng, và ghi cả con số cũ để thấy nó trôi bao nhiêu.*
+Backend nói được **148/147** lệnh của hợp đồng 0.30, client không còn đường nào nhận 404, bot điều
+khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc **21/23** ca đo
+được. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang tắt**.
 
-| | |
-|---|---|
-| **Backend** | **20.693** dòng TS *(bảng cũ: 15.687)* · **134** lệnh cổng *(cũ: 120)* · 21 lệnh đã gọi thật trên VPS, **0 lệnh chưa có mapping** |
-| **Kiểm thử** | **37** file unit / **337 bài** *(cũ: 34 file / 310 bài)* · **61** bộ e2e *(cũ: 58)* |
-| **Hai backend đang sống** | máy này `127.0.0.1:8788` · VPS `https://cinai.app/agent/` — cả hai trả 200 |
-| **Cờ trên VPS** | `AUTH=enforce` · `BILLING=warn` · `ALLOW_REGISTER=1` · `ALLOW_PLUGIN_INSTALL=1` · `PER_BOT_DISPLAY=off` · `BIND=127.0.0.1` |
-| **Tài khoản thật** | 2 người có mật khẩu: `phamduykhanh0209@` (máy 1/2) · `ngoclongdz96@` (máy 3) |
-| **Danh tính trên đường `/gw`** | `user-ticket: 152` · `matching-bearer: 70` — **vé theo người đã chiếm phần lớn lưu lượng thật**, tức app đã khởi động lại và đang dùng nó |
+```
+lệnh gateway   hợp đồng 147 · có handler 148 · thiếu 17 (15 cái client tự tắt)
+client gọi     148 lệnh · 0 đường còn 404
+kênh           3: local-exec · webauthn · cookie-origin-approval
+mã             68 file test · 78 file nguồn · 518 bài xanh · typecheck sạch
+parity         21/23 ổn định qua 3 lượt · 20 bản ghi phát lại
+bản vá client  6 bản, `--verify` còn nguyên
+```
 
+## 2 · Máy tính người dùng — làm được gì
 
-### Bảng chặng — một mắt nhìn hết
-
-| chặng | việc | trạng thái | còn gì |
-|---|---|---|---|
-| 0 | Dọn mã | ✅ 25/08 | — |
-| 1 | Đo được tiền | ✅ 25/08 (`warn`) | `tokens_in/out` là **ước lượng**, chưa tách theo người |
-| 2 | Vá ba lỗ đăng nhập | ✅ 25/08 | 2.1 chỉ siết khi `AUTH=enforce` (VPS: có · máy này: không) |
-| 3 | Máy thứ hai / thứ ba | ✅ 27–28/08 | máy 3 đã đăng ký + đăng nhập thật qua Internet |
-| 4 | Đưa BE ra Internet | ✅ 26/08 | ⚠ **chuyển quyền 116 dòng dữ liệu cũ** — chờ bạn chọn tài khoản |
-| 5 | Tách người dùng trên box | ✅ 28/08 | VNC từng slot xong, cờ **BẬT thật** |
-| 6 | FE riêng | ⬜ | 6.1 routines · 6.2 đối chiếu app gốc |
-| **7** | **Lên client 0.29** | 🟡 **đang làm** | 7.3 bộ vá · 7.4 tính năng mới |
-| 8 | Tự cập nhật | ⬜ | cơ chế đã moi xong, chưa dựng |
-
-**Việc kế tiếp đã chọn:** `setBoxSecrets` (đang là khúc gỗ) → 7.3 đưa bộ vá sang 0.29.
-
-**Ba việc chờ bạn, không chặn tôi:** ① chọn tài khoản nhận 116 dòng dữ liệu cũ ·
-② đăng nhập Shopee một lần trong màn riêng của bot · ③ đồng hồ máy chậm 13 phút (cần quyền quản trị).
-
-
----
-
-## 2 · Máy đo tự động — **9/9** *(26/08, đo lại sau bản vá plugin)*
-
-| mục | trạng thái |
-|---|---|
-| code chết (knip) | ok · 72 phát hiện (đúng mốc) — xem ô dưới về lượt đỏ 73 |
-| kích thước code | ok · 3 file > 800 dòng · 16 hàm > 50 dòng (đúng mốc) |
-| ranh giới tầng | ok · 7 luật đạt |
-| ngân sách bundle | ok · 95 KB thô / 31 KB gzip |
-| hợp đồng client | ok · khớp bản đã trích |
-| spec `/v1` | ok · 29 route · 32 schema |
-| docs | ok · 0 link chết · 0 mồ côi |
-| nhật ký e2e | ok · 98 lượt — *xem cảnh báo §5* |
-| không lặp lại | ok · hai lượt trước không đỏ cùng chỗ |
-
-**Lượt 26/08 đỏ hai mục rồi xanh lại — đây là cái gì:**
-
-`code chết` báo **73/72**, và `không lặp lại` đỏ theo. Truy ra: `+1` là
-[`infra/vps/serve-static.mjs`](../../infra/vps/serve-static.mjs) — máy chủ đứng một mình do systemd
-chạy trên VPS, **không ai import nên knip coi là rác**. Khai nó là điểm vào trong `knip.json`
-(`infra/vps/*.mjs`) → về 72, và `không lặp lại` tự xanh ở lượt sau.
-
-Cùng lượt đó `chat/state.ts` có hai bí danh export trùng (`nextId`→`nextEntryId`,
-`persistState`→`persist`). Đã gộp về một tên; 20 chỗ gọi được đổi theo.
-
-**Đã vá luôn một điểm mù của chính máy đo:** phát hiện loại *"file không ai import"* nằm trong từng
-issue dưới cờ `files`, nhưng `keys` chỉ khoá `j.files` — khoá mà knip 6 luôn để rỗng. Nên loại này
-không bao giờ vào danh sách khoá: **số tăng mà dòng delta vẫn nói "thêm: không"**, phải chạy knip
-bằng tay mới truy ra. Đúng cái bẫy mà chú thích ngay trên đó nói là muốn tránh. Nay đã khoá cả hai.
-
----
-
-## 3 · Việc còn lại — mỗi việc kèm cách kiểm
-
-Thứ tự ở đây là **cái gì chặn cái gì**, không phải theo độ khó. Mỗi việc có một dòng **kiểm** — chạy
-được, ra kết quả nhìn thấy. Không có dòng kiểm thì không tính là xong.
-
-Lệnh chạy từ `services/grokbot-backend/` trừ khi ghi khác.
-
-### Chặng 0 · Dọn — ✅ **XONG 25/08, cổng 9/9**
-
-| # | việc | kiểm bằng | kết quả |
-|---|---|---|---|
-| 0.1 | ✅ Tách 6 hàm dài (backend) | `node scripts/code-size.mjs` | 28 → 22 |
-| 0.2 | ✅ Sửa 5 bài `store.test` đỏ im lặng | `npx tsx --test src/store.test.ts` | 9/9 |
-| 0.3 | ✅ `httpTransport` 182 → 6 hàm nhỏ | `npx tsx --test src/mcp-http.test.ts src/mcp-oauth.test.ts` | 28/28 *(16 + 12 — 12 bài đã dời sang `mcp-oauth.test.ts`; chạy một file ra 16/16, kiểm 27/08)* |
-| 0.4 | ✅ `oauthPortFor` → `pendingPort` + `tokenPort` | như trên | 28/28 |
-| 0.5 | ✅ `mcp.ts` 936 → dưới 800 | `node scripts/code-size.mjs` | rời danh sách |
-| 0.6 | ✅ `bootstrap.ts` 862 → dưới 800 | `node scripts/contract-test.mjs` | **48/48** *(routes 16 · auth 6 · commands 10 · channels 16 — đếm lại 27/08, bảng cũ ghi 46)* |
-| 0.7 | ✅ FE: `mdToHtml`·`renderRuns`·`messageActions`·`bootApp` | `npx tsx --test src/markdown.test.ts` | 10/10 |
-| 0.8 | ✅ Xoá 3 export chết mới sinh | `npx knip` | về mốc 72 |
-| 0.9 | ✅ **Sửa bẫy tự quy chiếu của cổng** | `node scripts/self-xray.mjs` | **9/9** |
-| 0.10 | ✅ **Chạy E2E thật, không chỉ unit** | `e2e-native` · `e2e-mcp` · 3× `verify-*` | 60/60 · MCP xanh · 3/3 |
-| 0.11 | ✅ Sửa bài kiểm ôm hợp đồng cũ (X8) | `node scripts/e2e-native.mjs` | 58/1 → **60/0** |
-
-**Kết quả chốt chặng:** 3 file > 800 · 16 hàm > 50 — **đúng mốc**. BE 272/272 · FE 16/17 · hợp
-đồng **48/48** · `/v1` đầu-cuối **60/60** · MCP xanh · ba cổng tiến trình xanh · self-xray **9/9**.
-
-> **Cổng kích thước suýt đỏ 27/08 và thủ phạm là tôi.** Hàm `discover` mới trong `oauth-client.ts`
-> dài 78 dòng, đẩy "hàm > 50" từ 16 lên **17**, tức vượt mốc `self-xray-baseline.json`. Đã tách thành
-> `declaredResourceUrl` · `wellKnownResourceUrls` · `issuerFor` · `authServerMetadata`, về lại **16**,
-> 5 test khám phá OAuth vẫn xanh và Zernio vẫn ra đúng endpoint. Nới mốc thì dễ hơn, nhưng mốc nới
-> một lần là mốc chết.
-
-> **Một bài FE đỏ, và nó KHÔNG phải do chặng này:** `avatar.test.ts` — "SVG có thân, có hai mắt".
-> Đã kiểm trên cây trước khi sửa: đỏ y hệt. Xếp vào nợ lẻ N8, đừng tính vào chặng 0.
-
-### Chặng 1 · Đo được tiền — ✅ **BẬT XONG 25/08, đã có số thật**
-
-| # | việc | kiểm bằng | kết quả |
-|---|---|---|---|
-| 1.1 | ✅ Seed bảng `plans` | `SELECT * FROM plans` | `free cap=100.000` · `pro` không giới hạn |
-| 1.2 | ✅ Bật `GROKBOT2_BILLING=warn` | `curl /v1/me` | `plan:"free"` · `overQuota:false` |
-| 1.3 | ✅ Gửi một lượt thật rồi đọc số | `SELECT * FROM usage` | có dòng thật — nhưng **chỉ `turns` là số đếm**; `tokens_in/out` là **ước lượng** `len/2.8` (`compaction.ts:30`, dùng ở `runtime/turn.ts:969`) vì pool không trả số token. Đừng đọc nó như hoá đơn. |
-| 1.4 | ⬜ Chỉ khi có đủ số một tuần: cân nhắc `enforce` | `GROKBOT2_BILLING=enforce` | *chưa làm — cố ý* |
-
-**E2E chốt chặng:** `e2e-native` **60/60** · unit **272/272** · hợp đồng **4/4 nhóm** · self-xray **9/9**.
-
-**Vì sao bảng `plans` rỗng suốt từ đầu** — `seedPlans()` chỉ được gọi từ `ensureUser()` và
-`getPlan()`, mà **không nơi nào ngoài `billing.ts` gọi hai hàm đó**. Không ai gọi → không seed →
-`getPlan("free")` trả `null` → hạn mức không tồn tại → bật `warn` cũng chẳng có gì để so. Giờ gọi
-thẳng lúc khởi động, và **chỉ khi** `billingMode() !== "off"`: một cài đặt không dùng billing thì
-không nên tự mọc thêm bảng.
-
-> **Bẫy mất 3 phút để tìm:** sửa `.env` xong **không tự nạp lại** — trình theo dõi của `dev` chỉ nhìn
-> `src/`. Đo ra mới thấy: BFF khởi động **10:54:44**, `.env` sửa **10:55:05**. Muốn nạp thì `touch`
-> một file trong `src/`, hoặc khởi động lại `pnpm backend`.
-
-### Chặng 2 · Vá ba lỗ đăng nhập — ✅ **XONG 25/08, kiểm trên máy thật**
-
-| # | việc | kiểm bằng | kết quả đo được |
-|---|---|---|---|
-| 2.1 | ✅ Thu hồi được token | logout rồi gọi lại `/v1/me` bằng token cũ | 200 → logout **204** → **401** |
-| 2.2 | ✅ Chặn đoán mật khẩu | gọi `/v1/login` sai 6 lần | 401·401·401·401·401 → **429** + `Retry-After` |
-| 2.3 | ✅ Khoá `/v1/register` | gọi khi chưa bật cờ | **403** `registration is closed` |
-| 2.4 | ✅ Rút hạn JWT | giải mã token vừa phát | **30 ngày** (trước: 365) · có `tv` |
-
-**E2E chốt chặng:** unit **278/278** · hợp đồng **4/4 nhóm** (nhóm `auth` 6/6) · `verify-native`
-**8/8** · `e2e-native` **60/60** · self-xray **9/9**.
-
-**Cách thu hồi — số đời token.** JWT không trạng thái nên không rút lại từng cái được. Mỗi người có
-một số đời trong `users.token_version`; token web mang `tv`; đăng xuất thì tăng số, mọi token đời cũ
-chết ngay. Không danh sách đen, không phải dọn rác.
-
-> **Hai đường giấy tờ khác nhau ở HẠN, không khác ở số đời — và bản trước của đoạn này nói sai.**
-> App desktop vào bằng **token cổng** qua handshake không mật khẩu và **không biết tự làm mới**, nên
-> token desktop giữ hạn **365 ngày** còn đường web là 30. Nhưng **cả hai đều mang `tv`**:
-> `tokenPayload()` gọi `mintJwt(user, { days, tokenVersion: … })` (`auth.ts:213`). Đo 27/08 — lấy
-> token thật từ `/auth/poll` rồi giải mã:
->
-> ```
-> {"sub":"auth0|grokbot2-user","email":"user@localhost","iat":…,"exp":…,"tv":0}   365 ngày
-> ```
->
-> Hệ quả ngược hẳn điều đoạn cũ khẳng định: một cú `/v1/logout` nâng số đời của danh tính đó, và
-> `verifyJwt` từ chối mọi token có `tv` lệch (`auth.ts:137`) — nên **đăng xuất trên web cắt luôn app
-> desktop cùng tài khoản**. Đó là hành vi đúng của "đăng xuất"; chỉ đừng ai đọc đoạn cũ rồi tưởng
-> app không bị đụng tới. Nhánh "thiếu `tv` vẫn hợp lệ" còn đó, nhưng nay chỉ để đỡ token cũ.
-
-> **Đăng ký tự mở cho người đầu tiên.** Sổ trống → mở (không thì backend vừa dựng lên không ai vào
-> được). Có người rồi → đóng, trừ khi bật `GROKBOT2_ALLOW_REGISTER=1`.
-
-**~~Còn lại một dấu vết~~ — đã sạch.** Tài khoản thử `chang2-probe@test.local` không còn trong sổ
-`users` (đọc lại 27/08). Sổ trên máy này giờ có hai dòng: một tài khoản web thật và danh tính
-desktop `auth0|grokbot2-user`.
-
-### Chặng 3 · Test trên máy thứ hai
-
-> **Trước khi chạm vào máy 2, đọc [test-may-thu-hai.md](../plan/test-may-thu-hai.md).** Luồng cài có
-> **bốn màn hình trông như lỗi nhưng bình thường** (Chrome giữ file · SmartScreen · "Setting up…" ·
-> "Can't reach your computer"). Không biết trước thì mỗi cái làm người test dừng lại tưởng hỏng —
-> đúng chuyện đã xảy ra 26/08. — **T1 xong, T2–T5 chờ phần cứng**
-
-Chi tiết mang gì / không mang gì: [system-xray.md §6c](system-xray.md).
-
-| # | việc | kiểm bằng | kết quả |
-|---|---|---|---|
-| 3.1 | ✅ **T1** BE tự dựng từ 0 | chạy `index.ts` với `GROKBOT2_STATE_FILE` trỏ thư mục trắng, cổng 8797 | sổ **tự sinh** · `/v1/agents` trả `[]` · `/v1/health` ok |
-| 3.1b | ✅ Đăng ký **tự mở cho người đầu tiên** (nhánh không unit-test được) | trên sổ trắng | người đầu **200** · người thứ hai **403** |
-| 3.2 | 🟡 **T2** một lượt chat trên máy khác | máy 2 đã có app chạy được (T4) | chỉ còn: backend phải **mở ra mạng** (chặng 4 đã có code) + sửa `backend.txt` trên máy 2 |
-| 3.3 | ⬜ **T3** box qua hầm từ máy khác | — | *chờ máy thứ hai* |
-| 3.4 | ✅ **T4** bộ cài `.exe` chở app | cài trên **máy sạch thật** (26/08) | tải 118 MB → bấm đúp → SmartScreen *More info → Run anyway* → **app mở tới onboarding**, shortcut mang logo app |
-| 3.5 | ⬜ **T5** hai máy một box | — | *bắt buộc hai máy thật* |
-
-**Bộ cài chở cả app đã có (25/08)** — `build-setup.mjs --with-app` ra một file **118 MB**, gần đúng
-bằng bộ cài của hãng (120 MB). Máy nhận **không cần client cài trước, không cần Node**: cắm vào là
-chạy. Trước đó T2–T5 vướng ở chỗ máy thứ hai phải tự cài client rồi cài Node; giờ chỉ còn cần **máy**.
-
-**T1 chạy được ngay tại đây** bằng thư mục dữ liệu trắng + cổng riêng. Nó **không** thay thế máy thứ
-hai (không chứng minh được "máy chưa từng có repo này"), nhưng nó là chỗ dễ lòi đường dẫn ghim cứng
-nhất — và nó đã lòi ra ba chỗ.
-
-#### T1 tìm ra: "sổ trắng" hoá ra không trắng
-
-Bản chạy sạch đầu tiên khởi động lên với **4 bot thật và 64 tệp đính kèm của máy này**. Ba hằng đường
-dẫn ghim `.data` mặc định thay vì thư mục đang dùng:
-
-| chỗ | hằng cũ | hậu quả |
+| việc | trạng thái | đo bằng |
 |---|---|---|
-| `store.ts` | `SNAPSHOT = join(DEFAULT_DIR, …)` | nuốt `snapshot.json` của máy thật |
-| `attachments.ts` | `DISK = …/../.data/attachments` | "restored 64 attachment(s)" |
-| `observe.ts` | `DIR = …/../.data` | coverage của máy thật |
+| chạy lệnh trên máy Windows | ✅ | `hostname` → `DESKTOP-7D2FJG8`, exit 0 |
+| nhiều máy cùng lúc | ✅ | 3 máy, mỗi lệnh tới đúng máy, tên sai báo rõ |
+| bảng Settings → Computer | ✅ | hiện đúng máy; "Current computer" lấy id từ client |
+| đổi tên máy / mức quyền | ✅ | tên người đặt không bị `hello` ghi đè |
+| đọc project trên máy | ✅ | bot tóm tắt đúng 5 phần `clawe-main`, tự tránh `.env` |
+| lái Chrome trên máy | ✅ | mở · đọc · bấm · gõ · chụp, cửa sổ riêng cổng 9333 |
+| cài phần mềm **portable** | ✅ | bot tự tải + bung + chạy OBS 32.2.2, `obs64` PID 27156 |
+| cài phần mềm **cần admin** | ❌ | daemon `KHONG-ELEVATED`; app gốc **cũng chặn cứng** trên Windows |
 
-Cả ba giờ đi qua **một nguồn duy nhất**: `store.dataDir()`. Chạy lại: `[]` bot, không dòng
-`restored` nào.
+Vì sao **không** thêm đường nâng quyền — đo từ chính daemon của hãng:
+[nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md).
 
-#### T4 ĐÓNG (26/08) — cài thành công trên máy sạch thật
+## 3 · Lệnh gateway còn thiếu
 
-Chủ máy cài trên **một máy chưa từng có Grok Bot**, qua đúng đường công khai:
+Thiếu 17, nhưng **15 trong số đó client không gọi được**:
 
-```
-http://103.75.186.63:8099/?k=<token>  →  Tải cho Windows  →  bấm đúp  →  app mở lên
-```
+| nhóm | số | vì sao client không gọi |
+|---|---|---|
+| phòng chung (`createSharedRoom`, `joinSharedRoom`…) | 9 | sau cờ `grok_bot_multiplayer` — **TẮT** |
+| gọi thoại (`getVoiceCall`, `recordVoiceCall`…) | 5 | sau cờ `sand_voice_call` — **TẮT** |
+| `getBotTemplateExportPolicy`, `resolveVirtualCardApproval` | 2 | **0 lần** trong bundle 0.29 — chỉ có ở hợp đồng 0.30 |
+| `injectChromeCookies` | 1 | main nhắc 7× — **món duy nhất còn mở thật** |
 
-Chuỗi đầy đủ đã chạy: tải **118 MB** qua Internet → Chrome giữ file (vì HTTP) → **Keep** →
-SmartScreen chặn → **More info → Run anyway** → cài → **app mở tới màn hình onboarding**, shortcut
-Desktop mang **icon thật của app**.
+Cờ đọc từ `main.cjs` bản đang cài: `grok_bot_multiplayer` TẮT · `sand_voice_call` TẮT ·
+`sand_share_bot` TẮT · `sand_channels` TẮT · `agent_prompted_cookie_sync` TẮT ·
+`sand_multi_machine_local_exec` TẮT *(mặc định của hãng — bản vá `computer-tab` bật nó tại chỗ
+renderer đọc)*.
 
-**Quyết định: giữ `.exe` làm bản chính.** ZIP vẫn còn (`/download/zip?k=…`) nhưng chỉ là lối thoát —
-bấm qua được SmartScreen thì không cần, và `.exe` mới là hình dạng bản gốc dùng.
+**Đọc bảng này thế nào.** "Thiếu" không đồng nghĩa "hỏng". Viết ra 14 lệnh sau cờ tắt thì client vẫn
+không gọi một dòng nào.
 
-**Hai cửa người dùng phải tự bấm qua — cả hai là thiếu hạ tầng, không phải lỗi:**
+## 4 · Bám app gốc
 
-| cửa | vì sao | cách qua | cách bỏ hẳn |
+`21/23` ca khớp, ổn định qua 3 lượt. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
+vặn cho bot mời chọn nhiều hơn thì ca "biết edit video" khá lên và ca "tự đăng ký giúp" hỏng, vặn
+ngược lại thì ngược lại.
+
+| vòng | đổi gì | lệch ổn định |
+|---|---|---|
+| 1 | "mời chọn SAU khi đã tra" | **2** ← giữ bản này |
+| 2 | thêm "việc cụ thể thì phải đi TRA" | 3 |
+| 3 | thu hẹp còn "hỏi mình CÓ CÔNG CỤ gì" | 3 |
+
+Muốn tiến thêm phải đổi thứ khác một luật văn xuôi — dạy bằng ví dụ trong ngữ cảnh, hoặc một tool
+riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ không bằng cách hiểu chữ.
+
+## 5 · Việc còn lại, theo thứ tự đáng làm
+
+| # | việc | chặn bởi | kiểm bằng |
 |---|---|---|---|
-| Chrome giữ file | trang chạy **HTTP** | bấm **Keep** | tên miền + HTTPS ([publish-download-site.md](../plan/publish-download-site.md)) |
-| SmartScreen | bộ cài **chưa ký số** | **More info → Run anyway** | chứng chỉ ký mã EV (~400–600 $/năm) |
+| 1 | `injectChromeCookies` | — | client gọi được thật, không cờ nào chắn |
+| 2 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
+| 3 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
+| 4 | Box qua hầm từ máy khác (`T3`) | như trên | — |
+| 5 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
+| 6 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
+| 7 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
+| 8 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
+| 9 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
 
-#### T4 (25/08): bộ cài chở app ra đúng folder như hãng, nhưng boot đầy đủ cần máy sạch
+## 6 · Đã xong — kết luận, không phải nhật ký
 
-**Chứng minh được, đo tận nơi:**
-- Cài im lặng vào `C:\BotNoiBo` → **827 file · 499 MB**, cấu trúc **y hệt app gốc**: `Grok Bot.exe` ·
-  `resources/` · `locales/` · các `.dll` · `resources.pak` … cộng `start-bot.cmd` + `backend.txt` của
-  mình. `resources/app` đã vá, **không còn `app.asar` gốc**. `backend.txt` = `http://localhost:8788`.
-- `Grok Bot.exe` trong folder đó **khởi động được** — CDP lên (Chrome/149).
-
-**Chưa chứng minh được trên máy này, và vì sao:** app vừa cài **khởi động rồi thoát ngay**, 0 lượt
-RPC. Gần như chắc do **Electron single-instance lock** — máy này đã có sẵn bản trong `Programs\Grok Bot`
-và userData dùng chung, hai bản đá nhau. Đúng cái T4 sinh ra để bắt: **"máy chưa từng có app này"**
-không giả lập được trên máy đã có nó. Cần một máy sạch thật.
-
-**Một lỗi của tôi, đã ghi để khỏi lặp:** cài im lặng lần đầu treo 0 file — tôi đoán "đường dẫn dài",
-sai. `install.log` chỉ ra: **Git Bash biến `/VERYSILENT` thành đường dẫn POSIX** (`C:/Program Files/Git/VERYSILENT`),
-bộ cài không nhận cờ nên mở wizard chờ bấm. Chạy đúng: `MSYS_NO_PATHCONV=1`, hoặc qua một file `.cmd`,
-hoặc **bấm đúp như người dùng thật** (Explorer không mangle). Người dùng cuối không gặp lỗi này.
-
-### Chặng 4 · Đưa BE ra khỏi máy cá nhân — ✅ **XONG 26/08 · BE sống trên VPS qua HTTPS**
-
-| # | việc | kiểm bằng | kết quả |
-|---|---|---|---|
-| 4.1 | ✅ Bỏ ghim cứng `127.0.0.1` | `GROKBOT2_BIND=0.0.0.0` rồi gọi qua IP LAN | `BFF nghe trên 0.0.0.0:8796` · `/v1/health` **200** qua `192.168.100.203` |
-| 4.2 | ✅ CORS cho tên miền, từ chối nguồn lạ | `GROKBOT2_ALLOW_ORIGIN=…` + gửi Origin | tên miền khai → trả đúng nó · nguồn lạ → **không** mượn được origin |
-| 4.2b | ✅ Chốt an toàn: mở mà chưa `enforce` thì cảnh báo to | bind 0.0.0.0 với AUTH≠enforce | in `⚠ MỞ RA MẠNG…` |
-| 4.4 | ✅ `host_settings` theo người | `host-settings.test.ts` | hai người hai múi giờ không đè nhau; cài đặt máy vẫn chung |
-| 4.6 | ✅ Bịt lỗ `/oauth/token` + đăng nhập thật | §3b | đo đầu-cuối qua HTTP · 403/403/200/403 |
-| 4.7 | ✅ Sửa lối mở trỏ đăng nhập sang **máy chủ hãng** | `launcher-env.test.ts` | 3/3 — xem ô dưới |
-| 4.3 | ✅ **HTTPS** | `curl https://cinai.app/agent/v1/health` | **200** · TLS do Cloudflare Tunnel, **không cần certbot** |
-| 4.5 | ✅ **BE trên VPS** | `systemctl is-active grokbot2-be` | **active** · luồng đăng nhập 9/9 bước qua Internet |
-| 4.8 | ⬜ Máy 2 trỏ vào `https://cinai.app/agent/` | mở app máy 2 | *chờ bạn cài trên máy 2* |
-
-**Cách mở an toàn (một lệnh):**
-```
-GROKBOT2_BIND=0.0.0.0 GROKBOT2_AUTH=enforce GROKBOT2_ALLOW_ORIGIN=https://tai.tenmiencuaban.com pnpm backend
-```
-Mặc định vẫn `127.0.0.1` + `auth off` nên **không đổi hành vi cũ**; phải khai rõ mới mở.
-
-**E2E chốt chặng:** unit **281/281** · hợp đồng **4/4 nhóm** · bind 0.0.0.0 + enforce + CORS đo tận
-nơi qua IP LAN.
-
-> **Một lối mở đang trỏ đăng nhập sang máy chủ của hãng — đã sửa 26/08.** Cả `run.ps1` lẫn hai bộ
-> cài đều đặt `CURSOR_WEBSITE_URL=https://cursor.com`. Vô hại suốt thời gian `/auth/poll` còn cấp
-> token cho mọi lời gọi, vì đăng nhập chỉ là bắt tay giả. Từ khi đăng nhập là thật thì bấm "Sign in"
-> mở `https://cursor.com/loginDeepControl?challenge=…&uuid=…`: trình duyệt vào trang của **họ**, đăng
-> nhập không bao giờ xong, và uuid + challenge của phiên trên máy người dùng bị giao cho họ. Nay cả
-> ba chỗ trỏ vào chính backend, và `launcher-env.test.ts` đọc thẳng các tệp phát ra để khoá lại.
-
----
-
-## 3d · BE trên VPS — ✅ **dựng xong 26/08**
-
-**Đang sống:** `https://cinai.app/agent/` — đo được từ Internet, không phải ước.
-
-### Nằm ở đâu, và vì sao ở đó
-
-| | |
+| chặng | kết quả |
 |---|---|
-| Mã nguồn | `/opt/grokbot2` (đẩy bằng `git archive`, **không** đặt khoá GitHub lên VPS) |
-| Dịch vụ | `grokbot2-be.service` — systemd, `Restart=always` |
-| Nghe ở | **`127.0.0.1:8788`** — không có cổng công khai nào để dò |
-| Ra Internet | nginx `cinai-app` → `/agent/` · HTTPS do **Cloudflare Tunnel**, không cần certbot |
-| Kho | SQLite **rỗng**, riêng của VPS — máy cá nhân không bị đụng |
-| Plugin | `GROKBOT2_ALLOW_PLUGIN_INSTALL=0` — máy chung thì không cho ai spawn tiến trình |
+| 0 · Dọn mã | cổng 9/9; `mcp.ts` 936 → <800; `bootstrap.ts` 862 → <800 |
+| 1 · Đo được tiền | `GROKBOT2_BILLING=warn` có số thật; `enforce` cố ý chưa bật |
+| 2 · Ba lỗ đăng nhập | thu hồi token 200→204→**401** · đoán mật khẩu 6 lần → **429** · `/register` **403** · JWT 365 → **30 ngày** |
+| 3 · Máy thứ hai | T1 ✅ · T4 ✅ (cài trên máy sạch thật, 118 MB) · T2/T3/T5 chờ máy thật |
+| 4 · BE ra khỏi máy cá nhân | VPS + HTTPS qua Cloudflare Tunnel; `/oauth/token` bịt xong — đo 403/403/**200**/403 |
+| 5 · Tách người dùng trên box | 8/8, một daemon mỗi người, cờ màn-riêng bật |
+| 6 · FE riêng | **bỏ hướng này** — client gốc LÀ production UI; `apps/grokbot-web` chỉ còn là fallback |
+| 7 · Lên client 0.29 | chạy tốt hơn dự đoán; bộ vá chuyển sang xong |
+| 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
-### Đo trên chính hệ đang chạy
+## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
 
-Toàn bộ luồng đăng nhập thiết bị, chạy qua Internet:
+**Đo cái đang chạy, không đo mã nguồn.** Bốn lần đo parity đầu đo nhầm thứ: đọc văn bản prompt thay
+vì đo hành vi. Một lượt đo đúng đắt hơn bốn lượt đo nhầm.
 
-| bước | kết quả |
-|---|---|
-| hỏi vòng trước khi mở trình duyệt | **403** |
-| `/loginDeepControl` | **302 → `/agent/app/?login_uuid=…`** |
-| tạo tài khoản đầu tiên · đăng nhập | **200 · 200** |
-| trang duyệt phiên | **200** |
-| kẻ khác đoán verifier | **403** |
-| app nhận token | **200**, đúng `authId` |
-| đọc roster bằng token đó | **200** |
-| hỏi lại lần hai | **403** |
+**Một lượt không kết luận được gì.** Hai lượt cùng cấu hình cho kết quả khác nhau. `parity-lap` sinh
+ra vì lý do đó: nó in "3/3" hay "1/3" chứ không in một con số.
 
-Và trang đăng nhập mở được **trong trình duyệt thật** ở `https://cinai.app/agent/app/` — không trắng.
+**Sổ trắng hoá ra không trắng.** Ba hằng số trỏ về `.data` của máy thật (`store.ts`,
+`attachments.ts`, `observe.ts`) — chạy "từ đầu" mà vẫn nuốt dữ liệu cũ.
 
-### Ba lỗi chỉ lộ ra khi chạy thật
+**Hàng đợi local-exec nằm trong bộ nhớ tiến trình server.** Một script `tsx` rời import
+`local-exec.ts` chỉ nói chuyện với hàng đợi rỗng của chính nó. Tôi tự viết điều này trong chú thích
+rồi quên, và mất một vòng chẩn đoán nhầm sang "lệnh quá dài".
 
-1. **Kho sạch không build được.** `pnpm --filter @grokbot2/web build` không dựng `api-contract`
-   trước, nên kiểu thành `any` và `tsc` đỏ. Máy cá nhân không thấy vì `dist/` cũ còn đó — đúng kiểu
-   "chạy được trên máy tôi". Trên VPS phải `pnpm -r --filter './packages/*' build` trước.
-2. **Giao diện web gọi `/v1/…` tuyệt đối**, nên dưới `/agent/` nó bay ra gốc tên miền và rơi vào
-   Next.js của cinAPI. Chữa bằng nginx thì phải chiếm `/v1/` trên tên miền của họ — quá rộng. Nay FE
-   tự suy tiền tố từ chỗ nó đang đứng.
-3. **Chuyển hướng đăng nhập mất nhánh.** nginx cắt tiền tố trước khi chuyển tiếp nên backend thấy
-   mọi request như ở gốc, và nó trả `302 → /app/…` — trình duyệt đi thẳng vào Next.js của cinAPI,
-   **không lỗi nào nói vì sao**. `GROKBOT2_PUBLIC_PATH` là chỗ backend được *bảo* nó đứng ở đâu.
+**Bash nuốt một lớp backslash, kể cả trong heredoc `<<'EOF'`.** Hỏng ít nhất 6 lần: regex, `\n`,
+đường dẫn Windows. Dùng Write/Edit thay heredoc khi chuỗi có backslash.
 
-### Lỗi máy 2 gặp thật — và nó không phải đăng nhập
+**Máy Windows: shell là POSIX, Node là Windows.** `$HOME` = `/c/Users/admin` nhưng Node không đọc
+được `/tmp/...`. Shell nuốt `$` nên biến PowerShell viết trần đều hỏng. `tar` trần bị bắt sang
+`/usr/bin/tar` của Git Bash — phải gọi `C:\Windows\System32\tar.exe`.
 
-Máy 2 dừng ở **"Grok Bot couldn't finish setting up · Can't reach your computer right now."**
+**Dòng lệnh Windows chặn ở 8.191 ký tự** — vượt thì im lặng hết giờ, không lỗi nào.
 
-Truy: `backend.txt` thiếu **dấu gạch chéo cuối**. Client ghép URL tương đối, nên base
-`https://cinai.app/agent` (thiếu một ký tự) làm rụng `/agent`, và `EnsureSandBox` bay ra gốc tên
-miền. Đo được: `/agent/aiserver.v1.…/EnsureSandBox` → **200**, `/aiserver.v1.…/EnsureSandBox` → **404**.
+**Test xanh không có nghĩa là đúng.** `mock.timers.tick(120_000)` không chạy chuỗi `setTimeout` lồng
+nhau; bài test xanh vì lý do sai. Chỉ lộ ra khi bài "tái hiện lỗi cũ" cũng xanh nốt.
 
-Đã bỏ hẳn cái bẫy thay vì ghi vào tài liệu — thêm một `location` nhận cả dạng thiếu gạch chéo:
+**Một bài ĐO không được có quyền xoá thứ nó không tạo ra.** `parity-lap` bản đầu gọi `deleteAgents`
+lên mọi bot — suýt xoá 6 bot việc thật.
 
-```nginx
-location ^~ /aiserver.v1. { proxy_pass http://127.0.0.1:8788; … }
-```
+**"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
+cái client tự tắt" mới quyết định được.
 
-`^~` để nó thắng cả khối regex lẫn catch-all. **Đo lại trên app thật với base thiếu gạch chéo:** qua
-được bước cài đặt, hiện "No saved Bots yet" — đúng với kho rỗng trên VPS.
+## 8 · Chưa chắc chắn
 
-### Vì sao cấu hình nginx lại hẹp đến thế
-
-Client ghép URL bằng **ba kiểu khác nhau**. Đo trên app thật:
-
-- base **có gạch chéo cuối** → mọi RPC giữ nguyên `/agent/`
-- nhưng **đường dẫn tuyệt đối** luôn bay ra gốc, dù base là gì
-
-Danh sách đường tuyệt đối lấy từ chính bản dựng của client (mọi `new URL("/…")`), nên nó **đóng và
-ngắn** — 5 đường. Cấu hình vì thế chỉ cần **một nhánh `/agent/` + một khối regex 5 đường**, thay vì
-chiếm hàng loạt tiền tố trên tên miền của cinAPI.
-
-**Chạm vào nginx an toàn ra sao:** sao lưu trước → `nginx -t` → `reload` (không restart) → đối chiếu
-`diff`: **0 dòng bị xoá, 39 dòng thêm** → kiểm lại 7 site đang chạy, cinai.app vẫn chuyển hướng i18n
-như cũ.
-
-### Chưa khai, có ý
-
-`CLAUDE_POOL_KEY` (bộ não) và `GROKBOT2_EXEC_TOKEN` (công cụ chạy trên box) **chưa đặt** — không bí
-mật nào được chuyển lên VPS. Bot vì thế đăng nhập và hiện giao diện được, nhưng **chưa trả lời
-được**. Muốn đủ chức năng thì thêm hai dòng đó vào `/opt/grokbot2/.env` rồi
-`systemctl restart grokbot2-be`.
-
----
-
-## 3g · VPS đã đủ tính năng — 27/08
-
-Máy 2 thiếu tính năng **không phải vì lỗi**: backend tự nói ra đủ 5 chỗ chưa khai, và tôi cố ý để
-trống vì 2 trong số đó là bí mật. Nay khai đủ:
-
-| trước | sau |
-|---|---|
-| `[model] no pool key, tool support unknown` | `[model] claude-opus-5 **honours TOOL_CALL** — tools available` |
-| `[box] chưa cấu hình` | `[box] **OK** https://admin.halcion.vn/grok-exec` |
-| `[browser] CDP not set — browser_* tools are off` | `[browser] 127.0.0.1:9223 — **reachable**, 1 tab` |
-| `[box] VNC_URL not set — pane sẽ trống` | VNC đã khai |
-| `ALLOW_PLUGIN_INSTALL=0` | **`=1`** — mở lại được vì chặng 5 đã bật |
-
-**Khoá pool RIÊNG cho VPS.** Tạo key `Grokbot2-VPS` trong trang admin thay vì dùng chung key
-`Grokbot2` của máy cá nhân — lộ thì thu hồi đúng cái đó, máy này vẫn chạy. Đã nghiệm: gọi pool bằng
-key mới trả `success:true · keyName:"Grokbot2-VPS"`. File `.env` là `-rw------- root:root`.
-
-**Vì sao dám mở lại `ALLOW_PLUGIN_INSTALL`:** hai lớp, không phải một.
-1. Chặng 5 đã bật — bot chạy dưới `gb2uNNN` riêng, plugin độc hại không với tới file người khác.
-2. `childEnv()` chỉ cho plugin thấy **26 biến vô hại**. Đo: `CLAUDE_POOL_KEY`, `GROKBOT2_JWT_SECRET`,
-   `GROKBOT2_EXEC_TOKEN`, `GROKBOT2_GATEWAY_TOKEN`, `GROKBOT2_BILLING_WEBHOOK_SECRET`, `NODE_OPTIONS`
-   — **không cái nào tới được plugin**.
-
-> **Một chỗ đáng biết, không phải lỗi:** MCP server chạy **trong tiến trình backend**, không chạy
-> trên box — nên chặng 5 KHÔNG che nó. Thứ che nó là allowlist môi trường ở trên. Hai cơ chế khác
-> nhau cho hai loại tiến trình khác nhau.
-
-> **Và một hệ quả của `DEFAULT_USER`:** cả máy này lẫn VPS, khi **chưa đăng nhập**, đều mang danh
-> tính `auth0|grokbot2-user` → cùng rơi vào ô `gb2u003`. Người dùng **đã đăng nhập** thì có danh tính
-> riêng (`local|<email>`) và ô riêng — đo được: `authId local|e2e-chang4-…`. Nên tách chỉ có hiệu lực
-> **sau khi đăng nhập**, đúng như thiết kế.
-
-**E2E chặng 4 chạy lại sau khi đổi: 28/28 đậu.**
-
----
-
-## 3f · Khoá pool có lộ được không — đo 27/08
-
-Câu hỏi: *"máy khác tải app về có nhìn thấy khoá không?"* Ba đường một khoá có thể lộ, đo cả ba.
-
-| đường | kết quả |
-|---|---|
-| Đi kèm bộ cài | **kín** — bộ cài chỉ chép client + launcher + icon; không `Source:` nào là file khoá |
-| Đi qua dây về app | **kín** — chỉ `loadPoolKey()` đọc khoá, 3 nơi gọi đều phía máy chủ; 5 file phục vụ HTTP không chạm |
-| Lọt vào log | **che** — `redact` bắt `hal_…` trong header, giữa dòng có nhãn, trong JSON, trong query |
-
-**App trên máy người dùng không bao giờ cầm khoá.** Nó gửi yêu cầu tới backend; backend mới gắn khoá
-rồi gọi pool. Khoá một đầu, app đầu kia.
-
-`pool-key-exposure.test.ts` (8/8) khoá cả ba. Trước đó **chưa từng có bài kiểm nào cho `redact`** —
-chỉ có mẫu che, không ai kiểm nó thật sự che.
-
-> **Một câu tôi nói SAI, và đã đo lại.** Tôi bảo *"bot chạy shell được, nếu backend và bot chung tài
-> khoản thì bot đọc được `.env`"*. Đo thật:
->
-> | | |
-> |---|---|
-> | backend VPS chạy dưới | `root` |
-> | daemon box chạy dưới | `box` |
-> | `/opt/grokbot2/.env` | `-rw------- root:root` |
-> | bot thật `cat` file đó | **`Permission denied`** |
-> | bot tìm file `*.env` / `pool-key.txt` trong tầm với | **không có cái nào** |
-> | bot đọc `/proc/*/environ` tìm `hal_` | **0 kết quả** |
->
-> Hai tài khoản đã khác nhau từ trước, nên mối lo đó **không tồn tại**. Tôi đã nêu nó như một sự thật
-> trong khi chưa đo — đúng cái lỗi mà tài liệu này tồn tại để tránh.
-
----
-
-## 3e · Lỗ danh tính bịa — ✅ **bịt 27/08**
-
-Máy 2 vào thẳng app không qua đăng nhập. Đo ra thì **không phải cổng hở**: `/auth/poll` trả 403,
-`/oauth/token` trả 401, `/v1/agents` không token trả 401 — tất cả đang siết đúng.
-
-Thứ hở là **một nguồn danh tính thứ hai**. Trong bảng `users` trên VPS có một dòng không ai tạo:
-
-```
-google-oauth2|user_01M04VTMSC6RPVPT20TKXBBBS8   không mật khẩu   26/08 22:44
-```
-
-Backend **chưa từng chạy ngoài `enforce`** (đếm trong journal: 8 lượt khởi động, tất cả `enforce`),
-nên nó không đến từ một lúc cổng mở. Nó đến từ `userFromToken` — hàm chỉ base64 giải mã payload rồi
-trả `sub`, **không kiểm chữ ký**:
-
-| | |
-|---|---|
-| `verifyJwt("<h>.<p>.chu-ky-rac")` | `null` |
-| `userFromToken("<h>.<p>.chu-ky-rac")` | `google-oauth2|user_TU_BIA` |
-
-Và giá trị đó chảy thẳng vào `accessVerdict` → `ensureUser`, tức **tạo hẳn một dòng người dùng** cho
-danh tính bịa. Chỉ **một** chỗ gọi nó, mà ngay cạnh `ownerFromAuth` đã kiểm chữ ký đàng hoàng từ đầu
-— một cửa sau bỏ quên nằm cạnh một cửa đã khoá.
-
-**Đã xoá hẳn hàm đó**, không sửa: một nguồn danh tính, không phải hai.
-
-> **Bài kiểm đọc MÃ NGUỒN, không chỉ đọc hành vi** (`forged-identity.test.ts`, 5/5). Vì lỗi này không
-> phải một nhánh sai mà là **một hàm thứ hai tồn tại song song** với hàm đúng — kiểm hành vi của
-> `verifyJwt` không bao giờ bắt được. Đã nghiệm bằng cách dựng lại lỗ: bài đỏ; gỡ đi: xanh.
-
-**Đo lại trên VPS đang chạy:** gọi RPC bằng token bịa → tài khoản `KIEM_TRA_27_08` **không** được
-tạo. Dòng giả cũ đã xoá.
-
----
-
-## 3c · Máy thứ hai — nay chỉ còn việc trên chính máy đó
-
-> **Bản in ra để cầm khi ngồi trước máy 2:** [checklist-may-2.md](../plan/checklist-may-2.md)
-> — từng bước, kèm *sẽ thấy gì*, và bảng phân biệt "trông như lỗi" với "hỏng thật".
-
-Đường LAN và đường VPS đã gộp làm một: **không còn hạ tầng nào phải dựng**. Đo 26/08:
-
-| | |
-|---|---|
-| Trang tải | `https://cinai.app/tai/` — HTTPS, không còn cửa "Keep" của Chrome |
-| Backend | `https://cinai.app/agent/` — `/v1/health` **200** qua Internet |
-| Đăng nhập | luồng thiết bị **9/9 bước** qua Internet, xem §3d |
-
-### Các bước trên máy 2
-
-| # | việc | kiểm bằng |
-|---|---|---|
-| T1 | Mở `https://cinai.app/tai/?k=<token>` → bấm **Tải cho Windows** | file **118 MB**, tải thẳng không phải bấm "Keep" |
-| T2 | Bấm đúp `.exe`, điền địa chỉ backend | **`https://cinai.app/agent/`** — có gạch chéo cuối |
-| T3 | Mở app → bấm **Sign in** | trình duyệt mở `https://cinai.app/agent/app/?login_uuid=…` |
-| T4 | Tạo tài khoản (người đầu tiên tự mở) rồi đăng nhập | app tự vào sau vài giây |
-| T5 | Tạo một bot, gửi một câu | *chờ khoá pool — xem "chưa khai" ở §3d* |
-
-> **Gạch chéo cuối ở T2 không phải chi tiết làm đẹp.** Thiếu nó thì client ghép URL tương đối làm
-> **rụng mất `/agent`**, mọi RPC bay ra gốc tên miền và rơi vào Next.js của cinAPI. Đo trên app thật:
-> có gạch chéo → `/agent/aiserver.v1…`; không có → `/aiserver.v1…`.
-
-> **T5 chưa chạy được**, và không phải vì code: hạn mức nhóm trên pool đang là **0 đô**, và khoá pool
-> cố ý chưa đặt lên VPS.
-
-## 3b · Cửa cấp token — ✅ **bịt xong 26/08**
-
-Đây là thứ đã chặn chặng 4 suốt hai ngày, và nó **không phải hạ tầng**.
-
-**Lỗ:** `/oauth/token` và `/auth/poll` phát token cho bất kỳ ai gọi. Đo từ máy khác trong LAN:
-`POST /oauth/token` thân **rỗng** → token **199 ký tự**, token đó `GET /v1/agents` được, đọc ra tên
-mọi bot.
-
-**Hợp đồng lấy từ chính bản dựng của client, không đoán:**
-
-| cửa | client dùng để làm gì | nay hỏi gì |
-|---|---|---|
-| `/oauth/token` | `runRefreshAccessToken` gửi `{grant_type:"refresh_token", refresh_token}` | token cũ đó **có phải ta phát không** — `verifyJwt` (chữ ký + số đời) |
-| `/auth/poll` | lần đăng nhập **đầu** trên một máy | đã có người đăng nhập thật và duyệt **đúng phiên** đó chưa |
-| `/loginDeepControl` | trang client mở trong trình duyệt | chuyển hướng vào **giao diện đăng nhập đã có** ở `/app/` |
-
-Luồng đầu là PKCE S256: `challenge = base64url(sha256(verifier))`. `uuid` đi qua thanh địa chỉ trình
-duyệt nên coi như lộ, còn `verifier` **không rời khỏi app** — nên poll phải chứng minh giữ verifier.
-**Đo trên app thật:** challenge app gửi khớp tuyệt đối với hàm của ta.
-
-**Không dựng form đăng nhập thứ hai.** `apps/grokbot-web` đã có sẵn email + mật khẩu + tạo tài khoản
-+ đăng xuất; nó chỉ nằm trên Vite `:5173`, nơi app desktop không với tới. Nay backend phát chính bản
-build đó ở `/app/` (xem [`web-app.ts`](../../services/grokbot-backend/src/web-app.ts)).
-
-**Đo đầu-cuối qua HTTP thật:** hỏi vòng trước khi duyệt **403** · sai verifier **403** · duyệt xong
-**200 đúng tài khoản** · hỏi lại lần hai **403**. Từ IP LAN: `POST /oauth/token` **không** ra token,
-`/v1/agents` không token **401**.
-
-**Ba mức như phần còn lại của cổng:** `off`/`warn` vẫn cấp (máy đang chạy không chết giữa chừng),
-`enforce` mới từ chối. Đây là công tắc phải bật **trước khi** mở cổng ra mạng.
-
-### ⚠ Việc còn lại của chặng 4 — chuyển quyền dữ liệu cũ
-
-Trước khi có đăng nhập thật, app dùng chung danh tính vô danh `auth0|grokbot2-user`, và **3.524 dòng
-trên 9 bảng** mang tên nó. Đăng nhập bằng tài khoản email thật thì app thấy **0 bot** — không mất gì,
-nhưng trông y hệt mất sạch.
-
-```
-node scripts/adopt-legacy-owner.mjs                        # chỉ xem, không đổi
-node scripts/adopt-legacy-owner.mjs --to <email> --yes     # sao lưu rồi đổi, một giao dịch
-```
-
-**Trạng thái 26/08:** `.env` đang để `GROKBOT2_AUTH=off` + `GROKBOT2_BIND=127.0.0.1` — hai dòng này
-**phải đổi cùng nhau**, vì `off` + `0.0.0.0` là mở lại đúng lỗ trên ra cả mạng.
-
-### Hai lỗi có sẵn lộ ra khi làm việc này
-
-1. **Di chú chưa từng chạy trên bản cài này.** `index.ts` gọi `enableWriting()` ở dòng 13, nhưng ESM
-   nâng mọi `import` lên trước, mà `host-settings.ts` và `chat/state.ts` gọi `loadState()` ở cấp
-   module — sổ mở dưới danh nghĩa tiến trình đọc, bỏ qua di chú, rồi nhớ luôn kết nối đó. Nên cột
-   `token_version` của **chặng 2 chưa từng tồn tại**, tức `/v1/logout` chưa thu hồi được gì. Nay
-   người ghi tự dựng schema kể cả khi sổ đã mở.
-2. **Ngân sách bundle đang đọc 0 KB và đậu.** `base: "./"` làm index.html trỏ `./assets/…`, biểu thức
-   của máy đo chỉ nhận `/assets/`. Một phép đo luôn ra 0 thì tệ hơn không đo — nay là **109 KB thô /
-   34 KB gzip**.
-
-### Chặng 5 · Tách người dùng trên box — ✅ **XONG 28/08 · 8/8, cờ màn-riêng BẬT thật**
-
-**Mốc đầu `0/7` → nay `7/8`.** `npx tsx scripts/e2e-box-leak.mjs` chạy trên box thật:
-
-| thử | mốc 26/08 | sau tầng 1 |
-|---|---|---|
-| A và B dùng chung thư mục gốc | chung | **riêng** — `/home/gb2u001` ≠ `/home/gb2u002` |
-| B đọc file của A | đọc ra bí mật | **chặn** — đi ra ngoài gốc |
-| B thấy file của A khi liệt kê | thấy | **chặn** |
-| B `cat` file của A | được | **`Permission denied`** — kernel nói |
-| B **ghi đè** file của A | được | **chặn** |
-| B đọc cookie của Chrome dùng chung | — | **`Permission denied`** |
-| mỗi bot một trình duyệt riêng | — | ❌ **còn rò** — xem dưới |
-| hai tài khoản hệ điều hành khác nhau | cả hai là `box` | **`gb2u001` ≠ `gb2u002`** |
-
-Đo trước khi sửa là cố ý: không có mốc thì sau này một bài xanh cũng không nói được gì — nó có thể
-vẫn xanh từ đầu.
-
-**Chỗ sắc nhất là hồ sơ Chrome dùng chung (2,9 GB).** Chung hồ sơ nghĩa là **chung cookie**: nếu A
-đăng nhập một trang trong trình duyệt của bot mình thì bot của B duyệt web **với tư cách A**. Đây
-không phải "đọc trộm dữ liệu" mà là "dùng luôn danh tính".
-
-> **Chỗ tắc hôm 25/08 đã gỡ.** Kế hoạch ghi *"không thể tách theo OS user từ bên trong daemon — công
-> cụ có đủ, quyền thì không"*: daemon chạy `uid=1001(box)`, không sudo, `/home` là `755 root`. Nay
-> backend nằm trên **chính VPS đó** và có đường root, nên **Bước 0** làm được.
-
-> **Hai lần bài kiểm suýt nói dối, và cả hai đều đã bịt:**
-> 1. `exec` trả về object, đem so trực tiếp thì thành `"[object Object]" === "[object Object]"` —
->    đúng kết quả hôm nay nhưng **sau khi tách xong vẫn báo rò**. Nay đọc `.stdout`.
-> 2. Một lỗi của **chính bài kiểm** rơi vào `catch` và được đọc là "box từ chối", làm bài **tự xanh
->    lên 4/6**. Nay `attempt()` phân biệt hai thứ đó và ném lỗi thay vì tính điểm.
-
-> **Mặc định là nghiêm:** còn rò thì thoát khác 0. Hôm nay phải gõ `--moc` mới cho qua — một bài kiểm
-> không hỏng được là một bài kiểm không kiểm gì.
-
-### Hình dạng đã chọn: **một daemon mỗi người**, không phải một daemon đổi danh tính
-
-Bản thử đầu cho daemon tự đổi uid theo từng request. Nó chạy được phần shell rồi vấp đúng chỗ đáng
-lẽ phải thấy trước: **tám handler còn dùng `fs` trực tiếp**, tiến trình vẫn là `box`, kernel từ chối
-— **ghi file hỏng hẳn**. Đi tiếp nghĩa là viết lại cả tám.
-
-Nên đổi hình. Daemon **không biết gì** về người dùng (đã trả về đúng bản gốc từng byte);
-[`exec-router.mjs`](../../infra/vps/exec-router.mjs) đứng trước và bật **một daemon riêng cho mỗi
-người**, chạy dưới tài khoản của họ. Kết quả: tám handler kia không sửa một dòng, và cách ly do
-**tiến trình khác uid** lo chứ không do một hàm kiểm đường dẫn lo. Đây cũng là cách hãng làm — họ lấy
-chính cái box làm ranh giới giữa người với người.
-
-Hợp đồng nhìn từ ngoài **không đổi**: vẫn cổng 1337, vẫn `Bearer`, vẫn `POST /<op>`. Backend chỉ thêm
-header `x-grokbot2-owner`.
-
-> **Header, không phải một trường trong thân.** Thân là *tham số của công cụ*, do model điền. Nhét
-> danh tính vào đó thì một ngày model sẽ điền nó — mà "tự chọn mình là ai" đúng là thứ tầng này tồn
-> tại để ngăn.
-
-> **Sổ ghép, không phải băm owner ra số.** Hai người trùng ô băm sẽ dùng chung một tài khoản — hỏng
-> cách ly mà không có dấu hiệu nào. Hết dải thì **ném lỗi**, không lùi về tài khoản chung: lùi về là
-> im lặng bỏ cách ly đúng lúc cần nó nhất.
-
-### Năm cái bẫy đã trả giá — cả năm đều **im lặng**
-
-| # | bẫy | vì sao không ai thấy |
-|---|---|---|
-| 1 | `sudo` **xoá sạch môi trường** | daemon con chết vì thiếu token, nhìn ngoài chỉ thấy "không lên" |
-| 2 | `kill` vào `sudo` | `sudo` fork rồi chờ `node` → `node` **mồ côi vẫn ôm cổng**, log vẫn in "đã thu" |
-| 3 | `kill(-pid)` cả nhóm | cây tiến trình đúng, nhưng `box` **không có quyền** giết tiến trình của `root`/`gb2uNNN` — EPERM cho không ai đọc |
-| 4 | bài kiểm so `[object Object]` | đúng kết quả hôm đó, và sẽ **vẫn báo rò sau khi đã kín** |
-| 5 | `head -c 40` cắt mất chữ `Permission denied` | một đường đã kín bị báo là rò — cắt là việc của lúc **in**, không phải lúc **đo** |
-
-Bẫy 2 và 3 chỉ lộ ra vì **soi cây tiến trình sau khi log nói "đã thu"**. Tin dòng log đó thì cả hai
-nằm im tới ngày box hết RAM.
-
-### Chỗ rò cuối, và nó là một **công tắc** chứ không phải code
-
-Bài kiểm ban đầu đi tìm thư mục hồ sơ Chrome dùng chung — **hỏi sai câu**. Đo lại: hồ sơ chung nằm ở
-`/home/box/.config/grok-chrome-77` mode **700 của box**, `gb2u002` bị `Permission denied`. Đường file
-đã kín từ trước.
-
-Cái rò thật là **điểm CDP**: mọi bot của mọi người nói với **cùng một con Chrome qua cùng một cổng**,
-nên cookie dùng chung mà chẳng cần đọc file nào. Nếu A đăng nhập một trang trong trình duyệt của bot
-mình thì bot của B duyệt web **với tư cách A** — không phải đọc trộm dữ liệu, mà là dùng luôn danh tính.
-
-`displays.ts` **đã có sẵn** phần chữa: mỗi bot một display, một cổng CDP, một hồ sơ riêng, kèm thu hồi
-10 phút. Nó chỉ nằm sau cờ `GROKBOT2_PER_BOT_DISPLAY`, và cờ đó chưa bật ở đâu cả.
-
-### Bật thật cần đúng ba dòng — và một quyết định
-
-```
-grok-exec.service   ExecStart → exec-router.mjs
-grok-exec.env       GROKBOT2_PER_USER=1
-.env của backend    GROKBOT2_PER_BOT_DISPLAY=on
-```
-
-Đây là bước duy nhất **chạm vào box đang chạy**. Nó đổi chỗ làm việc của bot từ `/home/box/workspace`
-sang `/home/gb2uNNN/workspace`, nên **9 bot hiện có sẽ thấy thư mục làm việc trống** — file cũ vẫn ở
-chỗ cũ, không mất, nhưng bot không còn thấy.
-
-**Chờ bạn quyết:** chép `/home/box/workspace` sang thư mục của chủ sở hữu hiện tại, hay để bot bắt
-đầu với thư mục trống?
-
-### Sáu việc
-
-
-
-Kế hoạch đầy đủ: [per-user-on-one-box.md](../plan/per-user-on-one-box.md).
-
-| # | việc | kiểm bằng | ĐẠT khi |
-|---|---|---|---|
-| 5.1 | ✅ **Bước 0: root một lần** (`groupadd` + 5 user + sudoers) | `sudo -u box sudo -n -l` | `(%gb2users) NOPASSWD: ALL` · làm root thì **bị từ chối** |
-| 5.2 | ✅ **Một daemon mỗi người** ([`exec-router.mjs`](../../infra/vps/exec-router.mjs)) | `e2e-box-leak.mjs` | `A→gb2u001` · `B→gb2u002`, hai gốc, hai uid |
-| 5.3 | ✅ `workspace` + `grok-memory` riêng từng người | như trên | `/home/gb2uNNN/{workspace,grok-memory}`, mode 700 |
-| 5.4 | ✅ **Thử rò** — bài kiểm viết TRƯỚC khi sửa | `npx tsx scripts/e2e-box-leak.mjs` | **0/7 → 7/8** · `Permission denied` từ kernel |
-| 5.5 | ✅ Thu hồi khi nghỉ (10 phút, quét mỗi phút) | nghỉ quá ngưỡng rồi soi cổng | cổng ngừng trả lời, gọi lại bật pid **khác** |
-| 5.7 | 🟡 **Đã bật trên box thật 27/08** — router + `PER_USER=1` | `e2e-box-leak.mjs` | **7/8** · 8 thao tác file/shell nguyên vẹn · app chạy bình thường |
-| 5.8 | ⬜ Bật `GROKBOT2_PER_BOT_DISPLAY=on` — chỗ rò cuối | như trên | **8/8** |
-| 5.6 | ⬜ Mượn hình dạng `SandboxPolicy` | policy có `additional_readwrite_paths` | lệnh ngoài allowlist bị từ chối |
-
-**E2E chốt chặng 5**
-```
-node scripts/e2e-box-tools.mjs      → công cụ box còn chạy sau khi đổi user
-node scripts/e2e-desktop.mjs        → 29 mục · điều khiển máy tính không vỡ
-node scripts/test-real-box.mjs      → box thật, không phải giả lập
-```
-
-### Chặng 6 · FE riêng
-
-| # | việc | kiểm bằng | ĐẠT khi |
-|---|---|---|---|
-| 6.1 | ⬜ Routines: danh sách + tạo + sửa | `node scripts/e2e-routine-ui.mjs` | tạo được routine ngay trên web |
-| 6.2 | ⬜ Đối chiếu với app gốc | `node scripts/ui-diff.mjs` | không lệch vùng đã dựng |
-
-**E2E chốt chặng 6**
-```
-node scripts/e2e-routines.mjs       → routine nổ đúng điều kiện
-node scripts/measure-routines-ui.mjs → giao diện khớp bản gốc
-```
-
-### Chặng 7 · Lên client 0.29 — 🟡 **đang làm**
-
-*Gộp từ `docs/plan/len-0-29.md` ngày 28/08 — một tài liệu để theo dõi, không phải hai. Đánh số lại
-thành 7.x vì tài liệu cũ có "Chặng 1/2/3" của riêng nó, trùng tên với các chặng ở trên và đọc lẫn.*
-
-| bước | việc | trạng thái |
-|---|---|---|
-| 7.0 | Biết trước khi quyết — bộ cài 0.29 đã **xoá** bản 0.20 đã vá | ✅ ghi nhận |
-| 7.1 | Bảy cờ chuyển roster/transcript/gửi tin lên đám mây | ✅ đã đo — **cờ do CHÍNH ta phát** |
-| 7.2 | Chạy thử 0.29 trên backend này | ✅ **28/08 — 3 lệnh thiếu, đã vá, `unmapped` rỗng** |
-| 7.3 | Đưa bộ vá sang 0.29 | ✅ **28/08 — chạy khô xanh trên 0.29 thật, 0.20 không hỏng** |
-| 7.4 | Tính năng mới, xếp theo giá trị | 🟡 **kế hoạch riêng: [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md)** — tính năng 1 ✅ 28/08 (đội bot + phòng chung), 3L/3/2 còn lại · bản đồ 0.29↔ta (trích từ bundle thật): [docs/extracted/0-29-mapping.md](../extracted/0-29-mapping.md) |
-| 7.5 | VNC từng slot (chặn 7.4.1) | ✅ **28/08** |
-| 7.6 | Nếu 7.2 xấu thì làm gì | — không cần, 7.2 tốt |
-| 7.7 | Thứ tự đề nghị | 🟡 đang theo |
-
-#### 7.0 · Điều phải biết trước khi quyết
-
-**Bộ cài 0.29 đã xoá bản 0.20 đã vá.** Nó đặt vào đúng `%LOCALAPPDATA%\Programs\Grok Bot` và thay
-thế toàn bộ; thư mục đó giờ không còn. Bản tự chứa `C:\cai` (0.20.0, đã vá, không có `app.asar`) là
-**bản 0.20 duy nhất còn lại** — đừng cài gì đè lên nó. `run.ps1` đã sửa để thử ba đường thay vì ghi
-cứng một đường.
-
-**Cấu trúc bundle đổi hẳn.** 0.20 gom vào một file renderer; 0.29 chia **288 chunk**. `main.cjs` lại
-*nhỏ đi* (8,2 MB → 6,5 MB) trong khi số kiểu proto tăng 3572 → 3905. Nghĩa là bộ vá hiện tại — 4 file,
-237 dòng, bám vào hình dạng mã đã minify — **gần như chắc chắn không áp được nguyên xi**.
-
-**Bề mặt cầu nối desktop: 151 → 332 phương thức.** Nhưng đó không phải 181 tính năng mới: 0.29 đã
-**dời bề mặt lệnh cổng vào cầu nối desktop**. Trừ đi những gì 0.20 đã có ở dạng lệnh cổng thì còn
-**101 phương thức mới thật**. Hình dạng khai báo cũng đổi: `name:{args:"object"}` → `name:v().args(…)`.
-
-**Bốn biến môi trường vẫn còn** trong 0.29 (`CURSOR_API_BASE_URL`, `SAND_BACKEND_URL`,
-`CURSOR_WEBSITE_URL`, `SAND_DISABLE_UPDATES`), kèm `SAND_USER_DATA_DIR` và
-`SAND_FEATURE_GATE_OVERRIDES`. Nên nó **vẫn trỏ được** vào backend tự dựng.
-
----
-
-#### 7.1 · Mối đe doạ thật, và vì sao ta vẫn cầm đằng chuôi
-
-Cờ tính năng: **58 → 101**. Bảy cờ trong số mới quyết định số phận của cả dự án này:
-
-```
-sand_roster_via_server        sand_send_via_server
-sand_transcript_store_first   sand_transcript_store_read
-sand_transcript_server_tail   sand_transcript_double_write
-sand_attachments_via_server
-```
-
-Kèm theo là RPC mới: `ListGrokBotAgents` · `CommitGrokBotTranscriptEntries` ·
-`WatchGrokBotTranscripts` · `SendGrokBotAgentMessage` · `GetGrokBotSendStatus`.
-
-Ở 0.20, **danh sách bot, bản ghi hội thoại và việc gửi tin** nằm trong *box gateway* — đúng thứ
-backend này emulate. Ở 0.29 chúng chuyển lên một *dịch vụ đám mây*. Nếu client bắt buộc đi đường mới
-thì emulation chết.
-
-**Nhưng cờ do ta phát.** `BootstrapStatsig` là của backend này
-([../../packages/grokbot-proto/src/feature-gates.ts](../../packages/grokbot-proto/src/feature-gates.ts)),
-và chính hôm nay ta đã dùng nó để bật `sand_teach_by_demonstration`. Nên giả thuyết là: **để bảy cờ
-đó tắt thì 0.29 vẫn đi đường box**. Đó là giả thuyết, không phải kết luận — và nó rẻ đến mức phải thử
-trước mọi thứ khác.
-
----
-
-#### 7.2 · Chạy thử 0.29 trên backend này — ✅ **XONG 28/08, tốt hơn dự đoán**
-
-Chạy đúng như mô tả: bản 0.29 chưa vá, kho dữ liệu riêng, trỏ vào `localhost:8788`, cạnh bản 0.20 và
-bản hãng đang chạy — ba instance cùng lúc, không cái nào đụng cái nào.
-
-```powershell
-$env:SAND_USER_DATA_DIR   = "$env:APPDATA\Grok Bot (thu-029)"
-$env:CURSOR_API_BASE_URL  = 'http://localhost:8788'
-$env:SAND_BACKEND_URL     = 'http://localhost:8788'
-$env:CURSOR_WEBSITE_URL   = 'http://localhost:8788'
-$env:SAND_DISABLE_UPDATES = '1'
-Start-Process 'C:\Program Files\Grok Bot\Grok Bot.exe' --remote-debugging-port=9226
-```
-
-**Kết quả: 0.29 boot được, đăng nhập được, và hiện đúng roster + hội thoại của backend này.** Không
-phải "chạy tàm tạm" — nó vào thẳng vỏ ứng dụng với dữ liệu thật.
-
-`/gw/__coverage` sau lượt chạy đầu: **30 lệnh được gọi, đúng 3 lệnh chưa có mapping** — và cả ba là
-bề mặt plugin/MCP bị **đổi tên**, không phải tính năng mới:
-
-| lệnh 0.29 | tương ứng ở 0.20 | reply |
-|---|---|---|
-| `getEffectiveMcpPlugins` | `getEffectivePlugins` | array |
-| `getMcpCatalog` | (RPC proto `ListMarketplacePlugins`) | array |
-| `getMcpState` | (gần `listBoxMcpServers`) | record |
-
-Đã vá. Hình dạng đọc từ chính bản dựng 0.29, không suy đoán: renderer dùng
-`q.servers.some(J => J.id === X.serverId && J.accountKey === X.accountKey)` cho `getMcpState`, tức
-đúng những hàng `mcpServerRows` đã dựng sẵn. **Đo lại sau khi vá: `unmapped` rỗng.**
-
-Một chi tiết đáng giữ: bản đầu tôi gọi thẳng hàm dựng hình của proto trong `gateway.ts`, và
-`boundaries.test.ts` đỏ ngay với *"no service module imports protobuf — it lives in the ACL"*. Test
-đúng: tầng dịch vụ nói tiếng grokbot2, tiếng của client dừng ở ACL. `gateway.ts` giờ chỉ đưa dữ liệu
-thô (`mcpCatalogEntries`, `mcpInstalledIds`) qua cổng.
-
-##### Điều này đổi kết luận của §1
-
-Giả thuyết "để bảy cờ server tắt thì 0.29 vẫn đi đường box" **đã được nghiệm đúng một lần** — với
-`BootstrapStatsig` của ta chỉ bật `sand_teach_by_demonstration`, client không hề đòi đường server cho
-roster/transcript/gửi tin. Chưa phải bảo chứng vĩnh viễn (hãng có thể đổi mặc định phía họ), nhưng
-đủ để **chọn hướng (A): lên 0.29 và giữ backend box**, thay vì viết lại lõi.
-
-##### Việc còn lại của chặng 1
-
-- ⬜ Chạy dài hơn: gửi một lượt chat thật, mở khung máy tính, thử Teach trên 0.29 — mới chỉ nghiệm
-  tới bước hiện roster.
-- ⬜ Đối chiếu SSE: 0.29 có đọc cùng các kênh không, hay có kênh mới.
-
-#### 7.3 · Đưa bộ vá sang 0.29 — ✅ **XONG 28/08**
-
-Bốn bản vá hiện có ([../../infra/patches/](../../infra/patches/)):
-
-| bản vá | vá gì | rủi ro khi sang 0.29 |
-|---|---|---|
-| `win-drive-path.mjs` | `cOt` từ chối đường dẫn có ổ đĩa Windows | cao — bám vào một hàm đã minify |
-| `attach-upload-observable.mjs` | đường upload nuốt lỗi | cao |
-| `get-ultra-redirect.mjs` | chặn đẩy sang trang bán hàng | vừa |
-| `client-paths.mjs` | đường dẫn tài nguyên | thấp |
-
-**Đo trước khi sửa:** quét 307 file js của 0.29 — **không một dấu hiệu nào của 0.20 còn sống**. Đúng
-như dự đoán: tên rút gọn đổi hết sau mỗi lần hãng dựng lại.
-
-Nhưng ba bản vá có ba số phận khác nhau, và chỉ đọc mã mới biết:
-
-| bản vá | ở 0.29 | xử lý |
-|---|---|---|
-| `win-drive-path` | **lỗi còn nguyên**, hàm đổi tên `cOt`→`vht` (`swr`→`Pst`); bản dựng mới tự khai `s(vht,"normalizeAttachmentSource")` | thêm biến thể 0.29 |
-| `get-ultra-redirect` | URL còn, nhưng chuyển từ renderer sang **`main.cjs`** (`jpr="…"`) | thêm biến thể 0.29 — và **bớt được chỗ giòn nhất**: không còn phụ thuộc tên file renderer mang băm nội dung |
-| `attach-upload-observable` | `uploadAttachmentsIntoBox` và `getRemoteBoxAvailable` **biến mất hoàn toàn** (0 lần trong 307 file) — đường đính kèm đã viết lại, khớp cờ `sand_attachments_via_server` | **đã thừa**, đánh dấu `obsoleteWhenMissing` |
-
-**Khung vá nay đỡ nhiều phiên bản.** Mỗi bản vá khai `variants`, mỗi biến thể một phiên bản client;
-`pickVariant` chọn cái khớp bundle đang cầm. Nhân đôi file bản vá cho từng phiên bản là hai chỗ để
-sửa và hai chỗ để quên. Không biến thể nào khớp ⇒ **dừng đỏ kèm id**, không vá mò — `expected: 1`
-vẫn là toàn bộ câu chuyện an toàn.
-
-**Hai lỗi lộ ra từ chính lượt kiểm này:**
-
-1. `--verify` bắt `C:\cai` đỏ với *"vendor app.asar not found aside"*. Nhưng đó là **bản tự chứa** —
-   bộ cài "chở cả app" dựng thẳng `resources/app`, không có asar nào để dời, và cũng không có gì
-   tranh thứ tự nạp. Ba trạng thái, không phải hai; bản trước gộp hai cái cuối thành "lỗi" và khiến
-   `run.ps1` từ chối chạy **chính bản app đang dùng được**.
-2. `run.ps1` kiểm đường dẫn **mặc định** trong khi mở một bản **khác** — và từ 28/08 thì bản mặc định
-   không còn tồn tại. Nay nó truyền `GROKBOT2_CLIENT_DIR` từ chính `$appExe` nó vừa chọn.
-
-**Cổng ra — đạt cả hai đầu:**
-
-```
-0.20 (C:\cai)      → OK — patch set is live and intact
-0.29 (chạy khô)     → win-drive-path 1x (biến thể 0.29) · get-ultra-redirect 1x (biến thể 0.29)
-                      attach-upload-observable: đã thừa
-                      DRY RUN OK — every patch matched and parsed
-```
-
-**Chưa làm:** `--apply` thật lên bản 0.29 đang cài. Chạy khô đã chứng minh mọi thứ khớp và parse
-được, nhưng áp thật là đụng vào bản client của hãng đang chạy — việc đó chờ lúc bạn thực sự muốn
-chuyển sang 0.29.
-
----
-
-#### 7.4 · Tính năng mới, xếp theo giá trị THẬT với bạn
-
-Xếp theo việc bạn đang làm (đội bot vận hành Shopee, ba máy, nhiều người dùng), không theo thứ tự
-hãng ra.
-
-##### 4.1 · Nhập cookie Chrome — **làm trước, cách biệt**
-
-Ảnh chụp màn hình của bạn nói hết: năm con bot đứng im với dòng
-*"Waiting for you: Đăng nhập Shopee Seller Centre"*. Đây là thứ gỡ đúng nút thắt đó.
-
-- **API mới:** `importChromeCookies` · `injectChromeCookies` · `listChromeProfiles` ·
-  `listChromeCookieAllowItems` · `listCookieOriginGrants` · `putCookieOriginGrants` ·
-  `removeCookieOriginGrants`. Cờ `sand_import_chrome_cookies`.
-- **BE:** đọc kho cookie của Chrome trên máy người dùng, bơm vào Chrome của box qua CDP
-  (`Network.setCookies` — ta đã nói CDP sẵn rồi, xem `browser.ts`). Phần khó không phải kỹ thuật mà
-  là **phạm vi**: `cookieOriginGrants` là danh sách trang được phép, và nó phải theo **từng người**,
-  nếu không một người mở khoá phiên Shopee cho tất cả.
-- **FE:** màn chọn hồ sơ Chrome + chọn trang cho phép.
-- **System prompt:** thêm cho bot biết nó *có* phiên đăng nhập, và **không được** dùng phiên đó ngoài
-  danh sách trang đã cho.
-- ⚠ **Chỗ này chạm thẳng vào lỗ đang mở**: hiện mọi bot của mọi người dùng chung một Chrome trên box
-  (`PER_BOT_DISPLAY=off`). Bơm cookie thật vào một trình duyệt dùng chung là **nhân lỗ đó lên**. Nên
-  việc này **phải đi sau** phần tách trình duyệt ở §5.
-
-##### 4.2 · Phòng chung / nhiều bot một hội thoại — ✅ **XONG 28/08**
-
-Ảnh của bạn cho thấy nhóm *"Shopee Ops"* với danh sách Members đang chạy trên app hãng. Kiểm trong
-kho: `createGroup` · `setGroupMembers` · `broadcastToAgents` · `createSharedRoom` **đã có** trong
-`packages/cursor-acl/src/commands.ts`.
-
-- ✅ **28/08 — làm xong, đo xong.** `createGroup`/`setGroupMembers` hết là khúc gỗ trả `null`
-  (nút New Group từng im lặng không làm gì); nhóm = `AgentRecord` mang `isGroup + memberIds`, đúng
-  hình client vẽ. Luật lượt nói nằm trong `sendPrompt` (`runtime/turn.ts`), KHÔNG cần cặp RPC
-  `RequestGrokBotRoomMemberTurn` của hãng: lần lượt mỗi thành viên một lượt (con sau đọc được lời
-  con trước), bot không kích hoạt bot (chặn vòng lặp tận gốc), bản ghi thuộc nhóm còn giọng thuộc
-  thành viên (`speakAs`). Đối chiếu shape với app gốc: `author {id,name}` khớp, thứ tự tuần tự khớp
-  (docs/extracted/chat-goc-0.29.md).
-- Bằng chứng: `e2e-group-turn.mjs` **7/7** · `e2e-team-build.mjs` **5/5** (bot mẹ tự tạo 2 bot con
-  kèm SOP trong description rồi tự mở phòng) · unit 355/355. Hai lỗi thật bắt được khi đo:
-  description chưa bao giờ vào lời nhắc hệ thống, và `summarise()` hardcode `isGroup:false` +
-  `memberIds:[]` đè sự thật trên mọi roster row.
-- Phần còn lại của 7.4.x (tính năng 3L xem video · 3 cài phần mềm trên box · 2 gợi ý skill/MCP):
-  kế hoạch riêng ở [docs/plan/7-4-x-tinh-nang-moi.md](../plan/7-4-x-tinh-nang-moi.md).
-
-##### 4.3 · Keyring — kho bí mật có phân quyền
-
-`Keyring` · `KeyringSecret` · `KeyringGrant` · `KeyringAccessLevel` · `CopyTeamSecretsToKeyring`.
-
-Khớp thẳng với chỗ backend này đang yếu: hôm nay bí mật MCP nằm theo từng người trong
-`.data/mcp/<authId>.json`, không chia sẻ được, không phân quyền được. Nhiều người dùng chung một
-backend thì sớm muộn cũng cần.
-
-##### 4.4 · Máy của người dùng (`GrokBotUserComputer*`) — bot chạy trên máy BẠN
-
-~20 kiểu message + `spawnLocalExecDaemon` · `mintLocalExecDaemonCredential` · `sealLocalExecFile` ·
-`ListSandMachines` · `RegisterSandMachine` · `UpdateSandMachineLabel`. Cờ `sand_multi_machine_local_exec`.
-
-Đây là hướng đi **ngược** với box: thay vì một máy Linux dùng chung, bot chạy trên chính máy Windows
-của từng người. Với ba máy của bạn thì nó giải quyết luôn cả chuyện tách trình duyệt lẫn chuyện phiên
-đăng nhập — nhưng nó là **một kiến trúc khác**, không phải một tính năng. Đáng bàn riêng.
-
-##### 4.5 · Template bot / chợ
-
-`GrokBotTemplate` · `publishBotTemplate` · `listBotTemplates` · `createAgentFromTemplate` ·
-`GrokBotMarketplaceListing*`. Đội bot Shopee của bạn **chính là** một template — dựng một lần, phát
-cho người khác.
-
-##### 4.6 · Còn lại, chưa gấp
-
-Gọi thoại (`MintSandVoiceCallSecret`, `TextToSpeech`) · Slack hạng nhất
-(`InstallGrokBotSlackApp`) · nhiều tài khoản trong một app (`switchCursorAccount`, `selectCursorTeam`,
-`setCursorSpendLimit`) · form người dùng (`submitUserForm` — **chưa có** bên ta) · lịch nâng cấp box ·
-agent tạm thời · accent theming · i18n.
-
-Đã có sẵn bên ta, không phải làm lại: ký ức (`getAgentMemories`), workflow (`createAgentWorkflow`),
-reaction (`reactToMessage`), tray (`getTrays`).
-
----
-
-#### 7.5 · VNC từng slot — chặn 7.4.1 — ✅ **XONG 28/08**
-
-**Tách trình duyệt theo người.** Hôm nay `PER_BOT_DISPLAY=off` nên mọi bot của mọi người dùng chung
-một Chrome trên box. Từ lúc đăng ký mở ra Internet, đó là lỗ nghiêm trọng nhất còn lại — và §4.1 sẽ
-nhân nó lên nhiều lần nếu làm trước.
-
-Việc thật không phải bật một cờ (đã thử 27/08, hỏng Teach và khung màn hình): Chrome riêng từng bot
-chạy `Xvfb + fluxbox` **không có x11vnc/websockify**, nên không ai nhìn thấy chúng.
-
-**Đã dựng 28/08.** Mỗi slot tự chạy x11vnc + websockify dưới chính tài khoản của nó, mật khẩu ngẫu
-nhiên riêng sinh mới mỗi lần dựng. Cổng suy ra từ số display nên nginx viết tĩnh bốn nhánh. Client
-không phải đổi gì: `getForeverBoxStatus` vốn đã hỏi theo từng `agentId`.
-
-Đo thật trên VPS: hai bot → hai display (`:521`, `:522`), hai đường noVNC, hai mật khẩu khác nhau;
-cả hai trả 200 qua Internet và bắt tay WebSocket **101**; Teach ghi **4 bước** và tạo routine — hôm
-qua chỗ này ghi đúng **1 bước rỗng**.
-
-Giờ §4.1 (nhập cookie Chrome) mới an toàn để làm: phiên đăng nhập thật sẽ nằm trong trình duyệt của
-riêng từng người, không phải một con Chrome dùng chung.
-
----
-
-#### 7.6 · Nếu bước 7.2 cho kết quả xấu
-
-Nếu 0.29 **bắt buộc** đi đường server cho roster/transcript, thì lên 0.29 nghĩa là viết lại phần lõi
-của backend theo một hợp đồng khác — không còn là "cập nhật" mà là một dự án mới. Khi đó hai lựa chọn
-thành thật hơn:
-
-- **Ở lại 0.20** và tự làm các tính năng mới trên FE riêng. `C:\cai` chạy ổn định, không tự cập nhật,
-  và ta nắm toàn bộ hợp đồng. Giá: vĩnh viễn tụt lại sau hãng.
-- **Đổi mục tiêu**: bỏ việc bám client của hãng, dồn sang FE riêng (chặng 6) và dùng client hãng như
-  một tham chiếu thiết kế thay vì một thứ phải chiều.
-
-Không quyết chuyện này trước khi có số của chặng 1.
-
----
-
-#### 7.7 · Thứ tự đề nghị
-
-1. ~~**bước 7.2**~~ — ✅ xong 27/08: 0.29 chạy được, 3 lệnh thiếu đã vá, `unmapped` rỗng.
-2. **§5** — VNC từng slot, đóng lỗ trình duyệt dùng chung.
-3. **§4.1** — nhập cookie Chrome (chỉ sau bước 2).
-4. **Chặng 2** — đưa bộ vá sang 0.29, nếu bước 1 cho kết quả tốt.
-5. **§4.2** — luật lượt nói trong phòng chung.
-6. Còn lại theo giá trị.
-
-Bước 1 và bước 2 **không phụ thuộc nhau**, làm song song được.
-
----
-
-### Chặng 8 · Tự cập nhật — ⬜ **đã moi xong cơ chế của hãng, chưa dựng**
-
-Đọc từ bản dựng 0.29 ngày 28/08. Ghi lại đủ để dựng sau mà không phải đọc lại bundle.
-
-#### Móc có sẵn, không cần vá
-
-```js
-feedBaseUrl: process.env.SAND_UPDATE_FEED_BASE_URL          // hãng để sẵn
-url = `${base}/api/update/${platform}/${appName}/${version}/${machineId}/${track}`
-platform : win32-x64-user · win32-arm64-user · darwin-arm64 · darwin-x64
-appName  : stable → "sand" · nightly → "sand-nightly" · dogfood → "sand-dogfood"
-```
-
-Trả lời:
-
-| mã | nghĩa |
-|---|---|
-| `204` | đang là bản mới nhất — **không phải** 200 thân rỗng, cũng không phải 404 |
-| `200` | Windows (`iupdate`): `{url, version, sha256hash?}` · macOS (`squirrel`): `{url, name}` |
-
-Client tự tải về `sand-update-<version>.exe`, **tự kiểm sha256**, rồi mới áp dụng. macOS thì nó dựng
-một feed server **localhost** rồi giao cho Squirrel.Mac — không nói chuyện thẳng với máy chủ.
-
-#### Đường ngắn bị chặn ở đâu
-
-```js
-LMr = ["Anysphere, Inc.", "Anysphere"]
-if (sig.status !== "Valid") throw …
-if (!(signerAllowlist ?? LMr).includes(signerCommonName)) throw `unexpected signer ""`
-```
-
-`SandWindowsInstaller` kiểm **chữ ký Authenticode** và đối chiếu tên người ký với danh sách ghi cứng
-của hãng. Bộ cài của ta không ký ⇒ client tải xong rồi mới ném lỗi — **tệ hơn là không làm gì**.
-Nó cũng chạy file cài với `--updated /S` (cờ kiểu NSIS), trong khi bộ cài của ta là Inno Setup
-(`/VERYSILENT`).
-
-#### Nên dựng theo hình nào
-
-1. **Feed đúng hình dạng của hãng** trong backend này, phát từ `.data/dist` — để nếu sau này ký được
-   bộ cài và vá `signerAllowlist` thì chỉ cần bỏ `SAND_DISABLE_UPDATES`, không phải viết lại.
-2. **Bộ cập nhật của riêng ta** trong launcher (PowerShell, không cần Node trên máy đích): hỏi cùng
-   cửa đó → tải → kiểm sha256 → chạy bộ cài với `/VERYSILENT`.
-3. Ký bộ cài + vá `signerAllowlist` là **đường thứ ba**, cần chứng chỉ thật; chỉ làm nếu muốn nút
-   "Check for Updates" trong app chạy được.
-
-Phiên bản suy từ tên file (`Bot-Noi-Bo-Setup-20260827.exe` → `2026.08.27`) chứ không chép tay: một
-con số suy được từ file đang nằm đó thì không bao giờ lệch với file thật.
-
----
-
-### Nợ lẻ — không chặn ai, nhưng đừng quên
-
-| # | việc | kiểm bằng |
-|---|---|---|
-| N1 | ⬜ Thử Cloudflare thật rồi thêm bước nhận biết trang chặn | mở một trang có CF, xem bot nói gì |
-| N2 | ⬜ Bộ cài macOS chạy trên máy Mac thật | `bash Cai-dat-Bot-Noi-Bo-mac-*.command` |
-| N3 | ⬜ `.exe` cài thử trên máy sạch | chạy file, xem Apps & features có mục |
-| N4 | ⬜ `self-xray` **tự ghi mình vào nhật ký e2e** → làm hỏng chỉ số | sửa chỗ ghi log, xem §5 |
-| N5 | ⬜ 6 bot xoá 24/08 — **chờ bạn quyết** cứu hay bỏ | `grokbot.sqlite.7.bak` |
-| N6 | ⬜ `bot.log` in token Telegram | đổi token + xoay log |
-| N7 | ⬜ `publishSkill` cần registry | thuộc hạ tầng |
-| N8 | ⬜ `avatar.test.ts` đỏ từ trước — "SVG có thân, có hai mắt" | `npx tsx --test apps/grokbot-web/src/avatar.test.ts` |
-| N9 | ⬜ App hiện "Couldn't render this" ở cuối transcript · console: `TypeError: Cannot read properties of undefined (reading 'find')` trong `ms()` của renderer | mở app, bấm một bot, đọc console qua CDP 9222 |
-| N11 | ✅ **Plugin “không mất”** — pane vẽ Error cho memory/CinAI/toolbox sau mỗi lần mở app. electron-main (`j7n`) chỉ hiểu `connected · needsAuth · loading · error`; ta gửi `disconnected` → rơi vào nhánh `default` = *Error · Not reported by Grok Bot's computer*. Dịch ở biên ACL (`wireStatus`). **Đo lại trên app thật: cả ba đọc `Connected`.** Test `src/mcp-wire-status.test.ts` 4/4 |
-| N10 | ⬜ Ảnh cũ trong transcript hiện "Image unavailable" | **đã giải thích, không phải lỗi**: kho đính kèm giữ 64 file mới nhất (857–920), tin cũ trỏ tới `369-*` đã bị dọn. Cần quyết: giữ nhiều hơn, hay vẽ "ảnh đã hết hạn" thay vì "không có" |
-| N12 | ✅ **"Teach a task" không mất — chưa từng bật.** Nút nằm sau cổng `sand_teach_by_demonstration`, và cái `+` cạnh ô nhập chỉ mở ra menu khi cổng bật (`_ = S && f != null ? {} : {onClick:m}`). Cổng lấy từ `AnalyticsService/BootstrapStatsig` hỏi chính backend này; ta trả `{}` — 200 nhưng thiếu khoá `config`, nên client không dựng được Statsig và **mọi** cổng về mặc định đóng. Biến `SAND_FEATURE_GATE_OVERRIDES` client có đọc nhưng chỉ khi bản dev / tài khoản nội bộ, nên đường đó chết. Sửa: `packages/grokbot-proto/src/feature-gates.ts` (7 test). **Đo trên app thật: `+` từ không có `aria-haspopup` thành `menu`, mở ra "Attach files \| Teach a task"; bấm vào → backend `{"state":"recording","agentId":"agent-513"}`.** Đã lên VPS. |
-| N13 | ✅ **Onboarding vẫn bị cướp trên máy đã chạy bản cũ** — đổi mặc định thành `false` chỉ cứu kho TRỐNG; `state.json` cũ còn `hasSeenOnboarding: true` ở mức dùng chung và đè mặc định mãi mãi. Gỡ khoá-theo-người khỏi blob chung khi nạp (`withoutPerUserKeys`). Hai test `host-settings` đang đỏ trên chính máy này vì lý do đó, không phải vì test sai. |
-| N14 | ⬜ `%APPDATA%\Grok Bot.truoc-reset-20260827-1032` — bản sao lưu khi cửa sổ app không mở được sáng 27/08. Giữ vài ngày rồi xoá. |
-| N15 | ⬜ CDP `:9222` **tự đóng** một lần giữa phiên (app vẫn chạy). Đã thử lại: nối Playwright rồi thoát KHÔNG giết app (7 tiến trình còn nguyên), nên giả thuyết "công cụ giết app" **sai**. Chưa truy ra; chỉ ảnh hưởng việc đo. |
-| N16 | ✅ **Plugin trên VPS chỉ còn 2 cái mẫu** — VPS không có `plugin-registry.json`, nên `plugin-catalog.ts` rơi về `LOCAL_PLUGINS` dựng sẵn (Grokbot2 Memory / Grokbot2 Skill). File thật giống **y hệt** `plugin-registry.example.json` đã commit và không chứa khoá nào, nên chép thẳng. **Đo qua Internet: 25 plugin.** |
-| N17 | ✅ **Màn riêng từng bot — nay NHÌN THẤY được (28/08).** Bật cờ lần đầu 27/08 đã tách cái bot ĐIỀU KHIỂN khỏi cái người dùng NHÌN THẤY: Chrome riêng chạy `Xvfb + fluxbox` **không có x11vnc/websockify**, mà `GROKBOT2_VNC_URL` chỉ có MỘT giá trị cố định chiếu màn dùng chung. Teach vũ trang vào `about:blank` còn người dùng thao tác chỗ khác → mỗi lần dạy ghi đúng **1 bước rỗng**, không routine nào ra đời. **Sửa:** mỗi slot tự dựng x11vnc + websockify dưới chính tài khoản của nó, **mật khẩu ngẫu nhiên riêng sinh mới mỗi lần dựng** (`-passwdfile`, không `-passwd`, vì đối số tiến trình thì cả máy đọc được trong `ps`). Cổng suy ra từ số display (`:52N` → RFB `59NN`, ws `70NN`) theo đúng nếp box dùng cho `:77`, nên nginx viết **tĩnh** 4 nhánh `/flowvnc-gb2-N/` — không nạp lại khi cấp slot. Client không đổi gì: `getForeverBoxStatus` vốn đã hỏi theo từng `agentId`, nên chỉ cần `boxVncUrl(agentId)`. **Đo thật: hai bot → hai display, hai đường noVNC, hai mật khẩu; cả hai 200 qua Internet + bắt tay WebSocket 101; Teach ghi 4 bước và tạo routine.** |
-| N27 | ✅ **Phiên đăng nhập của bot nay sống sót — và chỉ lộ ra SAU khi N17 xong.** Hồ sơ Chrome nằm ở `<slot>/profile`, tức trong thư mục slot, mà `teardown` `rm -rf` cả thư mục đó sau **10 phút nghỉ**. Chủ đăng nhập Shopee trong màn của bot → mười phút sau phiên bị xoá sạch; lần sau bot nhận slot khác → hồ sơ khác nữa. Đúng quy trình mà chính đám bot đề ra (*"Owner đăng nhập xong em kéo queue liền"*) **không thể chạy**, và không lỗi nào báo — cả hai đường đều "chạy", chỉ là phiên lặng lẽ biến mất. Sửa: hồ sơ đi theo **BOT** (`agents/<id>/profile`), ngoài thư mục slot. **Đo thật: đặt cookie → khởi động lại backend (thu hết slot) → bot xin lại màn → cookie còn nguyên.** Cùng bài học với `shared/data` bên triển khai: trạng thái phải sống ngoài cái thứ bị dựng lại. Hồ sơ dùng thật nặng **57 MB**, nên `deleteAgents` nay xoá kèm. |
-| N18 | ⬜ **Đồng hồ máy này chậm 776 giây (~13 phút)** so với giờ thật; VPS lệch 2 giây (NTP chạy). Đồng hồ Teach là `now` của client trừ `startedAtMs` của máy chủ → ra âm → client kẹp `0:00` và đứng yên đúng 13 phút. Không sửa được từ backend: ta không biết đồng hồ của client. Cần chạy **PowerShell quyền quản trị**: `sc config w32time start= auto; net start w32time; w32tm /resync /force`. Lệch giờ cỡ này còn đụng `iat`/`exp` của JWT — đáng ngờ cho những lỗi đăng nhập lẻ tẻ khác. |
-| N19 | ⬜ Dạy xong mà không ra bước nào (`stepsToPrompt` rỗng) thì `stopTeach` trả `{steps: 0}` **im lặng** — client không vẽ gì, người dùng kết luận "không tạo được task". Hợp đồng không có ô nào để báo; cân nhắc đẩy một dòng vào transcript. |
-| N20 | ✅ **Bấm "Teach a task" CHƯA ghi gì** — nó mở khung máy tính và "lên đạn" (`arm`); việc ghi bắt đầu ở nút **`Start recording`** bên trong khung đó, rồi lớp phủ đổi sang `Stop and save recording` / `Discard recording`. Đúng chỗ người dùng báo "ấn start không chạy". Đã khoá lại bằng `scripts/e2e-teach.mjs`. |
-| N21 | ⬜ Không có bot nào đang chọn thì bấm "Teach a task" **không làm gì và không báo gì** (`q` chỉ chạy khi `u != null`). Nhưng nó vẫn `arm` — tạo bot xong là tự bắt đầu ghi, khá bất ngờ. |
-| N22 | ⬜ Ba đường đọc routine từ giao diện đều hỏng theo cách riêng: `window.desktop` có 48 phương thức, **không** cái nào về automation; `[class*="sand-info-pane"]` tồn tại + đang hiện mà `innerText` **rỗng**; đếm chữ cả trang thì số **đi xuống** khi khung máy tính phủ lên. `listAllAutomations` bằng token cổng cũng rỗng (lọc theo chủ sở hữu), nhưng `getAgentAutomations` kèm `agentId` thì đúng. |
-| N23 | ✅ **Mọi máy desktop là CÙNG một người** — app không gửi JWT trên `/gw`, nó gửi **vé cổng**, mà vé đó dùng chung cho cả bản cài. `/gw/__coverage`: `matching-bearer: 429` · `user-jwt: 3` (ba lượt kia là lệnh thử). `ownerFromAuth` chỉ đọc JWT ⇒ rơi về danh tính mặc định ⇒ tài khoản mới trên máy 3 mở ra thấy nguyên bộ bot của máy 2. Không sửa được bằng cách bắt app gửi JWT (ta không viết app) — nhưng vé nó gửi là thứ ta đưa qua `EnsureSandBox`, nên phát vé theo người: `gwu.<b64u(authId)>.<HMAC>`. Vé cũ vẫn nhận (app cache bản mô tả box). `services/grokbot-backend/src/gateway-ticket.ts`, 9 test. **Đo qua Internet: người 2 không thấy bot người 1 tạo, quyền sở hữu sống qua restart.** |
-| N24 | ⚠️ **Sau N23, app phải khởi động lại** để lấy vé riêng — và dữ liệu tạo TRƯỚC đó nằm dưới `auth0|grokbot2-user`, nên tài khoản thật sẽ thấy trống cho tới khi chuyển chủ. Chủ thật nằm ở `body.agentOwnerAuthId` (cột `owner_id` chỉ là bản sao cũ; `ownerOf()` đọc body). |
-| N25 | ✅ **Onboarding không bị ta cắt** — cổng nằm trong chính app gốc: `nGn()` trả `shell` khi `countAgents() > 0` (và tự `markOnboardingSeen()`), nên bất kỳ tài khoản nào đã có bot sẽ KHÔNG bao giờ thấy phần mở đầu. Bước `landing` cũng bị bỏ qua khi đã đăng nhập (`IJt`) vì `landing` chính là màn đăng nhập. Luồng thật của người mới: `meet → computer-demo → jobs → tools → create → hand-off`. Đo trên VPS với tài khoản mới: `countAgents=0` + `hasSeenOnboarding=false` ⇒ cổng mở ONBOARDING. |
-| N26 | ⬜ `getOnboardingSeen()` là **hoà giải hai chiều** giữa kho cục bộ của máy và host settings của ta (`dDt.reconcile()`): box thắng khi luồng box đọc được, không thì lấy bản cục bộ. Nghĩa là backend KHÔNG ép được onboarding trên một máy đã xem, nếu luồng box chưa sống lúc kiểm. |
-
----
-
-## 4 · E2E — quy trình và danh sách
-
-### Quy trình (bắt buộc theo thứ tự)
-
-```
-1. Kiểm bot có rảnh      curl -s localhost:8788/v1/health   → isBusy phải là false
-2. Chạy bộ của chặng     (bảng dưới)
-3. ĐỎ?  → sửa NGAY tại gốc, không ghi nợ, không bỏ qua
-         → trước khi sửa: bài kiểm sai hay code sai?  (xem ô dưới)
-4. Chạy lại tới khi XANH
-5. Xanh rồi mới cập nhật docs + commit
-```
-
-> **Bài kiểm sai hay code sai?** Mặc định là **code sai**. Chỉ kết luận bài kiểm sai khi tìm được
-> chỗ hợp đồng đã cố ý đổi, kèm lý do — và khi sửa bài kiểm thì phải kiểm **chặt hơn** trước, đừng
-> chỉ nới cho qua.
->
-> Ví dụ thật (25/08): `e2e-native` đỏ ở "POST non-image is 400" nhưng nhận 201. Route đã đổi ở X8 —
-> app gốc đính kèm được **mọi loại tệp**, nên `400` mới là hợp đồng sai. Sửa bài kiểm, và thêm một
-> khẳng định nữa: **tệp phải giữ đúng tên**, vì chỉ so mã 201 thì một lần âm thầm lưu nhầm thành
-> ảnh vẫn lọt.
-
-### Runner: `node` hay `npx tsx`?
-
-**61 bộ chạy bằng `node`. Bốn bộ này BẮT BUỘC `npx tsx`** vì chúng import thẳng `src/*.ts`:
-
-```
-npx tsx scripts/e2e-mcp.mjs        npx tsx scripts/e2e-browser.mjs
-npx tsx scripts/e2e-attachment.mjs npx tsx scripts/e2e-drafts-todo.mjs
-```
-
-Chạy nhầm bằng `node` thì lỗi là `ERR_UNKNOWN_FILE_EXTENSION ".ts"` — trông như hỏng code, thực ra
-chỉ là sai runner. Tìm ra được cũng vì chạy thật (25/08).
-
-### Danh sách — bộ nào phủ cái gì
-
-| bộ | lệnh | phủ | lần chạy gần nhất |
-|---|---|---|---|
-| **Unit backend** | `node scripts/run-tests.mjs` | 288 bài · store, auth, mcp, site, đường dẫn client, **trạng thái MCP gửi cho client** | ✅ 288/288 · 26/08 |
-| **Unit FE** | `cd apps/grokbot-web && npx tsx --test src/*.test.ts` | markdown, avatar | ⚠️ 16/17 — **N8 đỏ từ trước** |
-| **Hợp đồng client** | `node scripts/contract-test.mjs` | 48 · routes·auth·commands·channels | ✅ **48/48** · 27/08 |
-| **`/v1` đầu-cuối** | `node scripts/e2e-native.mjs` | 60 · roster CRUD·gửi·ngắt·SSE·đính kèm | ✅ 60/60 · 25/08 |
-| **MCP** | `npx tsx scripts/e2e-mcp.mjs` | liệt kê tool·gọi tool·lỗi tool·args hỏng | ✅ · 26/08 — 4 server spawn thật, trả tool thật |
-| **Plugin qua agent** | `npx tsx scripts/e2e-mcp-plugin.mjs` | agent có **dùng** được tool của plugin không | ⚠️ **1/3 · 26/08** — kẹt ở pool, xem ô dưới |
-| **App đầu-cuối** | `node scripts/e2e-app-full.mjs` | 16 bước qua UI thật: tạo bot·mở·gửi·trả lời·avatar·xoá | ⚠️ **12/16 · 26/08** — hai đỏ cùng một nguyên nhân pool |
-| **Cổng tiến trình** | `node scripts/verify-native.mjs`<br>`node scripts/verify-runtime.mjs`<br>`node scripts/verify-ops.mjs` | BFF·runtime·ops còn đúng vai | ✅ cả ba · 25/08 |
-| **Điều khiển máy tính** | `node scripts/e2e-desktop.mjs` | 29 · chuột·phím·dạy việc | 27–29/29 · *chập chờn 10–20%* |
-| **Việc song song** | `node scripts/e2e-tasks.mjs` | 14 · `task`/`await_task` | ✅ 14/14 |
-| **Routine** | `node scripts/e2e-routines.mjs` | nổ đúng điều kiện·bộ lọc | — |
-| **Trình duyệt** | `npx tsx scripts/e2e-browser.mjs` | 16 công cụ trình duyệt | — |
-| **Box** | `node scripts/e2e-box-tools.mjs` | chạy lệnh·đọc/ghi file trên box | — |
-
-Còn **58 bộ e2e** khác trong `scripts/`; bảng này chỉ liệt kê những bộ **đã dùng để chốt một chặng**.
-
-### Bộ nào chạy cho chặng nào
-
-| chặng | chạy tối thiểu |
-|---|---|
-| **0 · Dọn** | unit BE + unit FE + hợp đồng + `e2e-native` + `e2e-mcp` + ba `verify-*` |
-| **1 · Đo tiền** | `e2e-native` + `e2e-run` |
-| **2 · Đăng nhập** | `auth-cinapi.test` + `site.test` + `gw-auth` |
-| **3 · Máy thứ hai** | `verify-sqlite` + `verify-runtime` + `check-app.cmd` |
-| **4 · Ra ngoài** | `e2e-native` + `contract-test` |
-| **5 · Tách user** | `e2e-box-tools` + `e2e-desktop` + `test-real-box` |
-| **6 · FE** | `e2e-routine-ui` + `e2e-routines` |
-
-### ~~Chặn: pool $0~~ — ✅ **HẾT từ 27/08, và tôi đã báo sai**
-
-Suốt hai ngày tôi nói việc này chặn mọi bài E2E cần agent trả lời, và nói bạn phải "nâng hạn mức
-pool". **Đo lại 27/08 thì không còn đúng**, mà cũng chưa chắc từng đúng theo cách tôi mô tả:
-
-| đo | kết quả |
-|---|---|
-| Gọi thẳng `admin.halcion.vn/v1/claude` bằng khoá `Grokbot2` | **HTTP 200** · `success:true` · `keyName:"Grokbot2"` |
-| Backend khởi động | `[model] claude-opus-5 honours TOOL_CALL — tools available` |
-| Gửi một lượt thật qua `/v1/agents/:id/turns` | **202** → bot trả lời **`"XONG"`** |
-
-Thông điệp `$0` lần cuối xuất hiện trong nhật ký là **25/08**. Bảng admin cho thấy khoá `Grokbot2`
-vẫn chạy đều: **1.352 request/tuần**, lần cuối 05:55 ngày 27/08.
-
-> **Hai lỗi của tôi trong lúc truy việc này, ghi lại vì cả hai đều là "đọc sai rồi kết luận":**
->
-> 1. Tôi bảo `pool-key.txt` không có khoá thật, vì nhìn dòng 2 thấy bắt đầu bằng `API-key-HALCION…`.
->    Thực ra `config.ts` dùng `/hal_[A-Za-z0-9]{24,}/` **rút khoá ra từ giữa dòng** — có khoá thật,
->    52 ký tự, đúng key `Grokbot2`. Tôi đọc đầu dòng thay vì chạy chính phép rút của code.
-> 2. Bài kiểm chat đầu tiên của tôi báo "hết giờ chờ, chưa thấy trả lời". Sai vì nó đọc cột `text`,
->    mà bảng `entries` lưu ở cột **`body`**. Bot đã trả lời trong 3 giây. **Một bài kiểm đọc sai chỗ
->    thì im lặng y hệt một hệ thống hỏng** — và tôi suýt báo cáo cái im lặng đó là sự thật.
-
-**Vẫn cần đo lại `e2e-app-full` và `e2e-mcp-plugin`** để biết 12/16 và 1/3 hôm nay còn đỏ ở đâu — có
-thể là lý do khác, không phải hạn mức.
-
-Phần **không** cần model thì xanh hết: tạo bot · hiện lên thanh bên 269 ms · mở bằng chuột ·
-gõ vào ô soạn · lời nhắn tới backend · avatar HTTP 200 · pane máy tính có trạng thái.
-
-### Ba cái bẫy đã trả giá
-
-1. **Đừng chạy bộ đụng màn hình khi `isBusy` là `true`** — cắt ngang một bot đang làm việc thật.
-2. **Nhóm dựa vào thị giác chập chờn 10–20%** (đo 5 lượt: 29·27·28·29·28). Đỏ một lượt ở **chỗ khác
-   nhau mỗi lần** là hình dạng của bài toán, không phải một lỗi sửa bằng một commit. Đỏ **cùng một
-   chỗ** hai lượt mới là lỗi thật.
-3. **Số "x/20 lượt gần nhất đỏ" đang bị nhiễu** — `self-xray` ghi chính nó vào `e2e-history.jsonl`.
-   Xem §5, và nợ N4.
-
----
-
-## 4b · Sự cố 25/08 — mất 2.030 tin nhắn, đã khôi phục, đã sửa gốc
-
-**Chuyện gì:** lúc ~10:58 sổ tụt từ **2.036 tin / 8 bot** xuống **6 tin / 4 bot**. Khôi phục từ
-`grokbot.sqlite.2.bak` (09:20) — đủ **8 bot · 2.036 tin · 64 đính kèm · 4 routine**.
-
-**Cơ chế — hai lỗi cộng lại, cả hai đều có sẵn từ trước:**
-
-1. `pnpm backend` chạy **bốn tiến trình**, và cả bốn cùng `exec(SCHEMA)` + `ALTER TABLE` mỗi lần mở
-   sổ. Bốn người cùng xin khoá ghi trên một file WAL thì có lúc một người thua.
-2. Người thua ném lỗi → `loadState()` **im lặng lùi về JSON** → `snapshot.json` từ **16/08** (4 bot,
-   0 tin) → tiến trình chạy tiếp như không có gì → lần lưu kế tiếp `writeSnapshot` **cắt tỉa** sổ
-   xuống đúng bằng ảnh chụp cũ.
-
-Việc thêm cột `token_version` của chặng 2 là **giọt nước** làm một tiến trình thua khoá, không phải
-nguyên nhân.
-
-**Đã sửa gốc:**
-
-- **Chỉ tiến trình ghi mới chạy migration.** Ba tiến trình đọc chỉ mở file ra đọc.
-- **Có sổ mà đọc hỏng thì NÉM, không lùi.** Lùi về JSON chỉ còn đúng khi **chưa có sổ nào** (máy
-  mới). Dừng ồn ào hơn là chạy tiếp với trạng thái nghèo rồi ghi đè phần còn thiếu.
-
-**Chốt mới này bắt ngay một lỗi của chính tôi:** `e2e-native` đỏ với `no such table: agents` — tôi
-hỏi `existsSync` **sau** `new DatabaseSync`, mà lệnh đó tự tạo file, nên sổ mới toanh trông như đã
-tồn tại và bị bỏ qua bước dựng bảng. Hỏi trước khi mở là xong.
-
-**Sau khi sửa:** 278/278 unit · `e2e-native` 60/60 · hợp đồng 4/4 · sổ vẫn **8 bot / 2.036 tin** sau
-mọi phép thử.
-
-## 5 · Chưa chắc chắn — và cảnh báo về chính số đo
-
-- **"12/20 lượt e2e gần nhất đỏ" là số bị nhiễu.** `self-xray` ghi mỗi lần chạy của chính nó vào
-  `e2e-history.jsonl` với `pass:false` khi cổng đỏ. Hôm nay tôi chạy nó nhiều lần, nên phần lớn
-  "lượt đỏ" là chính nó. **Đừng đọc con số này là "e2e đang hỏng"** cho tới khi sửa chỗ ghi log.
 - **Mất mạng:** lịch sử chắc chắn đọc được (SQLite cục bộ), nhưng **chưa thử rút mạng** xem app có
   boot trọn không.
 - **Cloudflare có nhận ra Chrome của mình không** — chưa thử trang thật.
 - **Tên binary cưỡng chế sandbox của hãng** — hàm trả đường dẫn bị minify, chưa truy ra.
-- **File tên hỏng** `{"contents_after_edit":…}` trong workspace — chưa truy được lượt nào tạo ra.
+- **Box của HÃNG** — chỉ đo được box của mình (`gb2u003`, không root, `sudo` đòi mật khẩu, có
+  `DISPLAY=:77` + Xvfb). Box hãng không có quyền vào, nên không kết luận thay.
+- **Kênh `cookie-origin-approval`** — khoá `frames` của batch rỗng là **phỏng đoán**: client mới chỉ
+  long-poll, chưa nhận khung nào nên chưa đo được khoá thật.
 
----
-
-## 6 · Tài liệu nào giữ cái gì
+## 9 · Tài liệu nào giữ cái gì
 
 Bảng này để **không chép lại nội dung** — mỗi thứ có đúng một chỗ ở.
 
 | tài liệu | giữ gì |
 |---|---|
-| **bảng này** | trạng thái + việc còn lại + E2E |
-| [system-xray.md](system-xray.md) | x-quang toàn hệ cho người không rành kỹ thuật · vận hành · test máy thứ hai |
-| [ship-to-users.md](../plan/ship-to-users.md) | website → tải → cài · billing · cái gì ở máy khách cái gì ở VPS |
-| [per-user-on-one-box.md](../plan/per-user-on-one-box.md) | tách OS user · thu hồi khi nghỉ · cách hãng cô lập |
+| **bảng này** | trạng thái · việc còn lại · bẫy đã trả giá |
+| [system-xray.md](system-xray.md) | hệ thống này là gì, cho người **không rành kỹ thuật** |
+| [con-thieu-so-voi-0-30.md](../plan/con-thieu-so-voi-0-30.md) | cách CHIA LOẠI thiếu: năng lực · dữ liệu · không thuộc về ta |
+| [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
+| [nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md) | nâng quyền: app gốc cho tới đâu |
+| [ship-to-users.md](../plan/ship-to-users.md) | website → tải → cài · billing |
+| [per-user-on-one-box.md](../plan/per-user-on-one-box.md) | tách OS user · thu hồi khi nghỉ |
 | [one-display-per-bot.md](../plan/one-display-per-bot.md) | một màn hình mỗi bot · sức chứa box |
 | [desktop-computer-use.md](../plan/desktop-computer-use.md) | điều khiển máy tính · dạy việc |
-| [fe-clone-plan.md](../plan/fe-clone-plan.md) | FE riêng, chia việc theo API |
-| [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
 | [architecture.md](../architecture.md) | kiến trúc tổng |
 | [legal.md](../legal.md) | ranh giới: dùng cá nhân / nghiên cứu |
-| [runbooks/trien-khai.md](runbooks/trien-khai.md) | **triển khai + lùi bản** — một trang, §1 là nút lùi |
-
----
-
-## 7 · Ba câu hỏi nên trả lời trước khi code tiếp
-
-1. **Dọn trước hay làm tiếp?** Luật của dự án nói dọn (đỏ hai lượt liền). Tôi cũng nghĩ vậy — chặng
-   0 mất khoảng một lượt làm việc, và mọi chặng sau đều đụng vào đúng mấy file đó.
-2. **6 bot đã xoá — cứu hay bỏ?** Bản sao còn đó, nhưng càng để lâu càng dễ lẫn với dữ liệu mới.
-3. **Test máy thứ hai bằng máy nào?** Một laptop khác, hoặc một tài khoản Windows khác trên chính
-   máy này cũng đủ cho T1–T4. Riêng **T5 cần hai máy thật**.
+| [runbooks/trien-khai.md](../runbooks/trien-khai.md) | triển khai + **lùi bản** — §1 là nút lùi |

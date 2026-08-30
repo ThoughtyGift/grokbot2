@@ -18,12 +18,11 @@ Ba loại tài liệu, đừng lẫn:
 
 | Bạn đang muốn | Đọc |
 |---|---|
-| **Đang ở đâu, còn gì — mở cái này trước** | [TRANG-THAI.md](TRANG-THAI.md) — một chỗ duy nhất, đo lại bằng `scripts/trang-thai.mjs` |
-| lộ trình + việc chi tiết (tài liệu sâu) | [state/bang-theo-doi.md](state/bang-theo-doi.md) |
+| **Đang ở đâu, còn gì — mở cái này trước** | [state/bang-theo-doi.md](state/bang-theo-doi.md) — một chỗ duy nhất, đo lại bằng `scripts/trang-thai.mjs` |
 | **Ngày đầu làm việc trên repo** | [onboarding.md](onboarding.md) |
 | Hiểu hệ thống trong 10 phút | [architecture.md](architecture.md) |
 | Biết đang làm tới đâu | [../ROADMAP.md](../ROADMAP.md) → [roadmap.md](../ROADMAP.md) |
-| Clone FE app gốc | [plan/fe-xray-roadmap.md](plan/fe-xray-roadmap.md) |
+| Clone FE app gốc | [plan/fe-xray-roadmap.md](history/fe-xray-roadmap.archived.md) |
 | Sửa/thêm một lệnh của client | [protocol-reference.md](protocol-reference.md) |
 | Biết được phép làm gì, không được làm gì | [legal.md](legal.md) |
 | Hiểu vì sao hệ thống như hiện tại | [adr/README.md](adr/README.md) |
@@ -44,10 +43,10 @@ Mở thư mục này là biết việc gì đang chạy. Bốn file, hai trục:
 
 | File | Trục | Trạng thái |
 |---|---|---|
-| [plan/fe-xray-roadmap.md](plan/fe-xray-roadmap.md) | **X-series** — *cái* làm: bóc tách app gốc rồi clone FE từng chi tiết | X0–X6; A1/A4/A5/A6 xong |
+| [plan/fe-xray-roadmap.md](history/fe-xray-roadmap.archived.md) | **X-series** — *cái* làm: bóc tách app gốc rồi clone FE từng chi tiết | X0–X6; A1/A4/A5/A6 xong |
 | [plan/system-pipeline.md](plan/system-pipeline.md) | **T-series** — *cách* làm: quy trình, ADR, sơ đồ, tự soi mình | T1.1 + T2.1 xong |
 | [plan/multi-tenant-roadmap.md](plan/multi-tenant-roadmap.md) | đa người dùng: `owner_id`, login, billing | Phase 1 đang chạy |
-| [plan/fe-clone-plan.md](plan/fe-clone-plan.md) | bản trước của X-series, chia việc theo API | vẫn đúng, hẹp hơn |
+| [plan/fe-clone-plan.md](history/fe-clone-plan.archived.md) | bản trước của X-series, chia việc theo API | vẫn đúng, hẹp hơn |
 
 X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm, một cái làm cách làm sản phẩm.
 
@@ -81,8 +80,8 @@ X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm
 
 | File | Nói về |
 |---|---|
-| [fe/fe-xray-roadmap.md](plan/fe-xray-roadmap.md) | **bản đang dùng**: bóc tách app gốc rồi clone từng chi tiết + checklist X0–X6 |
-| [fe/fe-clone-plan.md](plan/fe-clone-plan.md) | bản trước, chia việc theo API — vẫn đúng, hẹp hơn |
+| [fe/fe-xray-roadmap.md](history/fe-xray-roadmap.archived.md) | **bản đang dùng**: bóc tách app gốc rồi clone từng chi tiết + checklist X0–X6 |
+| [fe/fe-clone-plan.md](history/fe-clone-plan.archived.md) | bản trước, chia việc theo API — vẫn đúng, hẹp hơn |
 
 ### reverse/ — dịch ngược client hãng
 
@@ -117,8 +116,6 @@ X-series và T-series **không đổi chỗ nhau**: một cái làm sản phẩm
 
 | File | Nói về |
 |---|---|
-| [session/HANDOFF.md](session/HANDOFF.md) | trạng thái cuối phiên, việc đang dở |
-| [session/NEXT-SESSION-PROMPT.md](session/NEXT-SESSION-PROMPT.md) | câu mở đầu cho phiên sau |
 
 ---
 

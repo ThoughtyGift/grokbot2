@@ -109,7 +109,7 @@ bị di chuyển — và một gate đã chạy trên con số đó.
 
 ## 6. Việc đầu tiên nên nhận
 
-Chọn một mục trong [plan/fe-xray-roadmap.md](plan/fe-xray-roadmap.md) nhóm **X1** — chúng là nguyên
+Chọn một mục trong [plan/fe-xray-roadmap.md](history/fe-xray-roadmap.archived.md) nhóm **X1** — chúng là nguyên
 tử: chỉ sửa FE, không cần route mới, và có tiêu chí nghiệm thu bằng số sẵn. Vòng làm:
 
 1. `pnpm ui:diff` → ghi con số **trước**.

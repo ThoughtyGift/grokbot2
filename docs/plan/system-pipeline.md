@@ -9,7 +9,7 @@
 |---|---|---|---|
 | **IDEA / TODO** | ý tưởng nằm trong hội thoại; checklist rải trong `ROADMAP.md` | 🟡 | không có **một** hàng đợi. Việc sống nhờ trí nhớ phiên làm việc — chính vì vậy mới cần `session/HANDOFF.md` |
 | **PLAN** (Execution Roadmap) | `ROADMAP.md` có phase, exit criteria, và **gate chạy được** (`pnpm phase:gate`) | 🟢 **mạnh** | — |
-| **Chọn stack** | chưa bao giờ làm tường minh cho FE | 🔴 **yếu nhất** | không có ADR nào cho "vì sao vanilla TS". Hệ quả: bốn lỗi cùng gốc trong một phiên (xem [fe/fe-xray-roadmap.md](fe-xray-roadmap.md) §2) |
+| **Chọn stack** | chưa bao giờ làm tường minh cho FE | 🔴 **yếu nhất** | không có ADR nào cho "vì sao vanilla TS". Hệ quả: bốn lỗi cùng gốc trong một phiên (xem [fe/fe-xray-roadmap.md](../history/fe-xray-roadmap.archived.md) §2) |
 | **Design** (X-ray hệ cũ) | số đo thật: [extracted/ui-design-spec.md](../extracted/ui-design-spec.md), `ui-xray.json`, `pnpm ui:diff`, `pnpm ui:shots` | 🟢 | thiếu **sơ đồ**: không có C4 mức 1–2, không có sequence diagram cho luồng nào |
 | **BUILD** | pnpm workspaces + Turborepo, module theo domain | 🟢 | hợp đồng `/v1` chỉ tồn tại trong `native.ts` — FE tự khai lại type |
 | **TEST** | 63 script, gate theo phase, nhật ký nối thêm (`pnpm e2e:history`) | 🟢 **mạnh** | script phẳng một thư mục; đã có lúc `import` một script làm chạy luôn bài đo của nó |
@@ -183,5 +183,5 @@ Không có lựa chọn nào sai — nhưng **không chọn** thì mặc định
 6. **T5** — ngưỡng refactor. Làm sau khi `self-xray` có số, vì ngưỡng không có số thì vô nghĩa.
 7. **T2.2, T2.3, T1.2, T6.3, T6.4** — theo sức.
 
-Song song với X0–X6 của [fe/fe-xray-roadmap.md](fe-xray-roadmap.md): T-series là *cách làm*,
+Song song với X0–X6 của [fe/fe-xray-roadmap.md](../history/fe-xray-roadmap.archived.md): T-series là *cách làm*,
 X-series là *cái làm*. Không nên đổi chỗ hai cái.

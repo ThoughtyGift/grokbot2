@@ -10,7 +10,7 @@
 > P6 chen lên trước P5 có lý do, xem [§9.4](#94-cửa-kiểm-p6--và-vì-sao-cửa-c-mất-hiệu-lực).
 >
 > Tài liệu liên quan: [parity.md](../parity.md) · [protocol-reference.md](../protocol-reference.md) ·
-> [HANDOFF.md](../session/HANDOFF.md) · [agent-brain.md](../reverse/agent-brain.md) · [box-architecture.md](../architecture/box-architecture.md)
+> [HANDOFF.md](../state/bang-theo-doi.md) · [agent-brain.md](../reverse/agent-brain.md) · [box-architecture.md](../architecture/box-architecture.md)
 
 ---
 
@@ -90,7 +90,7 @@ node services/grokbot-backend/scripts/label-window.mjs --cdp http://127.0.0.1:93
 ```
 
 > Khoá single-instance được tính theo profile, nên `--user-data-dir` riêng là điều kiện để mở
-> được app thứ hai. Chi tiết: [HANDOFF.md §3](../session/HANDOFF.md).
+> được app thứ hai. Chi tiết: [HANDOFF.md §3](../state/bang-theo-doi.md).
 
 ### 1.3 Nếu thiếu điều kiện thì mất gì
 

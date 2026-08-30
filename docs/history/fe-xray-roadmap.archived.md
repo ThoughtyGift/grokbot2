@@ -1,6 +1,6 @@
 # X-ray roadmap — bóc tách app gốc rồi clone FE về `127.0.0.1:5173`
 
-Thay cho [fe-clone-plan.md](fe-clone-plan.md) (bản đó vẫn đúng, nhưng chỉ nói về vùng đã dựng).
+Thay cho [fe-clone-plan.md](../history/fe-clone-plan.archived.md) (bản đó vẫn đúng, nhưng chỉ nói về vùng đã dựng).
 Tài liệu này trả lời trước ba câu hỏi mà nếu không trả lời thì làm sẽ tù mù, rồi mới chia việc.
 
 ---

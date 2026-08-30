@@ -212,7 +212,7 @@ của Cursor (Anysphere), nên phát hành lại một bản đã sửa là phâ
 mỗi lần hãng ra bản mới — đã đo, và đó là lý do `SAND_DISABLE_UPDATES` phải có.
 
 **Đường B đã đi được nửa đường rồi**, và số liệu có sẵn: `apps/grokbot-web` — 3.849 dòng, `ui-diff`
-báo **khớp 40/40 trên 19 vùng đã dựng**. Kế hoạch chi tiết ở [fe-clone-plan.md](fe-clone-plan.md),
+báo **khớp 40/40 trên 19 vùng đã dựng**. Kế hoạch chi tiết ở [fe-clone-plan.md](../history/fe-clone-plan.archived.md),
 đã chia việc theo API (nhóm A chỉ cần sửa FE · nhóm B cần route `/v1` mới · nhóm C cần hợp đồng
 mới) — mảng lớn nhất còn trống là **Routines**.
 
@@ -250,7 +250,7 @@ Xếp theo thứ tự làm, và mảnh 1 là mảnh quyết định:
 
 | # | mảnh | việc | trạng thái |
 |---|---|---|---|
-| 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](fe-clone-plan.md) |
+| 1 | **FE riêng** | làm nốt nhóm A, rồi B (Routines trước) | **đang dở** — [fe-clone-plan.md](../history/fe-clone-plan.archived.md) |
 > **macOS: đã có gói, chưa thử trên máy thật.** Client gốc **có** bản Mac — `main.cjs` có 49 dấu vết
 > `darwin`, 13 nhánh `process.platform === "darwin"`, cả nhánh sandbox và zsh riêng. Phía mình giờ
 > cũng có: đường dẫn tách sang [`infra/patches/client-paths.mjs`](../../infra/patches/client-paths.mjs)

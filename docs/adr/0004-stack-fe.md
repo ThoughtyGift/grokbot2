@@ -3,7 +3,7 @@
 - **Trạng thái:** ⚠️ **hoãn thi hành 2026-08-23** — điều kiện kích hoạt (X4) đã tới, đo lại thì
   tiền đề không đúng. Xem §Kích hoạt đã được đo lại.
 - **Ngày:** 2026-08-22
-- **Liên quan:** [fe/fe-xray-roadmap.md](../plan/fe-xray-roadmap.md) · [system-pipeline.md](../plan/system-pipeline.md) T1.1
+- **Liên quan:** [fe/fe-xray-roadmap.md](../history/fe-xray-roadmap.archived.md) · [system-pipeline.md](../plan/system-pipeline.md) T1.1
 
 ## Bối cảnh
 

@@ -73,3 +73,13 @@ plugin-registry.json
 # Speech-to-text engine: a local venv with the faster-whisper stack (~290MB) plus a model cache.
 # Recreate with:  python -m venv .venv-stt && .venv-stt/Scripts/pip install faster-whisper
 .venv-stt/
+
+# Bundle giải nén của NHÀ PHÁT HÀNH — không bao giờ vào repo này.
+#
+# CLAUDE.md đã nói "decompiled bundle (reference only, not in this repo)", nhưng 31/08 phát hiện
+# `docs/extracted/_latest-asar` nằm ngay trong cây làm việc: 16 MB mã của hãng, chưa commit và
+# cũng chưa ignore — tức chỉ cách một lần `git add -A` là vào lịch sử vĩnh viễn.
+#
+# Nó vẫn hữu ích để ĐO (mọi phát hiện về cờ tính năng, askpass, hợp đồng lệnh đều đọc từ đó), nên
+# không xoá — chỉ chặn không cho commit. Muốn dựng lại: giải nén app.asar của bản đang cài.
+docs/extracted/_latest-asar/
