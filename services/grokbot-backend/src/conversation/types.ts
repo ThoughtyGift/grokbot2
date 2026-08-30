@@ -143,7 +143,26 @@ export type Entry =
    * `t.kind==="user-attachment"?"user":…` — tức nó được vẽ về phía NGƯỜI. Tên trường là
    * `file_path`/`file_name` (snake_case), không phải camelCase.
    */
-  | (Base & { kind: "user-attachment"; file_path: string; file_name: string; replyTo?: { entryId: string; author: string; excerpt: string } });
+  | (Base & {
+      kind: "user-attachment"; file_path: string; file_name: string;
+      /*
+       * `width`/`height`/`byteSize` — trích từ transcript THẬT của app gốc:
+       *
+       *     {"kind":"user-attachment","id":"t8ua0","file_path":"/home/box/…/<sha256>.png",
+       *      "file_name":"image.png","width":1920,"height":1078,"byteSize":520543,
+       *      "batchId":"…","clientNonce":"…"}
+       *
+       * Renderer đọc chúng khi dựng thư viện ảnh của hội thoại:
+       *
+       *     case "user-attachment":
+       *       ag(a.file_path) && i.addImage(a.file_path, a.width ?? null, a.height ?? null, a.file_name)
+       *
+       * `?? null` nên thiếu vẫn vẽ được — nhưng có thì khung ảnh không nhảy một nhịp lúc tải xong.
+       */
+      width?: number; height?: number; byteSize?: number;
+      batchId?: string; clientNonce?: string;
+      replyTo?: { entryId: string; author: string; excerpt: string };
+    });
 
 export type AgentActivity = { kind: "thinking" } | { kind: "tool"; tool: string; detail?: string };
 

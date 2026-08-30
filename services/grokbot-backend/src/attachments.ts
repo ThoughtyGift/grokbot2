@@ -249,6 +249,18 @@ export function readAttachmentImage(args: { path?: unknown }): { dataUrl: string
   };
 }
 
+/**
+ * Kích thước và cỡ tệp của một attachment đã staged. `null` nếu không biết nó.
+ *
+ * Dùng cho entry `user-attachment`: app gốc gửi kèm `width`/`height`/`byteSize`, và renderer đọc
+ * chúng khi dựng thư viện ảnh (`i.addImage(file_path, a.width ?? null, a.height ?? null, …)`).
+ */
+export function attachmentInfo(path: string): { width: number; height: number; byteSize: number } | null {
+  const hit = store.get(path);
+  if (hit == null) return null;
+  return { width: hit.width, height: hit.height, byteSize: hit.bytes.length };
+}
+
 /** For logging: how many images are held. */
 export const stagedCount = (): number => store.size;
 

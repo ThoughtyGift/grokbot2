@@ -31,7 +31,7 @@ import {
 } from "../conversation/index.js";
 import { postSecretRequest, postUserForm } from "../conversation/cards.js";
 import { quenManHinh } from "./anh-man-hinh.js";
-import { stagedTextPreview } from "../attachments.js";
+import { stagedTextPreview, attachmentInfo } from "../attachments.js";
 import {
   TOOLS, isKnownTool, isParallelSafe, toolProtocolFor, turnHooks, attachmentsOf, readImageAttachment,
 } from "./tools.js";
@@ -960,9 +960,31 @@ export function sendPrompt(args: SendArgs) {
     if (!att.path) continue;
     const attId = nextEntryId();
     freshAttIds.add(attId);
+    /*
+     * `kind: "user-attachment"`, KHÔNG phải `kind: "message"` — đo 31/08 từ chính renderer đang chạy.
+     *
+     * Người dùng gửi một tấm ảnh kèm câu hỏi, và trong chat nó hiện thành một ô xám trống. Truy ra
+     * thì renderer dựng thư viện ảnh của hội thoại bằng đúng đoạn này:
+     *
+     *     case "user-attachment":
+     *       ag(a.file_path) && i.addImage(a.file_path, a.width ?? null, a.height ?? null, a.file_name);
+     *     case "message":
+     *       X6e(a.content, i);
+     *       for (const o of a.images ?? []) …
+     *
+     * Nhánh `"message"` chỉ đọc `content` và `images[]` — nó KHÔNG hề nhìn tới trường `message`.
+     * Nên một entry `kind:"message"` mang `message:{type:"attachment"}` bị bỏ qua trọn vẹn: bytes
+     * vẫn tới model (ảnh đi bằng đường `image` của request), chỉ người là không thấy gì.
+     *
+     * Shape dưới đây khớp transcript thật của app gốc, kể cả `width`/`height`/`byteSize`.
+     */
+    const info = attachmentInfo(att.path);
     t.push({
-      id: attId, kind: "message", role: "user",
-      content: "", message: { type: "attachment", url: att.path, file_name: att.name ?? "", alt: att.name ?? "" },
+      id: attId, kind: "user-attachment",
+      file_path: att.path, file_name: att.name ?? "",
+      ...(info && info.width > 0 ? { width: info.width, height: info.height } : {}),
+      ...(info ? { byteSize: info.byteSize } : {}),
+      ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}),
       timestampMs: Date.now(),
     } as Entry);
   }
