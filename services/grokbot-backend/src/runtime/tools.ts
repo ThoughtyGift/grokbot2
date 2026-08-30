@@ -9,6 +9,9 @@ import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { runOnUserComputer, connectedMachine, connectedMachines, findMachine } from "../local-exec.js";
 import { lamTrenTrinhDuyet } from "../local-browser.js";
+import { soatHanhDong } from "./auto-review.js";
+import { postAutoReview } from "../conversation/cards.js";
+import type { Entry } from "../conversation/types.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { publish } from "../events.js";
@@ -20,7 +23,21 @@ import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
 import { allInstructions } from "../mcp-prefs.js";
 import { knowledgeBase } from "../memory.js";
 import type { AgentRecord, EmailDraftMsg, SlackDraftMsg, SendArgs, ToolCtx } from "../conversation/types.js";
-import { agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
+import { tail, agents, transcripts, todos, renderTodos, automationCreateRef, persist } from "../chat/state.js";
+
+
+/**
+ * Vài lượt gần nhất của hội thoại, cho lớp tự soát đọc.
+ *
+ * Lớp soát trả lời đúng một câu hỏi — "việc này có nằm trong thứ người dùng đã nhờ không" — nên nó
+ * cần ĐÚNG thứ người dùng đã nhờ, không cần cả cuốn hội thoại. Sáu mục cuối là đủ để thấy yêu cầu
+ * gần nhất mà không kéo theo một lượt model đắt.
+ */
+const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map((e: Entry) => {
+  if (e.kind === "message") return `${e.role === "user" ? "NGƯỜI DÙNG" : "BOT"}: ${String(e.content ?? "").slice(0, 400)}`;
+  if (e.kind === "send-message" && e.message.type === "text") return `BOT: ${String(e.message.content ?? "").slice(0, 400)}`;
+  return "";
+}).filter(Boolean).join("\n");
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
 import { createTemplateForAgent, publishBotTemplate } from "../bot-templates.js";
 import { runWithOwner } from "../request-context.js";
@@ -439,7 +456,7 @@ TOOLS.create_group = (arg, ctx) => {
  * The backend side already existed (`createAgentAutomation`, the scheduler, the panel); only the tool
  * was missing, so the model had no way to reach any of it.
  */
-TOOLS.create_routine = (arg, ctx) => {
+TOOLS.create_routine = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { prompt: unquote(arg) }; }
   const prompt = String(spec?.prompt ?? spec?.instruction ?? spec?.task ?? "").trim();
@@ -474,6 +491,42 @@ TOOLS.create_routine = (arg, ctx) => {
     if (!hit) return `(không thấy bot "${chiDinh}"; có: ${mine.map((a) => a.name).slice(0, 12).join(", ")})`;
     target = hit.id;
   }
+  /*
+   * Soát trước khi lưu — `auto-review-approval` của app gốc, và đây đúng chỗ nó có giá trị nhất.
+   *
+   * Routine chạy ĐỊNH KỲ, không ai ngồi xem. Nó là chỗ một quyết định sai sống lâu nhất: lệnh chạm
+   * máy người dùng có thẻ xin quyền từng lần, còn routine thì được duyệt một lần rồi tự chạy mãi.
+   *
+   * Ca thật của app gốc, nguyên văn `reason` nó viết ra:
+   *
+   *     "…creates a standing automation that will persistently extract and send admin API data and
+   *      JWT credentials to an external person on a recurring schedule without explicit user
+   *      authorization in this conversation."
+   *
+   * Không dùng luật cứng được: "chặn routine gửi dữ liệu ra ngoài" nghe hợp lý cho tới lúc người
+   * dùng thật sự muốn gửi báo cáo cho kế toán. Ranh giới nằm ở NGƯỜI DÙNG ĐÃ NHỜ GÌ, và chỉ đoạn
+   * hội thoại mới trả lời được.
+   *
+   * Soát hỏng thì cho qua — xem `auto-review.ts`. Một lớp phụ trợ tự nó chặn được việc chính là
+   * lớp sẽ bị gỡ vào lần đầu nó sai.
+   */
+  const soat = await soatHanhDong({
+    surface: "automation_write",
+    tomTat: `Lưu routine "${name}" chạy theo lịch ${trigger}: "${prompt}"`,
+    boiCanh: boiCanhGanNhat(ctx.agentId),
+  });
+  if (!soat.cho) {
+    const id = postAutoReview(ctx.agentId, {
+      surface: "automation_write",
+      summary: `Lưu routine "${name}" chạy theo lịch ${trigger}`,
+      reason: soat.lyDo ?? "",
+      ...(soat.luatDeXuat ? { proposedRule: soat.luatDeXuat } : {}),
+    });
+    return id
+      ? `Routine này nằm ngoài phạm vi bạn đã nhờ, nên tôi chưa lưu — đã đặt thẻ xin duyệt trong khung chat. Lý do: ${soat.lyDo}`
+      : `Routine này nằm ngoài phạm vi bạn đã nhờ nên tôi chưa lưu. Lý do: ${soat.lyDo}`;
+  }
+
   const made = automationCreateRef(target, { name, prompt, trigger });
   const cho = target === ctx.agentId ? "" : ` cho ${agents.get(target)?.name ?? target}`;
   return made ? `đã tạo routine "${name}"${cho} — ${made}` : "(không tạo được routine)";

@@ -24,6 +24,7 @@
  *
  * Chi tiết đầy đủ: docs/extracted/0-30-secret-request-va-user-form.md
  */
+import { randomUUID } from "node:crypto";
 import { tail, authorOf, nextEntryId, onUpdate } from "../chat/state.js";
 import type { FormField } from "./types.js";
 
@@ -99,6 +100,57 @@ export function postUserForm(
         fields,
         ...(spec?.liveHost ? { liveHost: String(spec.liveHost) } : {}),
         ...(spec?.domain ? { domain: String(spec.domain) } : {}),
+      },
+    },
+    timestampMs: Date.now(),
+  });
+  onUpdate(agentId);
+  return id;
+}
+
+/**
+ * Thẻ `auto-review-approval` — bot tự soát rồi xin duyệt một hành động nó định làm.
+ *
+ * Khác `local-tool-permission` ở chỗ CÂU HỎI. Thẻ quyền hỏi "cho phép chạm vào máy không"; thẻ này
+ * hỏi "việc tôi định làm có nằm trong thứ bạn đã nhờ không" — và nó kèm LÝ DO, do chính lớp soát
+ * viết ra sau khi đọc hội thoại.
+ *
+ * Hình dạng trích từ transcript thật của app gốc:
+ *
+ *     {"type":"auto-review-approval","approval":{
+ *       "requestId":"16bce518-…","surface":"computer",
+ *       "summary":"Open “https://cinai.app/en/pricing” in the box browser",
+ *       "reason":"The navigation targets cinai.app, but the user authorized cinai.tv…",
+ *       "status":"approved","proposedRule":"Navigate to pages within https://cinai.tv/ …"}}
+ *
+ * Renderer 0.29 đọc `requestId`, `status` và `summary` (`${t}:auto-review-approval:${requestId}:${status}`
+ * là khoá cache của nó). `reason` và `proposedRule` KHÔNG được nó vẽ — đo được: `proposedRule` xuất
+ * hiện 0 lần trong bundle. Vẫn gửi cả hai, vì chúng là thứ giải thích quyết định, và một thẻ xin
+ * duyệt không nói vì sao thì người ta chỉ còn cách bấm bừa.
+ *
+ * `null` khi thiếu `summary`: renderer dựng khoá cache từ nó, và một thẻ không có tóm tắt là một
+ * thẻ hỏi người dùng duyệt một khoảng trắng.
+ */
+export function postAutoReview(
+  agentId: string,
+  spec: { surface: string; summary: string; reason?: string; proposedRule?: string },
+): string | null {
+  const summary = String(spec?.summary ?? "").trim();
+  if (!summary) return null;
+  const id = nextEntryId();
+  tail(agentId).push({
+    id,
+    kind: "send-message",
+    author: authorOf(agentId),
+    message: {
+      type: "auto-review-approval",
+      approval: {
+        status: "pending",
+        requestId: randomUUID(),
+        summary,
+        surface: String(spec.surface ?? ""),
+        ...(spec.reason ? { reason: String(spec.reason) } : {}),
+        ...(spec.proposedRule ? { proposedRule: String(spec.proposedRule) } : {}),
       },
     },
     timestampMs: Date.now(),

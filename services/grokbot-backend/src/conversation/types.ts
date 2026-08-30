@@ -37,7 +37,27 @@ export type TextMsg = { type: "text"; content: string };
  */
 export type LocalToolAction = "run-command" | "send-input" | "read-file" | "list-directory" | "write-file";
 export type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; action: LocalToolAction; target: string; requestId: string } };
-export type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending" | "approved" | "denied"; summary: string; requestId: string } };
+/**
+ * Thẻ bot tự soát rồi xin duyệt — hình dạng trích từ transcript thật của app gốc:
+ *
+ *     {"type":"auto-review-approval","approval":{"requestId":"16bce518-…","surface":"computer",
+ *       "summary":"Open “…/pricing” in the box browser","reason":"The navigation targets…",
+ *       "status":"approved","proposedRule":"Navigate to pages within https://cinai.tv/ …"}}
+ *
+ * Renderer 0.29 chỉ đọc `requestId`, `status`, `summary`; `proposedRule` xuất hiện 0 lần trong
+ * bundle. Ba trường sau vẫn gửi vì chúng giải thích quyết định — xem `postAutoReview`.
+ */
+export type ApprovalMsg = {
+  type: "auto-review-approval";
+  approval: {
+    status: "pending" | "approved" | "denied";
+    summary: string;
+    requestId: string;
+    surface?: string;
+    reason?: string;
+    proposedRule?: string;
+  };
+};
 export type ListenerConnectMsg = { type: "listener-connect"; platform: string; reason: string };
 /**
  * Tệp đính kèm trong bản ghi.
