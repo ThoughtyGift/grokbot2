@@ -68,8 +68,19 @@ const traLoiExec = async (khung) => {
   const lenh = sm.shellStreamArgs?.command ?? sm.readArgs?.path ?? "(khong ro)";
   console.log(`  ← exec ${String(lenh).slice(0, 60)}  (machineId=${sm.machineId ?? "(khong)"})`);
 
-  await gui({ kind: "client", requestId: khung.requestId, clientMessage: { execId, stdout: `${TRA_LOI}\n` } });
-  await gui({ kind: "client", requestId: khung.requestId, clientMessage: { execId, streamClose: { exitCode: 0 } } });
+  // Shape đúng như daemon thật: mọi mẩu bọc trong `shellStream`, và `stdout` là một OBJECT mang
+  // `data` chứ không phải chuỗi trần. Bản đầu gửi chuỗi trần, backend trả `khungChuaHieu` — đúng
+  // chỗ `gomLuongShell` giữ lại thứ nó không hiểu thay vì nuốt mất, nên cái sai lộ ra ngay.
+  await gui({
+    kind: "client", requestId: khung.requestId,
+    clientMessage: { execId, shellStream: { stdout: { data: `${TRA_LOI}\n` } } },
+  });
+  // `cwd` về trong nhánh `exit`, không phải một nhánh riêng — xem chú thích trong `gomLuongShell`.
+  await gui({
+    kind: "client", requestId: khung.requestId,
+    clientMessage: { execId, shellStream: { exit: { code: 0, cwd: "/ao" } } },
+  });
+  await gui({ kind: "client", requestId: khung.requestId, clientMessage: { execId, streamClose: {} } });
 };
 
 const chay = async () => {

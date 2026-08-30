@@ -48,7 +48,7 @@ import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
 import { closeTeach } from "./teach.js";
-import { runOnUserComputer, userComputerConnected } from "./local-exec.js";
+import { runOnUserComputer, userComputerConnected, findMachine, connectedMachines } from "./local-exec.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -285,8 +285,25 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
         const op = kind === "shell" ? { kind: "shell" as const, command: String(bodyJ.command ?? "") }
           : kind === "read" ? { kind: "read" as const, path: String(bodyJ.path ?? "") }
           : { kind: "ls" as const, path: String(bodyJ.path ?? "") };
-        const r = await runOnUserComputer(op, { timeoutMs: Number(bodyJ.timeoutMs) || 30_000 });
-        return json(r, r.ok ? 200 : 502);
+        /*
+         * `may` — chạy trên MÁY NÀO, khi có nhiều máy nối cùng lúc.
+         *
+         * Không có tham số này thì cửa chẩn đoán luôn rơi vào máy thấy gần nhất, và nhánh định
+         * tuyến đa máy (`findMachine` → `queueRequest(machineId)`) chỉ đo được bằng một lượt model
+         * thật. Nhận cả id lẫn tên hiển thị, đúng như `local_shell` nhận, vì người gõ tên còn
+         * model có thể gõ id.
+         */
+        const ten = String(bodyJ.may ?? bodyJ.machine ?? bodyJ.machineId ?? "").trim();
+        const may = ten ? findMachine(ten) : null;
+        if (ten && !may) {
+          const co = connectedMachines().map((m) => m.label);
+          return json({ ok: false, error: `không có máy nào tên "${ten}". Đang nối: ${co.join(", ") || "(không máy nào)"}` }, 404);
+        }
+        const r = await runOnUserComputer(op, {
+          timeoutMs: Number(bodyJ.timeoutMs) || 30_000,
+          ...(may ? { machineId: may.computerId } : {}),
+        });
+        return json(may ? { ...r, may: may.label } : r, r.ok ? 200 : 502);
       }
       // Webhook của routine. Ops nhận POST công khai rồi chuyển vào đây, vì KHOÁ nằm ở BFF (sqlite)
       // và ops không được đụng sqlite (ADR-P4-2). Đặt TRƯỚC `/internal/ops/fire` vì nhánh kia dùng
