@@ -1174,6 +1174,40 @@ TOOLS.task_v2 = async (arg, ctx) => {
   // what the subagent list shows. Registering before the run is the point: a list that only
   // gains a row once the work finishes never shows anything as "running".
   const title = task.split("\n")[0].slice(0, 80);
+
+  /*
+   * Soát bản giao việc — ca thứ ba app gốc bắt, nguyên văn lý do nó viết:
+   *
+   *     surface "subagent"
+   *     "This delegated prompt instructs a subagent to inspect a third-party website (cinai.tv) and
+   *      report back findings about its monetization, pricing, and business model. The trusted user
+   *      message asks to 'check for 1 trillion dollars from this website' — a vague request that
+   *      does not clearly authorize detailed reconnaissance… The delegated prompt goes beyond the
+   *      user's stated intent."
+   *
+   * Ca này khác hai ca kia ở một điểm đáng để ý: người dùng nói MỘT câu ngắn, còn bot tự viết ra cả
+   * một bản giao việc dài. Khoảng cách giữa hai thứ đó chính là chỗ ý định bị nống lên — và không
+   * ai đọc bản giao việc ấy, trừ đúng con bot con sắp làm theo nó.
+   *
+   * Không lọc trước được như điều hướng: ở đó có tên miền để so, còn ở đây thứ phải so là cả một
+   * đoạn văn. Đổi lại `task_v2` được gọi thưa hơn hẳn một cú bấm chuột, nên một lượt soát cho mỗi
+   * lần giao việc là giá chấp nhận được.
+   */
+  const soat = await soatHanhDong({
+    surface: "subagent",
+    tomTat: `Giao việc cho bot con (${type}): "${task}"`,
+    boiCanh: boiCanhGanNhat(ctx.agentId),
+  });
+  if (!soat.cho) {
+    postAutoReview(ctx.agentId, {
+      surface: "subagent",
+      summary: `Giao việc cho bot con (${type}): ${title}`,
+      reason: soat.lyDo ?? "",
+      ...(soat.luatDeXuat ? { proposedRule: soat.luatDeXuat } : {}),
+    });
+    return `Chưa giao việc này cho bot con: nó rộng hơn thứ người dùng đã nhờ, đã đặt thẻ xin duyệt trong khung chat. Lý do: ${soat.lyDo}`;
+  }
+
   const subagentId = turnHooks.startSubagentRun(ctx.agentId, type, title);
   try {
     const out = await runSubagent(type, task, Object.keys(TOOLS), {
