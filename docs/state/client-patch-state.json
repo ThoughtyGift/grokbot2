@@ -1,12 +1,10 @@
 {
-  "appliedAt": "2026-08-22T09:51:36.442Z",
-  "clientVersion": "0.20.0",
-  "vendorAsarSha256": "0efec942653a2686",
+  "appliedAt": "2026-08-30T16:55:03.308Z",
+  "clientVersion": "0.29.0",
+  "vendorAsarSha256": "e08ac0a9d49a3b9b",
   "patches": [
     {
-      "id": "win-drive-path",
-      "file": "dist/electron-main/main.cjs",
-      "expected": 1
+      "id": "win-drive-path"
     },
     {
       "id": "attach-upload-observable",
@@ -14,9 +12,13 @@
       "expected": 1
     },
     {
-      "id": "get-ultra-redirect",
-      "file": "dist/renderer/assets/index-DNC736IO.js",
-      "expected": 1
+      "id": "get-ultra-redirect"
+    },
+    {
+      "id": "computer-tab-flag"
+    },
+    {
+      "id": "computer-tab-ipc"
     }
   ],
   "note": "Written by infra/scripts/patch-client.mjs --apply. Personal install only — never redistribute a patched client (docs/legal.md)."

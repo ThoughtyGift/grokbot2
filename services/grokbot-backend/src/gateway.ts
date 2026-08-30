@@ -88,7 +88,8 @@ import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody, clearUnknown,
 } from "./observe.js";
-import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot } from "./channels.js";
+import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, connectedMachines } from "./channels.js";
+import { mayChoBang } from "./may-da-biet.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
 import { handleGitHubEvent } from "./github-events.js";
@@ -218,6 +219,11 @@ const ports: AclPorts = {
     channelEnabled: isChannelEnabled,
     // The ACL holds the `ServerResponse` opaquely — it hands back the same object it was given.
     parkRequests: (name, res) => parkRequests(name, res as ServerResponse),
+    // Bảng Settings → Computer đọc qua đây (bản vá `computer-tab` bẻ IPC `getSandMachines` sang).
+    //
+    // Trả cả máy ĐÃ TỪNG nối, không chỉ máy đang nối: bảng hỏi đúng một lần lúc app khởi động, và
+    // lúc ấy daemon chưa kịp cắm. Định tuyến thì vẫn chỉ đọc máy đang nối — xem `may-da-biet.ts`.
+    connectedMachines: () => mayChoBang(connectedMachines()),
     submitResponses,
     channelSnapshot,
   },

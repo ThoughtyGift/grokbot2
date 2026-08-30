@@ -185,6 +185,38 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     getHostStatus: () => ({ isBusy: false, capabilities: {}, current: "applied", version: "0.20.0", state: "current" }),
 
     listAgents: () => directory.listAgents(),
+
+    /*
+     * Bảng Settings → Computer — máy của người dùng đang nối vào kênh local-exec.
+     *
+     * Client GỐC không hỏi lệnh này: bảng ấy đi qua tài khoản Cursor thật rồi gọi API của hãng
+     * (`listSandMachines(getValidAccessToken, getTeamId)` trong main 0.29), nên với backend này nó
+     * luôn trống. Bản vá `computer-tab` bẻ cầu IPC `getSandMachines` sang đây — xem
+     * `infra/patches/computer-tab.mjs` để biết vì sao phải bẻ ở main chứ không ở renderer.
+     *
+     * Hình dạng phải khớp `fromProto` của chính client, không được đoán:
+     *
+     *     {machineId, label, isCurrent, localToolPermission?}
+     *
+     * `localToolPermission` chỉ gửi khi daemon có khai `standing`, vì client bỏ trường này khi
+     * giá trị không hợp lệ (`zMe(...)` mới đưa vào) — gửi bừa một chuỗi lạ thì thà đừng gửi.
+     *
+     * `isCurrent` là máy MỚI THẤY NHẤT chứ không phải máy so theo id. Backend không biết
+     * `getMachineId()` của client, còn daemon thật gửi `ping` đều nên máy đang chạy app luôn là
+     * máy có `seenAtMs` mới nhất. Hai máy THẬT cùng nối thì dấu này thành tuỳ tiện — ghi ra đây
+     * để lần sau khỏi phải phát hiện lại.
+     */
+    getSandMachines: () => {
+      const ds = ports.connectors.connectedMachines?.() ?? [];
+      let moiNhat = -1;
+      for (const m of ds) if (m.seenAtMs > moiNhat) moiNhat = m.seenAtMs;
+      return ds.map((m) => ({
+        machineId: m.computerId,
+        label: m.label,
+        isCurrent: m.seenAtMs === moiNhat,
+        ...(m.standing ? { localToolPermission: m.standing } : {}),
+      }));
+    },
     countAgents: () => directory.countAgents(),
     // The client reads `result.agent.id`, so createAgent/duplicateAgent/openAgent must wrap the
     // record as `{agent, transcript}` (matches the box host: `return { agent: u, transcript: Gn() }`).

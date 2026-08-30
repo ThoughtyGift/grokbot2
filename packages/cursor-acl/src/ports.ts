@@ -208,6 +208,14 @@ export interface ConnectorsPort {
   parkRequests(name: ChannelName, res: unknown): void;
   submitResponses(name: ChannelName, body: Buffer): unknown;
   channelSnapshot(): unknown;
+  /**
+   * Máy của người dùng đang nối vào kênh `local-exec`, cho bảng Settings → Computer.
+   *
+   * Vắng mặt ⇒ lệnh `getSandMachines` trả mảng rỗng, và bảng trống y như trước khi có nó — chứ
+   * không phải một hình dạng renderer không đọc được. Client đọc `.length` rồi `machineId`,
+   * `label`, `isCurrent`, nên thiếu trường là thẻ hỏng, không phải thẻ trống.
+   */
+  connectedMachines?(): { computerId: string; label: string; standing?: string; seenAtMs: number }[];
 }
 
 export type ChannelName = "local-exec" | "webauthn";

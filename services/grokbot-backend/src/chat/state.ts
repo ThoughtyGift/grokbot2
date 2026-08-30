@@ -2,6 +2,7 @@
  * In-process kernel: the maps `state.json` round-trips. Directory, conversation and
  * runtime all share this; they do not each open the file.
  */
+import { napMayDaBiet } from "../may-da-biet.js";
 import { loadState, scheduleSave, type PersistedState } from "../store.js";
 import { ensureSeq } from "../conversation/seq.js";
 import { publish } from "../events.js";
@@ -172,6 +173,10 @@ function migrate(e: any, agentName: string): Entry | null {
   );
   toolSeq = Math.max(maxNum(all.flatMap((e) => (e.kind === "tool-call" ? [e.toolCallId] : [])), /^tc-(\d+)$/) + 1, 1);
   if (agents.size) console.log(`[grokbot2] restored ${agents.size} agent(s), ${[...transcripts.values()].flat().length} transcript entries`);
+  // Sổ máy đã từng nối — bảng Settings → Computer đọc nó lúc app khởi động, trước khi daemon kịp
+  // cắm vào. Nạp ở đây vì đây là chỗ mọi thứ khôi-phục-từ-đĩa đã tụ lại.
+  const soMay = napMayDaBiet();
+  if (soMay) console.log(`[grokbot2] restored ${soMay} máy đã từng nối`);
 }
 
 export const EPOCH = Date.now();

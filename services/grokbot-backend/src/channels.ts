@@ -28,6 +28,7 @@
  * guessed the way `{"frames":[{"kind":"ping"}]}` had to be.
  */
 import type { ServerResponse } from "node:http";
+import { nhoMay } from "./may-da-biet.js";
 import { randomUUID } from "node:crypto";
 import { redact } from "./redact.js";
 
@@ -372,6 +373,9 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
         providerId: nguoiGui,
       };
       mayDangNoi.set(may.computerId, may);
+      // Nhớ sang sổ BỀN nữa: bảng Settings → Computer hỏi một lần lúc app khởi động, mà lúc đó
+      // daemon chưa kịp nối. Xem `may-da-biet.ts` để biết vì sao hai sổ chứ không phải một.
+      nhoMay({ computerId: may.computerId, label: may.label, ...(may.standing ? { standing: may.standing } : {}) });
       console.log(`[grokbot2] [local-exec] máy nối vào: ${may.label} (${may.computerId}) — đang có ${mayDangNoi.size} máy`);
       continue;
     }

@@ -1,4 +1,4 @@
-﻿# F2 launcher: four-process stack + patched Grok Bot.exe on CDP :9222.
+# F2 launcher: four-process stack + patched Grok Bot.exe on CDP :9222.
 #
 #   pnpm dev:app
 #   infra\scripts\run.ps1
@@ -152,6 +152,17 @@ $env:CURSOR_WEBSITE_URL = "http://localhost:$bff"
 # the app would keep working and quietly stop being ours. Pin the version instead; re-apply
 # deliberately with `node infra/scripts/patch-client.mjs --apply` after reviewing a new release.
 $env:SAND_DISABLE_UPDATES = '1'
+
+# Khoa gateway cho tien trinh main cua app.
+#
+# Ban va `computer-tab` be cau IPC `getSandMachines` sang backend nay, va moi loi goi `/gw/api/*`
+# deu phai co Bearer. Main KHONG doc duoc file trong repo (no chay tu C:\cai029), nen khoa di
+# bang bien moi truong — cung duong ma bon bien kia da di.
+#
+# Thieu bien nay thi bang Settings -> Computer trong, chu khong vo: ban va tra `null` khi backend
+# tu choi, va renderer coi `null` la "chua co du lieu".
+$tokenFile = Join-Path $PSScriptRoot "..\..\services\grokbot-backend\.data\gateway-token.txt"
+if (Test-Path $tokenFile) { $env:GROKBOT2_GATEWAY_TOKEN = (Get-Content $tokenFile -Raw).Trim() }
 # Kho du lieu RIENG cho ban da va — de no dung canh app cua hang duoc.
 #
 # Khoa mot-ban cua Electron nam TRONG userData, va client doi userData truoc khi lay khoa:
