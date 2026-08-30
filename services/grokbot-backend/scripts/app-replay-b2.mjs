@@ -169,8 +169,14 @@ if (!moDuoc) {
 await wait(1000);
 
 // ── kịch bản ───────────────────────────────────────────────────────────────────────────────────
-const data = JSON.parse(await readFile("docs/extracted/kich-ban-b2.json", "utf8"));
-const sc = data.scenarios.find((s) => s.bot === "Test Clone");
+// Bộ ca đo sống tách khỏi bản xuất chat — xem chú thích trong parity-lap.mjs (trả giá 31/08).
+const F_BO_CA = "docs/parity-runs/bo-ca-parity.json";
+let sc;
+try { sc = JSON.parse(await readFile(F_BO_CA, "utf8")); } catch (e) {
+  console.error(`KHÔNG ĐO ĐƯỢC — thiếu hoặc hỏng bộ ca: ${F_BO_CA}`);
+  console.error(`  ${e.message}`);
+  process.exit(2);
+}
 const cases = sc.cases.filter((c) => String(c.input ?? "").trim());
 
 /*

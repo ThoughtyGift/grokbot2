@@ -1,0 +1,671 @@
+{
+  "nguon": "docs/extracted/kich-ban-b2.json @ 6fe97bb — scenario bot \"Test Clone\", xuất từ chat app gốc 0.29",
+  "viSaoTachRa": "kich-ban-b2.json bị GHI ĐÈ mỗi lần xuất lại chat. Commit d1edf23 xuất lại và bộ ca này biến mất, làm cả parity-lap, parity-b2 lẫn app-replay-b2 ném TypeError ngay dòng nạp ca. Dữ liệu ĐO phải sống tách khỏi dữ liệu XUẤT.",
+  "soCa": 23,
+  "soCaMongWidget": 5,
+  "cases": [
+    {
+      "input": "bản moi nhất grok bpot có tinh năng nào mới",
+      "atMs": 1787807938953,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Để mình check bản Grok Bot mới nhất xem có gì mới."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Grok Bot mới ra beta hôm 11/8. Tin mới nhất (26/8) là mở rộng gói: SuperGrok, Cursor Pro, và mọi gói Cursor Teams đều dùng được. Usage của Bot tách riêng, không ăn quota Grok/Cursor."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Tính năng đang có: mỗi Bot có máy tính cloud riêng (browser, file, terminal), đăng nhập app thật rồi làm việc luôn. Nhiều Bot nhắn nhau, group chat, routine học từ lúc bạn làm mẫu rồi chạy lịch. Có app desktop và iOS. Android thì chưa."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Sắp ra (chưa ship hết): template chia sẻ để clone Bot, chuyển nhiều account, import Chrome, và route mạng qua máy bạn (cái egress này đã thấy trong Settings của bản hiện tại).\n\nMuốn mình đi sâu cái nào, hoặc check [Updates](grokbot://app/v1/settings?id=update-status) xem app của bạn đã mới chưa?"
+        }
+      ]
+    },
+    {
+      "input": "Grok Bot Updates xem app của bạn đã mới",
+      "atMs": 1787810589272,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình check version app trên máy bạn và đối chiếu bản mới nhất."
+        },
+        {
+          "kind": "permission",
+          "action": "run-command",
+          "target": "uname -s; echo '---'; (sw_vers 2>/dev/null; true); echo '---'; ls /Applications 2>/dev/null | head -50; echo '---'; ls \"$HOME/Applications\" 2>/dev/null; echo '---'; ls /opt 2>/dev/null | head; echo '-"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Máy bạn đang chạy Grok Bot `0.29.0`, cài hôm nay. Mình đang xem còn bản mới hơn không."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "`0.29.0` là version mặc định của bản hiện tại. Mình check thêm feed update xem có bản mới hơn không."
+        }
+      ]
+    },
+    {
+      "input": "The recording is finished. Learn the task from it.",
+      "atMs": 1787810725446,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình đang xem bản ghi demo trên máy của mình, rồi rút thành skill dùng lại được."
+        }
+      ]
+    },
+    {
+      "input": "bạn có tự cài mcp không",
+      "atMs": 1787810809411,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Có. Mình tìm connector, bạn bấm đồng ý, rồi mình cài. Cần đăng nhập thì hiện card để bạn auth. Muốn gắn cái nào?"
+        }
+      ]
+    },
+    {
+      "input": "tìm mcp shopee",
+      "atMs": 1787810860795,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình tìm connector Shopee trong catalog."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Catalog không có connector Shopee chính thức."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình vẫn vào Shopee bằng trình duyệt trên máy mình được. Ngoài catalog có vài MCP cộng đồng (tìm sản phẩm, hoặc quản lý shop nếu bạn có Shopee Open Platform). Bạn muốn mình dùng web, hay gắn MCP shop?"
+        },
+        {
+          "kind": "widget",
+          "prompt": "Bạn muốn mình gắn Shopee kiểu nào?",
+          "options": [
+            "Dùng web Shopee",
+            "MCP quản lý shop",
+            "MCP tìm sản phẩm"
+          ],
+          "responded": "Gắn MCP shop, mình có Shopee Open Platform"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Xem xong bản ghi. Bạn mở Chrome, gõ `kenh14` trên Google, rồi kẹt captcha unusual traffic. Mình không học bước bấm ảnh captcha."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đã lưu [Search Google](sand-workflow:search-google).\n\n1. Tìm `{query}` (trong demo là `kenh14`)\n2. Ưu tiên search tool, chỉ mở google.com khi bạn muốn trang kết quả\n3. Nếu ra captcha thì dừng, không tự giải\n\nMuốn chạy thử với `kenh14` không?"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình lấy MCP Shopee Open Platform (quản lý shop) rồi gắn. Cần Partner ID, Shop ID và key/token."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Catalog không có Shopee. Mình sẽ gắn MCP cộng đồng `@codespar/mcp-shopee` (Open Platform: đơn, sản phẩm, kho, giá). Chạy trên máy mình, các agent khác của bạn cũng dùng được. Cần Partner ID, Partner Key, Shop ID, Access Token."
+        },
+        {
+          "kind": "widget",
+          "prompt": "Gắn MCP Shopee Open Platform này chứ?",
+          "options": [
+            "Gắn MCP shop",
+            "Thôi"
+          ],
+          "responded": "Có, gắn @codespar/mcp-shopee"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Gửi 4 giá trị từ Shopee Open Platform, mỗi dòng một cái:\n\n`Partner ID`\n`Partner Key`\n`Shop ID`\n`Access Token`\n\nPartner Key và Access Token đừng share chỗ khác. Token hết hạn khoảng 4 giờ."
+        }
+      ]
+    },
+    {
+      "input": "Partner ID Partner Key Shop ID Access Token\n\nlấy ở đâu",
+      "atMs": 1787811475819,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình lấy đúng trang Open Platform rồi chỉ từng cái."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Tất cả lấy ở [Shopee Open Platform](https://open.shopee.com). Đăng nhập (email doanh nghiệp), vào Console → App Management → App List."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Trong app: **Partner ID** là App ID, **Partner Key** là Secret Key (trang chi tiết app).\n\n**Shop ID** và **Access Token** chỉ có sau khi shop ủy quyền app: mở link auth, đăng nhập seller, đồng ý. Token sống khoảng 4 giờ, phải refresh.\n\nBạn đã có app trên Console chưa, hay mới có shop bán hàng?"
+        },
+        {
+          "kind": "widget",
+          "prompt": "Bạn đang ở bước nào trên Open Platform?",
+          "options": [
+            "Đã có app Open Platform",
+            "Mới có shop, chưa có app"
+          ],
+          "responded": "Mới có shop bán hàng, chưa tạo app Open Platform"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Shop bán hàng khác Open Platform. Phải tạo app developer thì mới có Partner ID / Key."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Vào [open.shopee.com](https://open.shopee.com) (không phải Seller Centre), Sign up bằng email, rồi Console → App Management → Create App. Chọn Seller, đặt tên, Redirect URL tạm `https://example.com/callback`. Trong app lấy Partner ID và Partner Key, bật quyền Shop, Product, Order, Logistics.\n\nGửi hai cái đó khi có. Mình sẽ làm link ủy quyền shop để lấy Shop ID và Access Token."
+        }
+      ]
+    },
+    {
+      "input": "bạn tự đăng ký cho mình đc ko",
+      "atMs": 1787811548356,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình mở form trên máy mình được. Đăng nhập Shopee thì bạn phải bấm, mình không nhập mật khẩu. Đang mở Open Platform."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đang mở open.shopee.com. Tới bước login mình đưa máy cho bạn đăng nhập."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Open Platform đang ở trang đăng nhập. Mình đưa máy cho bạn: Log In nếu đã có tài khoản developer, hoặc Sign Up nếu chưa."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đăng nhập Shopee Open Platform, hoặc Sign Up nếu chưa có tài khoản"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Trang login còn trống, chưa đăng nhập. Mình không gõ mật khẩu được. Bấm Sign Up (hoặc Log In nếu đã có tài khoản developer), xong trả máy lại cho mình tạo app."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Sign up or log in to Shopee Open Platform, then hand back"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Vẫn chưa đăng nhập. Mình bấm Sign Up, rồi đưa máy cho bạn tạo tài khoản trên màn hình đó."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đang mở form đăng ký. Chờ xíu."
+        }
+      ]
+    },
+    {
+      "input": "kiểm tra có sẵn mcp plugin nào",
+      "atMs": 1787811841457,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình kiểm tra connector đang gắn và cái catalog có sẵn."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đang gắn 2 connector, cả hai chưa auth: Notion và Gmail."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Catalog khoảng 272 plugin, vẫn không có Shopee. Muốn mình bật auth Notion/Gmail, hay tìm plugin khác theo tên?"
+        },
+        {
+          "kind": "widget",
+          "prompt": "Bật auth connector nào?",
+          "options": [
+            "Auth Notion",
+            "Auth Gmail",
+            "Auth cả hai",
+            "Thôi"
+          ],
+          "responded": null
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Màn hình đang mở vẫn là login Shopee Open Platform. Mình kiểm tra các tab xem đã có session nào chưa."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Có tab Open Platform home. Mình vào Console xem session đã login chưa, rồi mới tạo app."
+        }
+      ]
+    },
+    {
+      "input": "xây nminfh quy trình vận hành sàn shopee chuyên nghiệp giống 1 shop lớn",
+      "atMs": 1787811956236,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình dựng bộ vận hành Shopee kiểu shop lớn: vai trò, lịch trong ngày, đơn hàng, kho, CS, ads, tài chính. Viết thành SOP."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Khung mình đang viết: Owner + CS + Kho + Listing + Ads + Kế toán (1 người cũng đeo hết mũ được). Lịch sáng-trưa-tối, SLA chat, cutoff đóng hàng, tồn kho an toàn, ads/voucher, KPI tuần."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Shopee Open Platform vẫn chờ login để gắn API. SOP thì dùng được ngay trên Seller Centre, không phụ thuộc MCP."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Xong bộ vận hành Shopee Mall-grade. 6 vai (Owner, CS, Kho, Listing, Ads, Kế toán), 1 người đeo hết mũ được. Sáng Chat trước, rồi đơn hạn hôm nay, pack có video, SPX, ads sau cùng. Không kêu khách hủy."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mục tiêu nội bộ: LSR < 3%, NFR < 2%, chat ≤ 2 phút (8h–22h), rating ≥ 4.80. SKU dạng `KD-NGANH-FAM-OPT`. Checklist dán cạnh màn hình, SOP để khi gãy."
+        },
+        {
+          "kind": "attachment",
+          "fileName": "shopee-ops-sop.md"
+        },
+        {
+          "kind": "attachment",
+          "fileName": "shopee-ops-daily-checklist.md"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Muốn mình nhắc checklist mỗi sáng thứ 2–6 lúc 8h, hay chỉnh SOP theo ngành hàng shop bạn đang bán?"
+        }
+      ]
+    },
+    {
+      "input": "buid cho mình dàn bot để vận hành",
+      "atMs": 1787812604995,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình dựng 5 bot đúng vai SOP (CS, Kho, Listing, Ads, Kế toán), cho vào một group. Bạn vẫn là Owner."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Dàn xong. Group **Shopee Ops** có mình (điều phối) + 5 bot:\n\nCS · Kho · Listing · Ads · Kế toán"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Bạn là Owner. Nhắn group khi cần cả dàn, hoặc mở từng bot. CS không kêu khách hủy; Kho pack có video; Ads không chạy khi còn đơn hạn hôm nay.\n\nMuốn mình chạy standup group mỗi sáng 8h thứ 2–6 theo checklist không?"
+        }
+      ]
+    },
+    {
+      "input": "bạn biết livetream or tự quay màn hình obs không",
+      "atMs": 1787860446767,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "OBS thì biết: cài, scene, quay màn hình, đẩy RTMP. Trên máy mình mình quay được desktop."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Livestream Shopee thì khác. Live bán hàng thường phải app seller / camera / khoe hàng. Mình setup OBS hoặc quay màn hình được, không thế bạn đứng live.\n\nBạn muốn quay màn hình, setup OBS, hay thử luồng live Shopee?"
+        },
+        {
+          "kind": "widget",
+          "prompt": "Bạn muốn mình làm kiểu nào?",
+          "options": [
+            "Quay màn hình",
+            "Setup OBS",
+            "Thử live Shopee"
+          ],
+          "responded": "Setup OBS cho mình"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình check máy bạn đã có OBS chưa, rồi cài và tạo scene quay màn hình."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Admin-PC đang disconnect. Mình thử máy DESKTOP-7D2FJG8."
+        },
+        {
+          "kind": "permission",
+          "action": "run-command",
+          "target": "$ErrorActionPreference = 'SilentlyContinue'\nWrite-Output \"USER=$env:USERNAME COMPUTER=$env:COMPUTERNAME\"\nWrite-Output '---OBS exe---'\n@(\n  \"${env:ProgramFiles}\\obs-studio\\bin\\64bit\\obs64.exe\",\n  \"${en"
+        }
+      ]
+    },
+    {
+      "input": "ok",
+      "atMs": 1787860985722,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình cài OBS trên máy mình, tạo scene quay màn hình."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "OBS 30.2 đã cài. Mình tạo scene quay màn hình 1280×800 rồi mở app."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Preview đang soi gương vì OBS tự bắt chính cửa sổ nó. Live Shopee thì thêm stream key trong Settings → Stream. Muốn mình gắn RTMP Shopee luôn không?"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "OBS đã chạy trên máy mình. Profile **Shopee**, scene **Man hinh**, Display Capture 1280×800 30fps. File ghi vào thư mục quay. Start Recording là bắt đầu."
+        }
+      ]
+    },
+    {
+      "input": "cách dùng OSB như nào",
+      "atMs": 1787861503898,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mở máy của mình, OBS đang chạy profile **Shopee**. Scene **Man hinh** = quay cả màn hình."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Quay: bấm **Start Recording** (đỏ là đang ghi). Dừng: **Stop Recording**. File .mp4 nằm thư mục quay trên máy mình.\n\nLive: **Settings → Stream** dán server + stream key, rồi **Start Streaming**. Chưa có key Shopee thì đừng bấm Stream."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Preview bị soi gương là bình thường vì OBS đang bắt chính nó. Muốn quay Chrome thì Sources → + → Window Capture, chọn cửa sổ, tắt Display Capture.\n\nNút chính: Start Recording / Start Streaming / Settings. Còn lại chưa cần đụng."
+        }
+      ]
+    },
+    {
+      "input": "kiểm tra có MCP hay các skill repo nào liên quan OBS không",
+      "atMs": 1787861559545,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình lùng catalog plugin và skill xem có OBS không."
+        }
+      ]
+    },
+    {
+      "input": "bạn biết edit video luôn không",
+      "atMs": 1787861578496,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Edit được. Cắt, ghép, overlay chữ, crop, đổi tốc độ, xuất mp4 bằng ffmpeg. Không phải Premiere: mình làm theo file, không kéo timeline GUI."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Catalog Grok Bot không có plugin OBS. Ngoài catalog có MCP cộng đồng điều khiển OBS qua WebSocket (đổi scene, start/stop record). Skill local cũng chưa có OBS.\n\nMuốn cắt clip vừa quay, hay gắn MCP OBS?"
+        },
+        {
+          "kind": "widget",
+          "prompt": "Làm tiếp cái nào?",
+          "options": [
+            "Cắt/edit clip",
+            "Gắn MCP OBS",
+            "Thôi"
+          ],
+          "responded": "Gắn MCP điều khiển OBS"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình lấy WebSocket OBS rồi gắn MCP điều khiển scene/record."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "WebSocket OBS đang tắt. Mình bật, rồi gắn MCP `obs-mcp`."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Gắn xong MCP **obs**, đang connected, 125 lệnh. Điều khiển OBS trên máy mình: scene, source, record, stream."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "OBS đang mở scene **Man hinh**. Muốn mình thử Start Recording không?"
+        }
+      ]
+    },
+    {
+      "input": "thử Start Recording thêm 1 vài test E2E",
+      "atMs": 1787861822326,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình bấm Start Recording qua MCP, rồi test list scene, status, stop, kiểm tra file."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "MCP obs đã sẵn sàng. Mình chạy test: version, scene, Start Recording, stop, kiểm tra file."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Recording đã start, scene **E2E Test**. Ghi ~3 giây rồi stop."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "E2E pass hết.\n\nOBS 30.2.3, scene **Man hinh**, folder `/workspace/obs-recordings`. Tạo scene **E2E Test**, Start Recording, stop, xóa scene test, quay lại **Man hinh**.\n\nFile: `2026-08-27_20-17-52.mp4` (~20s, H.264 1280×800 @ 30fps, AAC, 57KB). Ghi lúc ~03:18 ICT. Chưa đụng Stream."
+        },
+        {
+          "kind": "attachment",
+          "fileName": "2026-08-27_20-17-52.mp4"
+        }
+      ]
+    },
+    {
+      "input": "bạn có xem video vừa tạo ra ko",
+      "atMs": 1787861962056,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Chưa xem kỹ, đang mở clip E2E vừa ghi."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Xem xong mình nói luôn clip có gì."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Xem clip E2E rồi: ~20 giây toàn màn đen, không đệ quy, không đổi scene, không thấy UI. Đang check nhanh có tiếng không."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "File ghi được, nhưng hình đen hết 20 giây, tiếng thì track AAC có mà gần như câm (-91 dB). Start/Stop MCP ok, Display Capture thì chưa ra hình (có thể nguồn xshm không bắt được màn). Muốn mình chỉnh lại source rồi quay test lần nữa không?"
+        }
+      ]
+    },
+    {
+      "input": "chỉnh lại source rồi quay test lần nữa",
+      "atMs": 1787862036829,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Lần trước mình ghi scene **E2E Test** trống nên clip đen. Mình chỉnh source trên **Man hinh**, rồi quay test lại trên scene đó."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Scene **Man hinh** vẫn có Display Capture (xshm, màn 0). Mình chụp preview source xem có hình không rồi mới ghi."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Source bắt màn được rồi (preview có hình, đệ quy vì OBS tự quay mình). Clip đen là do ghi scene trống. Mình gắn chữ test lên **Man hinh** rồi quay lại, không đổi scene giữa chừng."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Preview có hình + chữ xanh **Shopee E2E Man hinh**. Đang ghi ~6 giây trên scene **Man hinh**."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Clip mới không đen. ~15s, scene **Man hinh**, chữ xanh **Shopee E2E Man hinh**, Display Capture ra màn (OBS tự quay mình nên đệ quy). File `2026-08-27_20-22-15.mp4`, ~03:22 ICT."
+        },
+        {
+          "kind": "attachment",
+          "fileName": "2026-08-27_20-22-15.mp4"
+        }
+      ]
+    },
+    {
+      "input": "bạn biết edit video ko",
+      "atMs": 1787863061031,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Có, nhưng không phải kiểu Premiere. Mình cắt, ghép, overlay chữ/ảnh, chỉnh tiếng bằng ffmpeg. Muốn mình thử trên clip E2E vừa ghi không?"
+        }
+      ]
+    },
+    {
+      "input": "edit video dùng phần mềm nào",
+      "atMs": 1787863130796,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình dùng **ffmpeg** trên máy này. Cắt, ghép, overlay, đổi tốc độ, tiếng. Không mở được Premiere, CapCut, DaVinci."
+        }
+      ]
+    },
+    {
+      "input": "capcut",
+      "atMs": 1787863142798,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "CapCut desktop không có bản Linux. Mình mở CapCut Web trên máy này."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đang mở editor web. Nếu bắt đăng nhập TikTok/CapCut thì mình đưa máy cho bạn."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "CapCut Web mở được (editor, timeline, Export), nhưng popup bắt đăng nhập Google/TikTok/email, chưa upload được. Bạn đăng nhập trên máy mình giúp."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Đăng nhập CapCut (Google / TikTok / email)"
+        }
+      ]
+    },
+    {
+      "input": "ùng ffmpeg trên máy này là gì",
+      "atMs": 1787864416890,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "ffmpeg là phần mềm cắt ghép video bằng lệnh, đã cài sẵn trên máy mình. Không có timeline kéo thả như CapCut; mình gõ lệnh kiểu cắt 5 giây, dán chữ, ghép 2 clip, rồi ra file mp4."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Hồi nãy clip E2E mình cũng dùng nó để đo độ dài, tách frame, check tiếng. Muốn mình demo cắt clip đó cho xem không?"
+        }
+      ]
+    },
+    {
+      "input": "kiểm tra có MCP skill plugin chuyên nghiệp giống capcut không",
+      "atMs": 1787864478646,
+      "expected": [
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Mình rà catalog MCP, plugin và skill xem có editor kiểu CapCut không."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Catalog plugin không có CapCut, Premiere hay DaVinci. Không có MCP “kéo timeline như CapCut” chính thức."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Gần nhất trên store: [Remotion](grokbot://app/v1/plugin/add?id=49339676) (làm video bằng React, 12 skill), [Canva](grokbot://app/v1/plugin/add?id=32197178) (design, không phải NLE), [HeyGen](grokbot://app/v1/plugin/add?id=14372196) (avatar/lồng tiếng). Không cái nào edit clip kiểu CapCut."
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Ngoài store: **Kinocut** (ffmpeg MCP, ~196 tool, chạy local trên máy mình, không cần CapCut). MCP CapCut cộng đồng thì có nhưng unofficial, phải cài CapCut desktop Windows/Mac rồi sửa file draft. Muốn mình gắn Kinocut giống OBS không?"
+        },
+        {
+          "kind": "text",
+          "author": null,
+          "text": "Ok, giờ mình là Test Clone."
+        }
+      ]
+    }
+  ]
+}

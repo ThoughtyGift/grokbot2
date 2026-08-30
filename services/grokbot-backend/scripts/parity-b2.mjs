@@ -24,8 +24,36 @@ const gw = (m, b = {}) => fetch(`http://127.0.0.1:8788/gw/api/${m}`, {
 
 const tr = await gw("getAgentTranscript", { agentId, id: agentId });
 const rows = tr?.transcript ?? tr?.entries ?? (Array.isArray(tr) ? tr : []);
-const cases = JSON.parse(readFileSync("docs/extracted/kich-ban-b2.json", "utf8"))
-  .scenarios.find((s) => s.bot === "Test Clone").cases.filter((c) => String(c.input ?? "").trim());
+/*
+ * Bộ ca đo sống TÁCH khỏi bản xuất chat, và đây là lý do — trả giá 31/08.
+ *
+ * Trước đây dòng này đọc `docs/extracted/kich-ban-b2.json` rồi `.find(s => s.bot === "Test Clone")`.
+ * File đó là đầu ra của script xuất chat app gốc, nên nó bị GHI ĐÈ mỗi lần xuất lại. Commit d1edf23
+ * xuất lại — danh sách bot đổi, "Test Clone" biến mất, và `.find(...)` trả `undefined`. Cả ba bài đo
+ * parity (`parity-lap`, `parity-b2`, `app-replay-b2`) từ đó ném `Cannot read properties of undefined
+ * (reading 'cases')` ngay dòng nạp ca.
+ *
+ * Không ai thấy, vì không ai chạy lại — con số "21/23 ổn định qua 3 lượt" trong bảng theo dõi vẫn
+ * nằm đó như một sự thật hiện hành, trong khi bài sinh ra nó đã không chạy được suốt nhiều ngày.
+ *
+ * Nên: dữ liệu ĐO không được nằm chung file với dữ liệu XUẤT, và khi bộ ca vắng mặt thì bài đo phải
+ * NÓI RA rồi dừng, chứ không ném một TypeError không ai đọc được là bệnh gì.
+ */
+const napBoCa = () => {
+  const f = "docs/parity-runs/bo-ca-parity.json";
+  let j;
+  try { j = JSON.parse(readFileSync(f, "utf8")); } catch (e) {
+    console.error(`KHÔNG ĐO ĐƯỢC — thiếu hoặc hỏng bộ ca: ${f}`);
+    console.error(`  ${e.message}`);
+    console.error("  Dựng lại: git show 6fe97bb:docs/extracted/kich-ban-b2.json (scenario bot \"Test Clone\").");
+    process.exit(2);
+  }
+  const cs = (j.cases ?? []).filter((c) => String(c.input ?? "").trim());
+  if (!cs.length) { console.error(`KHÔNG ĐO ĐƯỢC — ${f} không có ca nào.`); process.exit(2); }
+  return cs;
+};
+
+const cases = napBoCa();
 
 const moc = [];
 /*
