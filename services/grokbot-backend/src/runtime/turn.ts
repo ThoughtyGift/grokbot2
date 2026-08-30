@@ -383,6 +383,14 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
  */
 const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "watch_video", "create_diagram", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
 
+/**
+ * Tool chạm vào MÁY THẬT của người dùng qua local-exec — luôn phải có thẻ, không có đường tắt.
+ *
+ * Tách riêng khỏi `AUTO_APPROVED` vì đây là chiều ngược lại: không phải "khỏi hỏi", mà là "hỏi kể
+ * cả khi cài đặt nói khỏi hỏi". Xem khối chú thích ở chỗ dùng nó.
+ */
+const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read"]);
+
 /** Native `/v1` turns ask on write tools even when the stock app saved "always". */
 const askWriteThisTurn = new Set<string>();
 
@@ -1097,6 +1105,25 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
     t.push(denied);
     const tc = t.find((e): e is Extract<Entry, { kind: "tool-call" }> => e.kind === "tool-call" && e.toolCallId === toolCallId);
     if (tc) { tc.status = "done"; tc.result = "(người dùng đã chặn công cụ chạy lệnh trên máy)"; }
+    onUpdate(agentId);
+    return;
+  }
+  /*
+   * Việc chạm vào MÁY THẬT CỦA NGƯỜI DÙNG thì luôn phải hỏi, kể cả khi `standing === "always"`.
+   *
+   * Lý do không phải là thận trọng chung chung. `always` trên máy này ĐÃ được bật từ trước — nhưng
+   * nó được bấm trong bối cảnh mọi lệnh chạy trên BOX: một máy Linux dùng riêng cho bot, vứt đi
+   * được. Máy Windows của người dùng là bối cảnh khác hẳn: cùng cái máy đang mở Seller Centre,
+   * ngân hàng, Zalo. Người dùng chưa bao giờ được hỏi về máy ấy, nên coi cú bấm cũ là lời đồng ý
+   * cho máy ấy là suy diễn thay họ.
+   *
+   * App gốc cũng để mặc định "Ask every time" cho đúng nhóm này.
+   */
+  if (known && CHAM_MAY_NGUOI_DUNG.has(lower) && standing !== "never") {
+    const card: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
+      message: { type: "local-tool-permission", ask: { status: "pending", action: lower === "local_read" ? "read-file" : "run-command", target: `${name}(${arg})`, requestId } } };
+    t.push(card);
+    pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: lower, arg, history });
     onUpdate(agentId);
     return;
   }

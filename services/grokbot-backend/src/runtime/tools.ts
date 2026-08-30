@@ -7,6 +7,7 @@ import { config, loadPoolKey } from "../config.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, activateTabOf } from "../browser.js";
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
+import { runOnUserComputer, connectedMachine } from "../local-exec.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { publish } from "../events.js";
@@ -549,6 +550,67 @@ function isPrivateAddress(addr: string): boolean {
  * Một ảnh duy nhất: các khung ghép thành CONTACT SHEET (tile) vì pool chỉ chở một ảnh mỗi lượt —
  * xem ctx.see. Ảnh vừa vào transcript cho người xem, vừa đặt trước mắt model ở lượt kế.
  */
+/*
+ * Hai tool chạm vào MÁY THẬT của người dùng, qua local-exec.
+ *
+ * Khác mọi tool khác ở một điểm phải nói to: `run_terminal_command_v2` chạy trên BOX — một máy
+ * Linux dùng riêng cho bot, vứt đi được. Hai tool này chạy trên máy Windows/mac người dùng đang
+ * ngồi, nơi có OBS, có Chrome đã đăng nhập, có tệp thật.
+ *
+ * Vì thế chúng nằm trong `CHAM_MAY_NGUOI_DUNG` (turn.ts): LUÔN dựng thẻ xin quyền, kể cả khi cài
+ * đặt `localToolPermission` đang là "always". Đường tắt ấy được bấm trong bối cảnh lệnh chạy trên
+ * box; suy ra nó cũng đồng ý cho máy thật là suy diễn thay người dùng.
+ *
+ * Hai chốt an toàn nữa không phải của ta mà của chính daemon hãng, và đã đo được là đang chạy:
+ *   - mọi đường dẫn bị nhốt trong `localRoot` (`C:\Users\<user>`), ra ngoài thì `SandLocalExecPathError`
+ *   - lệnh chạy trong một script PowerShell có hạn giờ, hết giờ thì huỷ và báo `SHELL_ABORT_REASON_TIMEOUT`
+ */
+/** Cắt kết quả trả cho model. Một `dir` trong thư mục lớn có thể ra hàng trăm KB. */
+const catBot = (s: string, max = 8000): string =>
+  s.length <= max ? s : `${s.slice(0, max)}
+… (cắt bớt, còn ${s.length - max} ký tự)`;
+
+TOOLS.local_shell = async (arg, _ctx) => {
+  let spec: { command?: string; cwd?: string; timeoutMs?: number };
+  try { spec = JSON.parse(arg); } catch { spec = { command: unquote(arg) }; }
+  const command = String(spec?.command ?? "").trim();
+  if (!command) return 'local_shell cần {"command":"<lệnh>"}';
+  const may = connectedMachine();
+  if (!may) {
+    return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại"
+      + " (Settings → Computer phải thấy tên máy). Trong lúc chờ, mình dùng máy của mình được.";
+  }
+  const r = await runOnUserComputer(
+    { kind: "shell", command, ...(spec?.cwd ? { cwd: String(spec.cwd) } : {}) },
+    { timeoutMs: Number(spec?.timeoutMs) || 30_000 },
+  );
+  if (!r.ok) return `Không chạy được trên ${may.label}: ${r.error}`;
+  const d = (r.data ?? {}) as { stdout?: string; stderr?: string; exitCode?: number; aborted?: string };
+  const phan = [
+    `[${may.label}] exit=${d.exitCode ?? "?"}${d.aborted ? ` (${d.aborted})` : ""}`,
+    d.stdout?.trim() ? `stdout:\n${d.stdout.trim()}` : "",
+    d.stderr?.trim() ? `stderr:\n${d.stderr.trim()}` : "",
+  ].filter(Boolean);
+  return catBot(phan.join("\n"));
+};
+
+TOOLS.local_read = async (arg, _ctx) => {
+  let spec: { path?: string };
+  try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
+  const path = String(spec?.path ?? "").trim();
+  if (!path) return 'local_read cần {"path":"<đường dẫn trên máy bạn>"}';
+  const may = connectedMachine();
+  if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
+  const r = await runOnUserComputer({ kind: "read", path }, { timeoutMs: 20_000 });
+  if (!r.ok) return `Không đọc được trên ${may.label}: ${r.error}`;
+  const d = (r.data ?? {}) as { readResult?: { success?: { content?: string }; invalidFile?: { reason?: string } } };
+  const rr = d.readResult;
+  if (rr?.invalidFile) return `Không đọc được ${path}: ${rr.invalidFile.reason ?? "tệp không hợp lệ"}`;
+  const noi = rr?.success?.content;
+  if (typeof noi !== "string") return `Không rõ kết quả: ${JSON.stringify(r.data).slice(0, 300)}`;
+  return catBot(`[${may.label}] ${path}\n${noi}`);
+};
+
 TOOLS.watch_video = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
