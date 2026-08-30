@@ -22,7 +22,7 @@ three layers the client needs, so the real UI renders and works:
 | Chat (`sendPrompt`) | routed to your Claude pool via `@grokbot2/pool-client` |
 
 Not included yet: the VNC/exec **box** (a real Linux desktop). Chat does not need it. See
-[docs/roadmap.md](docs/roadmap.md) for running a real box on a VPS.
+[ROADMAP.md](ROADMAP.md) for running a real box on a VPS.
 
 ## Structure (pnpm + Turborepo)
 
