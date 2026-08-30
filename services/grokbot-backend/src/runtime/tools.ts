@@ -33,6 +33,63 @@ import { tail, agents, transcripts, todos, renderTodos, automationCreateRef, per
  * cần ĐÚNG thứ người dùng đã nhờ, không cần cả cuốn hội thoại. Sáu mục cuối là đủ để thấy yêu cầu
  * gần nhất mà không kéo theo một lượt model đắt.
  */
+/**
+ * Lấy tên miền gốc của một URL — `banhang.shopee.vn` → `shopee.vn`.
+ *
+ * So theo tên miền gốc chứ không theo host đầy đủ: người dùng nói "vào Shopee" rồi bot đi
+ * `banhang.shopee.vn` là chuyện bình thường, còn bắt nó trùng khít từng subdomain thì mỗi bước
+ * trong một trang là một lần hỏi.
+ */
+const tenMienGoc = (url: string): string => {
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    const p = h.split(".");
+    return p.length <= 2 ? h : p.slice(-2).join(".");
+  } catch { return ""; }
+};
+
+/**
+ * Soát một lần điều hướng — ca thứ hai app gốc bắt, nguyên văn lý do nó viết:
+ *
+ *     surface "computer" · Open “https://cinai.app/en/pricing” in the box browser
+ *     "The navigation targets https://cinai.app/en/pricing, but the user authorized inspection of
+ *      https://cinai.tv/ where you are already logged in. These are different domains, and the
+ *      user did not ask to visit cinai.app."
+ *
+ * ── Lọc TRƯỚC khi hỏi model ────────────────────────────────────────────────────────────────────
+ *
+ * Soát mọi lần điều hướng là một lượt model mỗi lần bấm — đắt, chậm, và gần như luôn cho qua. Nên
+ * chỉ hỏi khi tên miền CHƯA từng xuất hiện trong hội thoại. Điều hướng trong cùng một trang, hay
+ * tới trang người dùng vừa nhắc tên, đi thẳng và không tốn gì.
+ *
+ * Trả về `null` = cho đi. Trả về chuỗi = câu tool báo lại cho model, và thẻ xin duyệt đã được đặt.
+ */
+const soatDieuHuong = async (arg: string, agentId: string): Promise<string | null> => {
+  let url = "";
+  try { url = String(JSON.parse(arg)?.url ?? ""); } catch { url = unquote(arg); }
+  const mien = tenMienGoc(url);
+  if (!mien) return null;
+
+  const boiCanh = boiCanhGanNhat(agentId);
+  // Tên miền đã được nhắc tới thì không phải chuyện lạ — đi luôn, không tốn lượt model nào.
+  if (!boiCanh || boiCanh.toLowerCase().includes(mien)) return null;
+
+  const soat = await soatHanhDong({
+    surface: "computer",
+    tomTat: `Mở ${url} trong trình duyệt của bot`,
+    boiCanh,
+  });
+  if (soat.cho) return null;
+
+  postAutoReview(agentId, {
+    surface: "computer",
+    summary: `Mở ${url} trong trình duyệt của bot`,
+    reason: soat.lyDo ?? "",
+    ...(soat.luatDeXuat ? { proposedRule: soat.luatDeXuat } : {}),
+  });
+  return `Chưa mở ${url}: trang này nằm ngoài phạm vi người dùng đã nhờ, đã đặt thẻ xin duyệt trong khung chat. Lý do: ${soat.lyDo}`;
+};
+
 const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map((e: Entry) => {
   if (e.kind === "message") return `${e.role === "user" ? "NGƯỜI DÙNG" : "BOT"}: ${String(e.content ?? "").slice(0, 400)}`;
   if (e.kind === "send-message" && e.message.type === "text") return `BOT: ${String(e.message.content ?? "").slice(0, 400)}`;
@@ -1349,7 +1406,15 @@ const mcpProtocolFor = (owner: string): string => {
 // recoverable ("no page target - is Chrome running on the box?"); a silently missing tool is
 // neither. The probe stays, but only to say so in the startup line.
 if (isBrowserConfigured()) {
-  for (const name of BROWSER_TOOL_NAMES) TOOLS[name] = (arg, ctx) => runBrowserTool(name, arg, ctx);
+  for (const name of BROWSER_TOOL_NAMES) {
+    TOOLS[name] = async (arg, ctx) => {
+      if (name === "browser_navigate") {
+        const chan = await soatDieuHuong(arg, ctx.agentId);
+        if (chan) return chan;
+      }
+      return runBrowserTool(name, arg, ctx);
+    };
+  }
   void browserProbe();
 }
 

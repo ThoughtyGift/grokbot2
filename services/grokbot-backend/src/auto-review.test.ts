@@ -59,3 +59,37 @@ test("không bao giờ ném — mọi đường hỏng đều phải trả về 
     if (cuUrl != null) process.env.GROKBOT2_POOL_URL = cuUrl; else delete process.env.GROKBOT2_POOL_URL;
   }
 });
+
+/*
+ * ── Bộ lọc tên miền: thứ quyết định lớp này ĐẮT hay RẺ ──────────────────────────────────────────
+ *
+ * Soát mọi lần điều hướng là một lượt model mỗi lần bấm. Bộ lọc "tên miền đã được nhắc thì đi
+ * luôn" là lý do lớp này dùng được trong việc thật: điều hướng trong cùng một trang, hay tới trang
+ * người dùng vừa nêu tên, không tốn gì cả.
+ *
+ * Logic lọc nằm trong `tools.ts` (không export), nên bài dưới đây kiểm đúng phép rút tên miền gốc
+ * mà nó dựa vào — chép lại ở đây có chủ ý: hai bên lệch nhau thì bài đỏ.
+ */
+const tenMienGoc = (url: string): string => {
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    const p = h.split(".");
+    return p.length <= 2 ? h : p.slice(-2).join(".");
+  } catch { return ""; }
+};
+
+test("subdomain rút về cùng tên miền gốc — 'vào Shopee' rồi đi banhang.shopee.vn là bình thường", () => {
+  assert.equal(tenMienGoc("https://banhang.shopee.vn/portal/sale"), "shopee.vn");
+  assert.equal(tenMienGoc("https://shopee.vn/"), "shopee.vn");
+  assert.equal(tenMienGoc("https://www.shopee.vn/x"), "shopee.vn");
+});
+
+test("hai tên miền KHÁC nhau không được rút về một — đó là cả ca app gốc bắt", () => {
+  // "user authorized cinai.tv … targets cinai.app … These are different domains."
+  assert.notEqual(tenMienGoc("https://cinai.app/en/pricing"), tenMienGoc("https://cinai.tv/"));
+});
+
+test("URL hỏng thì trả rỗng, và rỗng nghĩa là KHÔNG soát", () => {
+  // Không rút được tên miền thì cũng không so được với hội thoại. Chặn ở đây là chặn mù.
+  for (const u of ["", "khong-phai-url", "về:trang-chủ"]) assert.equal(tenMienGoc(u), "");
+});
