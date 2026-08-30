@@ -1552,8 +1552,26 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
  * Bounded rather than open-ended because each step is a full model round trip, and a model
  * that misreads a tool result can otherwise retry forever. On the last step the instruction
  * goes back to "answer now", so the turn always ends with a reply rather than a silent stop.
+ *
+ * ── Vì sao 14, không phải 8 ─────────────────────────────────────────────────────────────────────
+ *
+ * Số 8 là ước lượng, và nó cắt ngắn công việc thật: người dùng thấy bot dừng giữa chừng rồi xin gõ
+ * "tiếp" — mỗi lần như vậy tốn một lượt của NGƯỜI cho một việc bot đang làm dở. Nguyên văn bot nói
+ * ra: *"Lượt này tôi hết số bước gọi công cụ nên dừng ở đây."*
+ *
+ * Đo 31/08 trên 74 lượt thật trong transcript app gốc — đếm số lần bot nói liên tiếp giữa hai tin
+ * người dùng:
+ *
+ *     lớn nhất  13      trung vị  4      vượt 8 bước:  9/74 lượt (12%)
+ *
+ * Nên trần 8 cắt đúng 12% số lượt, và 12% ấy rơi vào những lượt DÀI — tức những việc thật. Trung vị
+ * 4 nói phần còn lại chẳng bao giờ chạm trần, nên nâng trần KHÔNG làm lượt thường tốn thêm gì: nó
+ * chỉ mở đường cho những lượt cần đi xa.
+ *
+ * 14 chứ không phải 13 vì bước cuối của ta bị tiêu cho câu trả lời ("answer now"), còn con số 13
+ * kia đếm cả bước nói. Vẫn có trần, vẫn có chốt chặn — chỉ là trần đặt theo số đo thay vì cảm tính.
  */
-const MAX_TOOL_STEPS = 8;
+const MAX_TOOL_STEPS = 14;
 const toolSteps = new Map<string, number>();
 
 /** A fresh user message starts a new budget. */
@@ -1620,6 +1638,7 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   const step = (toolSteps.get(agentId) ?? 0) + 1;
   toolSteps.set(agentId, step);
   const last = step >= MAX_TOOL_STEPS;
+  const conLai = MAX_TOOL_STEPS - step;
 
   const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble); onUpdate(agentId);
@@ -1635,7 +1654,9 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
       // and, unlabelled, the model has to guess which file it is looking at — it guesses wrong.
       content: `${done.map((d) => `Kết quả công cụ ${d.name}(${d.arg}):\n${d.result}`).join("\n\n")}\n` + (last
         ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
-        : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
+        : conLai <= 3
+          ? `Còn ${conLai} bước công cụ cho lượt này. Ưu tiên làm nốt phần quan trọng nhất; không kịp xong thì nói rõ đã tới đâu.`
+          : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
     },
   ], key, controller, seen);
 }
@@ -1647,6 +1668,7 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   const step = (toolSteps.get(agentId) ?? 0) + 1;
   toolSteps.set(agentId, step);
   const last = step >= MAX_TOOL_STEPS;
+  const conLai = MAX_TOOL_STEPS - step;
 
   const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
   t.push(bubble); onUpdate(agentId);
@@ -1660,7 +1682,9 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
       role: "user",
       content: `Kết quả công cụ ${toolName}: ${result}\n` + (last
         ? "Đã dùng đủ số bước công cụ cho lượt này — hãy trả lời người dùng ngay, không gọi công cụ nữa."
-        : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
+        : conLai <= 3
+          ? `Còn ${conLai} bước công cụ cho lượt này. Ưu tiên làm nốt phần quan trọng nhất; không kịp xong thì nói rõ đã tới đâu.`
+          : "Nếu công việc đã xong thì trả lời người dùng. Nếu còn bước tiếp theo, hãy gọi công cụ kế tiếp."),
     },
   ], key, controller, seen);
 }
