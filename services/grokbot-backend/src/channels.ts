@@ -188,6 +188,14 @@ export interface UserMachine {
   terminalsFolder?: string;
   supervised?: boolean;
   variant?: string;
+  /**
+   * Mức quyền máy đó đang để — `Settings → Execution on Local Computer` phía app.
+   *
+   * Daemon gửi sẵn trong `hello`, và ta bỏ qua nó suốt. Không đọc thì khi daemon từ chối, bot chỉ
+   * trả về *"That action was not approved on the user's computer"* — đúng nhưng người dùng không
+   * biết phải làm gì. Đọc rồi thì bot nói được máy nào đang để mức nào.
+   */
+  standing?: string;
   seenAtMs: number;
   /** Luồng SSE nào đang giữ máy này. Rời đi thì bản ghi bị gỡ — xem `res.on("close")`. */
   providerId: string;
@@ -359,6 +367,7 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
         ...(typeof f.terminalsFolder === "string" ? { terminalsFolder: f.terminalsFolder } : {}),
         ...(typeof f.supervised === "boolean" ? { supervised: f.supervised } : {}),
         ...(typeof f.variant === "string" ? { variant: f.variant } : {}),
+        ...(typeof f.standing === "string" ? { standing: f.standing } : {}),
         seenAtMs: Date.now(),
         providerId: nguoiGui,
       };

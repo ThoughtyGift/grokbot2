@@ -211,7 +211,26 @@ export async function runOnUserComputer(
 
   const thans = khungs.map(thanCua).filter((x): x is Record<string, unknown> => x != null);
   const nem = thans.find((m) => m.throw != null);
-  if (nem) return { ok: false, error: String((nem.throw as Record<string, unknown>)?.error ?? "lỗi không rõ").slice(0, 500), ...keo };
+  if (nem) {
+    const loi = String((nem.throw as Record<string, unknown>)?.error ?? "lỗi không rõ").slice(0, 500);
+    /*
+     * Lỗi "chưa được duyệt" là lỗi HAY GẶP NHẤT, và câu của hãng không nói phải làm gì trên máy nào.
+     *
+     * Daemon gửi mức quyền hiện tại trong `hello` (`standing`), nên ta nói ra được. Không nói thì
+     * người dùng đọc "That action was not approved on the user's computer" rồi đi tìm — mà setting
+     * ấy nằm trong Settings của APP, không phải trong backend này.
+     */
+    if (/not approved|Execution on Local Computer/i.test(loi) && may) {
+      return {
+        ok: false,
+        error: `Máy ${may.label} đang để mức "${may.standing ?? "ask"}" nên không cho chạy lệnh.`
+          + ` Mở Settings → General → Execution on Local Computer trên máy đó và chọn "Always allow".`
+          + ` (Bạn vẫn được hỏi trước mỗi lệnh bằng thẻ trong khung chat.)`,
+        ...keo,
+      };
+    }
+    return { ok: false, error: loi, ...keo };
+  }
   if (khungs.some((f) => String(f.kind ?? "") === "file-error")) {
     return { ok: false, error: JSON.stringify(khungs[khungs.length - 1]).slice(0, 300), ...keo };
   }
