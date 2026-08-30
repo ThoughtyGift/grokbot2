@@ -30,6 +30,7 @@ import {
   isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget, postNotice,
 } from "../conversation/index.js";
 import { postSecretRequest, postUserForm } from "../conversation/cards.js";
+import { quenManHinh } from "./anh-man-hinh.js";
 import { stagedTextPreview } from "../attachments.js";
 import {
   TOOLS, isKnownTool, isParallelSafe, toolProtocolFor, turnHooks, attachmentsOf, readImageAttachment,
@@ -1220,6 +1221,14 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
   // since boot. Was a module-level constant built from the default owner's config at import time.
   // Quét lại ở nền nếu bộ nhớ đệm đã cũ; lượt này vẫn dùng bản cũ.
   warmSkills();
+  /*
+   * Lượt mới thì quên màn hình cũ đi.
+   *
+   * `computer_use` lọc bớt ảnh bằng cách so với tấm ĐÃ ĐÍNH gần nhất (xem `anh-man-hinh.ts`). Mốc
+   * đó phải chết theo lượt: giữ lại thì lượt sau mở đầu bằng im lặng — người vừa nhờ một việc mới
+   * mà không thấy bot khởi hành từ đâu.
+   */
+  quenManHinh(agentId);
   /*
    * `speakAs` — ai đang NÓI, khi khác với hội thoại đang ghi.
    *

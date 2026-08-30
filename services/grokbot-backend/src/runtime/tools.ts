@@ -12,6 +12,7 @@ import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { publish } from "../events.js";
 import { desktopRecordConfigured, startDesktopRecording, stopDesktopTeach } from "../desktop-record.js";
+import { nenDinhAnh, quenManHinh } from "./anh-man-hinh.js";
 import { runSubagent, SUBAGENT_TYPES } from "../subagents.js";
 import { startTask, awaitTasks } from "../tasks.js";
 import { getMcpTools, callMcpTool, mcpServers } from "../mcp.js";
@@ -1699,10 +1700,27 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   // Into the transcript for the person AND in front of the model for the next turn. Only the first
   // half existed at first, and it made the whole feature a mime show: the bot clicked by
   // coordinate, attached a picture, and read back the words "đã chụp màn hình 1920x1080".
-  const show = (dataUrl: string, alt: string) => { ctx.attach(dataUrl, "screen.jpg", alt); ctx.see(dataUrl); };
+  /*
+   * Model LUÔN được nhìn; bản ghi thì có luật.
+   *
+   * Hai người đọc, hai nhu cầu khác hẳn. `see` rẻ và pool chỉ chở một ảnh mỗi request nên chụp
+   * mọi bước chẳng tốn gì. `attach` thì mỗi tấm nằm lại vĩnh viễn trong bản ghi người đọc — và
+   * sáu thao tác thành sáu tấm trong một bong bóng chat, đúng thứ người dùng hỏi ngày 30/08.
+   *
+   * Luật nằm ở `nenDinhAnh` (tấm đầu · hành động hỏng · màn hình đổi đáng kể), có test riêng.
+   */
+  const show = (b64: string, alt: string, ket: { ok: boolean }) => {
+    const dataUrl = `data:image/jpeg;base64,${b64}`;
+    if (nenDinhAnh(ctx.agentId, b64, ket)) ctx.attach(dataUrl, "screen.jpg", alt);
+    ctx.see(dataUrl);
+  };
 
   if (parsed.action === "screenshot") {
-    if (r.imageBase64) show(`data:image/jpeg;base64,${r.imageBase64}`, "màn hình máy tính của bot");
+    // Model tự gọi screenshot là nó CHỦ ĐỘNG muốn cho xem — không lọc, và lấy luôn làm mốc mới.
+    if (r.imageBase64) {
+      quenManHinh(ctx.agentId);
+      show(r.imageBase64, "màn hình máy tính của bot", { ok: true });
+    }
     return `đã chụp màn hình ${r.width}x${r.height}`;
   }
   if (parsed.action === "cursor_position") return `con trỏ đang ở (${r.x}, ${r.y})`;
@@ -1711,7 +1729,7 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
   // Mọi action còn lại đều đổi màn hình. Chụp lại ngay thay vì trông chờ model tự nhớ: bước
   // "nhìn lại" chính là bước nó sẽ bỏ, và bỏ rồi thì hành động sau bấm mù.
   const after = await desktopAct({ action: "screenshot" });
-  if (after.ok && after.imageBase64) show(`data:image/jpeg;base64,${after.imageBase64}`, `màn hình sau khi ${parsed.action}`);
+  if (after.ok && after.imageBase64) show(after.imageBase64, `màn hình sau khi ${parsed.action}`, after);
   return `${parsed.action} xong`;
 };
 
