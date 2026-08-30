@@ -39,7 +39,19 @@ export type LocalToolAction = "run-command" | "send-input" | "read-file" | "list
 export type PermMsg = { type: "local-tool-permission"; ask: { status: "pending" | "approved" | "denied" | "expired"; action: LocalToolAction; target: string; requestId: string } };
 export type ApprovalMsg = { type: "auto-review-approval"; approval: { status: "pending" | "approved" | "denied"; summary: string; requestId: string } };
 export type ListenerConnectMsg = { type: "listener-connect"; platform: string; reason: string };
-export type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
+/**
+ * Tệp đính kèm trong bản ghi.
+ *
+ * `width`/`height` trích từ transcript THẬT của app gốc, không đoán — nó gửi video kèm kích thước:
+ *
+ *     {"type":"attachment",
+ *      "url":"file:///home/box/sand-data/agents/<id>/attachments/<sha256>.mp4",
+ *      "file_name":"2026-08-30_20-07-57.mp4","width":1280,"height":800}
+ *
+ * Tuỳ chọn vì ảnh do `stageImage` đo được kích thước từ bytes, còn video thì phải hỏi ffprobe —
+ * và một thẻ không có kích thước vẫn vẽ được, chỉ là khung hình nhảy một nhịp khi tải xong.
+ */
+export type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string; width?: number; height?: number };
 export type EmailDraftMsg = { type: "email-draft"; draft: { from?: string; to: string[]; subject: string; body: string } };
 export type SlackDraftMsg = { type: "slack-draft"; draft: { workspace?: string; target: string; thread?: string; body: string } };
 /**

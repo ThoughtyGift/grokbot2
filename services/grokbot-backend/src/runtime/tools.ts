@@ -521,8 +521,38 @@ TOOLS.attach_file = async (arg, ctx) => {
   }
   const fileName = abs.split("/").pop() || path;
   const alt = String(spec?.alt ?? spec?.caption ?? fileName);
-  postFileAttachment(ctx.agentId, abs, fileName, alt);
-  return `Đã đính kèm ${fileName} (${size} byte).`;
+
+  /*
+   * Video thì kèm kích thước — app gốc làm vậy, và nó có lý do nhìn thấy được.
+   *
+   * Trích transcript thật của nó:
+   *
+   *     {"type":"attachment","url":"file:///…/<sha256>.mp4",
+   *      "file_name":"2026-08-30_20-07-57.mp4","width":1280,"height":800}
+   *
+   * Không có `width`/`height`, renderer phải chờ tải đủ metadata mới biết khung hình bao nhiêu, nên
+   * bong bóng chat nhảy một nhịp giữa lúc người ta đang đọc. Ảnh không cần vì `stageImage` đọc được
+   * kích thước từ chính bytes; video thì phải hỏi ffprobe.
+   *
+   * Một lần gọi thêm, chỉ cho video, và hỏng thì bỏ qua: thiếu kích thước vẫn gửi được tệp, còn
+   * chặn cả việc gửi vì không đo được khung hình là đổi một phiền nhỏ lấy một hỏng lớn.
+   */
+  let co: { width?: number; height?: number } | undefined;
+  if (/\.(mp4|webm|mov|mkv|gif)$/i.test(fileName)) {
+    try {
+      const q = `'${abs.replace(/'/g, `'\\''`)}'`;
+      const r = await boxCall<{ stdout: string }>("exec", {
+        command: `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 ${q}`,
+      });
+      const w = Number((r.stdout.match(/width=(\d+)/) ?? [])[1]);
+      const h = Number((r.stdout.match(/height=(\d+)/) ?? [])[1]);
+      if (w > 0 && h > 0) co = { width: w, height: h };
+    } catch { /* không đo được thì vẫn gửi tệp */ }
+  }
+
+  postFileAttachment(ctx.agentId, abs, fileName, alt, co);
+  const kb = Math.round(size / 1024);
+  return `Đã đính kèm ${fileName} (${kb} KB${co ? `, ${co.width}×${co.height}` : ""}).`;
 };
 
 /** Refuse anything larger than this. A transcript attachment is inlined as base64 to the client. */
@@ -1519,7 +1549,30 @@ const VIDEO_PROTOCOL = boxConfigured()
   'TOOL_CALL: watch_video({"path":"clip.mp4"}) — đường dẫn tương đối gốc làm việc; you get duration, resolution, audio ' +
     "loudness, and a grid of evenly-spaced frames placed before your eyes. ALWAYS watch your own " +
     "output before telling the user it is good — a black or silent clip is something you must catch " +
-    "yourself, then fix and re-check."
+    "yourself, then fix and re-check. " +
+    /*
+     * GỬI video — khoảng trống đo được 31/08, và là loại khoảng trống tệ nhất: năng lực đã có, chỉ
+     * model không biết.
+     *
+     * Trích transcript THẬT của app gốc: nó gửi video cho người dùng như một tệp đính kèm thường,
+     * kèm kích thước —
+     *
+     *     {"type":"attachment","url":"file:///home/box/.../<sha256>.mp4",
+     *      "file_name":"2026-08-30_20-07-57.mp4","width":1280,"height":800}
+     *
+     * `attach_file` của ta đi đúng đường đó từ lâu (đường tuyệt đối trên box, không nhét base64 vào
+     * bản ghi). Nhưng giao thức chỉ có TÊN nó trong danh sách, không một dòng nào nói gọi thế nào
+     * hay gửi được video — nên bot quay xong clip 75 giây rồi… gửi ảnh chụp khung hình.
+     *
+     * Đây đúng bài học `create_routine` (28/08) lặp lại: model biết tool tồn tại mà không biết gọi
+     * thế nào thì gần như chắc chắn nó sẽ không gọi.
+     */
+    'SENDING a file — video included: TOOL_CALL: attach_file({"path":"clip.mp4","alt":"mô tả ngắn"}) ' +
+    "puts the file itself in the conversation. This works for .mp4 and .gif, not only images, and it " +
+    "is how you hand over a clip you recorded. Do NOT settle for sending frame grabs when the person " +
+    "asked for the video: frames are for YOU to check your work, the file is what they asked for. " +
+    "A clip that is too heavy to send is a clip to re-encode smaller (H.264 baseline, lower " +
+    "resolution), not a reason to send pictures instead."
   : "";
 
 const DEV_TOOLS = new Set(["echo", "time", "reverse", "upper", "count", "calc"]);

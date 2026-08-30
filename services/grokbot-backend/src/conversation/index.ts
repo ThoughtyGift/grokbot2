@@ -225,12 +225,19 @@ export function postAttachment(agentId: string, dataUrl: string, fileName: strin
   onUpdate(agentId);
 }
 
-export function postFileAttachment(agentId: string, path: string, fileName: string, alt: string): void {
+export function postFileAttachment(
+  agentId: string, path: string, fileName: string, alt: string,
+  /** Kích thước, nếu biết. App gốc gửi kèm cho video — xem `AttachmentMsg`. */
+  co?: { width?: number; height?: number },
+): void {
   tail(agentId).push({
     id: nextEntryId(),
     kind: "send-message",
     author: authorOf(agentId),
-    message: { type: "attachment", url: path, file_name: fileName, alt },
+    message: {
+      type: "attachment", url: path, file_name: fileName, alt,
+      ...(co?.width && co?.height ? { width: co.width, height: co.height } : {}),
+    },
     timestampMs: Date.now(),
   });
   onUpdate(agentId);
