@@ -83,3 +83,17 @@ plugin-registry.json
 # Nó vẫn hữu ích để ĐO (mọi phát hiện về cờ tính năng, askpass, hợp đồng lệnh đều đọc từ đó), nên
 # không xoá — chỉ chặn không cho commit. Muốn dựng lại: giải nén app.asar của bản đang cài.
 docs/extracted/_latest-asar/
+
+# Bản cài client đã giải nén, để cạnh repo cho tiện đo — KHÔNG phải mã của mình.
+#
+# `BotNoiBo/` là 499 MB gồm `Grok Bot.exe`, Chromium và LICENSES của nhà phát hành. Nó nằm ngoài
+# git nhưng 31/08 phát hiện KHÔNG được ignore, tức chỉ cách một `git add -A` là vào lịch sử — đúng
+# vi phạm mà `docs/extracted/_latest-asar/` vừa phải chặn cùng ngày, và mà 155 file `_tmp-*` đã
+# phạm trước đó. `docs/legal.md` cấm commit bundle của hãng.
+BotNoiBo/
+
+# Log của bộ cài Inno Setup, tên bị nối liền không dấu phân cách:
+#   UsersadminDesktopgrokbot2servicesgrokbot-backend.datainstall2.log
+# Đây chính là "file tên hỏng" từng nằm trong mục CHƯA CHẮC CHẮN của bảng theo dõi — nay truy ra:
+# `Bot-Noi-Bo-Setup-20260825.exe` ghi log với đường dẫn mất dấu tách.
+*install*.log

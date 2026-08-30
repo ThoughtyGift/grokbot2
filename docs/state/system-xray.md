@@ -488,6 +488,10 @@ Xếp theo mức đau, không theo thứ tự tìm ra.
 - **Ai đang ghi `bot.log` 10 MB** trong workspace — là bot Telegram Python của bạn, **không phải
   grokbot2**. Nó in **token bot ra log**; nên đổi token.
 - **File tên hỏng** `{"contents_after_edit":…` — một lệnh ghi file lỗi, chưa truy được lượt nào.
+  *(31/08: quét lại toàn cây, file này KHÔNG CÒN. Một file tên hỏng KHÁC ở gốc repo —
+  `Usersadmin…install2.log`, 560 KB — thì truy ra: log của Inno Setup từ
+  `Bot-Noi-Bo-Setup-20260825.exe`, ghi bằng đường dẫn mất dấu tách. Đã xoá và chặn bằng
+  `*install*.log`. Hai file khác nhau, đừng gộp làm một.)*
 - 7/20 lượt e2e gần nhất đỏ: **chưa phân tích từng lượt**, không kết luận nguyên nhân.
 
 ---
