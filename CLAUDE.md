@@ -6,6 +6,15 @@ backend + your Claude pool (`admin.halcion.vn`). User-facing quickstart in [READ
 > Personal / research use only. Grok Bot is a rebranded Cursor (Anysphere) desktop agent; this
 > backend emulates the contract its client speaks. See [docs/legal.md](docs/legal.md).
 
+## Đang ở đâu, còn gì
+
+@docs/state/bang-theo-doi.md
+
+*Dòng trên là một **import**, không phải link: Claude Code nạp nội dung file đó ngay lúc khởi động
+phiên. Nó ở đây vì một chuyện đo được ngày 31/08 — hai ngày làm việc năng suất nhất (28 commit) để
+lại **0 dòng ký ức**, và tài liệu trạng thái tốt nhất của dự án thì **không cơ chế nào nạp tự
+động**. Sửa bảng đó là sửa thứ mọi phiên sau đọc; đừng thêm tài liệu trạng thái thứ hai.*
+
 ## Structure — BE / FE / API map
 
 | Concern | Folder | What |
@@ -57,6 +66,12 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 
 ## Reverse-engineering context
 
-The Grok Bot client is Cursor's `sand` build (v0.20.0). Findings + protocol are captured in
-[docs/reverse/spike-findings.md](docs/reverse/spike-findings.md) and [docs/protocol-reference.md](docs/protocol-reference.md).
-The decompiled bundle (reference only, not in this repo) lives under the session scratchpad.
+The Grok Bot client is Cursor's `sand` build. **Bản đang cài là 0.29** (`C:\cai029`), còn hợp đồng
+lệnh đã trích thì của **0.30** (`docs/extracted/gateway-commands.json`, 147 lệnh) — hai số khác nhau
+và cả hai đều đúng, đừng hợp nhất. Dòng này từng ghi *v0.20.0* cho tới 31/08/2026, tức nó nói sai
+suốt nhiều ngày trong khi chính file này dặn phải đối chiếu hợp đồng trước khi đổi shape.
+
+Findings + protocol: [docs/reverse/spike-findings.md](docs/reverse/spike-findings.md) và
+[docs/protocol-reference.md](docs/protocol-reference.md).
+The decompiled bundle (reference only, **not in this repo** — `.gitignore` chặn
+`docs/extracted/_latest-asar/`) lives under the session scratchpad hoặc bản cài.
