@@ -24,8 +24,20 @@ const gw = (m, b = {}) => fetch(`http://127.0.0.1:8788/gw/api/${m}`, {
 
 const t = await gw("getAgentTranscript", { agentId, id: agentId });
 const rows = t?.transcript ?? t?.entries ?? (Array.isArray(t) ? t : []);
-const cases = JSON.parse(readFileSync("docs/extracted/kich-ban-b2.json", "utf8"))
-  .scenarios.find((s) => s.bot === "Test Clone").cases.filter((c) => String(c.input ?? "").trim());
+/*
+ * Bộ ca đo sống tách khỏi bản xuất chat — lý do đầy đủ trong `parity-lap.mjs`. Tóm tắt: file
+ * `kich-ban-b2.json` bị ghi đè mỗi lần xuất lại chat, và một lần xuất đã làm cả bốn bài đo parity
+ * chết ngay dòng nạp ca mà không bài nào nói ra.
+ */
+const F_BO_CA = "docs/parity-runs/bo-ca-parity.json";
+let cases;
+try {
+  cases = JSON.parse(readFileSync(F_BO_CA, "utf8")).cases.filter((c) => String(c.input ?? "").trim());
+} catch (e) {
+  console.error(`KHÔNG ĐO ĐƯỢC — thiếu hoặc hỏng bộ ca: ${F_BO_CA}`);
+  console.error(`  ${e.message}`);
+  process.exit(2);
+}
 
 const moc = [];
 /*
