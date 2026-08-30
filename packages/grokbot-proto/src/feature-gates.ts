@@ -36,6 +36,21 @@
  */
 const DEFAULT_GATES: Readonly<Record<string, boolean>> = {
   sand_teach_by_demonstration: true,
+  /*
+   * Bảng `Settings → Computer` — máy THẬT của người dùng.
+   *
+   * Gốc của bảng đó chỉ vẽ mục *Computers* khi cả ba điều kiện đúng, đọc từ renderer:
+   *
+   *     e.cursorAuth.status.kind === "logged-in" && ke("sand_multi_machine_local_exec") && i
+   *
+   * Ta đã đăng nhập, nên cờ này là thứ duy nhất còn thiếu — và đó là lý do bảng Computer bên ta
+   * trống trơn trong khi app gốc hiện `DESKTOP-7D2FJG8`.
+   *
+   * Bật SAU khi đường ống thông, đúng luật của tệp này ("chỉ những gì backend làm được thật"):
+   * daemon nhận việc qua SSE, `local_shell` chạy được lệnh (`hostname` → `DESKTOP-7D2FJG8`),
+   * `local_read` đọc được tệp, và cả hai đi qua thẻ xin quyền không có đường tắt.
+   */
+  sand_multi_machine_local_exec: true,
 };
 
 /**

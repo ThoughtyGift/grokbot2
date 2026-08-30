@@ -7,7 +7,7 @@ import { config, loadPoolKey } from "../config.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, activateTabOf } from "../browser.js";
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
-import { runOnUserComputer, connectedMachine } from "../local-exec.js";
+import { runOnUserComputer, connectedMachine, connectedMachines, findMachine } from "../local-exec.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { publish } from "../events.js";
@@ -570,19 +570,43 @@ const catBot = (s: string, max = 8000): string =>
   s.length <= max ? s : `${s.slice(0, max)}
 … (cắt bớt, còn ${s.length - max} ký tự)`;
 
+/**
+ * Dàn máy đang nối. Không cần thẻ quyền: nó chỉ đọc danh sách bên TA, không chạm vào máy nào.
+ *
+ * Có tool này thì model mới chỉ định máy được. Không có nó, "chạy trên Admin-PC" là model đoán một
+ * cái tên và ta trả về "không thấy máy đó" — đúng nhưng vô ích.
+ */
+TOOLS.local_machines = async () => {
+  const ds = connectedMachines();
+  if (!ds.length) {
+    return "Hiện không máy nào của bạn đang nối. Mở app Grok Bot trên máy đó và đăng nhập là nó tự nối.";
+  }
+  return ds.map((m) => {
+    const giay = Math.round((Date.now() - m.seenAtMs) / 1000);
+    return `${m.label} (id ${m.computerId.slice(0, 8)}…) · thư mục gốc ${m.localRoot ?? "?"} · thấy ${giay}s trước`;
+  }).join("\n");
+};
+
 TOOLS.local_shell = async (arg, _ctx) => {
   let spec: { command?: string; cwd?: string; timeoutMs?: number };
   try { spec = JSON.parse(arg); } catch { spec = { command: unquote(arg) }; }
   const command = String(spec?.command ?? "").trim();
   if (!command) return 'local_shell cần {"command":"<lệnh>"}';
-  const may = connectedMachine();
+  // Chỉ định máy bằng TÊN hoặc id. Không chỉ định thì lấy máy vừa thấy gần nhất.
+  const chiDinh = String((spec as { machine?: unknown })?.machine ?? "").trim();
+  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  if (chiDinh && !may) {
+    const co = connectedMachines().map((m) => m.label);
+    return `Không thấy máy "${chiDinh}" đang nối`
+      + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối");
+  }
   if (!may) {
     return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại"
       + " (Settings → Computer phải thấy tên máy). Trong lúc chờ, mình dùng máy của mình được.";
   }
   const r = await runOnUserComputer(
     { kind: "shell", command, ...(spec?.cwd ? { cwd: String(spec.cwd) } : {}) },
-    { timeoutMs: Number(spec?.timeoutMs) || 30_000 },
+    { machineId: may.computerId, timeoutMs: Number(spec?.timeoutMs) || 30_000 },
   );
   if (!r.ok) return `Không chạy được trên ${may.label}: ${r.error}`;
   const d = (r.data ?? {}) as { stdout?: string; stderr?: string; exitCode?: number; aborted?: string };
@@ -599,9 +623,15 @@ TOOLS.local_read = async (arg, _ctx) => {
   try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
   const path = String(spec?.path ?? "").trim();
   if (!path) return 'local_read cần {"path":"<đường dẫn trên máy bạn>"}';
-  const may = connectedMachine();
+  const chiDinh = String((spec as { machine?: unknown })?.machine ?? "").trim();
+  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  if (chiDinh && !may) {
+    const co = connectedMachines().map((m) => m.label);
+    return `Không thấy máy "${chiDinh}" đang nối`
+      + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối");
+  }
   if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
-  const r = await runOnUserComputer({ kind: "read", path }, { timeoutMs: 20_000 });
+  const r = await runOnUserComputer({ kind: "read", path }, { machineId: may.computerId, timeoutMs: 20_000 });
   if (!r.ok) return `Không đọc được trên ${may.label}: ${r.error}`;
   const d = (r.data ?? {}) as { readResult?: { success?: { content?: string }; invalidFile?: { reason?: string } } };
   const rr = d.readResult;

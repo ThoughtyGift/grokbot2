@@ -31,13 +31,24 @@
  *
  * Xem `scripts/extract-user-computer.mjs` và `docs/extracted/user-computer-proto.json`.
  *
- * ── CHƯA CHẠY ĐƯỢC ĐẦU-CUỐI ─────────────────────────────────────────────────────────────────────
+ * ── Đã chạy đầu-cuối ───────────────────────────────────────────────────────────────────────────
  *
- * Đo 30/08: daemon nhận khung (hàng đợi rút về 0, nó poll lại) nhưng KHÔNG trả lời khung nào. Đã
- * thử và loại bốn giả thuyết: `machineId` rỗng, thiếu bắt tay `welcome`, `serverMessage` dạng
- * object, `serverMessage` dạng chuỗi JSON. Nghi phạm còn lại đáng thử: `approvalId` — daemon có
- * chuỗi *"That action was not approved on the user's computer, so nothing ran"*, nên nhiều khả năng
- * nó chờ một mã duyệt do máy chủ cấp mà ta chưa cấp.
+ * Đo 30/08 trên máy Windows thật: `hostname` → `DESKTOP-7D2FJG8`, exitCode 0, cwd `C:\Users\admin`.
+ *
+ * Chỗ nghẽn cuối cùng là LỚP VẬN CHUYỂN, không phải nội dung: kênh này là SSE, và daemon bỏ qua
+ * trong im lặng mọi thân không có dòng `data:`. Bốn giả thuyết ở tầng nội dung đều trượt trước khi
+ * điều đó lộ ra — xem `channels.ts`.
+ *
+ * ── Nhiều máy ──────────────────────────────────────────────────────────────────────────────────
+ *
+ * App gốc nối được nhiều máy cùng lúc (ảnh Settings → Computer của người dùng hiện cả
+ * `DESKTOP-7D2FJG8` lẫn `Admin-PC`), và cờ tính năng tên thẳng là `sand_multi_machine_local_exec`.
+ * Mỗi máy đăng nhập là tự đăng ký; hợp đồng `ListGrokBotUserComputers` trả một MẢNG `Presence
+ * { machine_id, hello, last_seen_at_ms }`.
+ *
+ * Bên ta định tuyến bằng `providerId` cấp lúc mở luồng — xem `channels.ts`. Việc gửi cho một máy
+ * không nối thì DỪNG với câu nói rõ, không im lặng rơi sang máy khác: chạy nhầm máy là thứ không
+ * phát hiện được từ kết quả trả về.
  *
  * ── Vì sao chỉ ba thao tác ──────────────────────────────────────────────────────────────────────
  *
@@ -48,7 +59,7 @@
  * lệnh. App gốc lái OBS bằng dòng lệnh, không bằng con trỏ.
  */
 import { randomUUID } from "node:crypto";
-import { queueRequest, waitForResponse, connectedMachine } from "./channels.js";
+import { queueRequest, waitForResponse, connectedMachine, connectedMachines, findMachine } from "./channels.js";
 
 /** Bằng `JM` trong daemon (12e4). Lệnh dài hơn hai phút thì nên chạy nền, không nên treo lượt. */
 const MAX_TIMEOUT_MS = 120_000;
@@ -127,7 +138,25 @@ export async function runOnUserComputer(
   // `machineId` PHẢI là id máy tự khai trong khung `hello`: daemon so nó trước khi nhận việc
   // (`localToolApprovalCovers` mở đầu bằng `t.machineId !== e.machineId`). Gửi chuỗi rỗng thì
   // nó nuốt yêu cầu không một lời — đo được đúng như vậy trước khi sửa.
-  const machineId = opts.machineId ?? connectedMachine()?.computerId ?? "";
+  /*
+   * Máy nào chạy việc này.
+   *
+   * `opts.machineId` nhận cả id lẫn TÊN máy, vì người dùng gọi tên ("chạy trên Admin-PC") còn model
+   * có thể nhắc lại id. Không chỉ định thì lấy máy vừa thấy gần nhất.
+   *
+   * Chỉ định một máy không nối thì DỪNG ngay ở đây với câu nói rõ, chứ không im lặng rơi về máy
+   * khác: chạy một lệnh trên nhầm máy là thứ không phát hiện được từ kết quả trả về.
+   */
+  const may = opts.machineId ? findMachine(opts.machineId) : connectedMachine();
+  if (opts.machineId && !may) {
+    const co = connectedMachines().map((m) => m.label);
+    return {
+      ok: false,
+      error: `không thấy máy "${opts.machineId}" đang nối`
+        + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối"),
+    };
+  }
+  const machineId = may?.computerId ?? "";
   const requestId = randomUUID();
   const timeoutMs = Math.min(opts.timeoutMs ?? (op.kind === "shell" ? 60_000 : 20_000), MAX_TIMEOUT_MS);
 
@@ -152,7 +181,7 @@ export async function runOnUserComputer(
     requestId,
     serverMessage: serverMessage(op, machineId, requestId),
     ...(opts.approvalId ? { approvalId: opts.approvalId } : {}),
-  });
+  }, machineId);
 
   /*
    * Shell là LUỒNG; đọc/liệt kê thì một khung là xong.
@@ -241,4 +270,4 @@ function gomLuongShell(thans: Record<string, unknown>[]): Record<string, unknown
 }
 
 /** Máy người dùng có đang nối không, và nó tự khai là máy nào — cho nơi gọi nói câu từ chối tử tế. */
-export { userComputerConnected, connectedMachine } from "./channels.js";
+export { userComputerConnected, connectedMachine, connectedMachines, findMachine } from "./channels.js";

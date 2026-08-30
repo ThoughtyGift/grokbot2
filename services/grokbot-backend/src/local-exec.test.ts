@@ -18,7 +18,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { actionOf, targetOf, connectedMachine, userComputerConnected, runOnUserComputer } from "./local-exec.js";
+import { actionOf, targetOf, connectedMachine, connectedMachines, findMachine, userComputerConnected, runOnUserComputer } from "./local-exec.js";
 
 test("mỗi việc ánh xạ sang đúng hành động của thẻ xin quyền", () => {
   // Khớp `describeLocalExec` trong daemon: shell -> run-command, read -> read-file, ls -> list-directory.
@@ -34,11 +34,31 @@ test("thẻ quyền hiện đúng thứ người dùng cần đọc để quyế
   assert.equal(targetOf({ kind: "read", path: "C:/Users/admin/.ssh/id_rsa" }), "C:/Users/admin/.ssh/id_rsa");
 });
 
+test("không máy nào nối thì danh sách rỗng và tìm theo tên trả null", () => {
+  // Bảng Settings → Computer đọc danh sách này. Trả một máy đã rớt là vẽ ra một máy không nhận việc.
+  assert.deepEqual(connectedMachines(), []);
+  assert.equal(findMachine("Admin-PC"), null);
+  assert.equal(findMachine(""), null);
+});
+
 test("không máy nào nối thì `connectedMachine` trả null, không trả bản ghi cũ", () => {
-  // Quan trọng: sau khi daemon rớt, một `label` còn sót lại đọc y như đang nối. `connectedMachine`
-  // gác bằng `userComputerConnected()` nên nó không bao giờ nói dối về việc còn kết nối hay không.
+  // Quan trọng: sau khi daemon rớt, một `label` còn sót lại đọc y như đang nối. Bản ghi máy bị gỡ
+  // ngay trong `res.on("close")` của luồng SSE, nên danh sách không bao giờ giữ một máy đã đi.
   assert.equal(userComputerConnected(), false);
   assert.equal(connectedMachine(), null);
+});
+
+test("chỉ định một máy không nối thì DỪNG, không im lặng rơi sang máy khác", async () => {
+  /*
+   * Đây là lỗi tệ nhất của phần nhiều máy, vì nó KHÔNG lộ ra từ kết quả.
+   *
+   * Người dùng bảo "chạy trên Admin-PC"; nếu Admin-PC không nối mà ta lặng lẽ gửi sang
+   * DESKTOP-7D2FJG8 thì lệnh chạy xong, trả về stdout hợp lệ, và không ai biết nó chạy nhầm máy.
+   */
+  const r = await runOnUserComputer({ kind: "shell", command: "hostname" }, { machineId: "Admin-PC" });
+  assert.equal(r.ok, false);
+  assert.match(String(r.error), /Admin-PC/, "phải nhắc tên máy đã yêu cầu");
+  assert.match(String(r.error), /không (thấy|máy nào)/, "và nói rõ là không tìm thấy, không phải lỗi lệnh");
 });
 
 test("không có daemon thì trả lỗi rõ ràng, KHÔNG treo mãi", async () => {

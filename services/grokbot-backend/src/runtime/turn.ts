@@ -381,7 +381,11 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
  * `create_agent` is deliberately NOT here. It is equally mis-described by that copy, but it brings
  * a new actor into the workspace rather than editing a label, so the call is the user's to make.
  */
-const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "watch_video", "create_diagram", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc"]);
+const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tools", "message_agent", "attach_file", "attach_image", "generate_image", "watch_video", "create_diagram", "send_to_user", "rename_agent", "echo", "time", "reverse", "upper", "count", "calc",
+  // `local_machines` chỉ đọc danh sách máy đang nối, giữ ở BÊN TA — nó không gửi gì xuống máy nào.
+  // Dựng thẻ cho nó là bắt người dùng đọc "Allow … to run commands on your local computer?" cho một
+  // thao tác không chạy lệnh nào, đúng lỗi mà khối chú thích trên nói tới.
+  "local_machines"]);
 
 /**
  * Tool chạm vào MÁY THẬT của người dùng qua local-exec — luôn phải có thẻ, không có đường tắt.

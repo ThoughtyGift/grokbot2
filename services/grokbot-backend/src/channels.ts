@@ -28,6 +28,7 @@
  * guessed the way `{"frames":[{"kind":"ping"}]}` had to be.
  */
 import type { ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { redact } from "./redact.js";
 
 export type ChannelName = "local-exec" | "webauthn";
@@ -41,8 +42,15 @@ const EMPTY: Record<ChannelName, string> = {
   webauthn: JSON.stringify({ frames: [] }),
 };
 
-/** `timer` là setTimeout cho long-poll JSON, hoặc setInterval giữ nhịp cho luồng SSE. */
-interface Waiter { res: ServerResponse; timer: NodeJS.Timeout }
+/**
+ * `timer` là setTimeout cho long-poll JSON, hoặc setInterval giữ nhịp cho luồng SSE.
+ *
+ * `providerId` chỉ có ở `local-exec`, và nó là chìa khoá cho NHIỀU MÁY: ta sinh nó ngay khi luồng
+ * mở rồi gửi xuống bằng khung `welcome`; daemon nhớ (`this.providerId = e.providerId`) và đính nó
+ * vào MỌI lần POST sau đó. Nhờ vậy một câu trả lời ghép được về đúng luồng, đúng máy — không thì
+ * hai máy cùng nối là ta gửi việc cho máy này rồi đọc câu trả lời của máy kia.
+ */
+interface Waiter { res: ServerResponse; timer: NodeJS.Timeout; providerId?: string }
 
 interface Channel {
   waiters: Set<Waiter>;
@@ -97,14 +105,30 @@ export function parkRequests(name: ChannelName, res: ServerResponse): void {
       // Luồng này chạy sau proxy nào cũng không được gom đệm, kẻo khung nằm lại trong bộ đệm.
       "x-accel-buffering": "no",
     });
+    const providerId = randomUUID();
     const waiter: Waiter = {
       res,
+      providerId,
       // Giữ mở, không hết giờ. Nhịp giữ nhịp là dòng chú thích SSE (`:`), daemon bỏ qua nó vì
       // không bắt đầu bằng `data:`.
       timer: setInterval(() => { try { res.write(":\n\n"); } catch { /* đứt rồi */ } }, PARK_MS),
     };
     ch.waiters.add(waiter);
-    res.on("close", () => { clearInterval(waiter.timer); ch.waiters.delete(waiter); });
+    res.on("close", () => {
+      clearInterval(waiter.timer);
+      ch.waiters.delete(waiter);
+      // Máy rời đi thì bỏ khỏi danh sách hiện diện. Giữ lại một `label` sau khi luồng đứt là nói
+      // dối bảng Computer: nó sẽ hiện một máy không còn nhận việc được nữa.
+      for (const [id, m] of mayDangNoi) if (m.providerId === providerId) mayDangNoi.delete(id);
+    });
+    /*
+     * Chào TRƯỚC, không đợi `hello`.
+     *
+     * Bản trước gửi `welcome` khi thấy `hello` — chạy được với MỘT máy, nhưng với nhiều máy thì
+     * `hello` không nói nó đến từ luồng nào, nên không ghép được. Gửi trước thì daemon nhớ
+     * `providerId` của ta và đính vào mọi POST sau, kể cả `hello`.
+     */
+    try { res.write(`data: ${JSON.stringify({ kind: "welcome", providerId })}\n\n`); } catch { /* đứt ngay */ }
     // Việc đã xếp hàng từ trước lúc nối: đẩy ra ngay.
     if (ch.queue.length) {
       const batch = ch.queue.splice(0, ch.queue.length);
@@ -165,9 +189,44 @@ export interface UserMachine {
   supervised?: boolean;
   variant?: string;
   seenAtMs: number;
+  /** Luồng SSE nào đang giữ máy này. Rời đi thì bản ghi bị gỡ — xem `res.on("close")`. */
+  providerId: string;
 }
-let mayNguoiDung: UserMachine | null = null;
-export const connectedMachine = (): UserMachine | null => (userComputerConnected() ? mayNguoiDung : null);
+
+/**
+ * Mọi máy đang nối, khoá theo `computerId`.
+ *
+ * App gốc nối được NHIỀU máy cùng lúc — ảnh Settings → Computer của người dùng hiện cả
+ * `DESKTOP-7D2FJG8` lẫn `Admin-PC`, và cờ tính năng tên thẳng là `sand_multi_machine_local_exec`.
+ * Hợp đồng cũng nói vậy: `ListGrokBotUserComputers` trả một MẢNG `GrokBotUserComputerPresence
+ * { machine_id, hello, last_seen_at_ms }`.
+ *
+ * Bản trước giữ đúng một biến, nên máy nối sau ghi đè máy nối trước và mọi việc chảy nhầm chỗ.
+ */
+const mayDangNoi = new Map<string, UserMachine>();
+
+/** Máy để dùng khi không ai chỉ định — máy vừa thấy gần nhất. */
+export const connectedMachine = (): UserMachine | null => {
+  let moiNhat: UserMachine | null = null;
+  for (const m of mayDangNoi.values()) if (!moiNhat || m.seenAtMs > moiNhat.seenAtMs) moiNhat = m;
+  return moiNhat;
+};
+
+/** Danh sách máy cho bảng Settings → Computer, mới thấy trước. */
+export const connectedMachines = (): UserMachine[] =>
+  [...mayDangNoi.values()].sort((a, b) => b.seenAtMs - a.seenAtMs);
+
+/** Tìm một máy theo id hoặc theo tên hiển thị — người dùng gọi tên, model có thể gọi id. */
+export function findMachine(idHoacTen: string): UserMachine | null {
+  const s = idHoacTen.trim();
+  if (!s) return null;
+  const theoId = mayDangNoi.get(s);
+  if (theoId) return theoId;
+  const thap = s.toLowerCase();
+  return [...mayDangNoi.values()].find((m) => m.label.toLowerCase() === thap)
+    ?? [...mayDangNoi.values()].find((m) => m.label.toLowerCase().includes(thap))
+    ?? null;
+}
 
 /**
  * Đẩy một khung yêu cầu vào hàng đợi, đánh thức một poll đang treo nếu có.
@@ -175,17 +234,37 @@ export const connectedMachine = (): UserMachine | null => (userComputerConnected
  * Trước đây hàng đợi luôn rỗng vì không có ai sinh ra việc — chú thích đầu tệp nói đúng như vậy.
  * Giờ `local-exec.ts` sinh việc, nên nhánh "trả ngay cho poll đang chờ" mới thật sự chạy.
  */
-export function queueRequest(name: ChannelName, frame: unknown): void {
+export function queueRequest(name: ChannelName, frame: unknown, machineId?: string): void {
   const ch = channels[name];
-  const waiter = [...ch.waiters][0];
-  if (!waiter) { ch.queue.push(frame); return; }   // chưa ai nối — nằm chờ trong hàng đợi
 
   // SSE: ghi vào luồng đang mở và GIỮ nó mở. Đóng luồng sau mỗi khung là bắt daemon nối lại mỗi
   // lệnh, và tệ hơn, khung tiếp theo không có đường đi cho tới khi nó nối xong.
   if (name === "local-exec") {
-    try { waiter.res.write(`data: ${JSON.stringify(frame)}\n\n`); } catch { ch.queue.push(frame); }
+    /*
+     * Gửi đúng MÁY, không phải "luồng đầu tiên trong Set".
+     *
+     * Với một máy thì hai thứ đó trùng nhau, nên bản trước chạy được. Với nhiều máy thì lấy phần
+     * tử đầu của một `Set` là chọn bừa: việc dành cho *Admin-PC* có thể chạy trên
+     * *DESKTOP-7D2FJG8*. Không có cách nào phát hiện từ bên ngoài, vì cả hai đều trả về một kết
+     * quả trông hợp lệ.
+     */
+    const may = machineId ? mayDangNoi.get(machineId) : null;
+    const waiter = may
+      ? [...ch.waiters].find((w) => w.providerId === may.providerId)
+      : [...ch.waiters][0];
+    if (!waiter) {
+      // Chỉ định một máy không nối thì KHÔNG xếp hàng: hàng đợi không mang theo địa chỉ, nên khung
+      // ấy sẽ rơi vào máy nối tiếp theo — máy nào cũng được. Thà mất còn hơn chạy nhầm máy.
+      if (machineId) { console.warn(`[grokbot2] [local-exec] bỏ khung: máy ${machineId} không nối`); return; }
+      ch.queue.push(frame);
+      return;
+    }
+    try { waiter.res.write(`data: ${JSON.stringify(frame)}\n\n`); } catch { if (!machineId) ch.queue.push(frame); }
     return;
   }
+
+  const waiter = [...ch.waiters][0];
+  if (!waiter) { ch.queue.push(frame); return; }   // chưa ai nối — nằm chờ trong hàng đợi
 
   ch.queue.push(frame);
   ch.waiters.delete(waiter);
@@ -264,12 +343,16 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
   ch.submitted += 1;
   ch.received.push({ atMs: Date.now(), payload });
   while (ch.received.length > MAX_RECEIVED) ch.received.shift();
+  // Máy nào gửi. Daemon đính `providerId` ta cấp lúc `welcome` vào mọi POST — đó là thứ ghép câu
+  // trả lời về đúng máy khi có nhiều máy cùng nối.
+  const nguoiGui = typeof (payload as { providerId?: unknown })?.providerId === "string"
+    ? String((payload as { providerId: string }).providerId) : "";
   // Đánh thức người đang chờ. `requestId` là tên protobuf-JSON; `request_id` là dạng snake_case —
   // nhận cả hai vì bộ mã hoá bên kia có thể đổi mà ta không biết.
   for (const f of tanRa(payload)) {
     // `hello` là lời tự khai của máy, không phải trả lời cho ai — nhớ lại để dùng làm `machineId`.
     if (name === "local-exec" && f.kind === "hello" && typeof f.computerId === "string") {
-      mayNguoiDung = {
+      const may: UserMachine = {
         computerId: f.computerId,
         label: String(f.label ?? f.computerId),
         ...(typeof f.localRoot === "string" ? { localRoot: f.localRoot } : {}),
@@ -277,20 +360,15 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
         ...(typeof f.supervised === "boolean" ? { supervised: f.supervised } : {}),
         ...(typeof f.variant === "string" ? { variant: f.variant } : {}),
         seenAtMs: Date.now(),
+        providerId: nguoiGui,
       };
-      console.log(`[grokbot2] [local-exec] máy người dùng nối vào: ${mayNguoiDung.label} (${mayNguoiDung.computerId})`);
-      /*
-       * Đáp lễ `welcome`.
-       *
-       * Bộ khung yêu cầu có sẵn một nhánh `{kind:"welcome", providerId}` không mang `requestId` —
-       * tức nó không phải một việc, mà là lời xác nhận "đã ghi nhận máy này". Khung `welcome` cũng
-       * có trong giao thức webauthn y hệt, nên đây là bắt tay chung của cả hai kênh.
-       *
-       * Đo trước khi thêm: gửi thẳng `exec` sau `hello` thì daemon nuốt im, không một khung trả lời
-       * nào — kể cả khi `machineId` đã đúng.
-       */
-      queueRequest(name, { kind: "welcome", providerId: mayNguoiDung.computerId });
+      mayDangNoi.set(may.computerId, may);
+      console.log(`[grokbot2] [local-exec] máy nối vào: ${may.label} (${may.computerId}) — đang có ${mayDangNoi.size} máy`);
       continue;
+    }
+    // Mọi khung khác cũng là dấu hiệu máy còn sống (`ping` gửi đều đặn) — cập nhật giờ thấy cuối.
+    if (name === "local-exec" && nguoiGui) {
+      for (const m of mayDangNoi.values()) if (m.providerId === nguoiGui) m.seenAtMs = Date.now();
     }
     const id = String(f.requestId ?? f.request_id ?? "");
     const goi = id && dangCho.get(id);
