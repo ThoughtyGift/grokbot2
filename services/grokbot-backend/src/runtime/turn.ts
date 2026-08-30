@@ -399,6 +399,24 @@ const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tool
  */
 const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read"]);
 
+/**
+ * Người dùng đã bấm "Always allow" TRÊN CHÍNH THẺ CHẠM MÁY hay chưa.
+ *
+ * Cái `standing` của máy không trả lời được câu này. `standing` là mức trong Settings, và nó được
+ * bấm trong bối cảnh mọi lệnh chạy trên BOX — một máy Linux dùng riêng, vứt đi được. Máy Windows
+ * là bối cảnh khác hẳn, nên khối chú thích ở chỗ dựng thẻ cố ý bỏ qua `standing`.
+ *
+ * Nhưng bỏ qua luôn cả cú bấm "Always allow" TRÊN THẺ ẤY thì thành ra không nghe người dùng nói
+ * gì cả. Thẻ ghi rõ "run commands on your local computer" và có sẵn nút "Always allow"; bấm vào đó
+ * là một câu trả lời rõ ràng đúng cho máy ấy. Đo ngày 31/08: một lượt đọc project mất SÁU thẻ liên
+ * tiếp, mỗi lệnh một thẻ, trong khi app gốc hỏi đúng một lần.
+ *
+ * Sống trong bộ nhớ tiến trình, không ghi đĩa: khởi động lại backend là hỏi lại từ đầu. Đó là chủ
+ * ý — một quyền đứng mãi trên máy thật của người dùng phải do chính họ đặt trong Settings, không
+ * phải do một cú bấm trong lúc vội còn lại mãi mãi.
+ */
+const daChoPhepChamMay = new Set<string>();
+
 /** Native `/v1` turns ask on write tools even when the stock app saved "always". */
 const askWriteThisTurn = new Set<string>();
 
@@ -508,6 +526,10 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
     ? a.resolution === "always" || a.resolution === "allow-once" || a.resolution === "allow"
     : a.approved ?? a.allow ?? (a.decision === "approve" || a.decision === "allow");
   pending.delete(p.requestId);
+  // "Always allow" trên thẻ chạm máy: nghe, và thôi hỏi lại từng lệnh trong phiên này.
+  if (a.resolution === "always" && CHAM_MAY_NGUOI_DUNG.has((p.name ?? "").toLowerCase())) {
+    daChoPhepChamMay.add(p.agentId);
+  }
   const t = transcripts.get(p.agentId) ?? [];
   const card = t.find((e) => e.id === p.entryId);
   if (card && card.kind === "send-message" && card.message.type === "local-tool-permission") card.message.ask.status = approved ? "approved" : "denied";
@@ -1151,7 +1173,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
    *
    * App gốc cũng để mặc định "Ask every time" cho đúng nhóm này.
    */
-  if (known && CHAM_MAY_NGUOI_DUNG.has(lower) && standing !== "never") {
+  if (known && CHAM_MAY_NGUOI_DUNG.has(lower) && standing !== "never" && !daChoPhepChamMay.has(agentId)) {
     const card: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
       message: { type: "local-tool-permission", ask: { status: "pending", action: lower === "local_read" ? "read-file" : "run-command", target: `${name}(${arg})`, requestId } } };
     t.push(card);
