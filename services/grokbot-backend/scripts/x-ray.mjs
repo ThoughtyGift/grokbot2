@@ -477,6 +477,18 @@ if (GROUPS) {
     console.log(`  (sidebar đang ở rail — đã mở tạm để đo, sẽ trả về)`);
   }
 
+  /*
+   * Kiểm kê luôn trong lúc sidebar đang mở. Bản kiểm kê ở đầu script chạy với sidebar ở RAIL, nên
+   * nó không có đầu/đáy sidebar ở dạng mở — mà đó chính là thứ X1 phải dựng. Đo lúc đang mở thì
+   * khỏi phải mở lần thứ hai.
+   */
+  report.expandedControls = (await page.evaluate(CONTROLS))
+    .filter((c) => c.box.split(",")[0] < "400" && /sidebar|agents|account|search|new/i.test(`${c.block} ${c.label}`));
+  console.log(`  kiểm kê lúc MỞ: ${report.expandedControls.length} control ở dải sidebar`);
+  for (const c of report.expandedControls.slice(0, 14)) {
+    console.log(`      ${c.box.padEnd(20)} ${c.tag.padEnd(6)} ${c.block.padEnd(32)} "${c.label}"`);
+  }
+
   const heads = await page.evaluate(() => [...document.querySelectorAll("*")].flatMap((el) => {
     const cls = typeof el.className === "string" ? el.className : "";
     const name = cls.split(" ").find((c) => /^sand-agents-(section|group)[a-z_-]*$/.test(c));

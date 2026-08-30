@@ -37,13 +37,19 @@ const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 /**
  * Địa chỉ backend điền sẵn trong bộ cài.
  *
- * `GROKBOT2_PUBLIC_URL` là thứ máy chủ công khai đã biết về chính nó (nginx đứng trước, xem
+ * `GROKBOT2_PUBLIC_BACKEND` là thứ máy chủ công khai đã biết về chính nó (nginx đứng trước, xem
  * `GROKBOT2_PUBLIC_PATH`). Dựng gói trên VPS mà không khai biến này thì gói phát ra cho cả thiên
  * hạ mang mặc định `localhost:8788` — đo được ngày 27/08: máy thứ ba tải về, bấm Enter cho qua,
  * và app trỏ vào chính nó. Trên máy cá nhân không khai gì thì mặc định cũ vẫn đúng.
  */
 const beMacDinh = (() => {
-  const raw = (process.env.GROKBOT2_PUBLIC_URL ?? "http://localhost:8788").trim() || "http://localhost:8788";
+  /*
+   * MỘT tên biến cho cả hai loại gói. `setup-exe.mjs` đã dùng `GROKBOT2_PUBLIC_BACKEND` từ trước
+   * cho bản `.exe`; đặt thêm một tên nữa cho bản `.cmd` là tạo ra hai chỗ để quên, và người quên
+   * chỉ biết khi một máy nào đó ngoài kia trỏ vào chính nó. Ưu tiên tên cũ, chấp nhận tên mới.
+   */
+  const raw = (process.env.GROKBOT2_PUBLIC_BACKEND ?? process.env.GROKBOT2_PUBLIC_URL
+    ?? "http://localhost:8788").trim() || "http://localhost:8788";
   /*
    * **Giữ gạch chéo cuối.** Client nối đường dẫn TƯƠNG ĐỐI vào địa chỉ này, và
    * `new URL("aiserver.v1.X/Y", "https://cinai.app/agent")` cho ra

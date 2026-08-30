@@ -33,9 +33,19 @@ const MERMAID = process.argv.includes("--mermaid");
 /** Thư mục do MÁY ghi: không đòi mục lục cho từng file, chỉ cần mục lục nhắc tới thư mục. */
 const MACHINE_DIRS = new Set(["parity-runs", "extracted", "api"]);
 
+/**
+ * Thư mục KHÔNG phải tài liệu của mình — bỏ qua hẳn.
+ *
+ * `_latest-asar` là bundle giải nén của hãng (16 MB). Nó nằm dưới `docs/extracted/` vì tiện cho
+ * việc đo, nhưng quét nó thì bộ rà soát đếm cả file của người khác. Từ 31/08 nó đã vào
+ * `.gitignore` — xem `docs/legal.md` về lý do nó không được vào repo.
+ */
+const KHONG_PHAI_TAI_LIEU = new Set(["_latest-asar"]);
+
 const walk = (dir) => {
   const out = [];
   for (const name of readdirSync(dir)) {
+    if (KHONG_PHAI_TAI_LIEU.has(name)) continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) out.push(...walk(p));
     else out.push(p);
@@ -78,7 +88,10 @@ for (const p of docs) {
   const text = stripCode(readFileSync(p, "utf8"));
   for (const m of text.matchAll(LINK)) {
     const target = m[1];
-    if (/^(https?:|mailto:|#)/.test(target)) continue;
+    // Bỏ mọi URI có scheme, không chỉ http/mailto. Transcript app gốc đầy `grokbot://app/…` và
+    // `sand-workflow:…` — đó là deep-link của client, không phải đường dẫn file. Lượt chạy trước
+    // báo 20 "link chết" mà 20 đều là chúng; một bộ rà soát báo động giả thì lần sau không ai đọc.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) continue;
     const abs = resolve(dirname(p), target);
     try {
       statSync(abs);
@@ -161,6 +174,39 @@ if (!orphans.length) console.log("  (không có)");
 console.log(`\n── thiếu trong docs/README.md (${missing.length}) ──`);
 for (const p of missing) console.log(`  ${rel(p)}`);
 if (!missing.length) console.log("  (không có)");
+
+/*
+ * ── chỗ đang phình ────────────────────────────────────────────────────────────
+ *
+ * Không phải lỗi, là GỢI Ý. Một mục chiếm gần nửa tài liệu thường nghĩa là nội dung bị nhét sai
+ * chỗ chứ không phải mục đó quan trọng gấp đôi phần còn lại.
+ *
+ * Đo được 31/08: `bang-theo-doi.md` dài 1.249 dòng, trong đó một mục tên "Cửa cấp token" chiếm 567
+ * dòng (45%) — và bên trong nó là nhật ký của cả bốn chặng khác, mỗi chặng lẽ ra là một mục riêng.
+ * Không ai phát hiện được điều đó khi đọc tuần tự; chỉ đo mới thấy.
+ *
+ * Bản ghi đo và transcript thì ĐÚNG là một khối dài (`chat-goc-0.29.md` có một mục chiếm 67%, và
+ * nó nên như vậy) — nên chúng bị loại khỏi phần này thay vì bị cảnh báo mỗi lượt.
+ */
+const NGUONG_PHINH = 0.35;
+const khongXetPhinh = /^docs\/(parity-runs|extracted|history)\//;
+const phinh = [];
+for (const p of docs) {
+  const r = rel(p);
+  if (khongXetPhinh.test(r)) continue;
+  const L = readFileSync(p, "utf8").split("\n");
+  if (L.length < 200) continue;
+  const moc = L.map((l, i) => [i, l]).filter(([, l]) => l.startsWith("## "));
+  let to = { ten: "", n: 0 };
+  for (let k = 0; k < moc.length; k++) {
+    const n = (k + 1 < moc.length ? moc[k + 1][0] : L.length) - moc[k][0];
+    if (n > to.n) to = { ten: moc[k][1].slice(0, 50), n };
+  }
+  if (to.n / L.length >= NGUONG_PHINH) phinh.push({ r, dong: L.length, phan: Math.round((to.n / L.length) * 100), ten: to.ten });
+}
+console.log(`\n── một mục chiếm ≥${Math.round(NGUONG_PHINH * 100)}% tài liệu (${phinh.length}) ──`);
+for (const x of phinh) console.log(`  ${x.r} — ${x.dong} dòng, mục lớn nhất ${x.phan}%: ${x.ten}`);
+if (!phinh.length) console.log("  (không có)");
 
 // ── 4. sơ đồ mermaid ─────────────────────────────────────────────────────────
 let mermaidBad = 0;

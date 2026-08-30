@@ -52,9 +52,14 @@ grep -o 'ten_co:{client:!.,default:!.}' "C:/cai029/resources/app/dist/electron-m
 ## Luật bốn: dọn thì phải quét lại link
 
 ```bash
-node services/grokbot-backend/scripts/kiem-docs.mjs          # link gãy · mồ côi · chỗ phình
-node services/grokbot-backend/scripts/kiem-docs.mjs --link   # chỉ link, thoát 1 nếu gãy
+node services/grokbot-backend/scripts/docs-check.mjs            # link · mồ côi · mục lục · chỗ phình
+node services/grokbot-backend/scripts/docs-check.mjs --ci       # thoát 1 nếu có link chết
+node services/grokbot-backend/scripts/docs-check.mjs --mermaid  # thêm: sơ đồ có PARSE được không
 ```
+
+> **Trước khi viết bất kỳ script nào: `ls services/grokbot-backend/scripts/`.** 31/08 tôi viết
+> `kiem-docs.mjs` trong khi `docs-check.mjs` đã nằm đó từ 22/08 và làm nhiều hơn. Luật một của
+> chính kỹ năng này ("một câu hỏi, một tài liệu") áp cho script y hệt — tôi chỉ quên áp.
 
 Đo được 31/08: dọn 79 file làm gãy **19 link**, và không có cách nào biết ngoài quét. Sửa xong quét
 lại tới khi về **0**.
@@ -65,6 +70,7 @@ Ba con số script in ra, ba ý nghĩa **khác nhau**:
 |---|---|
 | **link gãy** | luôn là lỗi — sửa hoặc xoá dòng |
 | **mồ côi** | *ứng viên* xoá, không phải án tử. README mồ côi là bình thường; bản ghi đo trong `parity-runs/` mồ côi là **đúng bản chất** |
+| **thiếu trong mục lục** | có tồn tại nhưng `docs/README.md` không nhắc — coi như không có |
 | **chỗ phình** | một mục chiếm ≥35% tài liệu thường là nội dung bị nhét sai chỗ — nhưng transcript và bản ghi đo thì đúng là một khối dài, đừng cắt |
 
 ## Luật năm: việc đã xong thì một dòng, cái bẫy nó để lại thì nguyên văn
@@ -94,7 +100,7 @@ cổng đo hỏng im lặng. **Luôn `grep` tên file trong `scripts/` trước 
 1. `node services/grokbot-backend/scripts/trang-thai.mjs` — lấy số.
 2. Cập nhật `docs/state/bang-theo-doi.md`: §1 (số), §2–§5 (trạng thái + việc còn lại).
 3. Có bẫy mới trả giá trong phiên? Thêm vào §7, **nguyên văn**, kèm con số.
-4. `node services/grokbot-backend/scripts/kiem-docs.mjs` — link gãy phải về 0.
+4. `node services/grokbot-backend/scripts/docs-check.mjs` — link chết phải về 0.
 5. Commit, ghi rõ số nào đổi và vì sao.
 
 ## Đừng làm
