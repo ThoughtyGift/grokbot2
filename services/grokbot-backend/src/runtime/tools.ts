@@ -195,6 +195,47 @@ TOOLS.ask_question = (arg, ctx) => {
 };
 
 /**
+ * Xin một giá trị bí mật — mật khẩu, mã OTP, khoá API.
+ *
+ * Khác `ask_question` ở chỗ quan trọng nhất: giá trị người dùng gõ KHÔNG quay về model và không
+ * vào bản ghi hội thoại. Tool chỉ biết "đã gửi". Bản ghi sống mãi và model đọc lại được, nên một
+ * khoá API nằm đó là nằm đó vĩnh viễn — cùng lý do bộ ghi dạy việc phải che giá trị ngay lúc ghi.
+ */
+TOOLS.request_secret = (arg, ctx) => {
+  let spec: { label?: string; description?: string };
+  try { spec = JSON.parse(arg); } catch { spec = { label: unquote(arg) }; }
+  const id = ctx.askSecret({
+    label: String(spec?.label ?? "").trim(),
+    ...(spec?.description ? { description: String(spec.description) } : {}),
+  });
+  return id == null
+    ? 'request_secret cần {"label":"<xin cái gì>"} — nhãn không được rỗng'
+    : `đã xin: ${spec?.label}. Chờ người dùng gửi; giá trị sẽ KHÔNG hiện ra ở đây.`;
+};
+
+/**
+ * Hỏi một biểu mẫu nhiều ô cùng lúc — đăng nhập, điền thông tin đơn.
+ *
+ * `id` của mỗi ô là khoá giá trị (`values[field.id]`), nên nó bắt buộc; ô thiếu id bị loại chứ
+ * không giữ, vì người dùng gõ vào một ô không id thì cũng không gửi đi được.
+ */
+TOOLS.request_user_form = (arg, ctx) => {
+  let spec: { title?: string; instruction?: string; fields?: unknown; liveHost?: string; domain?: string };
+  try { spec = JSON.parse(arg); } catch { return 'request_user_form cần JSON, ví dụ {"title":"Đăng nhập","fields":[{"id":"user","label":"Tài khoản"}]}'; }
+  const fields = Array.isArray(spec?.fields) ? (spec.fields as { id?: string; label?: string }[]) : [];
+  const id = ctx.askForm({
+    title: String(spec?.title ?? "").trim(),
+    ...(spec?.instruction ? { instruction: String(spec.instruction) } : {}),
+    fields: fields as never,
+    ...(spec?.liveHost ? { liveHost: String(spec.liveHost) } : {}),
+    ...(spec?.domain ? { domain: String(spec.domain) } : {}),
+  });
+  return id == null
+    ? 'request_user_form cần "title" không rỗng và ít nhất một ô có đủ {"id","label"}'
+    : `đã hỏi biểu mẫu "${spec?.title}" (${fields.length} ô). Chờ người dùng điền.`;
+};
+
+/**
  * Show a draft before anything is sent. These render as the client's own draft cards, but the
  * renderer gives them no send button — see EmailDraftMsg — so the turn should say what it wants
  * to do with the draft rather than implying it went out.

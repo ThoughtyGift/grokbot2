@@ -42,6 +42,52 @@ export type ListenerConnectMsg = { type: "listener-connect"; platform: string; r
 export type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string };
 export type EmailDraftMsg = { type: "email-draft"; draft: { from?: string; to: string[]; subject: string; body: string } };
 export type SlackDraftMsg = { type: "slack-draft"; draft: { workspace?: string; target: string; thread?: string; body: string } };
+/**
+ * Xin một giá trị BÍ MẬT — thẻ `secret-request` của 0.29/0.30.
+ *
+ * Trích từ chunk vẽ thẻ (`cards/send-message/secret-request/view.tsx`), không đoán:
+ *
+ *     entry.message.secretRequest.label          ← BẮT BUỘC, renderer đọc `.label.length` không guard
+ *     entry.message.secretRequest.description    ← `!= null` mới vẽ dòng phụ, nên "" là một dòng trống
+ *     entry.secretProvided === true              ← vẽ thẻ "đã lưu" thay cho ô nhập
+ *
+ * Ô nhập là `type="password"`, `autoComplete="off"`, và nhãn chính là placeholder.
+ */
+export type SecretRequestMsg = {
+  type: "secret-request";
+  secretRequest: { label: string; description?: string };
+};
+
+/** Một ô trong biểu mẫu. `type` quyết định thuộc tính `<input>` — xem bảng trong `postUserForm`. */
+export type FormField = {
+  id: string;
+  label: string;
+  type?: "text" | "email" | "tel" | "password" | "otp" | "number" | "date";
+  placeholder?: string;
+  required?: boolean;
+  secret?: boolean;
+  options?: { value: string; label: string }[];
+};
+
+/**
+ * Biểu mẫu nhiều ô — thẻ `user-form`.
+ *
+ * `title` và `fields` BẮT BUỘC: renderer đọc `.title.length` và `.fields.length` không guard, nên
+ * thiếu một trong hai là nó ném giữa lúc vẽ và error boundary nuốt cả cột phải.
+ *
+ * `liveHost`/`domain` dựng origin `https://<host>/` để thẻ nói rõ đang điền cho trang nào.
+ */
+export type UserFormMsg = {
+  type: "user-form";
+  formRequest: {
+    title: string;
+    instruction?: string;
+    fields: FormField[];
+    liveHost?: string;
+    domain?: string;
+  };
+};
+
 export type WidgetOption = { label: string; value?: string; description?: string; style?: "default" | "primary" | "danger" };
 export type WidgetMsg = {
   type: "widget";
@@ -61,7 +107,11 @@ export type TranscriptEvent =
 
 export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })
-  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean })
+  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg | SecretRequestMsg | UserFormMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean;
+      /** Đã gửi bí mật chưa — renderer dùng để vẽ thẻ "đã lưu" thay cho ô nhập. Giá trị KHÔNG lưu. */
+      secretProvided?: boolean;
+      /** Trạng thái biểu mẫu; `!= null` thì renderer vẽ thẻ đã xong, không vẽ form nữa. */
+      formResolution?: "sending" | "submitted" | "fill_failed" | "escalated" })
   | (Base & { kind: "tool-call"; toolCallId: string; name: string; rawArgs: string; summary?: string; status: "pending" | "running" | "done" | "failed"; result?: string })
   | (Base & { kind: "event"; event: TranscriptEvent })
   /**
@@ -146,6 +196,14 @@ export interface ToolCtx {
    */
   see(dataUrl: string): void;
   ask(widget: { prompt: string; helpText?: string; options: WidgetOption[]; allowCustom?: boolean; multiSelect?: boolean; dismissOnMoveOn?: boolean }): string | null;
+  /**
+   * Xin một giá trị bí mật (`secret-request`). `null` nếu thiếu nhãn — xem `postSecretRequest`.
+   *
+   * Giá trị người dùng gõ KHÔNG quay lại đây và không vào ngữ cảnh model: tool chỉ biết "đã gửi".
+   */
+  askSecret(spec: { label: string; description?: string }): string | null;
+  /** Hỏi một biểu mẫu nhiều ô (`user-form`). `null` nếu thiếu tiêu đề hoặc không ô nào dùng được. */
+  askForm(spec: { title: string; instruction?: string; fields: FormField[]; liveHost?: string; domain?: string }): string | null;
   note(text: string): void;
   requestBoxHelp(instruction: string): Promise<string>;
   agentId: string;

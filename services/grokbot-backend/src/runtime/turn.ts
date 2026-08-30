@@ -29,6 +29,7 @@ import { createAgent, listAgents, setPresence } from "../directory/index.js";
 import {
   isToolEcho, textOf, setText, attachmentNameOf, attachmentLineOf, postAttachment, postWidget, postNotice,
 } from "../conversation/index.js";
+import { postSecretRequest, postUserForm } from "../conversation/cards.js";
 import { stagedTextPreview } from "../attachments.js";
 import {
   TOOLS, isKnownTool, isParallelSafe, toolProtocolFor, turnHooks, attachmentsOf, readImageAttachment,
@@ -343,6 +344,8 @@ const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   attach: (dataUrl, fileName, alt) => postAttachment(agentId, dataUrl, fileName, alt),
   see: (dataUrl) => { pendingVision.set(agentId, dataUrl); },
   ask: (widget) => postWidget(agentId, widget),
+  askSecret: (spec) => postSecretRequest(agentId, spec),
+  askForm: (spec) => postUserForm(agentId, spec),
   note: (text) => {
     tail(agentId).push({ id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: text }, timestampMs: Date.now() });
     onUpdate(agentId);
@@ -472,7 +475,11 @@ function runTool(
       // A question is not a result to reason about — the follow-up turn happens when the
       // user answers it, not now, or the model talks over its own question.
       if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
-      if (name === "ask_question" && history) park({ kind: "widget", key: agentId, agentId, history });
+      // Ba tool đều DỪNG lượt để chờ người: câu hỏi, xin bí mật, và biểu mẫu. Dùng chung khoá
+      // `widget` vì chúng mở khoá ở cùng một chỗ (`unpark("widget", …)` trong submitX).
+      if ((name === "ask_question" || name === "request_secret" || name === "request_user_form") && history) {
+        park({ kind: "widget", key: agentId, agentId, history });
+      }
       // A parked turn is waiting on the user, not working: leaving it "running" spins the
       // indicator forever behind a card that needs a click.
       if (!history || name === "ask_question") clearPresence(agentId);
@@ -586,8 +593,28 @@ export function respondToWidget(a: any) {
   }
   return found;
 }
-export function submitSecret(a: { requestId?: string }) {   // value intentionally not stored
-  const p = findPending(a.requestId); if (p) { pending.delete(p.requestId); onUpdate(p.agentId); } return {};
+/**
+ * Người dùng vừa gửi một bí mật — `submitSecret({entryId, value, agentId})`.
+ *
+ * Bản cũ nhận `{requestId}` và gọi `findPending(a.requestId)`. Client KHÔNG gửi `requestId`, nên
+ * `findPending(undefined)` rơi vào nhánh dự phòng "lấy mục pending ĐẦU TIÊN" — mà `pending` là bản
+ * đồ của THẺ XIN QUYỀN, không phải bí mật. Một lần gửi bí mật sẽ xoá nhầm một thẻ quyền không liên
+ * quan, và cái thẻ ấy treo mãi vì không còn ai giải nó. Chưa ai chạm tới được vì ta chưa từng phát
+ * thẻ `secret-request` — làm ① mà không sửa là bật đúng cái bẫy đó lên.
+ *
+ * GIÁ TRỊ KHÔNG BAO GIỜ ĐƯỢC LƯU. Nó không vào transcript, không vào ngữ cảnh model: bản ghi hội
+ * thoại sống mãi và model đọc lại được, nên một khoá API nằm đó là nằm đó vĩnh viễn. Thứ duy nhất
+ * ta ghi là ĐÃ gửi — `secretProvided`, thứ renderer dùng để vẽ thẻ "đã lưu".
+ */
+export function submitSecret(a: { entryId?: string; value?: string; agentId?: string; requestId?: string }) {
+  const found = findEntry(a.entryId ?? a.requestId, a.agentId ?? "");
+  if (!found || found.entry.kind !== "send-message") return { ok: false };
+  found.entry.secretProvided = true;
+  onUpdate(found.owner);
+  // Mở khoá lượt đang đỗ chờ bí mật, và nói cho model biết ĐÃ có — không nói giá trị là gì.
+  const waiting = unpark("widget", found.owner);
+  if (waiting?.history) continueAfterTool(found.owner, waiting.history, "request_secret", "", "(người dùng đã gửi)");
+  return { ok: true };
 }
 export function dismissWidget(a: { requestId?: string; agentId?: string }): Record<string, never> {
   if (a.requestId) pending.delete(a.requestId);
