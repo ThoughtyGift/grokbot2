@@ -18,10 +18,10 @@ khiển được **cả box Linux lẫn máy Windows thật** của người dù
 được. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang tắt**.
 
 ```
-lệnh gateway   hợp đồng 147 · có handler 148 · thiếu 17 (15 cái client tự tắt)
+lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 (15 cái client tự tắt)
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
-mã             68 file test · 78 file nguồn · 518 bài xanh · typecheck sạch
+mã             70 file test · 80 file nguồn · 523 bài xanh · typecheck sạch
 parity         21/23 ổn định qua 3 lượt · 20 bản ghi phát lại
 bản vá client  6 bản, `--verify` còn nguyên
 ```
@@ -44,14 +44,14 @@ Vì sao **không** thêm đường nâng quyền — đo từ chính daemon củ
 
 ## 3 · Lệnh gateway còn thiếu
 
-Thiếu 17, nhưng **15 trong số đó client không gọi được**:
+Thiếu 16, và **cả 16 đều là thứ client không gọi được**:
 
 | nhóm | số | vì sao client không gọi |
 |---|---|---|
 | phòng chung (`createSharedRoom`, `joinSharedRoom`…) | 9 | sau cờ `grok_bot_multiplayer` — **TẮT** |
 | gọi thoại (`getVoiceCall`, `recordVoiceCall`…) | 5 | sau cờ `sand_voice_call` — **TẮT** |
 | `getBotTemplateExportPolicy`, `resolveVirtualCardApproval` | 2 | **0 lần** trong bundle 0.29 — chỉ có ở hợp đồng 0.30 |
-| `injectChromeCookies` | 1 | main nhắc 7× — **món duy nhất còn mở thật** |
+| ~~`injectChromeCookies`~~ | ~~1~~ | **XONG 31/08** — chở phiên đăng nhập từ máy người dùng sang box |
 
 Cờ đọc từ `main.cjs` bản đang cài: `grok_bot_multiplayer` TẮT · `sand_voice_call` TẮT ·
 `sand_share_bot` TẮT · `sand_channels` TẮT · `agent_prompted_cookie_sync` TẮT ·
@@ -80,15 +80,14 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 
 | # | việc | chặn bởi | kiểm bằng |
 |---|---|---|---|
-| 1 | `injectChromeCookies` | — | client gọi được thật, không cờ nào chắn |
-| 2 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
-| 3 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
-| 4 | Box qua hầm từ máy khác (`T3`) | như trên | — |
-| 5 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
-| 6 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
-| 7 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
-| 8 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
-| 9 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
+| 1 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
+| 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
+| 3 | Box qua hầm từ máy khác (`T3`) | như trên | — |
+| 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
+| 5 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
+| 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
+| 7 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
+| 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
 
 ## 6 · Đã xong — kết luận, không phải nhật ký
 
@@ -133,6 +132,11 @@ nhau; bài test xanh vì lý do sai. Chỉ lộ ra khi bài "tái hiện lỗi c
 
 **Một bài ĐO không được có quyền xoá thứ nó không tạo ra.** `parity-lap` bản đầu gọi `deleteAgents`
 lên mọi bot — suýt xoá 6 bot việc thật.
+
+**Sửa `src` trong lúc người dùng đang chat là cắt lượt của họ.** `tsx watch` nạp lại backend, và
+lượt đang chạy chết giữa chừng — bot im, `isRunning=false`, mục cuối trong hội thoại là chính tin
+người dùng vừa gõ. Xảy ra 31/08: tôi sửa `cookie-chrome.ts` trong khi một lượt thật đang chạy.
+Luật "parity chạy thì không sửa src" áp cho MỌI lượt thật, không riêng lúc đo.
 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
