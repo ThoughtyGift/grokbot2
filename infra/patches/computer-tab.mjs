@@ -73,6 +73,15 @@ const co = {
  * Địa chỉ backend lấy từ `SAND_BACKEND_URL` (launcher đặt sẵn — `infra/scripts/run.ps1`), khoá từ
  * `GROKBOT2_GATEWAY_TOKEN`.
  *
+ * `cn()` là hàm module-level của main trả về machine-id THẬT của máy này (đọc từ secret store, id
+ * mà daemon local-exec cũng khai trong `hello`). Gửi nó xuống để backend biết hàng nào là "Current
+ * computer". Không có nó thì backend phải đoán bằng "máy mới thấy nhất", và đoán đó sai đúng vào
+ * lúc quan trọng: khi app vừa mở, daemon của MÁY NÀY chưa cắm, nên máy mới thấy nhất lại là một
+ * máy khác. Đo được đúng như vậy ngày 30/08 — bảng gắn nhãn "Current computer" cho một máy ảo.
+ *
+ * Bọc try/catch riêng: `cn()` hỏng thì vẫn hỏi backend, chỉ mất dấu "máy hiện tại" chứ không mất
+ * cả bảng.
+ *
  * Hỏng thì trả `null`, KHÔNG ném: renderer bọc lời gọi này trong `unavailableCodes`, nên một ngoại
  * lệ lạ ở đây nổi lên thành lỗi đỏ giữa Settings. `null` chỉ làm bảng trống — đúng bằng hiện trạng
  * trước khi có bản vá, tức là không tệ hơn.
@@ -83,7 +92,8 @@ const co = {
 const THAN_MOI = 'getSandMachines:s(async()=>{try{'
   + 'const u=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
   + 'const k=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-  + 'const r=await fetch(u+"/gw/api/getSandMachines",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:"{}",signal:AbortSignal.timeout(8000)});'
+  + 'let cur=null;try{cur=await cn()}catch{}'
+  + 'const r=await fetch(u+"/gw/api/getSandMachines",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify(cur?{currentMachineId:cur}:{}),signal:AbortSignal.timeout(8000)});'
   + 'if(!r.ok)return null;const a=await r.json();'
   + 'return Array.isArray(a)&&a.length>0?a:null;'
   + '}catch{return null}},"getSandMachines")';

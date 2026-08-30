@@ -206,14 +206,27 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      * máy có `seenAtMs` mới nhất. Hai máy THẬT cùng nối thì dấu này thành tuỳ tiện — ghi ra đây
      * để lần sau khỏi phải phát hiện lại.
      */
-    getSandMachines: () => {
+    getSandMachines: (a) => {
       const ds = ports.connectors.connectedMachines?.() ?? [];
+      /*
+       * "Máy hiện tại" đến TỪ CLIENT, không phải do backend đoán.
+       *
+       * Bản vá gửi `currentMachineId` — chính `cn()` của main, cùng một id daemon khai trong
+       * `hello`. Trước khi có nó tôi đoán bằng "máy mới thấy nhất", và đoán ấy sai đúng vào lúc
+       * quan trọng nhất: app vừa mở thì daemon của máy này chưa cắm, nên máy mới thấy nhất lại là
+       * một máy khác. Đo được ngày 30/08 — bảng gắn nhãn "Current computer" cho một máy ảo trong
+       * khi máy thật đứng dưới.
+       *
+       * Vẫn giữ đường đoán làm dự phòng: client cũ (chưa vá lại) không gửi trường này, và một
+       * bảng đoán sai một nhãn vẫn hơn một bảng không có nhãn nào.
+       */
+      const tuClient = String((a as { currentMachineId?: unknown } | undefined)?.currentMachineId ?? "").trim();
       let moiNhat = -1;
       for (const m of ds) if (m.seenAtMs > moiNhat) moiNhat = m.seenAtMs;
       return ds.map((m) => ({
         machineId: m.computerId,
         label: m.label,
-        isCurrent: m.seenAtMs === moiNhat,
+        isCurrent: tuClient ? m.computerId === tuClient : m.seenAtMs === moiNhat,
         ...(m.standing ? { localToolPermission: m.standing } : {}),
       }));
     },
