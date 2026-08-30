@@ -1,0 +1,61 @@
+flowchart LR
+
+subgraph 0["packages"]
+subgraph 1["api-contract"]
+subgraph 2["src"]
+3[" "]
+end
+end
+subgraph 4["cursor-acl"]
+subgraph 5["src"]
+6[" "]
+end
+end
+subgraph 7["grokbot-proto"]
+subgraph 8["src"]
+9[" "]
+end
+end
+subgraph A["pool-client"]
+subgraph B["src"]
+C[" "]
+end
+end
+end
+subgraph D["services"]
+subgraph E["grokbot-backend"]
+F["._env.mts"]
+subgraph G["scripts"]
+H[" "]
+end
+subgraph I["src"]
+J[" "]
+end
+end
+subgraph K["grokbot-computer"]
+subgraph L["src"]
+M[" "]
+end
+end
+subgraph N["grokbot-ops"]
+subgraph O["src"]
+P[" "]
+end
+end
+subgraph Q["grokbot-runtime"]
+subgraph R["src"]
+S[" "]
+end
+end
+end
+6-->9
+F-->J
+H-->6
+H-->J
+H-->3
+H-->C
+J-->C
+J-->9
+J-->6
+J-->3
+S-->C

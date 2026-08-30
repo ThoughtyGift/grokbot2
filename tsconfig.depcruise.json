@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": [
+    "CHỈ dùng cho dependency-cruiser vẽ sơ đồ. Không tham gia build, không ai import.",
+    "",
+    "Vì sao cần: mỗi gói workspace khai `main: dist/index.js`, mà `dist` thì bị loại khỏi sơ đồ.",
+    "Không có `paths` dưới đây thì cạnh `services/grokbot-backend/src → packages/cursor-acl` BIẾN",
+    "MẤT, dù `gateway.ts:10` import nó thật — và một sơ đồ thiếu đúng cạnh quan trọng nhất còn tệ",
+    "hơn không có sơ đồ, vì nó trông đáng tin.",
+    "",
+    "Không sửa `tsconfig.base.json` để đạt việc này: ở đó `paths` sẽ đổi cách BUILD phân giải gói,",
+    "tức đổi thứ đang chạy, chỉ để một bức tranh đẹp hơn."
+  ],
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@grokbot2/cursor-acl": ["packages/cursor-acl/src/index.ts"],
+      "@grokbot2/proto": ["packages/grokbot-proto/src/index.ts"],
+      "@grokbot2/pool-client": ["packages/pool-client/src/index.ts"],
+      "@grokbot2/api-contract": ["packages/api-contract/src/index.ts"]
+    }
+  }
+}

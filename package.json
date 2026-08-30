@@ -42,10 +42,13 @@
     "measure:transcript-scroll": "node services/grokbot-backend/scripts/measure-transcript-scroll.mjs",
     "measure:shot": "node services/grokbot-backend/scripts/measure-shot.mjs",
     "test:routines": "node services/grokbot-backend/scripts/e2e-routines.mjs",
-    "measure:routines": "node services/grokbot-backend/scripts/measure-routines-ui.mjs"
+    "measure:routines": "node services/grokbot-backend/scripts/measure-routines-ui.mjs",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs packages services --output-type err",
+    "arch:graph": "depcruise --config .dependency-cruiser.cjs packages services --output-type mermaid --collapse 3 --output-to docs/architecture/so-do-phu-thuoc.mermaid"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "dependency-cruiser": "17",
     "knip": "^6.32.2",
     "playwright-core": "^1.62.1",
     "tsx": "^4.19.0",

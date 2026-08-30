@@ -163,6 +163,7 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [per-user-on-one-box.md](../plan/per-user-on-one-box.md) | tách OS user · thu hồi khi nghỉ |
 | [one-display-per-bot.md](../plan/one-display-per-bot.md) | một màn hình mỗi bot · sức chứa box |
 | [desktop-computer-use.md](../plan/desktop-computer-use.md) | điều khiển máy tính · dạy việc |
-| [architecture.md](../architecture.md) | kiến trúc tổng |
+| [architecture.md](../architecture.md) | kiến trúc tổng, viết tay |
+| [architecture/so-do-tu-sinh.md](../architecture/so-do-tu-sinh.md) | sơ đồ do MÁY vẽ từ import thật — `pnpm arch:graph` |
 | [legal.md](../legal.md) | ranh giới: dùng cá nhân / nghiên cứu |
 | [runbooks/trien-khai.md](../runbooks/trien-khai.md) | triển khai + **lùi bản** — §1 là nút lùi |
