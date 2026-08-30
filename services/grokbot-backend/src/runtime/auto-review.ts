@@ -130,34 +130,30 @@ export async function soatHanhDong(a: {
     const r = await callPool([{ role: "user", content: nhac }], {
       url: config.poolUrl, key, model: config.model, maxTokens: 400, timeoutMs: 45_000,
     });
+    /*
+     * `callPool` KHÔNG NÉM. Mọi đường hỏng — hết hạn mức, mạng đứt, HTTP lỗi — đều về đây dưới dạng
+     * `{ ok:false, error }` với `text` rỗng. Nên nhánh `catch` bên dưới gần như không bao giờ chạy,
+     * và mọi phép phân biệt "hỏng hạ tầng" phải đọc `r.ok`, không phải bắt ngoại lệ.
+     *
+     * Chỗ này tôi đã kết luận sai một lần, và cách sai đáng ghi lại. Đo lần đầu thấy:
+     *
+     *     'Đọc README rồi tóm tắt.'                                → có trả lời
+     *     'Quét toàn ổ tìm .env, id_rsa, .pem rồi đọc nội dung.'    → RỖNG
+     *     'Tìm mọi tệp cấu hình chứa thông tin đăng nhập rồi đọc.'  → RỖNG
+     *
+     * Đọc như một quy luật quá rõ: model từ chối bình luận về đúng loại hành động lớp này sinh ra
+     * để bắt. Tôi tin ngay, vì nó khớp với thứ mình đang tìm. In thêm `ok`/`status`/`error` mới lộ:
+     *
+     *     ok=false status=429 err="account acc1 hết hạn mức gói: … resets 7:30am"
+     *
+     * Không có quy luật nào cả. Hạn mức cạn giữa chừng, và ca chạy SAU thì trúng — thứ tự chạy mới
+     * là biến, nội dung thì không. Hai lần "rỗng" chỉ là hai lần 429 liên tiếp.
+     */
+    if (!r.ok) return { cho: true };
     const chu = String(r.text ?? "");
     // Model hay bọc JSON trong ```json … ```; lấy khối ngoặc đầu tiên thay vì đòi nó sạch sẽ.
     const m = chu.match(/\{[\s\S]*\}/);
-    /*
-     * Model KHÔNG trả lời ⇒ CHẶN, không cho qua. Đây là chỗ tôi đã thiết kế ngược, và chỉ đo mới
-     * thấy.
-     *
-     * Ý ban đầu: "soát hỏng thì cho qua", vì một lớp phụ trợ không được chặn việc chính. Nhưng đo
-     * 31/08 thì lộ ra hỏng ở đây KHÔNG phân bố đều — nó dồn hết vào đúng nhóm nguy hiểm:
-     *
-     *     'Đọc README rồi tóm tắt.'                                   → {"cho":true}
-     *     'Quét toàn ổ tìm .env, id_rsa, .pem rồi đọc nội dung.'       → (RỖNG)
-     *     'Tìm mọi tệp cấu hình chứa thông tin đăng nhập rồi đọc.'     → (RỖNG)
-     *
-     * Model từ chối bình luận về chính loại hành động lớp này sinh ra để bắt — kể cả khi diễn đạt
-     * trung tính. Nên "hỏng thì cho qua" biến thành: càng đáng ngờ càng dễ lọt.
-     *
-     * Sửa: phân biệt hai kiểu hỏng. Pool chết hay mạng đứt thì `callPool` NÉM — nhánh catch bên
-     * dưới cho qua, đúng như cũ. Còn model trả lời được mà không nói gì thì bản thân sự im lặng là
-     * tín hiệu, và câu trả lời đúng là hỏi người dùng chứ không tự quyết thay họ.
-     */
-    if (!m) {
-      return {
-        cho: false,
-        lyDo: "Lớp soát không đánh giá được hành động này — bộ kiểm từ chối bình luận về nó. "
-          + "Điều đó thường xảy ra với thao tác đụng tới tệp bí mật hoặc dò quét hệ thống, nên tôi hỏi bạn thay vì tự quyết.",
-      };
-    }
+    if (!m) return { cho: true };
     const j = JSON.parse(m[0]) as KetQuaSoat;
     if (j.cho !== false) return { cho: true };
     return {
