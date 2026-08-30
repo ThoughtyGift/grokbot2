@@ -89,7 +89,7 @@ import {
   coverageSnapshot, calledMethods, lastArgsFor, notFoundBody, clearUnknown,
 } from "./observe.js";
 import { parkRequests, submitResponses, isChannelEnabled, channelSnapshot, connectedMachines } from "./channels.js";
-import { mayChoBang } from "./may-da-biet.js";
+import { mayChoBang, datTen, datQuyen } from "./may-da-biet.js";
 import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
 import { handleGitHubEvent } from "./github-events.js";
@@ -224,6 +224,8 @@ const ports: AclPorts = {
     // Trả cả máy ĐÃ TỪNG nối, không chỉ máy đang nối: bảng hỏi đúng một lần lúc app khởi động, và
     // lúc ấy daemon chưa kịp cắm. Định tuyến thì vẫn chỉ đọc máy đang nối — xem `may-da-biet.ts`.
     connectedMachines: () => mayChoBang(connectedMachines()),
+    renameMachine: datTen,
+    setMachinePermission: datQuyen,
     submitResponses,
     channelSnapshot,
   },

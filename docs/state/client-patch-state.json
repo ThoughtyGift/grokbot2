@@ -1,5 +1,5 @@
 {
-  "appliedAt": "2026-08-30T17:14:33.282Z",
+  "appliedAt": "2026-08-30T17:34:00.729Z",
   "clientVersion": "0.29.0",
   "vendorAsarSha256": "e08ac0a9d49a3b9b",
   "patches": [
@@ -19,6 +19,12 @@
     },
     {
       "id": "computer-tab-ipc"
+    },
+    {
+      "id": "computer-tab-label"
+    },
+    {
+      "id": "computer-tab-permission"
     }
   ],
   "note": "Written by infra/scripts/patch-client.mjs --apply. Personal install only — never redistribute a patched client (docs/legal.md)."

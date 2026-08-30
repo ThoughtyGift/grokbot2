@@ -98,6 +98,72 @@ const THAN_MOI = 'getSandMachines:s(async()=>{try{'
   + 'return Array.isArray(a)&&a.length>0?a:null;'
   + '}catch{return null}},"getSandMachines")';
 
+/**
+ * Đổi TÊN máy — nút Save trong bảng.
+ *
+ * Thân gốc dựng một chuỗi kiểm tra rồi gọi API hãng, và hai dòng đầu đã chặn mình rồi:
+ *
+ *     Ce(E.kind==="logged-in","Machine label update requires sign-in.");
+ *     Ce(await n.isMachineStorageAllowed(w),"Machine label update requires storage access.");
+ *
+ * Nên bấm Save trên client chưa vá là ném ngay, không phải "không có gì xảy ra".
+ *
+ * Bản thay giữ nguyên phần KIỂM TRA ĐẦU VÀO của hãng — id ≤127 ký tự, nhãn không rỗng và ≤ hằng số
+ * `s7t` của họ (SAND_MACHINE_LABEL_MAX_LENGTH). Không phải vì lịch sự: renderer đọc `.label.length`
+ * không guard ở vài chỗ, và một nhãn rỗng lọt xuống là một bảng ném giữa lúc vẽ. Bỏ luôn phần đăng
+ * nhập, và trả về đúng bản ghi máy mà renderer chờ (`Zn(u.machineId===a)` rồi `ingest`).
+ */
+const doiTen = {
+  id: "computer-tab-label",
+  summary: "nút Save đổi tên máy qua backend mình",
+  variants: [
+    {
+      version: "0.29.0",
+      file: MAIN,
+      find: 'updateMachineLabel:s(async({machineId:p,label:A})=>{let y=A.trim();',
+      expected: 1,
+      replace: 'updateMachineLabel:s(async({machineId:p,label:A})=>{/*grokbot2:computer-tab-label*/'
+        + 'const y2=String(A??"").trim();'
+        + 'if(!(p&&p.length>0&&p.length<=127&&y2.length>0&&[...y2].length<=s7t))throw new Error("Machine label update requires a bounded machine id and label.");'
+        + 'const u2=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
+        + 'const k2=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r2=await fetch(u2+"/gw/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
+        + 'if(!r2.ok)throw new Error("Machine label update failed: "+r2.status);'
+        + 'return await r2.json();}/*grokbot2:label-cu*/,"updateMachineLabel"),unusedUpdateMachineLabel:s(async({machineId:p,label:A})=>{let y=A.trim();',
+      marker: "/*grokbot2:computer-tab-label*/",
+    },
+  ],
+};
+
+/**
+ * Đổi MỨC QUYỀN của một máy — ô "Execution on this computer" trong bảng.
+ *
+ * Cùng khuôn với đổi tên: thân gốc đòi đăng nhập rồi gọi API hãng. Phần SAU lời gọi này (đồng bộ
+ * `localToolPermission` xuống box, có retry) nằm ở `setLocalToolPermission` chứ không ở đây, nên
+ * thay mỗi thân này là đủ và phần đồng bộ vẫn chạy nguyên.
+ *
+ * Trả về bản ghi máy: `setLocalToolPermission` đọc `a.localToolPermission??"ask"` ngay sau đó.
+ */
+const doiQuyen = {
+  id: "computer-tab-permission",
+  summary: "ô Execution đổi mức quyền của một máy qua backend mình",
+  variants: [
+    {
+      version: "0.29.0",
+      file: MAIN,
+      find: 'updateMachineLocalToolPermission:s(async({machineId:p,localToolPermission:A,expectedAccountScope:y})=>{let S=await e(),',
+      expected: 1,
+      replace: 'updateMachineLocalToolPermission:s(async({machineId:p,localToolPermission:A})=>{/*grokbot2:computer-tab-permission*/'
+        + 'const u3=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
+        + 'const k3=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r3=await fetch(u3+"/gw/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:A}),signal:AbortSignal.timeout(8000)});'
+        + 'if(!r3.ok)throw new Error("Machine permission update failed: "+r3.status);'
+        + 'return await r3.json();}/*grokbot2:quyen-cu*/,"updateMachineLocalToolPermission"),unusedUpdateMachinePermission:s(async({machineId:p,localToolPermission:A,expectedAccountScope:y})=>{let S=await e(),',
+      marker: "/*grokbot2:computer-tab-permission*/",
+    },
+  ],
+};
+
 const cau = {
   id: "computer-tab-ipc",
   summary: "getSandMachines hỏi backend mình thay vì API của hãng",
@@ -113,4 +179,4 @@ const cau = {
   ],
 };
 
-export default [co, cau];
+export default [co, cau, doiTen, doiQuyen];

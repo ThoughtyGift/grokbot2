@@ -215,7 +215,11 @@ export interface ConnectorsPort {
    * không phải một hình dạng renderer không đọc được. Client đọc `.length` rồi `machineId`,
    * `label`, `isCurrent`, nên thiếu trường là thẻ hỏng, không phải thẻ trống.
    */
-  connectedMachines?(): { computerId: string; label: string; standing?: string; seenAtMs: number }[];
+  connectedMachines?(): { computerId: string; label: string; tenNguoiDat?: string; standing?: string; seenAtMs: number }[];
+  /** Người dùng đặt lại tên một máy (nút Save trong bảng). `null` ⇒ không biết máy đó. */
+  renameMachine?(computerId: string, label: string): { computerId: string; label: string; tenNguoiDat?: string; standing?: string } | null;
+  /** Người dùng đổi mức quyền của một máy. Ghi lại lựa chọn; daemon vẫn là nơi thi hành. */
+  setMachinePermission?(computerId: string, permission: string): { computerId: string; label: string; tenNguoiDat?: string; standing?: string } | null;
 }
 
 export type ChannelName = "local-exec" | "webauthn";

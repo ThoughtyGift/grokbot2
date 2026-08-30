@@ -36,6 +36,14 @@ export interface MayDaBiet {
   computerId: string;
   label: string;
   standing?: string;
+  /**
+   * Tên do NGƯỜI DÙNG đặt trong bảng, nếu có.
+   *
+   * Tách khỏi `label` (tên máy tự khai trong `hello`) chứ không ghi đè lên nó: daemon nối lại là
+   * gửi `hello` mới, và nếu hai thứ dùng chung một ô thì tên người dùng vừa đặt sẽ tự quay về
+   * `DESKTOP-7D2FJG8` sau vài giây mà không ai hiểu vì sao.
+   */
+  tenNguoiDat?: string;
   /** Lần cuối máy này còn sống. Nạp từ đĩa thì đây là giờ của phiên trước. */
   seenAtMs: number;
 }
@@ -65,7 +73,7 @@ export function napMayDaBiet(): number {
     const ds = JSON.parse(readFileSync(FILE, "utf8")) as MayDaBiet[];
     for (const m of Array.isArray(ds) ? ds : []) {
       if (typeof m?.computerId === "string" && typeof m?.label === "string") {
-        so.set(m.computerId, { computerId: m.computerId, label: m.label, seenAtMs: Number(m.seenAtMs) || 0, ...(m.standing ? { standing: m.standing } : {}) });
+        so.set(m.computerId, { computerId: m.computerId, label: m.label, seenAtMs: Number(m.seenAtMs) || 0, ...(m.standing ? { standing: m.standing } : {}), ...(m.tenNguoiDat ? { tenNguoiDat: m.tenNguoiDat } : {}) });
       }
     }
   } catch {
@@ -76,7 +84,15 @@ export function napMayDaBiet(): number {
 
 /** Ghi nhận một máy vừa tự khai `hello`. */
 export function nhoMay(m: { computerId: string; label: string; standing?: string }): void {
-  so.set(m.computerId, { computerId: m.computerId, label: m.label, seenAtMs: Date.now(), ...(m.standing ? { standing: m.standing } : {}) });
+  // Giữ lại tên người dùng đã đặt: `hello` mang tên máy tự khai, không phải quyết định của người.
+  const cu = so.get(m.computerId);
+  so.set(m.computerId, {
+    computerId: m.computerId,
+    label: m.label,
+    seenAtMs: Date.now(),
+    ...(m.standing ? { standing: m.standing } : {}),
+    ...(cu?.tenNguoiDat ? { tenNguoiDat: cu.tenNguoiDat } : {}),
+  });
   luu();
 }
 
@@ -90,8 +106,56 @@ export function mayChoBang(dangNoi: { computerId: string; label: string; standin
   const ra = new Map<string, MayDaBiet>();
   for (const m of so.values()) ra.set(m.computerId, m);
   // Máy đang nối luôn thắng bản ghi cũ: tên có thể đã đổi, và `seenAtMs` của nó là bây giờ.
-  for (const m of dangNoi) ra.set(m.computerId, { computerId: m.computerId, label: m.label, seenAtMs: m.seenAtMs, ...(m.standing ? { standing: m.standing } : {}) });
+  for (const m of dangNoi) {
+    const cu = so.get(m.computerId);
+    ra.set(m.computerId, {
+      computerId: m.computerId,
+      label: m.label,
+      seenAtMs: m.seenAtMs,
+      // `standing` của daemon là sự thật về máy nên nó thắng — nhưng chỉ khi daemon CÓ khai. Không
+      // khai mà vẫn ghi đè thì mức quyền người dùng vừa đặt biến mất ngay lần daemon nối lại, và
+      // bảng quay về trống chỗ đó không lời giải thích.
+      ...(m.standing ?? cu?.standing ? { standing: m.standing ?? cu?.standing } : {}),
+      ...(cu?.tenNguoiDat ? { tenNguoiDat: cu.tenNguoiDat } : {}),
+    });
+  }
   return [...ra.values()].sort((a, b) => b.seenAtMs - a.seenAtMs);
+}
+
+/**
+ * Người dùng đặt lại tên cho một máy (nút Save trong bảng).
+ *
+ * Tên do người đặt PHẢI thắng tên máy tự khai trong `hello` — nếu không thì lần daemon nối lại kế
+ * tiếp sẽ ghi đè, và người dùng thấy tên mình vừa đặt tự quay về `DESKTOP-7D2FJG8` sau vài giây.
+ * Nên `tenNguoiDat` là một trường riêng, và `mayChoBang` ưu tiên nó.
+ *
+ * Trả về `null` nếu không biết máy nào mang id đó — người gọi phải nói ra thay vì im lặng thành công.
+ */
+export function datTen(computerId: string, ten: string): MayDaBiet | null {
+  const m = so.get(computerId);
+  const t = ten.trim();
+  if (!m || !t) return null;
+  const moi: MayDaBiet = { ...m, tenNguoiDat: t };
+  so.set(computerId, moi);
+  luu();
+  return moi;
+}
+
+/**
+ * Người dùng đổi mức quyền của một máy.
+ *
+ * Ghi vào sổ để bảng vẽ đúng ngay lập tức. Đây KHÔNG phải chỗ thi hành: daemon giữ mức quyền của
+ * chính nó và tự quyết định từ chối hay không — ta chỉ ghi lại thứ người dùng đã chọn, và client
+ * đồng bộ tiếp xuống máy qua `setLocalToolPermission` của nó.
+ */
+export function datQuyen(computerId: string, quyen: string): MayDaBiet | null {
+  const m = so.get(computerId);
+  const q = quyen.trim();
+  if (!m || !q) return null;
+  const moi: MayDaBiet = { ...m, standing: q };
+  so.set(computerId, moi);
+  luu();
+  return moi;
 }
 
 /** Quên hết — cho test. */

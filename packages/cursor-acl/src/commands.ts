@@ -225,10 +225,45 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       for (const m of ds) if (m.seenAtMs > moiNhat) moiNhat = m.seenAtMs;
       return ds.map((m) => ({
         machineId: m.computerId,
-        label: m.label,
+        label: m.tenNguoiDat ?? m.label,
         isCurrent: tuClient ? m.computerId === tuClient : m.seenAtMs === moiNhat,
         ...(m.standing ? { localToolPermission: m.standing } : {}),
       }));
+    },
+
+    /**
+     * Nút Save trong bảng — đặt lại tên một máy.
+     *
+     * Client chờ về ĐÚNG một bản ghi máy, không phải `{ok:true}`: nó khẳng định
+     * `Zn(u.machineId===a)` rồi `r.ingest(d.map(f=>f.machineId===a?u:f))` — trả sai hình dạng là
+     * bảng thay một hàng bằng `undefined`.
+     *
+     * Không biết máy đó thì NÉM, đừng lặng lẽ trả về bản ghi cũ: bản vá dịch lỗi thành một câu
+     * trong giao diện, còn im lặng thành công thì người dùng bấm Save và tên không đổi, không lời
+     * giải thích.
+     */
+    updateSandMachineLabel: (a) => {
+      const id = String(a?.machineId ?? "").trim();
+      const label = String(a?.label ?? "").trim();
+      const m = id && label ? ports.connectors.renameMachine?.(id, label) : null;
+      if (!m) throw new Error(`không đổi được tên máy ${id || "(thiếu id)"}`);
+      return { machineId: m.computerId, label: m.tenNguoiDat ?? m.label, isCurrent: false, ...(m.standing ? { localToolPermission: m.standing } : {}) };
+    },
+
+    /**
+     * Ô "Execution on this computer" — đổi mức quyền của một máy.
+     *
+     * Ghi lại LỰA CHỌN, không thi hành: daemon giữ mức quyền của chính nó và tự quyết định từ chối
+     * hay không. Client đồng bộ tiếp xuống máy bằng đường riêng của nó (`setLocalToolPermission`
+     * gọi `syncHostSettingsToBox` ngay sau lời gọi này), nên ta chỉ cần trả bản ghi đã cập nhật —
+     * `a.localToolPermission??"ask"` là thứ nó đọc ngay dòng sau.
+     */
+    updateSandMachineLocalToolPermission: (a) => {
+      const id = String(a?.machineId ?? "").trim();
+      const quyen = String(a?.localToolPermission ?? a?.permission ?? "").trim();
+      const m = id && quyen ? ports.connectors.setMachinePermission?.(id, quyen) : null;
+      if (!m) throw new Error(`không đổi được mức quyền máy ${id || "(thiếu id)"}`);
+      return { machineId: m.computerId, label: m.tenNguoiDat ?? m.label, isCurrent: false, ...(m.standing ? { localToolPermission: m.standing } : {}) };
     },
     countAgents: () => directory.countAgents(),
     // The client reads `result.agent.id`, so createAgent/duplicateAgent/openAgent must wrap the
