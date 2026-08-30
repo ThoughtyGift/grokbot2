@@ -17,6 +17,7 @@ một cấp thư mục không đáng cái rủi ro đó. Muốn chuyển thật 
 | `pnpm phase:gate` / `phase:advance` | gate của phase hiện tại · dời con trỏ |
 | `pnpm soak` / `soak:status` | ghi một ngày dùng thật (F7) |
 | `pnpm ui:diff` / `ui:shots` / `ui:xray` | so giao diện với app gốc: bằng số · bằng hình · bóc tách tương tác |
+| `npx tsx scripts/do-auto-review.mts [--surface subagent]` | lớp tự soát có chặn đúng 3 ca app gốc chặn không — báo riêng lượt **không đo được** (hết hạn mức pool) thay vì tính thành "cho qua" |
 | `pnpm test:avatar` / `test:avatar-ui` / `test:reaction` | ba bộ e2e có ghi nhật ký |
 | `pnpm e2e:history` | đọc nhật ký các lượt e2e |
 
@@ -50,5 +51,6 @@ top-level thì đừng import; tách phần dữ liệu ra file riêng.
 
 155 file `_tmp-*` (170 KB) từng bị commit, trong đó **126 file `.txt` là trích đoạn bundle minify
 của hãng** — vi phạm `docs/legal.md` và ROADMAP R5. Đã bỏ khỏi git và thêm luật vào `.gitignore`;
-chúng vẫn còn trên đĩa để tra. Đặt tên `_tmp-` cho mọi file dò dùng một lần thì `.gitignore` lo phần
+đã xoá nốt khỏi đĩa ngày 31/08/2026 — dựng lại được bằng `extract-*.mjs` từ `app.asar` nếu cần tra.
+Đặt tên `_tmp-` cho mọi file dò dùng một lần thì `.gitignore` lo phần
 còn lại.
