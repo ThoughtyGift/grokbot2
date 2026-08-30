@@ -49,6 +49,7 @@ import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
 import { closeTeach } from "./teach.js";
 import { runOnUserComputer, userComputerConnected, findMachine, connectedMachines } from "./local-exec.js";
+import { lamTrenTrinhDuyet } from "./local-browser.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
@@ -304,6 +305,25 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
           ...(may ? { machineId: may.computerId } : {}),
         });
         return json(may ? { ...r, may: may.label } : r, r.ok ? 200 : 502);
+      }
+      /*
+       * Chẩn đoán trình duyệt trên máy người dùng — cùng lý do với cửa `/internal/ops/local-exec`
+       * ngay trên: hàng đợi local-exec nằm trong BỘ NHỚ TIẾN TRÌNH NÀY, nên một script tsx rời có
+       * import `local-browser.ts` cũng chỉ nói chuyện với một hàng đợi rỗng của chính nó. Tôi đã
+       * quên đúng điều mình viết ở trên và mất một vòng chẩn đoán nhầm sang "lệnh quá dài".
+       */
+      if (url.startsWith("/internal/ops/local-browser") && req.method === "POST") {
+        const viec = String(bodyJ.viec ?? "");
+        if (!["mo", "doc", "bam", "go", "anh"].includes(viec)) {
+          return json({ error: "viec phải là mo|doc|bam|go|anh" }, 400);
+        }
+        const r = await lamTrenTrinhDuyet(bodyJ as never, {
+          timeoutMs: Number(bodyJ.timeoutMs) || 120_000,
+          ...(bodyJ.may ? { machineId: String(bodyJ.may) } : {}),
+        });
+        // Ảnh base64 dài hàng trăm KB — cắt trong bản chẩn đoán, giữ độ dài để còn biết có ảnh.
+        const goi = r.anhBase64 ? { ...r, anhBase64: `(${r.anhBase64.length} ký tự base64)` } : r;
+        return json(goi, r.ok ? 200 : 502);
       }
       // Webhook của routine. Ops nhận POST công khai rồi chuyển vào đây, vì KHOÁ nằm ở BFF (sqlite)
       // và ops không được đụng sqlite (ADR-P4-2). Đặt TRƯỚC `/internal/ops/fire` vì nhánh kia dùng

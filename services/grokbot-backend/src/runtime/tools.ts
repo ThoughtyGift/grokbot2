@@ -8,6 +8,7 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowser
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { runOnUserComputer, connectedMachine, connectedMachines, findMachine } from "../local-exec.js";
+import { lamTrenTrinhDuyet } from "../local-browser.js";
 import { boxConfigured, boxCall } from "../box-exec.js";
 import { desktopAct, desktopConfigured, parseDesktopArg, screenInfo, claimDesktop } from "../desktop.js";
 import { publish } from "../events.js";
@@ -627,6 +628,62 @@ TOOLS.local_machines = async () => {
     const giay = Math.round((Date.now() - m.seenAtMs) / 1000);
     return `${m.label} (id ${m.computerId.slice(0, 8)}…) · thư mục gốc ${m.localRoot ?? "?"} · thấy ${giay}s trước`;
   }).join("\n");
+};
+
+/**
+ * Lái trình duyệt TRÊN MÁY NGƯỜI DÙNG — đọc trang, bấm, gõ, chụp.
+ *
+ * Vì sao cần, khi đã có `local_shell`: đo 31/08, bảo bot "mở Chrome vào 24h rồi đọc tiêu đề bài
+ * đầu", nó MỞ được trang bằng một lệnh nhưng không nhìn vào được cửa sổ ấy — nó tự tải trang về
+ * đọc rồi thành thật khai ra. Mở một cửa sổ mà không nhìn được vào trong thì mới là nửa việc.
+ *
+ * Cửa sổ này là cửa sổ RIÊNG của bot (hồ sơ Chrome riêng, cổng 9333), không phải cửa sổ người dùng
+ * đang mở. Nên nó không có sẵn phiên đăng nhập nào — và cũng vì thế bot không đụng nhầm vào phiên
+ * ngân hàng hay Zalo đang mở. Muốn bot làm việc trong một tài khoản thì người dùng đăng nhập một
+ * lần trong chính cửa sổ ấy.
+ */
+TOOLS.local_browser = async (arg, ctx) => {
+  let spec: Record<string, unknown>;
+  try { spec = JSON.parse(arg) as Record<string, unknown>; } catch { spec = { viec: unquote(arg) }; }
+  const viec = String(spec?.viec ?? spec?.action ?? "").trim();
+  const hopLe = ["mo", "doc", "bam", "go", "anh"];
+  if (!hopLe.includes(viec)) {
+    return 'local_browser cần {"viec":"mo|doc|bam|go|anh", …}. '
+      + 'mo cần "url"; bam cần "chu" (chữ trên nút/liên kết); go cần "o" (tên ô) và "chu", thêm "enter":true để gửi luôn.';
+  }
+
+  const chiDinh = String(spec?.machine ?? "").trim();
+  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  if (chiDinh && !may) {
+    const co = connectedMachines().map((m) => m.label);
+    return `Không thấy máy "${chiDinh}" đang nối` + (co.length ? ` — đang có: ${co.join(", ")}` : "");
+  }
+  if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
+
+  const r = await lamTrenTrinhDuyet(spec as never, {
+    machineId: may.computerId,
+    // Lần đầu trong phiên phải chở script sang rồi bật Chrome — mất tới nửa phút.
+    timeoutMs: Number(spec?.timeoutMs) || 150_000,
+  });
+  if (!r.ok) return `[${may.label}] trình duyệt: ${r.loi}`;
+
+  if (viec === "anh") {
+    if (!r.anhBase64) return `[${may.label}] chụp được nhưng không có dữ liệu ảnh`;
+    const dataUrl = `data:image/jpeg;base64,${r.anhBase64}`;
+    ctx.attach(dataUrl, "man-hinh-may-ban.jpg", `màn hình trình duyệt trên ${may.label}`);
+    ctx.see(dataUrl);
+    return `[${may.label}] đã chụp trang ${r.url ?? "?"} và đặt trước mắt bạn — hãy nhìn rồi nhận xét nội dung thật, đừng đoán.`;
+  }
+  if (viec === "doc") {
+    const chu = String(r.chu ?? "");
+    const them = r.doDaiThat && r.doDaiThat > chu.length ? `
+(còn ${r.doDaiThat - chu.length} ký tự nữa, gọi lại với "gioiHan" lớn hơn nếu cần)` : "";
+    return catBot(`[${may.label}] ${r.url ?? ""}
+${chu}${them}`);
+  }
+  if (viec === "mo") return `[${may.label}] đã mở ${r.url} — tiêu đề: ${r.tieuDe ?? "(không đọc được)"}`;
+  if (viec === "bam") return `[${may.label}] ${r.ketQua ?? "đã bấm"} — giờ đang ở ${r.url ?? "?"}`;
+  return `[${may.label}] đã gõ xong — đang ở ${r.url ?? "?"}`;
 };
 
 TOOLS.local_shell = async (arg, _ctx) => {
@@ -1625,8 +1682,39 @@ const TASK_PROTOCOL =
   `Các loại dùng được: ${subagentTypeList()}. ` +
   "Chỉ dùng đúng những tên trên; không có tên nào hợp thì tự làm.";
 
+/**
+ * Máy THẬT của người dùng — bốn tool `local_*`, và cách gọi chúng.
+ *
+ * Danh sách tên tool được sinh tự động từ `TOOLS`, nên `local_browser` đã có mặt ở đó từ lúc thêm
+ * hàm. Nhưng CHỈ có tên. Bài học `create_routine` (28/08) đúng nguyên văn ở đây: model biết tool
+ * tồn tại mà không biết gọi thế nào thì gần như chắc chắn nó sẽ không gọi. `local_shell` thì model
+ * đoán ra được vì tham số hiển nhiên là `command`; `local_browser` có `viec`/`chu`/`o` — không ai
+ * đoán ra.
+ *
+ * Chỉ phát khi thật sự có máy đang nối. Dạy một tool không dùng được là mời model hứa với người
+ * dùng một việc rồi thất bại.
+ */
+const localProtocol = (): string => {
+  const ds = connectedMachines();
+  if (!ds.length) return "";
+  const ten = ds.map((m) => m.label).join(", ");
+  return "\n\nMÁY CỦA NGƯỜI DÙNG: bạn nối được vào máy tính THẬT của họ, ngoài máy của chính bạn. "
+    + `Đang nối: ${ten}. `
+    + 'TOOL_CALL: local_machines({}) — liệt kê. '
+    + 'TOOL_CALL: local_shell({"command":"...","machine":"<tên máy>"}) — chạy lệnh; bỏ "machine" thì lấy máy vừa thấy gần nhất. '
+    + 'TOOL_CALL: local_read({"path":"C:/..."}) — đọc một file. '
+    + 'TOOL_CALL: local_browser({"viec":"mo","url":"https://..."}) — mở trang trong CỬA SỔ CHROME RIÊNG của bạn trên máy đó; '
+    + 'rồi {"viec":"doc"} để đọc chữ trên trang, {"viec":"bam","chu":"<chữ trên nút>"} để bấm, '
+    + '{"viec":"go","o":"<tên ô>","chu":"...","enter":true} để điền, {"viec":"anh"} để chụp màn hình trang cho người dùng xem. '
+    + "Cửa sổ ấy là hồ sơ riêng, KHÔNG có phiên đăng nhập sẵn của người dùng — cần đăng nhập thì bảo họ đăng nhập một lần trong chính cửa sổ đó. "
+    + "Ba việc phải phân biệt: mở một trang bằng `local_shell` thì chỉ MỞ, không nhìn được vào trong; "
+    + "muốn đọc hay bấm thì phải đi bằng `local_browser`. "
+    + "Máy này là máy làm việc thật của người ta — mỗi lệnh đều hiện một thẻ xin phép, nên đừng rải lệnh thăm dò; "
+    + "nghĩ trước rồi chạy đúng thứ cần.";
+};
+
 const toolProtocolFor = (owner: string): string =>
-  toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
+  toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + localProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;
