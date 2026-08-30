@@ -146,8 +146,10 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
 
     // The responses half of the two long-poll channels. Both were missing, and the observe pass
     // caught the app posting to both.
-    if (url.startsWith("/gw/local-exec/responses") || url.startsWith("/gw/webauthn/responses")) {
-      const name: ChannelName = url.includes("webauthn") ? "webauthn" : "local-exec";
+    if (url.startsWith("/gw/local-exec/responses") || url.startsWith("/gw/webauthn/responses")
+      || url.startsWith("/gw/cookie-origin-approval/responses")) {
+      const name: ChannelName = url.includes("cookie-origin-approval") ? "cookie-origin-approval"
+        : url.includes("webauthn") ? "webauthn" : "local-exec";
       if (!connectors.channelEnabled(name)) return json(res, { error: `${name} channel not enabled` }, 404);
       return json(res, connectors.submitResponses(name, body));
     }
@@ -193,8 +195,12 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
     // Long-poll channels: the box holds these open until it has work. Answering instantly makes
     // the client reconnect in a tight loop and read the box as flapping, so park them and return
     // an empty batch on timeout.
-    if (url.startsWith("/gw/webauthn/requests") || url.startsWith("/gw/local-exec/requests")) {
-      connectors.parkRequests(url.includes("webauthn") ? "webauthn" : "local-exec", res);
+    if (url.startsWith("/gw/webauthn/requests") || url.startsWith("/gw/local-exec/requests")
+      || url.startsWith("/gw/cookie-origin-approval/requests")) {
+      // Kênh thứ ba thêm 31/08: `coverage.json` bắt được client gọi thật và nhận 404 hai lần.
+      const name: ChannelName = url.includes("cookie-origin-approval") ? "cookie-origin-approval"
+        : url.includes("webauthn") ? "webauthn" : "local-exec";
+      connectors.parkRequests(name, res);
       return true;
     }
 

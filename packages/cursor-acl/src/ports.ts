@@ -222,7 +222,7 @@ export interface ConnectorsPort {
   setMachinePermission?(computerId: string, permission: string): { computerId: string; label: string; tenNguoiDat?: string; standing?: string } | null;
 }
 
-export type ChannelName = "local-exec" | "webauthn";
+export type ChannelName = "local-exec" | "webauthn" | "cookie-origin-approval";
 
 /** S12 extensions — MCP servers, skills. */
 export interface ExtensionsPort {

@@ -32,7 +32,18 @@ import { nhoMay } from "./may-da-biet.js";
 import { randomUUID } from "node:crypto";
 import { redact } from "./redact.js";
 
-export type ChannelName = "local-exec" | "webauthn";
+/**
+ * Ba kênh yêu cầu/trả lời. Kênh thứ ba thêm 31/08 vì `coverage.json` bắt được client gọi thật:
+ *
+ *     2× POST /gw/cookie-origin-approval/requests   → 404
+ *     2× POST /gw/cookie-origin-approval/responses  → 404
+ *
+ * Nó là cửa để hỏi người dùng "cho phép dùng cookie của trang này chứ?" — renderer có sẵn store
+ * `cookieOriginApproval` với `{isSubmitting, items, requestId}` và một dock riêng
+ * (`sand-cookie-origin-approval-dock`). Cùng tên với một trong 17 loại thẻ `send-message`, nên
+ * đừng lẫn: thẻ là chỗ VẼ, kênh là chỗ HỎI.
+ */
+export type ChannelName = "local-exec" | "webauthn" | "cookie-origin-approval";
 
 /** The host holds a poll open until it has work; answering instantly is a bug, not a fast path. */
 const PARK_MS = Number(process.env.GROKBOT2_CHANNEL_PARK_MS ?? 25_000);
@@ -41,6 +52,9 @@ const PARK_MS = Number(process.env.GROKBOT2_CHANNEL_PARK_MS ?? 25_000);
 const EMPTY: Record<ChannelName, string> = {
   "local-exec": JSON.stringify({ requests: [] }),
   webauthn: JSON.stringify({ frames: [] }),
+  // Chưa đo được khoá thật của kênh này (client mới chỉ long-poll, chưa nhận gì), nên trả cùng
+  // khuôn `frames` như webauthn — đoán một lần, và ghi ra rằng đây là phỏng đoán.
+  "cookie-origin-approval": JSON.stringify({ frames: [] }),
 };
 
 /**
@@ -68,6 +82,7 @@ const MAX_RECEIVED = 20;
 const channels: Record<ChannelName, Channel> = {
   "local-exec": { waiters: new Set(), queue: [], received: [], submitted: 0 },
   webauthn: { waiters: new Set(), queue: [], received: [], submitted: 0 },
+  "cookie-origin-approval": { waiters: new Set(), queue: [], received: [], submitted: 0 },
 };
 
 /**

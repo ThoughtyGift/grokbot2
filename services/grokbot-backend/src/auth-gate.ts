@@ -113,9 +113,11 @@ export interface AuthVerdict {
 let lastUnknownShape: string | null = null;
 
 /** Which routes the host refuses outright when no token is configured at all. */
-const requiresToken = (url: string): "local-exec" | "webauthn" | null => {
+const requiresToken = (url: string): "local-exec" | "webauthn" | "cookie-origin-approval" | null => {
   if (url.startsWith("/gw/local-exec/")) return "local-exec";
   if (url.startsWith("/gw/webauthn/")) return "webauthn";
+  // Kênh này hỏi quyền dùng cookie của người dùng — càng phải có token, không phải càng ít.
+  if (url.startsWith("/gw/cookie-origin-approval/")) return "cookie-origin-approval";
   return null;
 };
 
