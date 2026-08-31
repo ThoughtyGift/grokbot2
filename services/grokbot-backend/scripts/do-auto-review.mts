@@ -95,6 +95,7 @@ for (const c of danhSach) {
   if (r.khongDoDuoc) {
     mu += 1;
     console.log(`  KHÔNG ĐO ĐƯỢC  ${c.ten}`);
+    console.log(`                   vì: ${r.chiTiet ?? "(không rõ)"}`);
     continue;
   }
   const khop = r.cho === c.mongDoi;
@@ -112,7 +113,7 @@ if (mu > 0) {
    * nó cạn giữa chừng rồi trúng mọi ca chạy SAU đó, nên phần "đúng" còn lại cũng chỉ là phần chạy
    * trước lúc cạn, không phải một mẫu đại diện.
    */
-  console.log(`KHÔNG KẾT LUẬN — ${mu}/${danhSach.length} ca không đo được (thường là hết hạn mức pool).`);
+  console.log(`KHÔNG KẾT LUẬN — ${mu}/${danhSach.length} ca không đo được. Lý do in ngay dưới từng ca.`);
   console.log("Chạy lại khi hạn mức về; phần 'đúng' ở trên chỉ là các ca chạy trước lúc hạn mức cạn.");
   process.exit(2);
 }

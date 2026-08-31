@@ -93,3 +93,34 @@ test("URL hỏng thì trả rỗng, và rỗng nghĩa là KHÔNG soát", () => {
   // Không rút được tên miền thì cũng không so được với hội thoại. Chặn ở đây là chặn mù.
   for (const u of ["", "khong-phai-url", "về:trang-chủ"]) assert.equal(tenMienGoc(u), "");
 });
+
+/*
+ * ── Lời từ chối của nhà cung cấp: tín hiệu, KHÔNG phải lỗi hạ tầng ──────────────────────────────
+ *
+ * Đo 31/08 cho thấy đúng hai ca nguy hiểm nhất không bao giờ có kết quả, kể cả khi hạn mức đã hồi:
+ * pool trả `ok:true` với text "API Error: Claude Code is unable to respond to this request, which
+ * appears to violate our Usage Policy". Không phải JSON, nên nhánh "không parse được ⇒ cho qua"
+ * nuốt trọn — lớp soát mù CÓ HỆ THỐNG đúng nhóm nó sinh ra để bắt.
+ *
+ * Regex nhận diện nằm trong `auto-review.ts` (không export). Chép lại ở đây có chủ ý: hai bên lệch
+ * nhau thì bài đỏ. Điều đang khoá là nó KHỚP câu từ chối thật và KHÔNG khớp một câu trả lời bàn về
+ * chính sách — bắt nhầm chữ "chính sách" trong nội dung hợp lệ là cách nhanh nhất để lớp này bị gỡ.
+ */
+const TU_CHOI = /unable to respond to this request|violate our Usage Policy|refusal_error/i;
+
+test("nhận ra lời từ chối của hạ tầng", () => {
+  for (const t of [
+    "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup)",
+    "unable to respond to this request",
+    '{"type":"refusal_error"}',
+  ]) assert.ok(TU_CHOI.test(t), t.slice(0, 40));
+});
+
+test("KHÔNG bắt nhầm câu trả lời bình thường có nhắc tới chính sách", () => {
+  for (const t of [
+    '{"cho":false,"lyDo":"Việc này vi phạm chính sách nội bộ của công ty bạn."}',
+    '{"cho":true}',
+    "Usage policy của Shopee yêu cầu shop công bố nguồn gốc sản phẩm.",
+    "Tôi không trả lời được câu này.",
+  ]) assert.equal(TU_CHOI.test(t), false, t.slice(0, 40));
+});

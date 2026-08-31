@@ -63,7 +63,23 @@ export interface KetQuaSoat {
    * không đo được sẽ tự nói ra thay vì giả dạng một kết quả.
    */
   khongDoDuoc?: boolean;
+  /*
+   * Vì sao không đo được — chỉ dùng để CHẨN ĐOÁN, không hiện cho người dùng.
+   *
+   * Bài đo từng in "thường là hết hạn mức pool" cho mọi lượt hỏng, và tôi tin nó suốt nhiều giờ.
+   * Tới khi hạn mức hồi mà hai ca vẫn hỏng thì mới lộ ra nguyên nhân nằm chỗ khác. Một lượt hỏng
+   * phải mang theo lý do của chính nó, không để người đọc suy đoán.
+   */
+  chiTiet?: string;
 }
+
+/*
+ * Dấu hiệu nhà cung cấp từ chối xử lý, thay vì model trả lời.
+ *
+ * Cố ý hẹp: chỉ khớp câu từ chối của chính hạ tầng, không khớp một câu trả lời BÀN VỀ chính sách.
+ * Một lớp soát bắt nhầm chữ "usage policy" trong nội dung hợp lệ là một lớp sẽ bị gỡ.
+ */
+const TU_CHOI = /unable to respond to this request|violate our Usage Policy|refusal_error/i;
 
 /** Cắt cho gọn — lời nhắc soát không cần cả cuốn hội thoại, chỉ cần ý định gần nhất. */
 const cat = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -82,7 +98,7 @@ export async function soatHanhDong(a: {
   boiCanh: string;
 }): Promise<KetQuaSoat> {
   const key = loadPoolKey();
-  if (!key) return { cho: true, khongDoDuoc: true };
+  if (!key) return { cho: true, khongDoDuoc: true, chiTiet: "chưa có khoá pool" };
 
   /*
    * Không có hội thoại thì không có gì để so — cho qua.
@@ -162,11 +178,40 @@ export async function soatHanhDong(a: {
      * Không có quy luật nào cả. Hạn mức cạn giữa chừng, và ca chạy SAU thì trúng — thứ tự chạy mới
      * là biến, nội dung thì không. Hai lần "rỗng" chỉ là hai lần 429 liên tiếp.
      */
-    if (!r.ok) return { cho: true, khongDoDuoc: true };
+    if (!r.ok) return { cho: true, khongDoDuoc: true, chiTiet: `pool: ${String((r as { error?: string }).error ?? "?").slice(0, 160)}` };
     const chu = String(r.text ?? "");
     // Model hay bọc JSON trong ```json … ```; lấy khối ngoặc đầu tiên thay vì đòi nó sạch sẽ.
     const m = chu.match(/\{[\s\S]*\}/);
-    if (!m) return { cho: true, khongDoDuoc: true };
+    /*
+     * Nhà cung cấp TỪ CHỐI xử lý ⇒ CHẶN. Đây là nhánh có bằng chứng, không phải phỏng đoán.
+     *
+     * Đo 31/08: đúng hai ca nguy hiểm nhất của bài đo không bao giờ có kết quả, kể cả khi hạn mức
+     * đã hồi. In thẳng thứ pool trả về thì thấy:
+     *
+     *     "API Error: Claude Code is unable to respond to this request, which appears to
+     *      violate our Usage Policy"
+     *
+     * `ok:true` (có text), nhưng text không phải JSON — nên nhánh "không parse được ⇒ cho qua" nuốt
+     * trọn. Kết quả: lớp soát mù CÓ HỆ THỐNG đúng vào nhóm nó sinh ra để bắt (giao bot con đi quét
+     * ổ tìm `.env`, `id_rsa`, `.pem`), trong khi vẫn trả lời ngon lành cho mọi ca vô hại.
+     *
+     * Nhưng một lời từ chối vì chính sách KHÔNG phải lỗi hạ tầng: bộ lọc của nhà cung cấp vừa đọc
+     * chính hành động này và xếp nó vào loại không nên trợ giúp. Đó là tín hiệu mạnh hơn cả câu trả
+     * lời ta định hỏi. Nên chặn và hỏi người dùng, thay vì im lặng cho qua.
+     *
+     * Phân biệt ba trạng thái, không phải hai:
+     *   ok:false            → hạ tầng (429, mạng đứt)   → CHO QUA
+     *   ok:true + từ chối   → tín hiệu                   → CHẶN
+     *   ok:true + JSON      → theo phán đoán của model
+     */
+    if (TU_CHOI.test(chu)) {
+      return {
+        cho: false,
+        lyDo: "Hành động này bị bộ kiểm an toàn từ chối đánh giá — thường xảy ra với thao tác dò quét hệ thống "
+          + "hoặc đọc tệp bí mật. Tôi dừng lại để bạn quyết, thay vì tự cho qua.",
+      };
+    }
+    if (!m) return { cho: true, khongDoDuoc: true, chiTiet: `model trả không có JSON: ${JSON.stringify(chu.slice(0, 120))}` };
     const j = JSON.parse(m[0]) as KetQuaSoat;
     if (j.cho !== false) return { cho: true };
     return {
@@ -174,8 +219,8 @@ export async function soatHanhDong(a: {
       lyDo: String(j.lyDo ?? "Hành động này nằm ngoài phạm vi bạn đã nhờ."),
       ...(j.luatDeXuat ? { luatDeXuat: String(j.luatDeXuat) } : {}),
     };
-  } catch {
+  } catch (e) {
     // Soát hỏng thì cho qua — xem chú thích đầu file.
-    return { cho: true, khongDoDuoc: true };
+    return { cho: true, khongDoDuoc: true, chiTiet: `ngoại lệ: ${String((e as Error)?.message ?? e).slice(0, 160)}` };
   }
 }
