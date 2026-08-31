@@ -16,6 +16,7 @@ import { sq, boxRoot, claimDesktop, releaseDesktop, desktopHeldBy } from "./desk
 import { callPool } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
 import { automationCreateRef } from "./chat/state.js";
+import { create as taoSkill } from "./workflows.js";
 import { publish } from "./events.js";
 import { screenInfo } from "./desktop.js";
 
@@ -424,5 +425,12 @@ export async function stopDesktopTeach(save: boolean): Promise<
 
   const name = `Việc đã dạy trên máy — ${new Date().toISOString().slice(5, 16).replace("T", " ")}`;
   automationCreateRef(out.agentId, { name, prompt, trigger: "manual" });
+  // Và thành skill, để gõ `/` gọi lại được ngay trong lúc chat — xem chú thích cùng chỗ ở `teach.ts`.
+  taoSkill({
+    agentId: out.agentId,
+    name,
+    description: `Việc đã dạy trên máy tính · ${out.steps.length} bước`,
+    instructions: prompt,
+  });
   return { ...IDLE, saved: name, steps: out.steps.length };
 }

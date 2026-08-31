@@ -22,6 +22,7 @@
  */
 import { cdpForAgent, onCdpEvent } from "./browser.js";
 import { automationCreateRef, automationRefineRef } from "./chat/state.js";
+import { create as taoSkill, forAgent as skillCuaBot, update as suaSkill } from "./workflows.js";
 import { publish } from "./events.js";
 import { callPool } from "@grokbot2/pool-client";
 import { config, loadPoolKey } from "./config.js";
@@ -516,6 +517,10 @@ async function hocNen(agentId: string, tenTho: string, steps: Step[]): Promise<v
     const dep = docKetQuaHoc(r.text);
     if (!dep) { console.warn("[grokbot2] [teach] câu trả lời model không dùng được; giữ bản ghi thô"); return; }
     const ok = automationRefineRef(agentId, tenTho, { name: dep.name, prompt: dep.prompt });
+    // Skill mang cùng cái tên thô, nên nó cũng phải được đặt lại tên — nếu không menu `/` giữ
+    // "Việc đã dạy — 08-31 09:12" mãi mãi, đúng thứ tên mà `hocNen` sinh ra để thay.
+    const sk = skillCuaBot({ agentId }).find((w) => w.name === tenTho);
+    if (sk) suaSkill({ workflowId: sk.id, name: dep.name, instructions: dep.prompt });
     console.log(ok
       ? `[grokbot2] [teach] đã đặt tên việc: "${dep.name}"`
       : `[grokbot2] [teach] không tìm thấy routine "${tenTho}" để sửa; giữ bản ghi thô`);
@@ -552,6 +557,22 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
   // The creator answers with the trigger's description ("manual"), which is not what the caller
   // asked; it wants to know WHAT was saved.
   automationCreateRef(id, { name, prompt, trigger: "manual" });
+  /*
+   * Lưu THÊM thành skill, không thay routine.
+   *
+   * Hai thứ trả lời hai câu hỏi khác nhau: routine là "chạy việc này theo lịch", skill là "gõ `/`
+   * để bảo tôi làm lại việc này". App gốc bản mới biến buổi dạy thành skill
+   * (`learn-from-demonstration`), và trước đây bên mình chỉ có nửa routine — dạy xong thì chỉ gọi
+   * lại được từ bảng Routines, chứ không gọi được ngay trong lúc đang chat.
+   *
+   * Bỏ routine đi thì mất đường chạy theo lịch, nên giữ cả hai.
+   */
+  taoSkill({
+    agentId: id,
+    name,
+    description: `Việc đã dạy trong trình duyệt · ${steps.length} bước`,
+    instructions: prompt,
+  });
   // Rồi mới nhờ model đặt tên và viết lại — nền, không chặn câu trả lời này. Xem `hocNen`.
   void hocNen(id, name, steps);
   return { ...IDLE, saved: name, steps: steps.length };

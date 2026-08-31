@@ -2047,9 +2047,15 @@ if (desktopRecordConfigured()) {
     const save = !/["\s:]?(false|huỷ|huy|bỏ|bo)\b/i.test(arg);
     const s = await stopDesktopTeach(save);
     if (!save) return "đã dừng ghi và bỏ bản ghi";
-    if (s.saved) return `đã lưu thành routine "${s.saved}" (${s.steps} bước) — chạy được từ bảng Routines`;
-    if (s.steps === 0) return "không ghi được thao tác nào nên không tạo routine";
-    return "đã dừng ghi nhưng không lưu được thành routine";
+    // Nói ra CẢ HAI đường gọi lại. Người dạy xong muốn biết "giờ tôi bấm ở đâu để chạy lại", và
+    // trước đây câu trả lời chỉ nhắc bảng Routines — trong khi đường tiện nhất là gõ `/` ngay tại
+    // khung soạn, không phải rời cuộc trò chuyện đi tìm một bảng khác.
+    if (s.saved) {
+      return `đã lưu "${s.saved}" (${s.steps} bước) — gõ \`/\` trong khung soạn để chạy lại,`
+        + " hoặc mở bảng Routines nếu muốn cho nó chạy theo lịch";
+    }
+    if (s.steps === 0) return "không ghi được thao tác nào nên không lưu gì";
+    return "đã dừng ghi nhưng không lưu lại được";
   };
 }
 
