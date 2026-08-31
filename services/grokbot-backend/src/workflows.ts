@@ -63,7 +63,19 @@ export interface Workflow {
   teachSessionId?: string;
 }
 
-const FILE = join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "workflows.json");
+/*
+ * Đường dẫn tính LƯỜI, và đọc được từ biến môi trường — vì bộ test đã ghi đè kho thật một lần.
+ *
+ * `workflows.test.ts` gọi `create()` thật, `create()` gọi `luu()`, và `luu()` ghi vào `.data` của
+ * máy đang chạy. Chạy `npx tsx --test` một lần là menu `/` của người dùng mọc thêm "dat-hang",
+ * "của A", "một", "hai" — dữ liệu test nằm lẫn trong dữ liệu thật.
+ *
+ * Repo này đã có đúng bẫy đó ghi trong bảng theo dõi ("Sổ trắng hoá ra không trắng": ba hằng số
+ * trỏ về `.data` của máy thật). Tôi vừa thêm cái thứ tư.
+ */
+const FILE = (): string =>
+  process.env.GROKBOT2_WORKFLOWS_FILE
+  || join(dirname(fileURLToPath(import.meta.url)), "..", ".data", "workflows.json");
 
 /** id → workflow. Một Map cho cả cài đặt; lọc theo `agentId` khi trả lời. */
 const kho = new Map<string, Workflow>();
@@ -78,9 +90,9 @@ const TOI_DA = 60;
 
 const luu = (): void => {
   try {
-    mkdirSync(dirname(FILE), { recursive: true });
+    mkdirSync(dirname(FILE()), { recursive: true });
     const ds = [...kho.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, TOI_DA);
-    writeFileSync(FILE, JSON.stringify(ds, null, 2), "utf8");
+    writeFileSync(FILE(), JSON.stringify(ds, null, 2), "utf8");
   } catch {
     // Đĩa đầy hay quyền ghi. Skill mất qua lần khởi động sau là tệ, nhưng làm hỏng lượt đang chạy
     // còn tệ hơn — cùng lối xử lý với `may-da-biet.ts`.
@@ -90,7 +102,7 @@ const luu = (): void => {
 /** Nạp kho từ đĩa. Gọi một lần lúc backend lên. */
 export function napWorkflows(): number {
   try {
-    const ds = JSON.parse(readFileSync(FILE, "utf8")) as Workflow[];
+    const ds = JSON.parse(readFileSync(FILE(), "utf8")) as Workflow[];
     for (const w of Array.isArray(ds) ? ds : []) {
       if (typeof w?.id === "string" && typeof w?.name === "string" && typeof w?.agentId === "string") {
         kho.set(w.id, {

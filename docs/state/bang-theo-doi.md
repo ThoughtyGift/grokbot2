@@ -90,6 +90,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
 | 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
+| 9 | OBS trên box chạy nền ổn định | cần unit systemd cấp user | websocket 4455 lên sau mỗi lần khởi động |
 
 ## 6 · Đã xong — kết luận, không phải nhật ký
 
@@ -103,6 +104,8 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 5 · Tách người dùng trên box | 8/8, một daemon mỗi người, cờ màn-riêng bật |
 | 6 · FE riêng | **bỏ hướng này** — client gốc LÀ production UI; `apps/grokbot-web` chỉ còn là fallback |
 | 7 · Lên client 0.29 | chạy tốt hơn dự đoán; bộ vá chuyển sang xong |
+| 9 · Skill trong menu `/` | 14 lệnh workflow hết stub; dạy xong gõ `/` là bot làm — đo end-to-end |
+| 10 · OBS trên box | AppImage 32.2.2 chạy không cần root, quay ra h264 720p + aac |
 | 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
@@ -139,6 +142,12 @@ lên mọi bot — suýt xoá 6 bot việc thật.
 lượt đang chạy chết giữa chừng — bot im, `isRunning=false`, mục cuối trong hội thoại là chính tin
 người dùng vừa gõ. Xảy ra 31/08: tôi sửa `cookie-chrome.ts` trong khi một lượt thật đang chạy.
 Luật "parity chạy thì không sửa src" áp cho MỌI lượt thật, không riêng lúc đo.
+
+**Bài test ghi thẳng vào kho THẬT của người dùng.** `workflows.test.ts` gọi `create()` thật, hàm đó
+lưu xuống đĩa, và đường dẫn là `.data` của máy đang chạy — nên chạy `npx tsx --test` một lần là menu
+`/` của người dùng mọc thêm "dat-hang", "của A", "một", "hai". Đây là cái bẫy thứ TƯ cùng họ với
+"sổ trắng hoá ra không trắng" ngay dưới, và tôi tự thêm nó vào dù đã đọc dòng cảnh báo đó. Nay
+đường dẫn đọc từ `GROKBOT2_WORKFLOWS_FILE`, và bài test trỏ nó vào thư mục tạm TRƯỚC khi nạp module.
 
 **Một bài đo hỏng vẫn báo cáo con số cũ.** Bộ ca parity nằm trong `kich-ban-b2.json` — chính là
 ĐẦU RA của script xuất chat, nên một lần xuất lại (d1edf23) đã ghi đè nó, bot `Test Clone` biến mất,

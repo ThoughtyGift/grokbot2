@@ -15,7 +15,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, _xoaHet } from "./workflows.js";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/*
+ * Trỏ kho vào thư mục tạm TRƯỚC khi nạp module.
+ *
+ * Không có dòng này thì mỗi lần chạy test là một lần ghi vào `.data` của máy thật, và menu `/` của
+ * người dùng mọc thêm "dat-hang", "của A", "một", "hai". Đã xảy ra một lần, 31/08 — cùng họ với
+ * bẫy "sổ trắng hoá ra không trắng" trong bảng theo dõi.
+ */
+process.env.GROKBOT2_WORKFLOWS_FILE = join(tmpdir(), `grokbot2-workflows-test-${process.pid}.json`);
+
+const { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, _xoaHet } = await import("./workflows.js");
 
 const bot = (n: string) => `agent-wf-${n}`;
 
