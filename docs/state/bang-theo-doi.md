@@ -43,6 +43,16 @@ bản vá client  6 bản, `--verify` còn nguyên
 Vì sao **không** thêm đường nâng quyền — đo từ chính daemon của hãng:
 [nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md).
 
+**Trên BOX Linux** (khác máy Windows ở trên):
+
+| việc | trạng thái | đo bằng |
+|---|---|---|
+| cài phần mềm không cần root | ✅ | OBS 32.2.2 AppImage, glibc 2.31 nhận |
+| bot tự quay màn hình box | ✅ | một lượt thật: bot tự bật OBS, quay, đo file, gửi clip |
+| skill: dạy xong gõ `/` gọi lại | ✅ | menu `/` có mục thật; chọn → gửi `@tên` → bot làm |
+
+Chi tiết + năm chỗ hỏng im lặng: [infra/box/README.md](../../infra/box/README.md).
+
 ## 3 · Lệnh gateway còn thiếu
 
 Thiếu 16, và **cả 16 đều là thứ client không gọi được**:
@@ -73,6 +83,11 @@ ngược lại thì ngược lại.
 | 1 | "mời chọn SAU khi đã tra" | **2** ← giữ bản này |
 | 2 | thêm "việc cụ thể thì phải đi TRA" | 3 |
 | 3 | thu hẹp còn "hỏi mình CÓ CÔNG CỤ gì" | 3 |
+| 4 | dữ kiện "mảng này đã mở chưa" (`nguCanhMoiChon`) | 4 → **đã tắt** |
+
+Vòng 4 là lần đầu đo TRỌN bộ (23 ca × 3 lượt, 69/69 có trả lời). Nó cũng dạy cách đọc con số: bản
+có hàm ấy ra 4 ca lệch (5, 6, 15 thiếu · 7 thừa), bản đã tắt cũng ra 4 — nhưng là (6, 11, 15 thiếu ·
+13 thừa). Cùng số, khác tập hợp. **Giao của hai lần đo là case 6 và 15** — đó mới là 2 ca thật.
 
 Muốn tiến thêm phải đổi thứ khác một luật văn xuôi — dạy bằng ví dụ trong ngữ cảnh, hoặc một tool
 riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ không bằng cách hiểu chữ.
@@ -90,7 +105,6 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
 | 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
-| 9 | Dạy bot tự gọi `obs-dam-bao` khi cần OBS | script đã có trên box, bot chưa biết | bot tự bật OBS rồi quay, không cần tôi |
 
 ## 6 · Đã xong — kết luận, không phải nhật ký
 
