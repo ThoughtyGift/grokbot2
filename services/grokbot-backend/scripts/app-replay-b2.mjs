@@ -149,6 +149,22 @@ console.log(`bot thử: ${BOT} (${bot.id})`);
  * luôn sai và guard chặn cả những lần bấm đúng. Nhãn `'s screen` thì có thật, đo được.
  */
 const daMoDungBot = async () => {
+  /*
+   * Hỏi DOM xem hàng nào đang được chọn, và so bằng **id** — không so tên.
+   *
+   * Nhãn `"<tên bot>'s screen"` vẫn dùng được, nhưng nó là nhãn của panel PHẢI: panel đó thu gọn
+   * được, và khi nó gọn thì guard luôn trả `false` — script bấm đúng bot rồi vẫn kết luận "không mở
+   * được", bỏ cả lượt đo. Ngày 31/08 lượt 2 và 3 chết đúng kiểu đó, còn lượt 1 thì chạy.
+   *
+   * `[aria-selected="true"][data-agent-id]` là thứ app tự dùng để tô hàng đang mở, nên nó đúng bất
+   * kể panel phải bật hay tắt, và so id thì không sợ hai bot trùng tên.
+   */
+  const theoId = await js(
+    "(() => { const el = document.querySelector('[aria-selected=\"true\"][data-agent-id]');"
+    + " return el ? el.getAttribute('data-agent-id') : null; })()",
+  );
+  if (theoId) return theoId === bot.id;
+  // Không có dấu hiệu nào trong DOM thì mới quay về nhãn panel phải.
   const t = (await screenText()) ?? "";
   return t.includes(`${BOT}'s screen`);
 };

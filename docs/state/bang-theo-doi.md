@@ -90,7 +90,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
 | 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
-| 9 | OBS trên box chạy nền ổn định | cần unit systemd cấp user | websocket 4455 lên sau mỗi lần khởi động |
+| 9 | Dạy bot tự gọi `obs-dam-bao` khi cần OBS | script đã có trên box, bot chưa biết | bot tự bật OBS rồi quay, không cần tôi |
 
 ## 6 · Đã xong — kết luận, không phải nhật ký
 
@@ -142,6 +142,13 @@ lên mọi bot — suýt xoá 6 bot việc thật.
 lượt đang chạy chết giữa chừng — bot im, `isRunning=false`, mục cuối trong hội thoại là chính tin
 người dùng vừa gõ. Xảy ra 31/08: tôi sửa `cookie-chrome.ts` trong khi một lượt thật đang chạy.
 Luật "parity chạy thì không sửa src" áp cho MỌI lượt thật, không riêng lúc đo.
+
+**Guard của bài đo dựa vào một nhãn THU GỌN ĐƯỢC.** `app-replay-b2.mjs` xác nhận "đã mở đúng bot"
+bằng chuỗi `"<tên bot>'s screen"` — nhãn của panel PHẢI. Panel đó thu gọn được, và khi nó gọn thì
+guard luôn trả `false`: script bấm đúng bot rồi vẫn kết luận "không mở được" và bỏ cả lượt. Ngày
+31/08 lượt 1 chạy, lượt 2 và 3 chết đúng kiểu đó, và thông báo lỗi ("không mở được sau 6 lần bấm")
+chỉ đường sang chuyện khác. Nay guard so `[aria-selected="true"][data-agent-id]` với **id** bot —
+thứ app tự dùng để tô hàng đang mở, đúng bất kể panel bật hay tắt, và không sợ hai bot trùng tên.
 
 **Bài test ghi thẳng vào kho THẬT của người dùng.** `workflows.test.ts` gọi `create()` thật, hàm đó
 lưu xuống đĩa, và đường dẫn là `.data` của máy đang chạy — nên chạy `npx tsx --test` một lần là menu
