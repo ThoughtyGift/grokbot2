@@ -1067,6 +1067,19 @@ export function sendPrompt(args: SendArgs) {
     }
   }
 
+  /*
+   * Lượt này có phải một câu TRẢ LỜI vào tin nào không — và câu trả lời của bot phải nối vào đúng
+   * tin đó.
+   *
+   * Đo 01/09: trong 748 entry của bản ghi, KHÔNG entry nào của bot mang `replyTo`. Kiểu dữ liệu có
+   * trường ấy (`send-message` khai báo nó), nhưng không chỗ nào đặt — đúng cái bẫy `awaitingUser
+   * Response` đã ghi ở đầu file này. Nên bot ta trả lời trôi giữa dòng, còn app gốc thì mỗi tin
+   * trong luồng đều mang trích dẫn của tin gốc (ảnh người dùng gửi: cả tin họ lẫn tin bot đều dẫn
+   * lại cùng một câu hỏi).
+   *
+   * Nối vào tin GỐC chứ không vào tin vừa gõ: người dùng bấm reply lên tin nào thì cả luồng thuộc
+   * về tin đó, và đó cũng là thứ app gốc vẽ.
+   */
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
   if (!args.silent) t.push(userEntry);
@@ -1141,7 +1154,7 @@ export function sendPrompt(args: SendArgs) {
   const m = text.match(/^\/tool\s+(.+)/i);
   if (m) { injectTool(agentId, m[1]); return { accepted: true, entryId: userEntry.id, agentId }; }
 
-  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true, ...(replyTo ? { replyTo } : {}) };
   t.push(bubble);
   onUpdate(agentId);
 
