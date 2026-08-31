@@ -261,3 +261,31 @@ export function skillDuocGoi(agentId: string, text: string): Workflow[] {
     return /[\s,;:!?)\]}"']/.test(sau);
   });
 }
+
+/**
+ * Nút **Run** của bảng — `runAgentWorkflowNow`.
+ *
+ * Chạy skill bằng cách gửi đúng `@<tên>` mà menu `/` gửi, chứ không nạp `instructions` bằng một
+ * đường riêng. Một tính năng có hai đường chạy là hai chỗ để lệch nhau, và chỗ lệch đó chỉ lộ ra
+ * khi người dùng thấy "bấm Run cho kết quả khác gõ `/`" — thứ gần như không ai báo cáo nổi.
+ *
+ * `sendPrompt` được tiêm vào thay vì import thẳng: `turn.ts` đã import file này (`skillDuocGoi`),
+ * nên import ngược lại là một vòng.
+ */
+let guiRef: ((a: { agentId: string; content: string }) => void) | null = null;
+
+export function bindGuiPrompt(fn: (a: { agentId: string; content: string }) => void): void {
+  guiRef = fn;
+}
+
+export function runNow(args: unknown): Record<string, never> {
+  const a = (args ?? {}) as Record<string, unknown>;
+  const w = kho.get(String(a.workflowId ?? a.id ?? ""));
+  // Không tìm thấy, hoặc đang tắt, hoặc chưa nối `sendPrompt` → không làm gì. Client không đọc gì
+  // từ phản hồi này (`reply:"void"`), nên `{}` là câu trả lời đúng cả khi chạy lẫn khi không.
+  if (w && w.enabled && guiRef) {
+    console.log(`[grokbot2] chạy skill "${w.name}" (${w.agentId}) từ nút Run`);
+    guiRef({ agentId: w.agentId, content: `@${w.name}` });
+  }
+  return {};
+}

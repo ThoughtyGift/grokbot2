@@ -99,6 +99,7 @@ import { config } from "./config.js";
 import {
   forAgent as workflowsForAgent, listAll as workflowsListAll, create as workflowCreate,
   update as workflowUpdate, remove as workflowRemove, setEnabled as workflowSetEnabled,
+  runNow as workflowRunNow,
 } from "./workflows.js";
 
 const ports: AclPorts = {
@@ -225,7 +226,7 @@ const ports: AclPorts = {
     update: (a) => workflowUpdate(a),
     remove: (a) => workflowRemove(a),
     setEnabled: (a) => workflowSetEnabled(a),
-    runNow: () => ({}),
+    runNow: (a) => workflowRunNow(a),
   },
   automations: {
     forAgent: getAgentAutomationsForClient,

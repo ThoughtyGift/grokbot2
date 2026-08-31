@@ -3,7 +3,7 @@
  */
 import { completeTurn, completeTurnPlain } from "../brain.js";
 import { type PoolMessage } from "@grokbot2/pool-client";
-import { skillDuocGoi } from "../workflows.js";
+import { skillDuocGoi, bindGuiPrompt } from "../workflows.js";
 import { config, loadPoolKey } from "../config.js";
 import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
@@ -1849,3 +1849,6 @@ turnHooks.messageAgent = messageAgent;
 turnHooks.startSubagentRun = startSubagentRun;
 turnHooks.finishSubagentRun = finishSubagentRun;
 
+// Nút Run của bảng skill gửi đúng `@<tên>` mà menu `/` gửi — một đường chạy duy nhất.
+// Tiêm thay vì để `workflows.ts` import ngược, vì file này đã import nó.
+bindGuiPrompt(sendPrompt);

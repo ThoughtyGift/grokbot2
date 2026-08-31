@@ -27,7 +27,7 @@ import { join } from "node:path";
  */
 process.env.GROKBOT2_WORKFLOWS_FILE = join(tmpdir(), `grokbot2-workflows-test-${process.pid}.json`);
 
-const { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, _xoaHet } = await import("./workflows.js");
+const { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, runNow, bindGuiPrompt, _xoaHet } = await import("./workflows.js");
 
 const bot = (n: string) => `agent-wf-${n}`;
 
@@ -142,4 +142,32 @@ test("tin không có @ thì không phải quét gì", () => {
   create({ agentId: bot("m"), name: "dat-hang", instructions: "B1" });
   assert.deepEqual(skillDuocGoi(bot("m"), "đặt hàng giúp tôi"), []);
   assert.deepEqual(skillDuocGoi(bot("m"), ""), []);
+});
+
+/*
+ * ── Nút Run của bảng ────────────────────────────────────────────────────────────────────────────
+ *
+ * `runAgentWorkflowNow` gửi đúng `@<tên>` mà menu `/` gửi, chứ không nạp `instructions` bằng đường
+ * riêng. Một tính năng có hai đường chạy là hai chỗ để lệch nhau, và chỗ lệch chỉ lộ ra khi người
+ * dùng thấy "bấm Run cho kết quả khác gõ `/`" — thứ gần như không ai báo cáo nổi.
+ */
+test("nút Run gửi @tên đúng bot, không nạp instructions bằng đường riêng", () => {
+  _xoaHet();
+  const daGui: { agentId: string; content: string }[] = [];
+  bindGuiPrompt((a) => daGui.push(a));
+  const [w] = create({ agentId: bot("r"), name: "rà-đơn", instructions: "B1 mở trang" });
+  runNow({ workflowId: w.id });
+  assert.deepEqual(daGui, [{ agentId: bot("r"), content: "@rà-đơn" }]);
+});
+
+test("Run một skill đang tắt hoặc không tồn tại thì KHÔNG gửi gì", () => {
+  _xoaHet();
+  const daGui: unknown[] = [];
+  bindGuiPrompt((a) => daGui.push(a));
+  const [w] = create({ agentId: bot("r"), name: "tắt-rồi", instructions: "B1" });
+  setEnabled({ workflowId: w.id, enabled: false });
+  runNow({ workflowId: w.id });
+  runNow({ workflowId: "wf-khong-ton-tai" });
+  runNow({});
+  assert.deepEqual(daGui, [], "bấm Run trên một skill đã tắt không được lặng lẽ chạy nó");
 });
