@@ -103,6 +103,9 @@ import { catalog } from "../plugin-catalog.js";
 import { resetSkillsCache, warmSkills } from "../skills.js";
 // Đoạn OBS chỉ có nội dung khi box THẬT SỰ có OBS — xem `box-obs.ts`.
 import { obsProtocol } from "../box-obs.js";
+// Dựng đội cho ra hồn: mỗi con một lịch, và tên có tiền tố miền — xem `doi-bot.ts`.
+import { BUOC_DAT_LICH, LUAT_DAT_TEN } from "../doi-bot.js";
+import { taoWorkflowTuBot } from "../teach-demo.js";
 import { installedIds, installPlugin } from "../plugins.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
@@ -1380,6 +1383,22 @@ echo "wrote=$(wc -c < ${file})"`;
   return `Đã lưu skill "${slug}" tại ${file} — từ giờ mọi lượt chat đều thấy nó trong <available_skills>.`;
 };
 
+/*
+ * `create_workflow` — bot tự ghi một skill vào kho, thứ người dùng gõ `/` để gọi.
+ *
+ * Khác `create_skill` ở chỗ căn bản: `create_skill` ghi một tệp SOP lên đĩa box và tệp đó nằm trong
+ * MỌI lượt chat sau đó (tốn ngữ cảnh mỗi lượt, dù cả tuần không ai dùng tới); `create_workflow` chỉ
+ * nằm trong menu `/` cho tới khi có người gọi tên nó. Việc đã dạy thuộc loại thứ hai.
+ *
+ * App gốc làm việc này qua `update_state target:"workflow"`; bên mình tách thành tool riêng vì
+ * `update_state` của ta không có nhánh workflow, và thêm một nhánh chỉ để làm một việc thì khó đọc
+ * hơn một tool gọi đúng tên việc.
+ */
+TOOLS.create_workflow = (arg, ctx) => taoWorkflowTuBot(
+  (() => { try { return JSON.parse(arg); } catch { return { name: "", instructions: unquote(arg) }; } })(),
+  ctx.agentId,
+);
+
 TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 
@@ -1667,12 +1686,15 @@ const PEER_PROTOCOL =
    * Trước khi viết câu này tôi đã đo rằng luật cũ CÓ tới được model (giao thức tool 13.441
    * ký tự, câu đó nguyên vẹn) — nên đây không phải vá một lời nhắc không được đọc.
    */
-  "When you build a TEAM (two or more bots at once), finish the job in THREE steps: create_agent "
-  + "for each member, create_group with all of them, then send the first task INTO the room with "
+  "When you build a TEAM (two or more bots at once), finish the job in FOUR steps: create_agent "
+  + "for each member, create_group with all of them, send the first task INTO the room with "
   + 'message_agent({"to":"<room name>","content":"..."}) — the room name works as a target just '
   + "like a bot name. Creating a room is not opening it: measured 28/08, the model created the "
   + "group, reported to the user and stopped, leaving a room nobody had ever spoken in. Do not end "
-  + "the turn on the create_group result. " +
+  + "the turn on the create_group result. "
+  // Bước 4 và luật đặt tên — cả hai trích từ chính app gốc, xem `doi-bot.ts`.
+  + BUOC_DAT_LICH
+  + LUAT_DAT_TEN + " " +
   /*
    * Routine — và chỗ này trước đây chỉ có TÊN tool, không có gì khác.
    *
@@ -1827,6 +1849,11 @@ const SKILL_WRITE_PROTOCOL = boxConfigured()
     "WRITING SKILLS: when the person settles a procedure worth keeping (an SOP, a checklist, rules " +
     "for a recurring task) or asks you to remember HOW to do something, save it as a skill: " +
     'TOOL_CALL: create_skill({"name":"ten-ngan","description":"when to use it","content":"the steps"}). ' +
+    // Hai tool cùng chữ "skill" nên phải nói ngay chúng khác nhau chỗ nào, nếu không model chọn bừa.
+    'For a task the user taught you (or asked you to remember as a step-by-step), use ' +
+    'TOOL_CALL: create_workflow({"name":"Đặt hàng Shopee","description":"khi cần mua lại đơn cũ","instructions":"các bước"}) ' +
+    "instead — that one shows up in the composer's `/` menu and only costs context when someone calls it, " +
+    "while create_skill writes a file that rides EVERY later turn. " +
     "It lands in <available_skills> for every later conversation. Skills are procedures; " +
     "knowledge_base is for facts about the person."
   : "";
