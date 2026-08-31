@@ -28,12 +28,19 @@ Nên hình dạng đúng là một lệnh **idempotent** gọi khi cần, không
 
 - **`xshm_input` sai tên.** Kind thật là `xshm_input_v2`; sai thì `CreateInput` báo *input kind is
   not supported*.
-- **Profile không có `FilePath` thì `StartRecord` trả "thành công" mà không ghi gì**, và chỉ
-  `StopRecord` mới lộ bằng mã `501 OutputNotRunning`. `SetProfileParameter` qua websocket chỉ đổi
-  trong bộ nhớ — OBS ghi ra đĩa lúc thoát, nên với OBS chạy nền thì đường lưu không bao giờ tồn
-  tại. Phải viết thẳng `basic.ini`.
+- **Profile không có `[SimpleOutput]` thì `StartRecord` trả "thành công" mà không ghi gì**, và chỉ
+  `StopRecord` mới lộ bằng mã `501 OutputNotRunning`. Lần đầu tôi kết luận `SetProfileParameter`
+  "chỉ đổi trong bộ nhớ nên vô dụng" — **sai**: nó vô dụng khi profile chưa có mục đó *chút nào*.
+  Dựng profile một lần bằng `obs-cai-dat.sh` (viết thẳng `basic.ini`, lúc OBS đang TẮT), rồi từ đó
+  API đặt được bình thường.
 - **mp4 chỉ hoàn tất khi output đóng.** Đọc sớm thì `ffprobe` báo *moov atom not found* — file có,
-  dung lượng có, ruột rỗng.
+  dung lượng có, ruột rỗng. Cùng lý do, `ls` ngay sau khi lệnh quay in đường dẫn có thể chưa thấy
+  file: nó xuất hiện vài giây sau.
+- **Đường lưu phải nằm TRONG gốc làm việc** (`~/workspace/quay`), và phải đặt qua
+  `SetProfileParameter` mỗi lần quay chứ không sửa `basic.ini`: OBS ghi lại profile khi thoát nên
+  mọi thay đổi trên file đều bị ghi đè. Đo bằng một lượt thật: với `~/quay`, bot quay xong không xem
+  lại được (`watch_video` báo "ngoài gốc làm việc"), phải thử đường tương đối rồi tự copy sang
+  workspace — ba bước lách cho một việc lẽ ra không có ma sát nào.
 - **`pkill -f` tự sát.** Daemon chạy script qua `bash -lc "<toàn bộ nội dung>"`, nên mọi chuỗi viết
   trong script đều nằm trong cmdline của chính nó: pattern khớp, script chết trước khi làm gì.
   Biểu hiện là `exit 1` và không một dòng output. Dùng `pkill -x` (so **tên** tiến trình).

@@ -84,7 +84,19 @@ async function chay() {
      * (OutputNotRunning). Đúng loại hỏng im lặng đắt nhất — lệnh nào cũng "thành công".
      */
     const dat = async (category, name, value) => goi("SetProfileParameter", { parameterCategory: category, parameterName: name, parameterValue: String(value) });
-    await dat("SimpleOutput", "FilePath", `${process.env.HOME}/quay`);
+    /*
+     * Ghi VÀO GỐC LÀM VIỆC (`~/workspace/quay`), không phải `~/quay`.
+     *
+     * Đo bằng một lượt thật 01/09: bot quay xong rồi không xem lại được — `watch_video` trả "thư mục
+     * quay nằm ngoài gốc làm việc", nên nó phải thử đường tương đối, rồi tự copy file sang workspace
+     * mới gửi được cho người dùng. Ba bước lách cho một việc lẽ ra không có ma sát nào.
+     *
+     * Đặt qua API mỗi lần quay chứ không sửa `basic.ini`: OBS GHI LẠI profile khi thoát, nên mọi
+     * thay đổi trên file đều bị nó ghi đè về giá trị cũ. Đây cũng là lý do lần đầu tôi tưởng
+     * `SetProfileParameter` vô dụng — thật ra nó vô dụng khi profile chưa có mục `[SimpleOutput]`
+     * nào cả, chứ không phải vì API không nhận.
+     */
+    await dat("SimpleOutput", "FilePath", `${process.env.HOME}/workspace/quay`);
     await dat("SimpleOutput", "RecFormat2", "mp4");
     await dat("SimpleOutput", "RecQuality", "Small");
     await dat("SimpleOutput", "RecEncoder", "x264");
@@ -98,6 +110,27 @@ async function chay() {
     console.log(`đang quay ${giay}s…`);
     await nghi(giay * 1000);
     const r = await goi("StopRecord");
+    /*
+     * CHỜ file đóng xong rồi mới in đường dẫn.
+     *
+     * `StopRecord` trả về ngay, nhưng OBS còn đang ghi nốt và đóng mp4. Đo bằng một lượt thật
+     * 01/09: bot lấy đường dẫn rồi đính kèm luôn, và người dùng nhận một file **0 KB**; bot phải tự
+     * phát hiện, chờ, rồi gửi lại — hai lượt thừa cho một việc.
+     *
+     * Lời nhắc có dặn "đợi lệnh quay kết thúc hẳn", nhưng nó ĐÃ kết thúc: cái chưa xong là file.
+     * Một lời dặn mà người đọc không có cách nào làm đúng thì phải sửa ở chỗ khác — ở đây.
+     *
+     * Điều kiện dừng là kích thước ổn định hai lần liên tiếp, không phải một mốc thời gian: clip 5
+     * giây và clip 5 phút đóng file lâu khác nhau.
+     */
+    const fs = await import("node:fs/promises");
+    let truoc = -1;
+    for (let i = 0; i < 30; i += 1) {
+      await nghi(500);
+      const cd = await fs.stat(r.outputPath).then((st) => st.size).catch(() => -1);
+      if (cd > 0 && cd === truoc) break;
+      truoc = cd;
+    }
     console.log(`file: ${r.outputPath}`);
   }
   ws.close();
