@@ -101,6 +101,8 @@ import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
 import { resetSkillsCache, warmSkills } from "../skills.js";
+// Đoạn OBS chỉ có nội dung khi box THẬT SỰ có OBS — xem `box-obs.ts`.
+import { obsProtocol } from "../box-obs.js";
 import { installedIds, installPlugin } from "../plugins.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
@@ -1748,7 +1750,7 @@ const toolProtocolBase = (): string =>
   "single response. Write nothing after those lines. Tools: " +
   Object.keys(TOOLS).filter((n) => !DEV_TOOLS.has(n)).join(", ") +
   ". If no tool is needed, just answer. Once tool results come back, answer from them." +
-  BROWSER_PROTOCOL + IMAGE_PROTOCOL + VIDEO_PROTOCOL + DIAGRAM_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol();
+  BROWSER_PROTOCOL + IMAGE_PROTOCOL + VIDEO_PROTOCOL + DIAGRAM_PROTOCOL + ASK_PROTOCOL + DRAFT_PROTOCOL + PEER_PROTOCOL + MEMORY_PROTOCOL + boxToolProtocol() + obsProtocol();
 
 /** The tool protocol for one owner — the shared part plus that owner's MCP servers. */
 /**

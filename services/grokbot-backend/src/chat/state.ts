@@ -4,6 +4,7 @@
  */
 import { napMayDaBiet } from "../may-da-biet.js";
 import { napWorkflows } from "../workflows.js";
+import { doObsTrenBox } from "../box-obs.js";
 import { loadState, scheduleSave, type PersistedState } from "../store.js";
 import { ensureSeq } from "../conversation/seq.js";
 import { publish } from "../events.js";
@@ -181,6 +182,14 @@ function migrate(e: any, agentName: string): Entry | null {
   // Skill của bot — menu `/` hỏi ngay khi app mở, nên kho phải có mặt trước lệnh đầu tiên.
   const soSkill = napWorkflows();
   if (soSkill) console.log(`[grokbot2] restored ${soSkill} skill`);
+  /*
+   * Box có OBS không — dò MỘT lần, ở NỀN.
+   *
+   * `void` là cố ý: khôi phục-từ-đĩa không được đứng chờ mạng. Box có thể chưa lên (VPS đang khởi
+   * động, hầm chưa nối), và một lần dò chậm ở đây làm chậm cả lúc app mở. Chưa dò xong thì lời nhắc
+   * coi như "không có OBS" — thà im còn hơn hứa một thứ chưa chắc có.
+   */
+  void doObsTrenBox();
 }
 
 export const EPOCH = Date.now();
