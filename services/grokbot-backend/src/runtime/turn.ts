@@ -269,6 +269,24 @@ function huongDanSkill(agentId: string, tinNguoiDung: string): string {
   ].join(NEWLINE);
 }
 
+/*
+ * ĐANG TẮT từ 31/08 — đo xong thì nó làm parity TỆ ĐI, không tốt lên.
+ *
+ * Ba lượt đầy đủ (23 ca × 3, 69/69 đo được) với hàm này nối vào lời nhắc:
+ *
+ *     lệch ỔN ĐỊNH: 4 case
+ *       case 5  app gốc mời chọn · ta 0/3 → THIẾU
+ *       case 6  app gốc mời chọn · ta 0/3 → THIẾU
+ *       case 15 app gốc mời chọn · ta 0/3 → THIẾU
+ *       case 7  app gốc KHÔNG    · ta 3/3 → THỪA
+ *
+ * Case 5 và 6 trước đó vẫn đúng. Dữ kiện "mảng này đã mở rồi" ức chế widget quá tay: nó không phân
+ * biệt được "hỏi lại chuyện vừa bàn" với "một câu hỏi mới tình cờ đứng sau một widget".
+ *
+ * Giữ lại hàm và bài test thay vì xoá, vì phép đo mới là thứ đáng giữ: ai muốn thử lại hướng này
+ * chỉ cần nối lại một dòng ở `opts`, chạy `parity-lap --lan 3`, và so với con số trên. Xoá đi thì
+ * người sau sẽ dựng lại đúng ý tưởng này rồi trả giá lần nữa.
+ */
 export function nguCanhMoiChon(agentId: string): string {
   const t = tail(agentId);
   for (let i = t.length - 1; i >= 0 && i >= t.length - 16; i -= 1) {
@@ -1417,7 +1435,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "Không có công cụ nào để mở ảnh và bạn không cần mở file nào — hãy nhìn ảnh rồi trả lời ngay.",
       ].join(NEWLINE)
     : "";
-  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + nguCanhMoiChon(agentId) + huongDanSkill(agentId, tinCuoiCuaNguoi(history)), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
+  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + huongDanSkill(agentId, tinCuoiCuaNguoi(history)), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).
