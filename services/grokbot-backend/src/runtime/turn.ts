@@ -3,6 +3,7 @@
  */
 import { completeTurn, completeTurnPlain } from "../brain.js";
 import { type PoolMessage } from "@grokbot2/pool-client";
+import { skillDuocGoi } from "../workflows.js";
 import { config, loadPoolKey } from "../config.js";
 import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
@@ -215,6 +216,59 @@ function lyDoCho(agentId: string): string | null {
  * widget. Model không tự biết điều này vì nó không đo được "mảng này đã mở chưa" từ chữ; nó cần
  * biết mình VỪA mời chọn cái gì. Nên hàm này không thêm luật, nó thêm một sự việc đã xảy ra.
  */
+/**
+ * Tin gần nhất của NGƯỜI DÙNG trong lượt này — để biết họ có gọi skill nào không.
+ *
+ * Đọc từ `history` (thứ sắp gửi cho model) chứ không từ bản ghi: hai thứ có thể lệch nhau ở lượt
+ * chạy lại, và cái quyết định lượt này là cái sắp gửi đi.
+ */
+const tinCuoiCuaNguoi = (history: { role: string; content: string }[]): string => {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i]?.role === "user") return String(history[i].content ?? "");
+  }
+  return "";
+};
+
+/*
+ * Người dùng vừa gọi một skill — nạp hướng dẫn của nó vào lượt này.
+ *
+ * ── Ba nhịp của hợp đồng, đo từ chính client 31/08 ──────────────────────────────────────────────
+ *
+ *   1. gõ `/`     → client gọi `getAgentWorkflows({id})` rồi vẽ menu
+ *   2. chọn một mục → client CHÈN một chip vào khung soạn (`span[data-type="skill-reference"]`),
+ *                     KHÔNG gọi lệnh nào lên backend
+ *   3. gửi         → chip serialize thành `@<tên skill>` trong nội dung tin:
+ *
+ *                       message · @hoc-tu-buoi-day
+ *
+ * Nên `runAgentWorkflowNow` không phải đường chạy skill — nó là nút "Run" của bảng. Đường thật là
+ * đọc `@tên` ra khỏi tin người dùng. Không có nhịp thứ ba này thì mọi thứ phía trên vẫn "chạy":
+ * menu hiện, bấm được, chip vào khung soạn — rồi bot nhận đúng một chuỗi `@hoc-tu-buoi-day` và
+ * không biết đó là gì. Một tính năng hỏng đúng kiểu khó thấy nhất.
+ *
+ * Đặt vào SYSTEM chứ không sửa tin người dùng: tin của họ là bản ghi, và một bản ghi bị viết lại
+ * sau lưng là thứ không ai gỡ lỗi nổi về sau.
+ */
+function huongDanSkill(agentId: string, tinNguoiDung: string): string {
+  const ds = skillDuocGoi(agentId, tinNguoiDung).filter((w) => w.instructions.trim());
+  if (!ds.length) return "";
+  return [
+    "",
+    "",
+    "## Skill người dùng vừa gọi",
+    "",
+    ...ds.flatMap((w) => [
+      `### ${w.name}`,
+      w.description ? `_${w.description}_` : "",
+      "",
+      w.instructions,
+      "",
+    ]),
+    "Người dùng gọi skill này bằng cách gõ `/` rồi chọn nó, nên hãy LÀM theo hướng dẫn trên chứ đừng",
+    "đọc lại nó cho họ nghe. Thiếu thông tin nào thì hỏi đúng thứ thiếu, không hỏi lại từ đầu.",
+  ].join(NEWLINE);
+}
+
 export function nguCanhMoiChon(agentId: string): string {
   const t = tail(agentId);
   for (let i = t.length - 1; i >= 0 && i >= t.length - 16; i -= 1) {
@@ -1363,7 +1417,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "Không có công cụ nào để mở ảnh và bạn không cần mở file nào — hãy nhìn ảnh rồi trả lời ngay.",
       ].join(NEWLINE)
     : "";
-  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + nguCanhMoiChon(agentId), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
+  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + nguCanhMoiChon(agentId) + huongDanSkill(agentId, tinCuoiCuaNguoi(history)), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).

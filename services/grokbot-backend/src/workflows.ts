@@ -205,3 +205,47 @@ export function byId(id: string): Workflow | null {
 export function _xoaHet(): void {
   kho.clear();
 }
+
+/**
+ * Người dùng vừa gọi skill nào trong tin này?
+ *
+ * ── Hợp đồng, đo từ chính client 31/08 ──────────────────────────────────────────────────────────
+ *
+ * Chọn một skill trong menu `/` KHÔNG gọi lệnh nào lên backend. Client chèn vào khung soạn một chip
+ * (`span[data-type="skill-reference"]`, class `sand-skill-chip`), và khi gửi thì chip serialize
+ * thành `@<tên skill>` trong chính nội dung tin:
+ *
+ *     message · @hoc-tu-buoi-day
+ *
+ * Nên `runAgentWorkflowNow` không phải đường chạy skill — nó là nút "Run" trong bảng. Đường thật là
+ * đọc `@tên` ra khỏi tin người dùng, đúng như @-mention.
+ *
+ * ── Khớp tên: chặt, không mò ────────────────────────────────────────────────────────────────────
+ *
+ * Chỉ khớp tên ĐÚNG NGUYÊN VĂN của một skill thuộc chính bot này. Không khớp gần đúng, không
+ * chuẩn hoá dấu: một email trong tin nhắn cũng có `@`, và nạp nhầm cả bản hướng dẫn vào một lượt
+ * chẳng liên quan thì bot đổi tính giữa cuộc trò chuyện mà không ai hiểu vì sao.
+ */
+export function skillDuocGoi(agentId: string, text: string): Workflow[] {
+  const t = String(text ?? "");
+  if (!t.includes("@")) return [];
+  return forAgent({ agentId }).filter((w) => {
+    if (!w.enabled || !w.name) return false;
+    const i = t.indexOf(`@${w.name}`);
+    if (i < 0) return false;
+    /*
+     * Ký tự ngay sau tên phải kết thúc lời gọi. Hai bẫy, cả hai đều có bài test:
+     *
+     *   `@dat` trong "@dat-hang"          → `-` không kết thúc gì cả: đó là skill KHÁC.
+     *   `@dat` trong "@dat.nguyen@cinai.tv" → dấu chấm ở đây nối tiếp một địa chỉ, không phải hết câu.
+     *
+     * Nên `.` chỉ được tính là kết thúc khi sau nó là khoảng trắng hoặc hết chuỗi — đúng cách một
+     * dấu chấm câu hành xử, và khác hẳn dấu chấm giữa một địa chỉ email.
+     */
+    const j = i + 1 + w.name.length;
+    const sau = t[j];
+    if (sau === undefined) return true;
+    if (sau === ".") return t[j + 1] === undefined || /\s/.test(t[j + 1]);
+    return /[\s,;:!?)\]}"']/.test(sau);
+  });
+}

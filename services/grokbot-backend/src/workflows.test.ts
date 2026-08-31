@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { create, update, remove, setEnabled, forAgent, listAll, byId, _xoaHet } from "./workflows.js";
+import { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, _xoaHet } from "./workflows.js";
 
 const bot = (n: string) => `agent-wf-${n}`;
 
@@ -89,4 +89,45 @@ test("mới sửa nằm trên đầu — menu `/` đọc theo thứ tự này", 
   create({ agentId: bot("a"), name: "mới hơn" });
   update({ workflowId: a.id, description: "vừa đụng vào" });
   assert.equal(forAgent({ agentId: bot("a") })[0].name, "cũ");
+});
+
+/*
+ * ── Gọi skill bằng `@tên` ───────────────────────────────────────────────────────────────────────
+ *
+ * Đo từ client 31/08: chọn một mục trong menu `/` KHÔNG gọi lệnh nào lên backend — client chèn một
+ * chip vào khung soạn, và khi gửi thì chip serialize thành `@<tên skill>` trong nội dung tin.
+ * Nên nhận diện `@tên` LÀ đường chạy skill, không phải `runAgentWorkflowNow`.
+ *
+ * Khớp phải chặt: một email cũng có `@`, và nạp nhầm cả bản hướng dẫn vào một lượt chẳng liên quan
+ * thì bot đổi tính giữa cuộc trò chuyện mà không ai hiểu vì sao.
+ */
+test("nhận ra skill được gọi bằng @tên", () => {
+  _xoaHet();
+  create({ agentId: bot("m"), name: "dat-hang", instructions: "B1" });
+  assert.deepEqual(skillDuocGoi(bot("m"), "@dat-hang").map((w) => w.name), ["dat-hang"]);
+  assert.deepEqual(skillDuocGoi(bot("m"), "@dat-hang giúp tôi 2 hộp").map((w) => w.name), ["dat-hang"]);
+  assert.deepEqual(skillDuocGoi(bot("m"), "làm @dat-hang, rồi báo lại").map((w) => w.name), ["dat-hang"]);
+});
+
+test("KHÔNG khớp nhầm khi tên này là tiền tố của chuỗi khác", () => {
+  _xoaHet();
+  create({ agentId: bot("m"), name: "dat", instructions: "B1" });
+  // `@dat` không được khớp vào `@dat-hang`: người dùng gọi skill kia mà nhận hướng dẫn skill này.
+  assert.deepEqual(skillDuocGoi(bot("m"), "@dat-hang giúp tôi"), []);
+  assert.deepEqual(skillDuocGoi(bot("m"), "gửi cho @dat.nguyen@cinai.tv"), []);
+});
+
+test("không lấy skill của bot khác, và bỏ qua skill đang tắt", () => {
+  _xoaHet();
+  const [w] = create({ agentId: bot("m"), name: "rieng-cua-m", instructions: "B1" });
+  assert.deepEqual(skillDuocGoi(bot("n"), "@rieng-cua-m"), [], "skill là của từng bot");
+  setEnabled({ workflowId: w.id, enabled: false });
+  assert.deepEqual(skillDuocGoi(bot("m"), "@rieng-cua-m"), [], "tắt rồi thì gọi tên cũng không chạy");
+});
+
+test("tin không có @ thì không phải quét gì", () => {
+  _xoaHet();
+  create({ agentId: bot("m"), name: "dat-hang", instructions: "B1" });
+  assert.deepEqual(skillDuocGoi(bot("m"), "đặt hàng giúp tôi"), []);
+  assert.deepEqual(skillDuocGoi(bot("m"), ""), []);
 });
