@@ -193,6 +193,54 @@ function lyDoCho(agentId: string): string | null {
   return null;
 }
 
+/*
+ * Lượt này có đang ở TRONG một mảng đã mở, hay đang mở một mảng mới?
+ *
+ * ── Vì sao cần, và vì sao nó là DỮ KIỆN chứ không phải một luật nữa ─────────────────────────────
+ *
+ * Hai ca parity còn lệch là hai đầu của cùng một cái núm: vặn cho bot mời chọn nhiều hơn thì ca
+ * "biết edit video" khá lên và ca "tự đăng ký giúp" hỏng, vặn ngược lại thì ngược lại. Ba vòng sửa
+ * luật văn xuôi đều không qua được 21/23, nên bảng theo dõi ghi thẳng: phải đổi thứ khác một luật.
+ *
+ * Đọc lại bản ghi app gốc thì ranh giới không nằm ở câu chữ mà ở NGỮ CẢNH — hai ca gần như cùng một
+ * câu, hai cách trả lời khác hẳn:
+ *
+ *   case 15  "bạn biết edit video luôn không"   (lần đầu chạm mảng video)
+ *            → trả lời + TRA catalog + widget "Làm tiếp cái nào?" [Cắt/edit clip | Gắn MCP OBS | Thôi]
+ *   case 19  "bạn biết edit video ko"           (đã gắn OBS, vừa quay xong clip E2E)
+ *            → "Có, nhưng không phải kiểu Premiere… Muốn mình thử trên clip E2E vừa ghi không?"
+ *              — trả gọn, KHÔNG widget, đề nghị đúng MỘT bước tiếp theo
+ *
+ * Cùng khuôn: case 14 sau case 11, case 23 sau case 8 — đều là hỏi lại trong mảng đã mở, đều không
+ * widget. Model không tự biết điều này vì nó không đo được "mảng này đã mở chưa" từ chữ; nó cần
+ * biết mình VỪA mời chọn cái gì. Nên hàm này không thêm luật, nó thêm một sự việc đã xảy ra.
+ */
+export function nguCanhMoiChon(agentId: string): string {
+  const t = tail(agentId);
+  for (let i = t.length - 1; i >= 0 && i >= t.length - 16; i -= 1) {
+    const e = t[i];
+    if (e.kind !== "send-message" || e.message.type !== "widget") continue;
+    // Đếm số tin người dùng kể từ widget đó — "vừa xong" khác hẳn "từ lâu rồi".
+    let luot = 0;
+    for (let k = i + 1; k < t.length; k += 1) {
+      if (t[k].kind === "message" && (t[k] as { role?: string }).role === "user") luot += 1;
+    }
+    const daChon = e.respondedValue ? `họ chọn "${String(e.respondedValue).slice(0, 60)}"` : "họ chưa chọn";
+    return [
+      "",
+      "",
+      "## Mảng đang mở",
+      "",
+      `Bạn đã mời người dùng chọn hướng ${luot <= 1 ? "ngay lượt trước" : `${luot} lượt trước`}: `
+        + `"${String(e.message.widget.prompt).slice(0, 100)}" — ${daChon}.`,
+      "Mảng đó nay đã mở. Nếu lượt này vẫn nằm trong mảng ấy, trả lời thẳng rồi đề nghị ĐÚNG MỘT bước "
+        + "tiếp theo bằng một câu hỏi thường — đừng dựng lại widget cho thứ vừa hỏi. Chỉ mời chọn lại "
+        + "khi người dùng mở sang một mảng khác hẳn.",
+    ].join(NEWLINE);
+  }
+  return "";
+}
+
 /** Everything presence-related back to idle. Called on every exit path, including failures. */
 const clearPresence = (agentId: string): void => {
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
@@ -1315,7 +1363,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "Không có công cụ nào để mở ảnh và bạn không cần mở file nào — hãy nhìn ảnh rồi trả lời ngay.",
       ].join(NEWLINE)
     : "";
-  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote, maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
+  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + nguCanhMoiChon(agentId), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).
