@@ -64,7 +64,7 @@ không gọi một dòng nào.
 
 ## 4 · Bám app gốc
 
-`21/23` ca khớp, ổn định qua 3 lượt. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
+`21/23` ca khớp — số này là GIAO của nhiều lần đo, không phải kết quả một lượt. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
 vặn cho bot mời chọn nhiều hơn thì ca "biết edit video" khá lên và ca "tự đăng ký giúp" hỏng, vặn
 ngược lại thì ngược lại.
 
@@ -142,6 +142,13 @@ lên mọi bot — suýt xoá 6 bot việc thật.
 lượt đang chạy chết giữa chừng — bot im, `isRunning=false`, mục cuối trong hội thoại là chính tin
 người dùng vừa gõ. Xảy ra 31/08: tôi sửa `cookie-chrome.ts` trong khi một lượt thật đang chạy.
 Luật "parity chạy thì không sửa src" áp cho MỌI lượt thật, không riêng lúc đo.
+
+**"4 case lệch ổn định" của MỘT lượt đo không so được với lượt khác.** Đo hai lần, mỗi lần 3 lượt
+đầy đủ (23 ca, 69/69 có trả lời): bản có `nguCanhMoiChon` ra 4 ca lệch (5, 6, 15 thiếu · 7 thừa),
+bản đã tắt cũng ra 4 ca lệch — nhưng là (6, 11, 15 thiếu · 13 thừa). Cùng con số, tập hợp khác hẳn.
+Giao của hai lần chỉ còn **case 6 và 15**. Nên `parity-lap --lan 3` đủ để loại nhiễu TRONG một lượt,
+nhưng không đủ để so hai bản với nhau: muốn kết luận "sửa cái này có giúp không" thì phải lấy GIAO
+của nhiều lần đo độc lập. Tôi đã kết luận sai một lần vì so 4 của lượt mới với 2 của lượt cũ.
 
 **Guard của bài đo dựa vào một nhãn THU GỌN ĐƯỢC.** `app-replay-b2.mjs` xác nhận "đã mở đúng bot"
 bằng chuỗi `"<tên bot>'s screen"` — nhãn của panel PHẢI. Panel đó thu gọn được, và khi nó gọn thì

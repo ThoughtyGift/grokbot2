@@ -270,22 +270,26 @@ function huongDanSkill(agentId: string, tinNguoiDung: string): string {
 }
 
 /*
- * ĐANG TẮT từ 31/08 — đo xong thì nó làm parity TỆ ĐI, không tốt lên.
+ * ĐANG TẮT từ 31/08 — không phải vì nó làm tệ đi, mà vì KHÔNG ĐO ĐƯỢC là nó có giúp gì.
  *
- * Ba lượt đầy đủ (23 ca × 3, 69/69 đo được) với hàm này nối vào lời nhắc:
+ * Hai lần đo, mỗi lần 3 lượt đầy đủ (23 ca, 69/69 có trả lời, im 0, chạm hạn 0):
  *
- *     lệch ỔN ĐỊNH: 4 case
- *       case 5  app gốc mời chọn · ta 0/3 → THIẾU
- *       case 6  app gốc mời chọn · ta 0/3 → THIẾU
- *       case 15 app gốc mời chọn · ta 0/3 → THIẾU
- *       case 7  app gốc KHÔNG    · ta 3/3 → THỪA
+ *                    có hàm này        đã tắt
+ *     lệch ổn định       4               4
+ *     THIẾU           5, 6, 15        6, 11, 15
+ *     THỪA               7               13
  *
- * Case 5 và 6 trước đó vẫn đúng. Dữ kiện "mảng này đã mở rồi" ức chế widget quá tay: nó không phân
- * biệt được "hỏi lại chuyện vừa bàn" với "một câu hỏi mới tình cờ đứng sau một widget".
+ * Cùng con số, TẬP HỢP khác hẳn. Nên "4 case lệch ổn định" không phân biệt được hai bản — nó đo
+ * nhiễu nhiều hơn đo hành vi. Giao của hai lần chỉ còn **case 6 và 15**, và đó đúng là 2 ca mà bảng
+ * theo dõi ghi từ 29/08.
  *
- * Giữ lại hàm và bài test thay vì xoá, vì phép đo mới là thứ đáng giữ: ai muốn thử lại hướng này
- * chỉ cần nối lại một dòng ở `opts`, chạy `parity-lap --lan 3`, và so với con số trên. Xoá đi thì
- * người sau sẽ dựng lại đúng ý tưởng này rồi trả giá lần nữa.
+ * Tôi đã commit một lần với lý do "nó làm parity tệ đi (2 → 4)". Sai: con số 2 cũ đo bằng bộ đo
+ * khác, và ngay cả bản đã tắt cũng cho 4. So một lượt 3 lần với một lượt 3 lần khác là so hai mẫu
+ * nhiễu, không so hai bản.
+ *
+ * Giữ hàm và 5 bài test lại. Muốn thử lại thì nối một dòng ở `opts`, nhưng đọc trước điều này: với
+ * mức nhiễu đã đo, 3 lượt KHÔNG đủ để kết luận. Phải nhiều lượt hơn, hoặc lấy GIAO của nhiều lần
+ * đo độc lập như trên.
  */
 export function nguCanhMoiChon(agentId: string): string {
   const t = tail(agentId);
