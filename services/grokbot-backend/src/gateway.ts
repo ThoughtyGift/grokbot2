@@ -96,6 +96,10 @@ import { checkAuth, noteAuth, authSnapshot } from "./auth-gate.js";
 import { handleSlackEvent } from "./slack-events.js";
 import { handleGitHubEvent } from "./github-events.js";
 import { config } from "./config.js";
+import {
+  forAgent as workflowsForAgent, listAll as workflowsListAll, create as workflowCreate,
+  update as workflowUpdate, remove as workflowRemove, setEnabled as workflowSetEnabled,
+} from "./workflows.js";
 
 const ports: AclPorts = {
   currentOwner,
@@ -206,6 +210,22 @@ const ports: AclPorts = {
     setVisibility: (shareId, visibility) => setBotTemplateVisibility(shareId, visibility, currentOwner()),
     remove: (shareId) => deleteBotTemplate(shareId, currentOwner()),
     createAgent: (a) => createAgentFromTemplate(a, currentOwner()),
+  },
+  /*
+   * Skill của bot — menu `/` của khung soạn.
+   *
+   * `runNow` để nguyên `{}`: client không đọc gì từ phản hồi, và chạy một skill nghĩa là mở một
+   * lượt chat mới với phần `instructions` — việc đó thuộc `turn.ts`, chưa nối ở bước này. Trả `{}`
+   * là nói "nhận rồi", nên khi nối xong sẽ không phải đổi shape.
+   */
+  workflows: {
+    forAgent: (a) => workflowsForAgent(a),
+    listAll: () => workflowsListAll(),
+    create: (a) => workflowCreate(a),
+    update: (a) => workflowUpdate(a),
+    remove: (a) => workflowRemove(a),
+    setEnabled: (a) => workflowSetEnabled(a),
+    runNow: () => ({}),
   },
   automations: {
     forAgent: getAgentAutomationsForClient,

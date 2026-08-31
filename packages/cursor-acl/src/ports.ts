@@ -200,6 +200,26 @@ export interface MemoryPort {
  * domain's; what the ACL owns is the DECISION to send it on every mutating reply, which is
  * a client fact: the FE stores the reply as the new list instead of re-fetching.
  */
+/**
+ * S10b workflow — thứ client gọi là "Skill" và vẽ trong menu `/`.
+ *
+ * Tuỳ chọn: thiếu cổng thì 14 lệnh workflow/skill trả rỗng đúng như trước, và menu `/` không có
+ * mục nào. Đó là hành vi cũ, không phải hỏng.
+ *
+ * Mọi lệnh ĐỔI trả CẢ DANH SÁCH, cùng lý do với routine: FE lưu phản hồi làm danh sách mới thay vì
+ * hỏi lại, nên trả `{ok:true}` sẽ hiện ra như "tạo xong rồi biến mất".
+ */
+export interface WorkflowsPort {
+  forAgent(args: unknown): unknown[];
+  listAll(): unknown[];
+  create(args: unknown): unknown[];
+  update(args: unknown): unknown[];
+  remove(args: unknown): unknown[];
+  setEnabled(args: unknown): unknown[];
+  /** Chạy lại một skill ngay. Trả `{}` — client không đọc gì từ phản hồi này. */
+  runNow(args: unknown): unknown;
+}
+
 export interface AutomationsPort {
   forAgent: Call;
   listAll(): unknown[];
@@ -358,6 +378,8 @@ export interface AclPorts {
   /** Mẫu bot. Tuỳ chọn — thiếu thì bảy lệnh mẫu bot trả lời "chưa bật". */
   botTemplates?: BotTemplatesPort;
   automations: AutomationsPort;
+  /** Skill của bot. Thiếu thì menu `/` trống — xem `WorkflowsPort`. */
+  workflows?: WorkflowsPort;
   connectors: ConnectorsPort;
   extensions: ExtensionsPort;
   /**

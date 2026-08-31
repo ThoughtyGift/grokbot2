@@ -3,6 +3,7 @@
  * runtime all share this; they do not each open the file.
  */
 import { napMayDaBiet } from "../may-da-biet.js";
+import { napWorkflows } from "../workflows.js";
 import { loadState, scheduleSave, type PersistedState } from "../store.js";
 import { ensureSeq } from "../conversation/seq.js";
 import { publish } from "../events.js";
@@ -177,6 +178,9 @@ function migrate(e: any, agentName: string): Entry | null {
   // cắm vào. Nạp ở đây vì đây là chỗ mọi thứ khôi-phục-từ-đĩa đã tụ lại.
   const soMay = napMayDaBiet();
   if (soMay) console.log(`[grokbot2] restored ${soMay} máy đã từng nối`);
+  // Skill của bot — menu `/` hỏi ngay khi app mở, nên kho phải có mặt trước lệnh đầu tiên.
+  const soSkill = napWorkflows();
+  if (soSkill) console.log(`[grokbot2] restored ${soSkill} skill`);
 }
 
 export const EPOCH = Date.now();

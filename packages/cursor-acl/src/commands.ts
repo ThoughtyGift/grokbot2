@@ -80,7 +80,7 @@ const idOf = (a: any): string =>
  * Only commands that are themselves the sole writer of a value use it — see `createGatewayRouter`.
  */
 export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel, payload: unknown) => void): Record<string, Call> {
-  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates } = ports;
+  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates, workflows } = ports;
   const push = (channel: WireChannel, payload: unknown) => { broadcast?.(channel, payload); };
 
   /**
@@ -460,7 +460,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     dismissTray: (a) => { const i = trays.findIndex((t) => t.id === (a?.id ?? a?.trayId)); if (i >= 0) trays.splice(i, 1); return {}; },
     clearTrays: () => { trays.length = 0; return {}; },
 
-    skillsCatalog: () => [],
+    skillsCatalog: () => workflows?.listAll() ?? [],
     syncPluginSkills: () => [],
     /**
      * The plugin-sync record. `{}` CRASHED the Plugins panel's "Yours" tab.
@@ -725,12 +725,21 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
 
     searchMedia: () => [],
     // Yours → Private filters `source === "workflow"` (or a plugin published by this user).
-    getAgentWorkflows: () => LOCAL_WORKFLOWS,
-    createAgentWorkflow: () => LOCAL_WORKFLOWS,
-    updateAgentWorkflow: () => LOCAL_WORKFLOWS,
-    setAgentWorkflowEnabled: () => LOCAL_WORKFLOWS,
-    deleteAgentWorkflow: () => LOCAL_WORKFLOWS,
-    runAgentWorkflowNow: () => ({}),
+    /*
+     * Skill của bot — menu `/` của khung soạn đọc đúng đây.
+     *
+     * Không có cổng thì trả `LOCAL_WORKFLOWS` (rỗng) như trước: client map mảng rỗng thành "không
+     * có gì", nên cài đặt không bật workflow vẫn chạy y hệt bản cũ.
+     *
+     * Shape phần tử ĐO từ chính client 31/08 — `name` và `description` lên màn hình, `title` và
+     * `body` bị bỏ qua. Xem đầu `services/grokbot-backend/src/workflows.ts`.
+     */
+    getAgentWorkflows: (a) => workflows?.forAgent(a) ?? LOCAL_WORKFLOWS,
+    createAgentWorkflow: (a) => workflows?.create(a) ?? LOCAL_WORKFLOWS,
+    updateAgentWorkflow: (a) => workflows?.update(a) ?? LOCAL_WORKFLOWS,
+    setAgentWorkflowEnabled: (a) => workflows?.setEnabled(a) ?? LOCAL_WORKFLOWS,
+    deleteAgentWorkflow: (a) => workflows?.remove(a) ?? LOCAL_WORKFLOWS,
+    runAgentWorkflowNow: (a) => workflows?.runNow(a) ?? ({}),
     importAgentWorkflowText: () => ({ ok: false, reason: "workflows not supported by this backend" }),
     importAgentWorkflowUrl: () => ({ ok: false, reason: "workflows not supported by this backend" }),
     // Skill trên đĩa CHẠY ở bản này (skills.ts quét và đưa vào prompt); thứ không có là đường
