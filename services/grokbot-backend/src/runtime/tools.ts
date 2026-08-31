@@ -1559,7 +1559,51 @@ const ASK_PROTOCOL =
   + "reasonable). Spelling out every branch in prose lands as work the person must now sort through. "
   + "But a question that only wants INFORMATION ends when the information is delivered: do not "
   + "manufacture a next step for it. If you would not act on any of the options, there is no widget "
-  + "to raise.";
+  + "to raise."
+  /*
+   * Ba VÍ DỤ THẬT, và vì sao chúng phải nằm trong lời nhắc chứ không phải trong chú thích.
+   *
+   * Bốn ví dụ này đã ngồi ngay phía trên từ lâu — trong một khối `/* … *\/`. Người đọc code thấy
+   * chúng; model thì KHÔNG, vì chú thích không đi vào chuỗi nào cả. Suốt ba vòng vặn luật văn xuôi
+   * tôi cứ diễn đạt lại cái quy tắc, trong khi thứ mô tả nó chính xác nhất đã nằm sẵn cách đó mười
+   * dòng và chưa bao giờ được gửi đi.
+   *
+   * Bảng theo dõi ghi "muốn tiến thêm phải đổi thứ khác một luật văn xuôi — dạy bằng ví dụ trong
+   * ngữ cảnh". Đây đúng là việc đó, và nó rẻ hơn mọi cách khác đã thử.
+   *
+   * Chép NGUYÊN VĂN từ transcript app gốc (`docs/extracted/kich-ban-b2.json`), không diễn giải:
+   * hai ca ta còn lệch ổn định qua hai lần đo độc lập là case 6 và 15, và cả hai đều nằm đây.
+   */
+  + " Ba ví dụ có thật, từ chính app này:"
+  + ' "Partner ID / Partner Key / Shop ID lấy ở đâu?" → trả lời xong thì hỏi '
+  + '"Bạn đã có app trên Console chưa?" [Đã có app | Mới có shop, chưa có app] — vì bước tiếp theo khác hẳn nhau.'
+  + ' "Bạn biết edit video luôn không?" → trả lời được gì rồi hỏi '
+  + '"Làm tiếp cái nào?" [Cắt/edit clip | Gắn MCP OBS | Thôi].'
+  + ' "Tìm mcp shopee" → tra xong, liệt kê xong thì hỏi '
+  + '"Bạn muốn mình gắn Shopee kiểu nào?" [Dùng web | MCP quản lý shop | MCP tìm sản phẩm].'
+  + " Điểm chung: người dùng hỏi một câu NGẮN về năng lực, bạn trả lời thật, rồi việc tiếp theo rẽ"
+  + " thành vài nhánh mà chỉ họ mới chọn được — đó là lúc dựng widget, không phải kể hết các nhánh ra bằng văn xuôi."
+  /*
+   * Vế NGƯỢC, và nó ra đời vì đo chứ không vì nghĩ thêm.
+   *
+   * Ba ví dụ ở trên chữa đúng bệnh thiếu: cả 5 ca app gốc mời chọn (5, 6, 8, 11, 15) từ chỗ lệch
+   * dai dẳng thành đúng hết. Nhưng núm vặn sang đầu kia — 5 ca app gốc KHÔNG hỏi thì ta lại hỏi
+   * (2, 7, 13, 17, 21). Dạy "khi nào mời chọn" mà không dạy "khi nào thôi" thì được đúng một nửa.
+   *
+   * Đọc lại app gốc trả lời gì ở 5 ca ấy thì quy luật hiện ra, và nó không phải chuyện câu chữ:
+   *
+   *     case 7  "bạn tự đăng ký cho mình đc ko" → "Mình mở form trên máy mình được… Đang mở Open Platform."
+   *     case 13 "cách dùng OBS như nào"         → "OBS đang chạy profile Shopee. Scene Man hinh = quay cả màn hình."
+   *     case 21 "capcut"                        → "CapCut desktop không có bản Linux. Mình mở CapCut Web trên máy này."
+   *
+   * Nó BẮT TAY LÀM, vì đã biết phải làm gì. Không có nhánh nào để người khác chọn hộ.
+   */
+  + " Và vế ngược, quan trọng ngang vế trên: khi bạn ĐÃ BIẾT phải làm gì thì LÀM, đừng hỏi."
+  + ' Cùng app đó: "bạn tự đăng ký giúp mình được không?" → "Mình mở form trên máy mình được. Đăng'
+  + ' nhập thì bạn phải tự bấm. Đang mở Open Platform." — bắt tay làm, KHÔNG widget.'
+  + ' "cách dùng OBS như nào?" → "OBS đang chạy profile Shopee, scene Man hinh quay cả màn hình." — trả lời thẳng, KHÔNG widget.'
+  + " Phép thử: nếu bạn đã biết bước tiếp theo là gì thì làm nó; chỉ hỏi khi bước tiếp theo rẽ nhánh"
+  + " và bạn KHÔNG có cách nào đoán đúng nhánh nào.";
 
 /**
  * Memory only helps if the agent writes to it, and models do not volunteer that.
