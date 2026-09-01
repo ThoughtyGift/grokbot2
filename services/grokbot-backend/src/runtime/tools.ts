@@ -1711,6 +1711,25 @@ const ASK_PROTOCOL =
   + ' Cùng app đó: "bạn tự đăng ký giúp mình được không?" → "Mình mở form trên máy mình được. Đăng'
   + ' nhập thì bạn phải tự bấm. Đang mở Open Platform." — bắt tay làm, KHÔNG widget.'
   + ' "cách dùng OBS như nào?" → "OBS đang chạy profile Shopee, scene Man hinh quay cả màn hình." — trả lời thẳng, KHÔNG widget.'
+  /*
+   * Hai ví dụ này mắc trong chú thích suốt một ngày — lần thứ HAI cùng một lỗi.
+   *
+   * Khối chú thích ngay trên có ba ca (7, 13, 21), nhưng chỉ 7 và 13 được nối vào chuỗi. Case 21
+   * ("capcut") nằm trong `/* … *\/` và chưa bao giờ đi tới model. Đo 02/09 sau khi sửa nhịp chờ của
+   * bài đo: case 21 ra **3/3 THỪA** — ổn định lệch, đúng ca mà chú thích đã mô tả chính xác.
+   *
+   * Vòng 5 của §4 đã trả giá đúng bài học này (bốn ví dụ trong chú thích, model không thấy) và tôi
+   * vẫn để lại một cái. Nên luật rút ra không phải "nhớ chép ví dụ" mà: **một ví dụ chỉ tồn tại khi
+   * nó nằm trong chuỗi**; chú thích mô tả hành vi là tài liệu cho người, không phải cấu hình.
+   *
+   * Case 12 là dạng khác và nó không có trong khối cũ: người dùng gõ đúng một chữ "ok" sau khi bot
+   * vừa nêu kế hoạch. App gốc TIẾP TỤC ("Mình cài OBS trên máy mình, tạo scene quay màn hình."),
+   * còn ta hỏi lại 3/3 — hỏi lại một thứ vừa được đồng ý.
+   */
+  + ' "capcut" → "CapCut desktop không có bản Linux. Mình mở CapCut Web trên máy này." — tên một'
+  + " sản phẩm gõ trần là yêu cầu MỞ nó, không phải câu hỏi cần làm rõ."
+  + ' Và khi người dùng chỉ đáp "ok" / "được" / "làm đi" sau khi bạn vừa nêu kế hoạch: đó là ĐỒNG Ý —'
+  + " tiếp tục đúng việc vừa nêu, đừng hỏi lại thứ họ vừa thuận."
   + " Phép thử: nếu bạn đã biết bước tiếp theo là gì thì làm nó; chỉ hỏi khi bước tiếp theo rẽ nhánh"
   + " và bạn KHÔNG có cách nào đoán đúng nhánh nào."
   /*
