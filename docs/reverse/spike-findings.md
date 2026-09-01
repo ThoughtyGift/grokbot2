@@ -241,3 +241,32 @@ phát hiện sau.
 `hasDevFeedOverride` bật lại updater và trỏ nó vào feed base URL của ta (`feedBaseUrl:
 process.env.SAND_UPDATE_FEED_BASE_URL` trong `H4n`). Tức hai việc tách nhau gọn: `sandLab` chặn feed
 của hãng vĩnh viễn, còn biến kia mở feed của mình khi nào ta muốn.
+
+
+### Hợp đồng feed cập nhật — đủ để dựng kênh của mình (trích 02/09)
+
+```js
+buildUpdateRequestUrl(base, track, currentVersion, machineId, platform) =
+  `${base.replace(/\/+$/,"")}/api/update/${platform}/${appNameForTrack(track)}/${currentVersion}/${machineId}/stable`
+  + (prerelease(currentVersion) !== track ? "?trackChanged=1" : "")
+
+appNameForTrack : stable → "sand" · nightly → "sand-nightly" · dogfood → "sand-dogfood"
+base mặc định   : https://api2.cursor.sh/updates          ← endpoint của hãng
+responseKind    : darwin → "squirrel"  ·  còn lại → "iupdate"
+```
+
+Phản hồi, kiểm bằng zod nên sai một trường là `feed_malformed`:
+
+| nền | schema |
+|---|---|
+| **Windows** (`iupdate`) | `{ url: string(url), version: string(≥1), sha256hash?: string(≥1) }` → tải `.exe` NSIS |
+| **macOS** (`squirrel`) | `{ url: string(url), name: string(≥1) }` → tải `.zip`, áp bằng Squirrel |
+
+Và **`204 No Content` nghĩa là "không có bản mới"** — nên một feed *"không bao giờ cập nhật"* chỉ là
+một route trả 204. Đó là cách chặn thứ hai, độc lập với `sandLab`; `sandLab` vẫn gọn hơn vì không cần
+máy chủ nào.
+
+**Còn thiếu gì để kênh của mình chạy thật:** một route `/api/update/<platform>/sand/<ver>/<machineId>/stable`
+trên trang tải đã có (`serve-site.mjs`), trả JSON trên kèm URL tới bộ cài. Vướng đã biết và chưa gỡ:
+bộ cài của ta **không ký số**, nên SmartScreen chặn — đo bằng `Get-AuthenticodeSignature`, xem mục
+trên trong chính file này. Tức phần khó của "tự cập nhật" không phải giao thức mà là **chữ ký**.
