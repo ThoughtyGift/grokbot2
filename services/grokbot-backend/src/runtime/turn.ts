@@ -346,6 +346,7 @@ const clearPresence = (agentId: string): void => {
   // Lượt xong thì quên ảnh của nó. Không có dòng này thì lượt SAU cũng nhận lại tấm ảnh cũ và trả
   // lời về một thứ người dùng không hề nhắc tới — tệ hơn cả bug nó vừa sửa.
   anhCuaLuot.delete(agentId);
+  traLoiCuaLuot.delete(agentId);
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
   // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
   // on screen, because that card exists precisely to make the user look at it.
@@ -503,6 +504,22 @@ const pendingVision = new Map<string, string>();
  * muốn cả lượt nhìn thấy nó, không phải mỗi bước đầu.
  */
 const anhCuaLuot = new Map<string, string>();
+
+/*
+ * Tham chiếu trả lời của lượt — giữ cho MỌI bubble, không chỉ bubble đầu.
+ *
+ * Đo 01/09 sau khi vá "bot trả lời có tham chiếu": bubble đầu mang `replyTo` đúng, nhưng mỗi lần
+ * model gọi tool thì bubble kế tiếp lại trắng —
+ *
+ *     e13954  send-message  →e13950   ← có
+ *     e13956  send-message    -       ← mất
+ *     e13958  send-message    -       ← mất
+ *
+ * App gốc thì vẽ trích dẫn trên MỌI tin trong luồng (ảnh người dùng gửi: tin họ, tin bot, và cả
+ * widget đều dẫn lại cùng một câu hỏi). Cùng một họ bug với ảnh đính kèm: dữ liệu của LƯỢT bị đối
+ * xử như dữ liệu của BƯỚC.
+ */
+const traLoiCuaLuot = new Map<string, { entryId: string; author: string; excerpt: string }>();
 
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
@@ -1125,6 +1142,8 @@ export function sendPrompt(args: SendArgs) {
    * Nối vào tin GỐC chứ không vào tin vừa gõ: người dùng bấm reply lên tin nào thì cả luồng thuộc
    * về tin đó, và đó cũng là thứ app gốc vẽ.
    */
+  // Nhớ tham chiếu cho CẢ lượt: mọi bubble trả lời phải dẫn lại cùng tin gốc, không riêng bubble đầu.
+  if (replyTo) traLoiCuaLuot.set(agentId, replyTo); else traLoiCuaLuot.delete(agentId);
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
   if (!args.silent) t.push(userEntry);
@@ -1839,7 +1858,9 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   const last = step >= MAX_TOOL_STEPS;
   const conLai = MAX_TOOL_STEPS - step;
 
-  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  // Tin nào trong luồng trả lời cũng mang tham chiếu — xem `traLoiCuaLuot`.
+  const rtLuot = traLoiCuaLuot.get(agentId);
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true, ...(rtLuot ? { replyTo: rtLuot } : {}) };
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
@@ -1871,7 +1892,9 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   const last = step >= MAX_TOOL_STEPS;
   const conLai = MAX_TOOL_STEPS - step;
 
-  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
+  // Tin nào trong luồng trả lời cũng mang tham chiếu — xem `traLoiCuaLuot`.
+  const rtLuot = traLoiCuaLuot.get(agentId);
+  const bubble: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true, ...(rtLuot ? { replyTo: rtLuot } : {}) };
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
