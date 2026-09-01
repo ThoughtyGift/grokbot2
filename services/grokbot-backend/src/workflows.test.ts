@@ -171,3 +171,38 @@ test("Run một skill đang tắt hoặc không tồn tại thì KHÔNG gửi g�
   runNow({});
   assert.deepEqual(daGui, [], "bấm Run trên một skill đã tắt không được lặng lẽ chạy nó");
 });
+
+/*
+ * ── Chỗ trống trong skill ───────────────────────────────────────────────────────────────────────
+ *
+ * Ảnh app gốc 01/09: một skill học từ demo ghi `Input là {query} (trong demo: nến thơm rồi Custom)`.
+ * Không có chỗ trống thì skill chỉ chạy lại đúng buổi demo — gọi lần thứ hai vẫn ra kết quả lần
+ * thứ nhất. Đây là thứ biến một bài học thành dùng lại được.
+ */
+test("nhận ra chỗ trống, không nhận nhầm ngoặc thường", async () => {
+  const { choTrongCua } = await import("./workflows.js");
+  assert.deepEqual(choTrongCua("Mở alibaba, gõ {query} vào ô search"), ["query"]);
+  assert.deepEqual(choTrongCua("Gửi cho {người nhận} vào {ngày}"), ["người nhận", "ngày"]);
+  assert.deepEqual(choTrongCua("Cùng một chỗ hai lần: {query} rồi {query}"), ["query"], "trùng thì gộp");
+  assert.deepEqual(choTrongCua("Không có chỗ trống nào"), []);
+  // `{}` rỗng và khối nhiều dòng không phải chỗ trống — chúng hay là mã nguồn trong bài học.
+  assert.deepEqual(choTrongCua("code: function f() {}"), []);
+  assert.deepEqual(choTrongCua("json: {\n  a: 1\n}"), []);
+});
+
+test("tách giá trị người dùng gọi kèm — giữ nguyên cả cụm có dấu cách", async () => {
+  const { doiSoCuaLoiGoi } = await import("./workflows.js");
+  // "nến thơm" có dấu cách bên trong; cắt ở khoảng trắng đầu tiên thì còn mỗi "nến".
+  assert.equal(doiSoCuaLoiGoi("@Search Alibaba wholesale nến thơm", "Search Alibaba wholesale"), "nến thơm");
+  assert.equal(doiSoCuaLoiGoi("@dat-hang 2 hộp nến", "dat-hang"), "2 hộp nến");
+  assert.equal(doiSoCuaLoiGoi("@dat-hang: 2 hộp", "dat-hang"), "2 hộp", "bỏ dấu hai chấm nối");
+});
+
+test("gọi tên trơn thì KHÔNG có giá trị — đó là trường hợp thường gặp nhất", async () => {
+  const { doiSoCuaLoiGoi } = await import("./workflows.js");
+  // Gõ `/` chọn skill rồi Enter thì chip serialize thành đúng `@tên`. Bịa một giá trị ở đây là
+  // chạy sai việc mà người dùng không kịp ngăn.
+  assert.equal(doiSoCuaLoiGoi("@dat-hang", "dat-hang"), "");
+  assert.equal(doiSoCuaLoiGoi("@dat-hang.", "dat-hang"), "");
+  assert.equal(doiSoCuaLoiGoi("làm @dat-hang. Rồi báo tôi", "dat-hang"), "", "câu sau dấu chấm là câu khác");
+});

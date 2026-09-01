@@ -289,3 +289,48 @@ export function runNow(args: unknown): Record<string, never> {
   }
   return {};
 }
+
+/**
+ * Chỗ trống trong một skill — `{query}`, `{tên người nhận}`, `{ngày}`.
+ *
+ * ── Vì sao skill phải có chỗ trống ──────────────────────────────────────────────────────────────
+ *
+ * Ảnh app gốc 01/09: một skill học từ demo ghi rõ `Input là {query} (trong demo: nến thơm rồi
+ * Custom)`. Không có chỗ trống thì skill chỉ chạy lại đúng buổi demo — "tìm nến thơm" mãi mãi, kể
+ * cả khi người dùng cần "tìm áo hoodie". Cái làm một bài học thành dùng lại được chính là chỗ nó
+ * biết phần nào sẽ thay.
+ *
+ * Nhận `{...}` chứ không phải `<...>` hay `$1`: đó là dấu app gốc dùng, và nó không đụng cú pháp
+ * nào khác trong văn bản tiếng Việt.
+ */
+export function choTrongCua(instructions: string): string[] {
+  const ra = new Set<string>();
+  for (const m of String(instructions ?? "").matchAll(/\{([^{}\n]{1,40})\}/g)) {
+    const ten = m[1].trim();
+    if (ten) ra.add(ten);
+  }
+  return [...ra];
+}
+
+/**
+ * Người dùng gọi skill kèm giá trị gì?
+ *
+ * `@Search Alibaba wholesale nến thơm` → skill là "Search Alibaba wholesale", giá trị là "nến thơm".
+ *
+ * Trả về chuỗi RỖNG khi họ chỉ gọi tên trơn — và đó là trường hợp thường gặp nhất, không phải lỗi:
+ * người dùng gõ `/` chọn skill rồi Enter thì chip serialize thành đúng `@tên`. Khi ấy bot phải HỎI
+ * giá trị, không được tự bịa một cái.
+ */
+export function doiSoCuaLoiGoi(text: string, ten: string): string {
+  const t = String(text ?? "");
+  const i = t.indexOf(`@${ten}`);
+  if (i < 0) return "";
+  const sau = t.slice(i + 1 + ten.length);
+  /*
+   * Cắt ở dấu câu kết thúc, không cắt ở khoảng trắng.
+   *
+   * "nến thơm" có dấu cách bên trong; cắt ở khoảng trắng đầu tiên thì còn mỗi "nến". Còn dấu chấm
+   * hay xuống dòng thì đúng là hết lời gọi — phần sau đó là câu khác của người dùng.
+   */
+  return sau.split(/[.\n!?;]/)[0].replace(/^[\s:,-]+/, "").trim();
+}

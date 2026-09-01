@@ -3,7 +3,7 @@
  */
 import { completeTurn, completeTurnPlain } from "../brain.js";
 import { type PoolMessage } from "@grokbot2/pool-client";
-import { skillDuocGoi, bindGuiPrompt } from "../workflows.js";
+import { skillDuocGoi, bindGuiPrompt, choTrongCua, doiSoCuaLoiGoi } from "../workflows.js";
 import { config, loadPoolKey } from "../config.js";
 import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
@@ -257,13 +257,37 @@ function huongDanSkill(agentId: string, tinNguoiDung: string): string {
     "",
     "## Skill người dùng vừa gọi",
     "",
-    ...ds.flatMap((w) => [
-      `### ${w.name}`,
-      w.description ? `_${w.description}_` : "",
-      "",
-      w.instructions,
-      "",
-    ]),
+    ...ds.flatMap((w) => {
+      /*
+       * Chỗ trống và giá trị người dùng đưa — đây là thứ biến một bài học thành dùng lại được.
+       *
+       * Ảnh app gốc: `Input là {query} (trong demo: nến thơm rồi Custom)`. Không có phần này thì
+       * skill chỉ chạy lại đúng buổi demo, và người dùng gọi nó lần thứ hai sẽ nhận lại kết quả của
+       * lần thứ nhất.
+       *
+       * KHÔNG tự thay chuỗi vào `{…}`: một skill có hai chỗ trống thì không đoán được giá trị thuộc
+       * chỗ nào, và đoán sai ở đây là chạy sai việc. Nêu ra rồi để model khớp — nó đọc được ngữ
+       * cảnh, phép thay chuỗi thì không.
+       */
+      const cho = choTrongCua(w.instructions);
+      const giaTri = doiSoCuaLoiGoi(tinNguoiDung, w.name);
+      return [
+        `### ${w.name}`,
+        w.description ? `_${w.description}_` : "",
+        "",
+        w.instructions,
+        "",
+        ...(cho.length
+          ? [
+            `Skill này có chỗ trống: ${cho.map((c) => `\`{${c}}\``).join(", ")}.`,
+            giaTri
+              ? `Người dùng gọi kèm: "${giaTri}" — điền vào chỗ hợp nghĩa nhất.`
+              : "Người dùng gọi tên trơn, KHÔNG kèm giá trị. Hỏi họ một câu ngắn để lấy, đừng tự bịa.",
+            "",
+          ]
+          : []),
+      ];
+    }),
     "Người dùng gọi skill này bằng cách gõ `/` rồi chọn nó, nên hãy LÀM theo hướng dẫn trên chứ đừng",
     "đọc lại nó cho họ nghe. Thiếu thông tin nào thì hỏi đúng thứ thiếu, không hỏi lại từ đầu.",
   ].join(NEWLINE);
