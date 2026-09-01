@@ -258,6 +258,15 @@ một ca không đo được là bỏ cả lượt.
 **`callPool` KHÔNG bao giờ ném.** Hết hạn mức, mạng đứt, HTTP lỗi — tất cả về dạng
 `{ok:false, text:""}`. Viết `try/catch` quanh nó là bắt một thứ không tồn tại; phải đọc `r.ok`.
 
+**Một trần dùng đúng chỗ, sai việc.** `readAttachmentChunk` — đường client nạp VIDEO qua scheme
+`sand-media://` — gọi `loadBytes`, và `loadBytes` đọc từ box với `length: TEXT_PREVIEW_CAP` (128 KB)
+vì nó sinh ra cho bản xem trước VĂN BẢN. Nên video 129 KB bị cắt và `totalSize` báo về 131.072. Cùng
+lúc, handler trả `{totalSize, bytesBase64}` mà **không có `mime`**, còn client thì kiểm
+`a.mime == null` TRƯỚC khi phát — nên **mọi** video đều ra "Couldn't load media", 198 lượt theo
+`coverage.lastArgs`, và không ai thấy vì ảnh đi đường khác (nhúng thẳng trong proto). Hai bài học:
+một hằng số đặt tên theo VIỆC nó sinh ra (`TEXT_PREVIEW_CAP`) bị dùng cho việc khác thì tên nó không
+cứu được ai, và **một đường chưa bao giờ chạy thì không có lỗi nào để mà thấy** — nó chỉ im.
+
 **`coverage.json` đếm cả lượt của chính bài đo.** 01/09 tôi thấy 5 lệnh phòng-chung có `n=1` và
 suýt báo "bảng theo dõi sai, client CÓ gọi". `lastArgs` cứu: `{"agentId":"agent-1","roomId":"r1"}`,
 cả 5 cùng một phút — script của tôi. Số lượt là bằng chứng cho "đường này có ai đi", **không** cho

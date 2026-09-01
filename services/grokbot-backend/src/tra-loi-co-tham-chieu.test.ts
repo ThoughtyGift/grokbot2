@@ -123,9 +123,11 @@ test("cửa /gw trả replyTo là string id, kèm replyToId", async () => {
     message: { type: "text", content: "câu hỏi gốc" }, timestampMs: Date.now() } as never);
   sendPrompt({ agentId: a, content: "trả lời", replyToId: "e-goc-9" } as never);
 
-  const raDay = transcriptTail({ id: a, limit: 20 }).entries.find(
-    (e: { replyTo?: unknown }) => e.replyTo != null,
-  ) as { replyTo?: unknown; replyToId?: unknown } | undefined;
+  // Cast MẢNG, không gán kiểu cho tham số của `find`: `Entry` là union và không có nhánh nào mang
+  // `replyTo`, nên một tham số kiểu `{replyTo?: unknown}` không giao với phần tử mảng và `tsc` từ
+  // chối cả hai overload. Đúng là điều cần kiểm ở đây: shape ra dây RỘNG hơn kiểu nội bộ.
+  const raDay = (transcriptTail({ id: a, limit: 20 }).entries as unknown as
+    { replyTo?: unknown; replyToId?: unknown }[]).find((e) => e.replyTo != null);
   assert.ok(raDay, "phải có entry mang tham chiếu");
   assert.equal(typeof raDay.replyTo, "string", "client chờ một chuỗi id, không phải object");
   assert.equal(raDay.replyTo, "e-goc-9");

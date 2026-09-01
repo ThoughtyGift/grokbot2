@@ -303,6 +303,31 @@ const TEXT_EXTENSIONS = new Set([
 /** The head the original previews before declaring the rest truncated. */
 const TEXT_PREVIEW_CAP = 128 * 1024;
 
+/**
+ * Trần một khối media, khớp với client: `sand-media` cắt mọi yêu cầu ở 4 MB (`Zri` trong
+ * `electron-main` 0.30). Đặt cùng số ở đây để một khối không bao giờ lớn hơn thứ nó chịu nhận.
+ *
+ * KHÔNG dùng `TEXT_PREVIEW_CAP` cho media. Đó là trần của bản xem trước VĂN BẢN, và dùng nhầm nó là
+ * một trong hai lỗi làm "Couldn't load media": video 129 KB vượt trần 128 KB nên bị cắt, và
+ * `totalSize` báo về 131.072 thay vì kích thước thật.
+ */
+const MEDIA_CHUNK_CAP = 4 * 1024 * 1024;
+
+/**
+ * Mime theo phần mở rộng — cho tệp nằm trên box, nơi không có bản ghi mime nào.
+ *
+ * Vì sao phải có: client kiểm `a.mime == null` TRƯỚC khi phát, nên thiếu mime là hỏng ngay ở lượt
+ * hỏi metadata, chưa kịp tải một byte nào. `application/octet-stream` là đáy có chủ ý — một mime sai
+ * còn cho client thử, còn `null` thì nó dừng hẳn.
+ */
+const MEDIA_MIME: Record<string, string> = {
+  mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm",
+  mkv: "video/x-matroska", avi: "video/x-msvideo",
+  mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac",
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", svg: "image/svg+xml", pdf: "application/pdf",
+};
+
 const extensionOf = (path: string): string => {
   const last = path.split(/[/\\]/).pop() ?? "";
   const dot = last.lastIndexOf(".");
@@ -347,18 +372,84 @@ export async function readAttachmentText(args: { path?: unknown }): Promise<
   return { kind: "text", text: head.toString("utf8"), truncated: bytes > TEXT_PREVIEW_CAP, bytes };
 }
 
-/** Gateway `readAttachmentChunk({path, offset, length})`. `length: 0` is a size probe. */
-export async function readAttachmentChunk(args: { path?: unknown; offset?: unknown; length?: unknown }): Promise<
-  { totalSize: number; bytesBase64: string } | null
-> {
+/**
+ * Gateway `readAttachmentChunk({path, offset, length})` — và đây là đường client nạp VIDEO.
+ *
+ * Trích 01/09 từ `electron-main` 0.30 (`gatewayMediaRemoteReader`): scheme `sand-media://` không đọc
+ * file, nó gọi thẳng lệnh này rồi tự dựng một `Response` có `content-range`. Trước khi phát, nó hỏi
+ * metadata bằng `offset:0, length:0` và bỏ đi nếu thiếu bất cứ điều nào trong ba:
+ *
+ *     if (a == null || a.mime == null || a.totalSize <= 0) → "Couldn't load media"
+ *
+ * Bản trước trả `{totalSize, bytesBase64}` — **không có `mime`** — nên điều kiện giữa luôn trượt và
+ * MỌI video đều hỏng. Ảnh không hỏng vì ảnh nhúng thẳng trong proto, nên đường này chưa bao giờ chạy
+ * một lần và không ai thấy: `coverage.lastArgs` ghi 198 lượt
+ * `{"path":"/home/gb2u003/workspace/rec_test.mp4","offset":0,"length":0,"videoPlayback":true}`.
+ *
+ * Đường dẫn tới đây là đường TUYỆT ĐỐI trên box, không phải `file://`, nên `readBytes` nhận thẳng.
+ * `videoPlayback` chỉ để client bỏ qua cache meta của chính nó; bên mình không có cache đó.
+ *
+ * `length: 0` vẫn là lượt hỏi kích thước, nhưng nay đọc `totalSize` từ CHÍNH box thay vì từ độ dài
+ * một buffer đã bị `TEXT_PREVIEW_CAP` cắt.
+ */
+export async function readAttachmentChunk(args: {
+  path?: unknown; offset?: unknown; length?: unknown;
+}): Promise<{ totalSize: number; bytesBase64: string; mime: string } | null> {
   const path = typeof args?.path === "string" ? args.path : "";
   if (!path) return null;
-  const buf = await loadBytes(path);
-  if (buf == null) return null;
   const from = Math.max(0, Number(args?.offset) || 0);
   const length = Number(args?.length) || 0;
-  if (length <= 0 || from >= buf.length) return { totalSize: buf.length, bytesBase64: "" };
-  return { totalSize: buf.length, bytesBase64: buf.subarray(from, from + length).toString("base64") };
+
+  // Tệp do backend này stage: mime đã nằm trong kho, không phải đoán từ đuôi.
+  const staged = store.get(path);
+  if (staged != null) {
+    const { bytes, mime } = staged;
+    if (length <= 0 || from >= bytes.length) return { totalSize: bytes.length, bytesBase64: "", mime };
+    return {
+      totalSize: bytes.length,
+      bytesBase64: bytes.subarray(from, from + Math.min(length, MEDIA_CHUNK_CAP)).toString("base64"),
+      mime,
+    };
+  }
+  return readBoxRange(path, from, length);
+}
+
+/**
+ * Đọc một KHOẢNG byte của tệp trên box, kèm kích thước thật của nó.
+ *
+ * Tách khỏi `loadBytes` có chủ ý: `loadBytes` phục vụ bản xem trước văn bản nên nó luôn nạp từ
+ * offset 0 với trần 128 KB. Phát video là đọc theo khoảng — client hỏi `bytes 131072-…` và một hàm
+ * luôn đọc từ đầu thì trả sai dữ liệu mà không báo lỗi nào.
+ */
+async function readBoxRange(
+  path: string, from: number, length: number,
+): Promise<{ totalSize: number; bytesBase64: string; mime: string } | null> {
+  try {
+    const { boxCall, boxConfigured } = await import("./box-exec.js");
+    if (!boxConfigured()) return null;
+    const mime = MEDIA_MIME[extensionOf(path)] ?? "application/octet-stream";
+    // `length: 0` là lượt hỏi kích thước của chính box — nó trả `totalSize` mà không chở byte nào.
+    // `attach_file` đã dùng đúng lượt này từ lâu (`runtime/tools.ts`), nên hợp đồng là thứ đã chạy.
+    const probe = await boxCall<{ totalSize?: number }>("readBytes", { target_file: path, offset: 0, length: 0 });
+    const totalSize = Number(probe?.totalSize) || 0;
+    if (totalSize <= 0) return null;
+    if (length <= 0 || from >= totalSize) return { totalSize, bytesBase64: "", mime };
+    const r = await boxCall<{ bytesBase64?: string }>("readBytes", {
+      target_file: path, offset: from, length: Math.min(length, MEDIA_CHUNK_CAP),
+    });
+    return { totalSize, bytesBase64: r?.bytesBase64 ?? "", mime };
+  } catch (e) {
+    /*
+     * NÓI RA vì sao, đừng chỉ trả null.
+     *
+     * Client vẽ đúng một chữ "Couldn't load media" cho mọi nguyên nhân, nên nếu bên này cũng im thì
+     * ba chuyện khác hẳn nhau trông y hệt: đường nằm NGOÀI gốc box (`readBytes` từ chối bằng "path
+     * escapes root"), file không tồn tại, và box chết. Tôi tự vấp cái đầu tiên trong lúc đo bản vá
+     * này — `/home/gb2u003/rec/…` ngoài gốc `workspace` — và chỉ biết được sau khi đi đọc `desktop.ts`.
+     */
+    console.warn(`[grokbot2] readAttachmentChunk: box từ chối "${path}" — ${(e as Error).message}`);
+    return null;
+  }
 }
 
 bindAttachmentCatalog(attachmentCatalog);
