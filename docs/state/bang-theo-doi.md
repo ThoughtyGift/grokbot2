@@ -14,7 +14,7 @@ trong nó là nhật ký của cả chặng 4 → 8; thứ tự mục là 3 → 
 ## 1 · Hôm nay đang ở đâu
 
 Backend nói được **148/147** lệnh của hợp đồng 0.30, client không còn đường nào nhận 404, bot điều
-khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc với **0 ca lệch ổn
+khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc với **2 ca lệch ổn
 định** trên 23 ca. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang
 tắt**.
 
@@ -23,7 +23,7 @@ lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
 mã             74 file test · 82 file nguồn · 587 bài xanh · typecheck sạch (đo 01/09)
-parity         0 ca lệch ỔN ĐỊNH — đo 02/09, 3 lượt ĐỦ 23/23; 16 ca ổn định đúng, 7 ca dao động
+parity         2 ca lệch ỔN ĐỊNH (case 12, 21) — đo 02/09 SAU khi sửa nhịp chờ; 14 đúng, 7 dao động
 bản vá client  6 bản, `--verify` còn nguyên
 ```
 
@@ -86,9 +86,18 @@ Phần còn thiếu không nằm ở *danh sách lệnh* mà ở *hình dạng l
 
 ## 4 · Bám app gốc
 
-**Số đo hiện hành — 02/09, `parity-lap --lan 3`: 0 ca lệch ổn định.** 16 ca ổn định đúng, 7 ca dao
-động (3, 4, 5, 9, 14, 20, 21). Đây là lần đầu **cả ba lượt chạy đủ 23/23** kể từ khi bộ ca được dựng
-lại, nên mẫu số là 3 ở mọi ô — không còn ô nào "chưa đủ dữ liệu".
+**Số đo hiện hành — 02/09, SAU khi sửa nhịp chờ: 2 ca lệch ổn định (12, 21).** 14 ca ổn định đúng,
+7 ca dao động (5, 14, 15, 16, 19, 22, 23). Ba lượt đủ 23/23.
+
+**Con số "0 ca lệch" của lượt đo TRƯỚC đó là số của một phép đo hỏng — đừng dùng lại.** Lượt ấy chạy
+với `app-replay-b2` còn chờ theo cờ `streaming`, nên nó gõ ca sau khi lượt trước chưa xong: ca bị
+giết (`stopped without replying`), và widget của ca này rơi vào cửa sổ của ca kia. Sửa nhịp chờ sang
+`isRunning` thì `stopped without replying` về **0**, case 3/4/9/20 từ "dao động" thành "ổn định
+đúng" — và **lộ ra hai ca lệch ổn định mà phép đo hỏng đang che**: case 12 (0/3 → 3/3 THỪA) và case
+21 (2/3 → 3/3 THỪA).
+
+Bài học lặp lại nguyên văn từ §7: cùng một con số "7 ca dao động", hai tập hợp khác hẳn. **Sửa bài đo
+trước, rồi mới đọc số.**
 
 Hai ca từng lệch ổn định:
 
