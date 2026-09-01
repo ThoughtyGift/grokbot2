@@ -312,6 +312,15 @@ một ca không đo được là bỏ cả lượt.
 **`callPool` KHÔNG bao giờ ném.** Hết hạn mức, mạng đứt, HTTP lỗi — tất cả về dạng
 `{ok:false, text:""}`. Viết `try/catch` quanh nó là bắt một thứ không tồn tại; phải đọc `r.ok`.
 
+**Khớp theo TÊN khi máy có hai bản cài.** Cùng một lớp lỗi, hai chỗ, phát hiện trong một giờ ngày
+02/09. `patch-client.mjs --apply` hỏi `tasklist /FI "IMAGENAME eq Grok Bot.exe"` nên nó từ chối vá dù
+bản đang vá đã đóng sạch — app của HÃNG trùng tên đang mở. Và `run.ps1` giết
+`ProcessName -like 'Grok Bot*'` **không lọc đường dẫn**, nên một lần chạy launcher đưa app gốc từ 10
+tiến trình xuống 0 — tôi tự đóng mất app tham chiếu của người dùng bằng chính bộ khởi chạy, ngay sau
+khi vừa sửa đúng lỗi ấy ở chỗ kia. Cả hai guard đều trả lời đúng, nhưng trả lời **sai câu hỏi**: "có
+app nào tên thế này không" thay vì "bản TÔI đang thao tác có đang chạy không". Nay cả hai lọc theo
+`Path`.
+
 **Cửa sổ đo không khớp với LƯỢT.** `app-replay-b2` gõ ca tiếp theo rồi quy mọi thứ xuất hiện sau đó
 cho ca ấy — nhưng lượt của ca TRƯỚC có thể chưa xong. Đo 02/09: case 3 nhận một widget thật ra là của
 case 2 (bot còn đang mở trang Updates), và hai ca liên tiếp ghi `stopped without replying` chỉ vì lượt

@@ -58,7 +58,7 @@ export function clientPaths(opts = {}) {
     asar: res ? join(res, "app.asar") : "",
     asarAside: res ? join(res, ASIDE_NAME) : "",
     appUnpacked: res ? join(res, "app") : "",
-    running: runningProbe(platform),
+    running: runningProbe(platform, appDir),
   };
 }
 
@@ -68,9 +68,29 @@ export function clientPaths(opts = {}) {
  *
  * @param {string} platform
  */
-function runningProbe(platform) {
+function runningProbe(platform, appDir = "") {
   if (platform === "win32") {
-    return { cmd: "tasklist", args: ["/FI", "IMAGENAME eq Grok Bot.exe", "/NH"], match: /Grok Bot\.exe/i };
+    /*
+     * Hỏi theo ĐƯỜNG DẪN, không theo tên ảnh — vì máy này có HAI bản cài.
+     *
+     * `tasklist /FI "IMAGENAME eq Grok Bot.exe"` chỉ biết tên tiến trình, nên nó trả về "đang chạy"
+     * khi bản của HÃNG (`C:\Program Files\Grok Bot`) đang mở, dù ta đang vá bản ở `C:\cai029`.
+     * Đo 02/09: app local đã đóng sạch (0 tiến trình), app gốc còn 10, và `--apply` vẫn từ chối.
+     * Guard trả lời đúng nhưng trả lời SAI CÂU HỎI: cái giữ `app.asar` là bản đang vá, không phải
+     * bản trùng tên.
+     *
+     * Không có `appDir` thì quay về chốt theo tên: thà từ chối quá rộng còn hơn vá lên một app đang
+     * mở — nửa lần vá để lại asar gốc cạnh `resources/app` và app boot bản gốc trong im lặng.
+     */
+    if (!appDir) {
+      return { cmd: "tasklist", args: ["/FI", "IMAGENAME eq Grok Bot.exe", "/NH"], match: /Grok Bot\.exe/i };
+    }
+    return {
+      cmd: "powershell",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        `$p = Get-Process -Name 'Grok Bot' -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '${appDir.replace(/'/g, "''")}\*' }; if ($p) { 'DANG-CHAY' } else { 'KHONG' }`],
+      match: /DANG-CHAY/,
+    };
   }
   if (platform === "darwin") {
     // -f khớp cả dòng lệnh; tên tiến trình thật là "Grok Bot" nằm trong bó .app.

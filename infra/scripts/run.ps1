@@ -130,7 +130,19 @@ if (Test-HttpOk 'http://127.0.0.1:9222/json/version') {
   exit 0
 }
 
-Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'Grok Bot*' } | ForEach-Object {
+# Giet theo DUONG DAN, khong theo ten — may nay co HAI ban cai.
+#
+# Ban truoc loc `ProcessName -like 'Grok Bot*'`, nen no giet ca ban cua HANG o
+# "C:\Program Files\Grok Bot" du ta chi dinh khoi dong lai ban da va. Do 02/09: chay run.ps1 mot lan
+# la app goc di tu 10 tien trinh xuong 0, va no la app tham chieu de doi chieu hanh vi — dong no la
+# mat cai duy nhat noi cho biet "app goc lam gi o ca nay".
+#
+# Cung mot lop loi voi guard `--apply` sua cung ngay: hoi "co app nao ten the nay dang chay khong"
+# thay vi "ban TOI SAP DONG co dang chay khong".
+$appDirKill = Split-Path $appExe
+Get-Process -ErrorAction SilentlyContinue | Where-Object {
+  $_.ProcessName -like 'Grok Bot*' -and $_.Path -and $_.Path.StartsWith($appDirKill, [System.StringComparison]::OrdinalIgnoreCase)
+} | ForEach-Object {
   try { $_.Kill() } catch {}
 }
 Start-Sleep -Milliseconds 400
