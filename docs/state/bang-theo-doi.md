@@ -14,7 +14,7 @@ trong nó là nhật ký của cả chặng 4 → 8; thứ tự mục là 3 → 
 ## 1 · Hôm nay đang ở đâu
 
 Backend nói được **148/147** lệnh của hợp đồng 0.30, client không còn đường nào nhận 404, bot điều
-khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc với **2 ca lệch ổn
+khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc với **0 ca lệch ổn
 định** trên 23 ca. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang
 tắt**.
 
@@ -23,7 +23,7 @@ lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
 mã             74 file test · 82 file nguồn · 587 bài xanh · typecheck sạch (đo 01/09)
-parity         2 ca lệch ỔN ĐỊNH (case 1, 3) — đo 01/09; 14 ca ổn định đúng, 7 ca chưa đủ dữ liệu
+parity         0 ca lệch ỔN ĐỊNH — đo 02/09, 3 lượt ĐỦ 23/23; 16 ca ổn định đúng, 7 ca dao động
 bản vá client  6 bản, `--verify` còn nguyên
 ```
 
@@ -86,8 +86,24 @@ Phần còn thiếu không nằm ở *danh sách lệnh* mà ở *hình dạng l
 
 ## 4 · Bám app gốc
 
-**Số đo hiện hành — 01/09, `parity-lap --lan 3`:** 2 ca lệch **ổn định**, 14 ca ổn định đúng, 7 ca
-**chưa đủ dữ liệu**.
+**Số đo hiện hành — 02/09, `parity-lap --lan 3`: 0 ca lệch ổn định.** 16 ca ổn định đúng, 7 ca dao
+động (3, 4, 5, 9, 14, 20, 21). Đây là lần đầu **cả ba lượt chạy đủ 23/23** kể từ khi bộ ca được dựng
+lại, nên mẫu số là 3 ở mọi ô — không còn ô nào "chưa đủ dữ liệu".
+
+Hai ca từng lệch ổn định:
+
+| ca | 01/09 | 02/09 | sửa bằng gì |
+|---|---|---|---|
+| **1** *"tính năng nào mới"* | 3/3 mời chọn | **0/3 · ổn định đúng** | vế thứ ba trong lời nhắc: *không biết thì đi TRA* |
+| **3** *"recording is finished"* | 2/2 mời chọn | **1/3 · dao động** | chặn `ask_question` bằng cờ `luotHocTuBanGhi` |
+
+Case 3 phải đọc kỹ hơn con số. Ba lượt là ba chuyện khác nhau: một lượt đúng (bot chốt bản ghi rồi
+giải thích), một lượt có widget **thuộc case 2** (*"Mình cài connector X cho khớp bản mới nhé?"* — bot
+còn đang dở việc mở trang Updates thì tin case 3 tới), và một lượt `stopped without replying` vì case
+2 vẫn đang chạy. Case 4 của cùng lượt ấy cũng im đúng kiểu đó, mà case 4 không liên quan gì bản sửa.
+Xem bẫy "cửa sổ đo không khớp với lượt" ở §7.
+
+Trước đây:
 
 | | ca | mong đợi | ta | đọc là |
 |---|---|---|---|---|
@@ -279,6 +295,13 @@ một ca không đo được là bỏ cả lượt.
 
 **`callPool` KHÔNG bao giờ ném.** Hết hạn mức, mạng đứt, HTTP lỗi — tất cả về dạng
 `{ok:false, text:""}`. Viết `try/catch` quanh nó là bắt một thứ không tồn tại; phải đọc `r.ok`.
+
+**Cửa sổ đo không khớp với LƯỢT.** `app-replay-b2` gõ ca tiếp theo rồi quy mọi thứ xuất hiện sau đó
+cho ca ấy — nhưng lượt của ca TRƯỚC có thể chưa xong. Đo 02/09: case 3 nhận một widget thật ra là của
+case 2 (bot còn đang mở trang Updates), và hai ca liên tiếp ghi `stopped without replying` chỉ vì lượt
+trước vẫn chạy. Hậu quả đúng kiểu khó thấy nhất: con số cho ca A phản ánh hành vi ở ca B, và "dao
+động" trở thành cái thùng chứa mọi thứ lệch pha. Nên một ô "1/3" phải mở transcript ra đọc trước khi
+đem đi sửa — tôi suýt đi sửa tiếp một bản chặn đang chạy đúng.
 
 **Lớp phủ của client bật TRƯỚC khi backend vũ trang.** `startTeach` đặt `active` chỉ SAU năm lượt
 `await cdpForAgent` tới Chrome của box qua hầm ssh, còn lớp phủ *"watching and learning"* là trạng
