@@ -315,14 +315,47 @@ for (const [i, c] of cases.entries()) {
    * Nên đo cả hai: entry mới HOẶC chữ dài thêm. Một lượt kết thúc là khi không còn gì stream và
    * có thêm nội dung so với lúc bắt đầu.
    */
+  /*
+   * `streaming` KHÔNG đủ để biết lượt còn chạy — và đây là chỗ mọi ô "dao động" sinh ra.
+   *
+   * Cờ `streaming` nằm trên ENTRY, nên nó tắt trong mọi khoảng nghỉ giữa hai lượt model của cùng
+   * một lượt người dùng: tool vừa xong, model chưa kịp nói tiếp. Script thấy "im" hai nhịp (6 giây)
+   * rồi gõ ca sau — mà một prompt mới thì HUỶ lượt đang chạy.
+   *
+   * Đo 02/09, lượt `16-40`: bot còn đang làm case 2 (bốn tin liên tiếp về release notes) thì case 3
+   * bị gõ vào, nên case 3 VÀ case 4 đều ghi `stopped without replying`. Cùng lượt đo ấy, một widget
+   * của case 2 rơi vào cửa sổ của case 3 và bị chấm thành "case 3 mời chọn". Con số cho ca A phản
+   * ánh hành vi ở ca B, và "dao động" thành thùng chứa mọi thứ lệch pha.
+   *
+   * `isRunning` của chính bot mới là thứ đúng: backend chỉ hạ nó ở `clearPresence`, tức khi lượt kết
+   * thúc thật — nó KHÔNG tắt trong khoảng nghỉ giữa hai lượt model. Đó cũng chính là cờ app dùng để
+   * quay cái vòng tròn bên cạnh tên bot.
+   */
+  const dangChayBot = async () => {
+    const ds = await gw("listAgents", {});
+    const rows = Array.isArray(ds) ? ds : (ds?.agents ?? []);
+    return rows.find((a) => a.id === bot.id)?.isRunning === true;
+  };
   const demEntry = async () => {
     const tr = await gw("getAgentTranscript", { agentId: bot.id, id: bot.id });
     const rows = tr?.transcript ?? tr?.entries ?? (Array.isArray(tr) ? tr : []);
     const len = rows.reduce((a, e) => a + String(e?.message?.content ?? e?.content ?? e?.result ?? "").length, 0);
-    return { n: rows.length, len, dangChay: rows.some((e) => e?.streaming === true) };
+    return {
+      n: rows.length,
+      len,
+      dangChay: rows.some((e) => e?.streaming === true) || await dangChayBot(),
+    };
   };
   const truoc = await demEntry();
   let widgetPrompt = null, permTargets = [], last = "", stable = 0;
+  /*
+   * Mốc "lần cuối bản ghi dài thêm" — lưới an toàn cho `isRunning` kẹt, xem cuối vòng lặp.
+   *
+   * So với LẦN ĐO TRƯỚC, không với mốc đầu lượt: `d.n > truoc.n` đúng vĩnh viễn sau lần tăng đầu
+   * tiên, nên nếu so với `truoc` thì `moiNhat` được làm mới mỗi 3 giây và lưới không bao giờ bắn.
+   */
+  let moiNhat = Date.now();
+  let truocDo = { n: truoc.n, len: truoc.len };
   let thuLai = 0;   // số lần bấm lại một thẻ báo "didn't go through"
   let xong = false;   // lượt kết thúc thật, hay chạm hạn cứng?
   while (Date.now() < deadline) {
@@ -433,6 +466,20 @@ for (const [i, c] of cases.entries()) {
      * `dangChay` tạm false trong khi lượt vẫn còn.
      */
     const d = await demEntry();
+    /*
+     * Lưới an toàn cho `isRunning` kẹt.
+     *
+     * Chờ theo `isRunning` đúng hơn hẳn chờ theo `streaming`, nhưng nó đổi hình dạng rủi ro: một cờ
+     * kẹt `true` giờ giữ script tới hết hạn cứng 900s MỖI CA — 23 ca là gần sáu tiếng, và một bài đo
+     * chạy sáu tiếng thì không ai chạy nữa. Nên: cờ còn bật mà bản ghi KHÔNG dài thêm suốt 180s thì
+     * coi như treo, ghi ra một dòng rồi đi tiếp. Nói ra chứ không im — một lượt bỏ qua trong im lặng
+     * là thứ đã tốn của tôi cả một vòng chẩn đoán trước đó.
+     */
+    if (d.n > truocDo.n || d.len > truocDo.len) { moiNhat = Date.now(); truocDo = { n: d.n, len: d.len }; }
+    else if (d.dangChay && Date.now() - moiNhat > 180_000) {
+      console.log(`    ⚠ case ${i + 1}: isRunning còn bật mà 180s không có gì mới — coi như treo, đi tiếp`);
+      break;
+    }
     if (!d.dangChay && (d.n > truoc.n || d.len > truoc.len)) { stable += 1; if (stable >= 2) { xong = true; break; } } else stable = 0;
   }
 
