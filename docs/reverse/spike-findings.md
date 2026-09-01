@@ -191,3 +191,53 @@ gọi** các RPC đó, nên có cài vào backend cũng không ai gọi tới �
 
 Còn `GetPrCodeTour`, `CloudCanvasMetadata`, `BackgroundComposer`, `Admin*` là tính năng của Cursor IDE
 và của đội vận hành hãng — **không thuộc bài toán này**.
+
+
+## Chặn tự cập nhật KHÔNG cần biến môi trường — trích 02/09 từ 0.30
+
+Cách hiện tại (`SAND_DISABLE_UPDATES=1`) chỉ giữ khi app mở qua shortcut của launcher. Mở thẳng
+`Grok Bot.exe` là không có biến → app tự cập nhật và xoá `resources/app`. Và không đặt được toàn cục,
+vì `CURSOR_API_BASE_URL` bị Cursor IDE thật đọc chung. Nên bảo vệ hiện tại chỉ là **một cú bấm sai**
+là mất — và cách phòng duy nhất đang là một dòng chữ trong `CLAUDE.md`.
+
+Cổng thật nằm ở đây:
+
+```js
+computeUpdateDisabledReason(n) =
+    n.envDisabled        ? "disabled-by-env"
+  : n.isLabBuild         ? "lab-build"          // ← KHÔNG đọc process.env
+  : n.hasDevFeedOverride ? null
+  : n.isPackaged ? (darwin|win32 ? null : "unsupported-platform") : "not-packaged"
+```
+
+và `isLabBuild` đến từ **chính `package.json` của gói**:
+
+```js
+yWe = JSON.parse(readFileSync(join(__dirname, "..", "..", "package.json")))
+aye = yWe.sandLab === true        // → isLabBuild
+process.env.SAND_LAB = aye ? "1" : "0"
+```
+
+`resources/app/package.json` là file bộ vá đã sở hữu, và bản 0.29 đang cài **không có khoá `sandLab`**.
+Thêm một dòng `"sandLab": true` là updater bất động ở **mọi đường mở**, kể cả bấm đúp vào `.exe`.
+
+**Toàn bộ tác dụng phụ — 20 chỗ dùng `isLabBuild` trong `electron-main`, 0 chỗ trong renderer:**
+
+| hàm | đổi gì | với ta |
+|---|---|---|
+| `x4n` · `b4n` | cổng cập nhật → `"lab-build"` | **đúng mục tiêu** |
+| `Msi` · `aQn` · `jsi` · `mQn` | dời gốc dữ liệu → `{route:"unchanged", reason:"lab"}` | app giữ nguyên gốc đang dùng, không tự dời |
+| `h$t` | nhãn Sentry → `"sand-lab"` | chỉ là nhãn đo lường |
+| `pQn` · `gQn` | bỏ hộp thoại "dời tôi vào /Applications" | chỉ macOS, và bỏ là đúng với bản đã vá |
+| `dQn` · `RWn` | đường dữ liệu người dùng tách biệt / kích hoạt chờ | không đổi hành vi thấy được |
+
+Renderer **0 lần** — không có khác biệt nào trên giao diện.
+
+**Cái giá phải nói ra:** vì nó tắt luôn bước dời gốc dữ liệu, một bản của hãng về sau mà CẦN bước dời
+ấy sẽ không dời. Điều đó nhất quán với chủ ý (ta không nhận bản của hãng), nhưng phải biết chứ đừng
+phát hiện sau.
+
+**Còn cửa thứ hai, cho kênh cập nhật của MÌNH:** `SAND_UPDATE_FEED_BASE_URL` — đặt biến này thì
+`hasDevFeedOverride` bật lại updater và trỏ nó vào feed base URL của ta (`feedBaseUrl:
+process.env.SAND_UPDATE_FEED_BASE_URL` trong `H4n`). Tức hai việc tách nhau gọn: `sandLab` chặn feed
+của hãng vĩnh viễn, còn biến kia mở feed của mình khi nào ta muốn.
