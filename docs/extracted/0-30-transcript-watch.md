@@ -180,3 +180,36 @@ kiện để bản ghi đúng.
 entry**. Lúc ấy trang cuối không phủ hết, và việc lật ngược bằng `nextBeforeSeq` là do client quyết
 định chứ không phải ta. Đó là ca hiếm (bot phải rất bận, mạng phải đứt lâu) nhưng nó có thật, và nó
 là thứ duy nhất còn đáng đo bằng cách rút dây mạng.
+
+
+## 8 · Sáu trường bỏ qua — trường nào thật sự có hệ quả (đo 02/09)
+
+§4 liệt kê sáu trường ta không đọc và để ngỏ "chưa rõ cái nào quan trọng". Đọc renderer 0.30 thì
+chúng tách thành ba nhóm rõ rệt:
+
+| trường | renderer dùng làm gì | hệ quả khi bỏ qua |
+|---|---|---|
+| `traceparent` · `enter_epoch_ms` | `emitTtfr` / `reportStream` — **đo lường thuần** | không có |
+| `sent_at_ms` | **0 lần** trong renderer (chỉ có ở tầng proto) | không có |
+| `message_id` | 1 chỗ thật: `messageIdAtTurnStart` để nhận ra lượt bắt đầu/kết thúc | không có |
+| `composed_at_ms` | → `sentWhileOfflineAtMs`, vẽ nhãn *"soạn lúc …"* kèm class `sand-sent-while-offline-notice` | tin soạn lúc mất mạng **không hiện mốc thời gian soạn**; chỉ rơi về chỉ báo "đang xếp hàng" |
+| **`is_fork`** | ghép với `replyToId` thành **khoá gốc luồng**: `dpt()` → `sand:thread <agentId> <rootId>` | **một trả lời dạng nhánh bị gộp vào luồng chính** thay vì thành nhánh riêng |
+
+```js
+function dpt(t){ return t.authoredThreadRootId !== undefined ? t.authoredThreadRootId
+                 : (t.isFork === true && t.replyToId != null ? t.replyToId : null) }
+function fpt(t){ const e = dpt(t); return e == null ? t.agentId : `sand:thread ${t.agentId} ${e}` }
+```
+
+`authoredThreadRootId` chỉ xuất hiện trong renderer (2 lần), **không** có trong `electron-main` — nó
+là trạng thái phía client. Nên trên dây, `is_fork` + `reply_to_id` mới là cơ chế thật để tách nhánh.
+
+**Một giả thuyết của tôi sai, và nó đáng chép.** Tôi đoán `message_id` là khoá khử trùng khi gửi lại,
+nên bỏ qua nó sẽ **nhân đôi tin** mỗi lần bấm "resend" — nghe rất hợp lý, và sai. Renderer dùng
+`clientNonce` cho việc đó (ta đã xử lý đúng), còn `message_id` chỉ để nhận ra mốc lượt. Nếu tôi "sửa"
+theo giả thuyết ấy thì đã thêm một cơ chế khử trùng cho một cái bệnh không tồn tại — đúng họ với
+`generation` ở §7.
+
+**Việc còn lại thu về đúng một trường:** `is_fork`. Nó đã có chỗ trong `conversation/types.ts`
+(`isFork?: boolean`) nhưng chưa được đọc lẫn phát lại. `composed_at_ms` là mục thẩm mỹ, chỉ thấy khi
+soạn lúc mất mạng. Bốn trường còn lại: bỏ qua là ĐÚNG, không phải nợ.
