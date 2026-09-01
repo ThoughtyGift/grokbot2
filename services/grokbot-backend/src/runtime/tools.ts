@@ -895,7 +895,21 @@ TOOLS.watch_video = async (arg, ctx) => {
   const NLCH = String.fromCharCode(10), CRCH = String.fromCharCode(13);
   if (path.includes("'") || path.includes(NLCH) || path.includes(CRCH)) return "(đường dẫn chứa ký tự không hợp lệ)";
   const q = `'${path}'`;
-  const frames = Math.min(Math.max(Number(spec?.frames) || 6, 2), 12);
+  /*
+   * Trần 24 khung, không phải 12.
+   *
+   * Đo 01/09 bằng một buổi demo thật: bot xem 6 khung của một clip 75 giây rồi nói "mấy khung rải
+   * đều chưa đủ để đọc ra từng thao tác" — đúng, vì một buổi demo là chuỗi thao tác, và 6 mẫu cách
+   * nhau 12 giây thì bỏ lọt cả việc gõ lẫn việc bấm. Nó bèn TỰ trích 25 khung rồi kẹt vì không mở
+   * được ảnh mình vừa tạo.
+   *
+   * 24 khung xếp 3 cột × 8 hàng, mỗi khung rộng 480 — vẫn đọc được chữ trên màn hình, và một tấm
+   * jpg cỡ đó còn xa mức 8 MB mà `readBytes` cho phép.
+   */
+  // Model gọi tool này với đủ tên: `frames`, `so_khung`, và (đo được 01/09) cả `fps`. Nhận hết rồi
+  // kẹp vào [2, 24] — từ chối vì sai tên trường là mất một bước tool cho một chuyện không đáng.
+  const xin = Number(spec?.frames ?? spec?.so_khung ?? spec?.fps ?? 6);
+  const frames = Math.min(Math.max(Number.isFinite(xin) && xin > 0 ? Math.round(xin) : 6, 2), 24);
 
   // 1) ffprobe — dài, kích thước, codec; đồng thời là bước xác nhận file có thật.
   const probe = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
@@ -940,14 +954,24 @@ TOOLS.watch_video = async (arg, ctx) => {
     : `tiếng mean ${mean} dB, max ${(vol.stdout.match(/max_volume: ([-0-9.]+) dB/) ?? [])[1] ?? "?"} dB${Number(mean) <= -70 ? " (gần như câm)" : ""}`;
 
   // 3) contact sheet — N khung rải đều, ghép 3 cột. -frames:v 1 → đúng MỘT ảnh jpg.
-  const cols = 3, rows = Math.ceil(frames / cols);
+  /*
+   * Hai cột và mỗi khung rộng 960 — không phải ba cột × 480.
+   *
+   * Đo 01/09, buổi dạy bằng video: bot xem được khung hình rồi vẫn báo "khung hình không rõ chữ,
+   * mình không dám đoán rồi viết thành quy trình sai". Một màn hình 1920 co xuống 480 thì chữ trên
+   * thanh địa chỉ và trong ô tìm kiếm còn 1/4 kích thước — đúng thứ cần đọc để biết người ta gõ gì.
+   *
+   * 960 là nửa chiều ngang màn hình, đủ để chữ còn đọc được, và một tấm 2 cột vẫn xa mức 8 MB mà
+   * `readBytes` cho phép.
+   */
+  const cols = 2, rows = Math.ceil(frames / cols);
   // KHÔNG ghi ra /tmp: exec chạy shell tự do nhưng readBytes đi qua safePath của daemon — mọi
   // đường dẫn phải nằm TRONG root của box. Đường dẫn tương đối resolve về root ở cả hai op
   // (exec có cwd mặc định là root), nên sheet nằm đúng chỗ đọc được. Đo được đúng lỗi này ở E2E
   // lần 1: bot tự khai "tool trích khung hình bị chặn vì nó ghi tạm ra /tmp".
   const sheet = `gb2-frames-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
   const mk = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
-    command: `ffmpeg -hide_banner -y -i ${q} -vf "fps=${frames}/${Math.max(dur, 1)},scale=480:-2,tile=${cols}x${rows}" -frames:v 1 ${sheet} 2>&1 | tail -2`,
+    command: `ffmpeg -hide_banner -y -i ${q} -vf "fps=${frames}/${Math.max(dur, 1)},scale=960:-2,tile=${cols}x${rows}" -frames:v 1 ${sheet} 2>&1 | tail -2`,
   });
   const info = `${path}: dài ${dur ? dur.toFixed(1) : "?"}s, ${w}x${h} ${codec}; ${audio}`;
   if (mk.exitCode !== 0) return `Đã đo được ${info} — nhưng không rút được khung hình: ${mk.stdout.trim().slice(0, 200)}`;
@@ -959,6 +983,41 @@ TOOLS.watch_video = async (arg, ctx) => {
   ctx.attach(dataUrl, `${fileName}.khung-hinh.jpg`, `${frames} khung hình rải đều từ ${fileName}`);
   ctx.see(dataUrl);
   return `Đã xem ${info}. ${frames} khung hình rải đều (đọc từ trái sang phải, trên xuống dưới) đã đặt trước mắt bạn — hãy nhìn và nhận xét nội dung thật, đừng đoán.`;
+};
+
+/**
+ * `view_image` — nhìn một ảnh có sẵn trên máy tính của bot.
+ *
+ * Khác `attach_image` ở chỗ căn bản: `attach_image` TẢI một ảnh từ web rồi GỬI cho người dùng xem;
+ * cái này mở một file ảnh trên box và đặt nó trước mắt CHÍNH MODEL.
+ *
+ * Đo 01/09, buổi dạy bằng video: bot xem 6 khung thấy chưa đủ, tự trích 25 khung ghép thành
+ * `sheet.png` — rồi tắc, vì không có đường nào mở tấm ảnh nó vừa tạo. Nó nói thẳng "bị chặn vì chưa
+ * được cấp quyền đọc file đó" và dừng lại. Bot tự sinh ra được bằng chứng mà không nhìn được bằng
+ * chứng của chính mình là một cái bẫy im lặng: mọi bước đều "thành công", kết quả vẫn là không học
+ * được gì.
+ */
+TOOLS.view_image = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
+  const path = String(spec?.path ?? spec?.file ?? spec?.target_file ?? spec?.image ?? "").trim();
+  if (!path) return 'view_image cần {"path":"đường dẫn ảnh trên máy tính của bạn"}';
+  if (!boxConfigured()) return "Chưa nối máy tính nên không mở được ảnh.";
+
+  const pull = await boxCall<{ totalSize?: number; bytesBase64?: string }>("readBytes", {
+    target_file: path, offset: 0, length: 8_000_000,
+  }).catch((e: Error) => ({ totalSize: 0, bytesBase64: "", loi: e.message } as never));
+  const b64 = String((pull as { bytesBase64?: string }).bytesBase64 ?? "");
+  if (!b64) {
+    // Đường dẫn ngoài gốc làm việc là lý do hay gặp nhất, và thông báo phải nói ra điều đó —
+    // "không đọc được" thì người đọc log không biết sửa gì.
+    return `Không đọc được ${path}. Ảnh phải nằm TRONG gốc làm việc của bạn; thử đường dẫn tương đối.`;
+  }
+  const duoi = (path.split(".").pop() ?? "png").toLowerCase();
+  const mime = duoi === "jpg" || duoi === "jpeg" ? "image/jpeg" : duoi === "webp" ? "image/webp" : "image/png";
+  const dataUrl = `data:${mime};base64,${b64}`;
+  ctx.see(dataUrl);
+  return `Đã mở ${path} (${(pull as { totalSize?: number }).totalSize ?? "?"} byte) và đặt trước mắt bạn — hãy nhìn rồi nói nội dung thật, đừng đoán.`;
 };
 
 TOOLS.attach_image = async (arg, ctx) => {
@@ -1767,6 +1826,10 @@ const VIDEO_PROTOCOL = boxConfigured()
    * các tool file khác.
    */
   'TOOL_CALL: watch_video({"path":"clip.mp4"}) — đường dẫn tương đối gốc làm việc; you get duration, resolution, audio ' +
+    // Thêm `frames` và `view_image` vào giao thức vì đo 01/09: bot muốn xem kỹ hơn 6 khung, tự trích
+    // 25 khung ra ảnh, rồi tắc — nó không biết có đường nào mở tấm ảnh nó vừa tạo.
+    'Thêm "frames":24 khi cần đọc từng thao tác trong một buổi demo — 6 khung mặc định là để nắm nội dung, không đủ để đọc thao tác. ' +
+    'TOOL_CALL: view_image({"path":"anh.png"}) mở MỘT ảnh có sẵn trên máy bạn và đặt nó trước mắt bạn — dùng cho ảnh bạn tự trích ra. ' +
     "loudness, and a grid of evenly-spaced frames placed before your eyes. ALWAYS watch your own " +
     "output before telling the user it is good — a black or silent clip is something you must catch " +
     "yourself, then fix and re-check. " +
