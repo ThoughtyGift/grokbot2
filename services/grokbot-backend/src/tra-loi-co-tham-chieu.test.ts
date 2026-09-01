@@ -62,3 +62,41 @@ test("id không tra được thì bỏ qua, không mất lượt", () => {
   assert.ok(tinNguoi, "lượt vẫn phải chạy");
   assert.equal((tinNguoi as { replyTo?: unknown }).replyTo, undefined);
 });
+
+/*
+ * ── Tên trường client THẬT SỰ gửi ───────────────────────────────────────────────────────────────
+ *
+ * Trích 01/09 từ `SendGrokBotUserMessageRequest` của app gốc 0.30:
+ *
+ *     6 reply_to_id      ← client gửi cái này
+ *
+ * `replyToEntryId` là tên TÔI tự đặt, và nó không khớp cái nào. Renderer dùng `replyToId` 55 lần.
+ * Hệ quả đã đo: 0 trên 748 entry mang `replyTo` — tham chiếu trả lời chưa từng tới backend, và bản
+ * vá "bot trả lời có tham chiếu" chạy trên một đường không ai đi.
+ */
+test("nhận replyToId — tên client 0.30 gửi thật", () => {
+  const a = botThu();
+  tail(a).push({ id: "e-goc-2", kind: "send-message", author: { id: a, name: "bot" },
+    message: { type: "text", content: "Muốn nối connector nào?" }, timestampMs: Date.now() } as never);
+  sendPrompt({ agentId: a, content: "Jira", replyToId: "e-goc-2" } as never);
+  const tinNguoi = tail(a).find((e) => e.kind === "message" && (e as { role?: string }).role === "user");
+  assert.equal((tinNguoi as { replyTo?: { entryId: string } }).replyTo?.entryId, "e-goc-2");
+});
+
+test("nhận cả reply_to_id (snake_case, đúng tên proto)", () => {
+  const a = botThu();
+  tail(a).push({ id: "e-goc-3", kind: "send-message", author: { id: a, name: "bot" },
+    message: { type: "text", content: "câu hỏi" }, timestampMs: Date.now() } as never);
+  sendPrompt({ agentId: a, content: "trả lời", reply_to_id: "e-goc-3" } as never);
+  const tinNguoi = tail(a).find((e) => e.kind === "message" && (e as { role?: string }).role === "user");
+  assert.equal((tinNguoi as { replyTo?: { entryId: string } }).replyTo?.entryId, "e-goc-3");
+});
+
+test("replyToEntryId vẫn chạy — caller nội bộ đang dùng tên đó", () => {
+  const a = botThu();
+  tail(a).push({ id: "e-goc-4", kind: "send-message", author: { id: a, name: "bot" },
+    message: { type: "text", content: "câu hỏi" }, timestampMs: Date.now() } as never);
+  sendPrompt({ agentId: a, content: "trả lời", replyToEntryId: "e-goc-4" } as never);
+  const tinNguoi = tail(a).find((e) => e.kind === "message" && (e as { role?: string }).role === "user");
+  assert.equal((tinNguoi as { replyTo?: { entryId: string } }).replyTo?.entryId, "e-goc-4");
+});

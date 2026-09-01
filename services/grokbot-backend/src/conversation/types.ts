@@ -279,6 +279,22 @@ export interface SendArgs {
   silent?: boolean;
   /** X6.3: entry được trả lời. Backend tra tên + trích đoạn từ transcript, caller chỉ gửi id. */
   replyToEntryId?: string;
+  /*
+   * Tên client THẬT SỰ gửi — trích 01/09 từ `SendGrokBotUserMessageRequest` của app gốc 0.30:
+   *
+   *     1 agent_id · 2 message_id · 3 text · 4 sent_at_ms · 5 rich_text · 6 reply_to_id
+   *     7 is_fork · 8 attachment_paths[] · 9 attachment_names[] · 10 traceparent
+   *     11 enter_epoch_ms · 12 composed_at_ms
+   *
+   * `replyToEntryId` là tên TÔI tự đặt, và nó không khớp cái nào. Renderer 0.30 dùng `replyToId`
+   * 55 lần. Hệ quả đo được: 0 trên 748 entry của bản ghi mang `replyTo` — tham chiếu trả lời của
+   * người dùng chưa từng tới backend một lần nào, và vá "bot trả lời có tham chiếu" sáng nay chạy
+   * trên một đường không ai đi.
+   */
+  replyToId?: string;
+  reply_to_id?: string;
+  /** Nhánh hội thoại. Chưa dùng, nhưng client gửi nên ghi lại để không mất dấu. */
+  isFork?: boolean;
   /**
    * Client 0.29 đính cờ này vào `sendPrompt` — và backend này từng bỏ qua nó hoàn toàn.
    *

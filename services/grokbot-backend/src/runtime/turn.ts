@@ -1118,8 +1118,11 @@ export function sendPrompt(args: SendArgs) {
    * qua thay vì từ chối cả turn: một tin trả lời mất tham chiếu vẫn đáng gửi hơn là mất luôn.
    */
   let replyTo: { entryId: string; author: string; excerpt: string } | undefined;
-  if (args.replyToEntryId) {
-    const target = t.find((e) => e.id === args.replyToEntryId);
+  // Nhận đủ ba cách viết: `replyToId` là tên client 0.30 gửi thật (proto `reply_to_id`),
+  // `replyToEntryId` là tên bên mình từng tự đặt và phải giữ cho các caller nội bộ đang dùng nó.
+  const rtId = args.replyToId ?? args.reply_to_id ?? args.replyToEntryId;
+  if (rtId) {
+    const target = t.find((e) => e.id === rtId);
     if (target) {
       const author = target.kind === "send-message" ? target.author.name
         : target.kind === "message" && target.role === "user" ? "người dùng"

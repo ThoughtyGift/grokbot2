@@ -69,7 +69,38 @@ cho client biết **nó đã bỏ lỡ gì**, và `replay` cho biết **lô đan
 có vế nào, nên sau một lần mất kết nối, client không có cách nào phân biệt "chưa có gì mới" với
 "đã lỡ mất vài entry".
 
-## 4 · Vì sao CHƯA vá
+## 4 · Hợp đồng tin nhắn người dùng — và một tên trường tôi tự đặt sai
+
+Cùng lần trích, từ `SendGrokBotUserMessageRequest`:
+
+| no | field | ta có? |
+|---|---|---|
+| 1 | `agent_id` | ✅ `agentId` |
+| 2 | `message_id` | ❌ bỏ qua |
+| 3 | `text` | ✅ |
+| 4 | `sent_at_ms` | ❌ bỏ qua (ta tự đóng dấu thời gian) |
+| 5 | `rich_text` | ✅ `richText.text` |
+| 6 | **`reply_to_id`** | ❌ **ta đọc `replyToEntryId`** — tên tôi tự đặt |
+| 7 | `is_fork` | ❌ chưa dùng |
+| 8 | `attachment_paths[]` | ✅ |
+| 9 | `attachment_names[]` | ✅ |
+| 10 | `traceparent` | ❌ bỏ qua |
+| 11 | `enter_epoch_ms` | ❌ bỏ qua |
+| 12 | `composed_at_ms` | ❌ bỏ qua |
+
+Dòng 6 là một bug thật, và nó giải thích con số đã đo hôm nay: **0 trên 748 entry** của bản ghi mang
+`replyTo`. Renderer 0.30 dùng `replyToId` 55 lần; backend đọc `replyToEntryId`; hai bên không gặp
+nhau, nên tham chiếu trả lời của người dùng **chưa từng tới backend một lần nào**. Bản vá "bot trả
+lời có tham chiếu" sáng 01/09 vì thế chạy trên một đường không ai đi — nó đúng về logic và vô hình
+trong thực tế.
+
+Nay nhận cả ba cách viết (`replyToId`, `reply_to_id`, `replyToEntryId`), với bài test cho từng cái.
+
+Bài học rộng hơn, và nó lặp lại lần thứ ba trong repo này: **đặt tên trường theo suy đoán rồi để bài
+test tự khoá cái tên suy đoán ấy** thì mọi thứ xanh mà không có ai gọi tới. Cách duy nhất bắt được
+là đọc hợp đồng thật — `coverage.json` `lastArgs`, hoặc proto trong asar.
+
+## 5 · Vì sao CHƯA vá cơ chế generation
 
 Chưa đo được hệ quả trên màn hình. Ba khả năng, và tôi không biết cái nào đúng:
 
