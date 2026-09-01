@@ -1473,7 +1473,23 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "## Ảnh đính kèm",
         "",
         "Một ảnh đã được đính kèm trực tiếp vào lượt này — của người dùng, hoặc ảnh màn hình do công cụ của bạn vừa chụp — và bạn ĐANG thấy nó.",
-        "Không có công cụ nào để mở ảnh và bạn không cần mở file nào — hãy nhìn ảnh rồi trả lời ngay.",
+        "Nhìn nó rồi trả lời ngay. ĐỪNG đi mở lại ảnh này bằng bất cứ công cụ nào.",
+        "",
+        /*
+         * Câu dưới đây ra đời từ sáu lượt dạy việc thất bại liên tiếp, 01/09.
+         *
+         * Bot nhận contact sheet qua `ctx.see`, rồi gọi
+         * `view_image({"path":"/tmp/oc-img-bd1120c6936d5d84/img0.png"})` — đường dẫn đó nằm trên máy
+         * POOL, không tồn tại trên máy nó. Đọc hỏng, và nó kết luận "không đọc được khung hình nào"
+         * dù ảnh đang ở ngay trước mắt. Canary cùng ngày xác nhận model đọc chữ trong ảnh tốt.
+         *
+         * Ghi chú cũ có một câu tuyệt đối — "không có công cụ nào để mở ảnh" — đúng cho tới khi
+         * `view_image` ra đời sáng nay, rồi thành lời chỉ dẫn NGƯỢC với giao thức tool. Model đứng
+         * giữa hai câu trái nhau thì làm cả hai, và cái nó chọn để làm lại là cái sai.
+         */
+        "Nếu bạn thấy một đường dẫn kiểu `/tmp/oc-img-…` trong ngữ cảnh: đó là đường dẫn trên máy chủ",
+        "mô hình, KHÔNG phải máy của bạn. Mở nó luôn hỏng. Ảnh đã ở trước mắt bạn rồi.",
+        "`view_image` chỉ dùng cho ảnh nằm trên máy BẠN mà bạn chưa nhìn thấy.",
       ].join(NEWLINE)
     : "";
   const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + huongDanSkill(agentId, tinCuoiCuaNguoi(history)), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };

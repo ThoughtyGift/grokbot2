@@ -908,8 +908,24 @@ TOOLS.watch_video = async (arg, ctx) => {
    */
   // Model gọi tool này với đủ tên: `frames`, `so_khung`, và (đo được 01/09) cả `fps`. Nhận hết rồi
   // kẹp vào [2, 24] — từ chối vì sai tên trường là mất một bước tool cho một chuyện không đáng.
-  const xin = Number(spec?.frames ?? spec?.so_khung ?? spec?.fps ?? 6);
-  const frames = Math.min(Math.max(Number.isFinite(xin) && xin > 0 ? Math.round(xin) : 6, 2), 24);
+  // Model gọi tool này với đủ tên: `frames`, `so_khung`, và (đo được 01/09) cả `fps`. Nhận hết.
+  const xin = Number(spec?.frames ?? spec?.so_khung ?? spec?.fps ?? 4);
+  /*
+   * Bốn khung mỗi lần, KHÔNG phải hai mươi bốn — và đây là số đo, không phải thẩm mỹ.
+   *
+   * Model thị giác co ảnh về cạnh dài ~1568px trước khi nhìn. Một tấm 24 khung xếp 2 cột là
+   * 1920x6480: co xong còn rộng ~460px, chữ trên thanh địa chỉ nát hoàn toàn. Đo 01/09 qua bốn lượt
+   * dạy thật, bot lần nào cũng kết luận cùng một câu — "khung hình không rõ chữ, mình không dám
+   * đoán rồi viết thành quy trình sai".
+   *
+   * Canary cùng ngày cho thấy đường ảnh KHÔNG hỏng: một tấm 1200x400 chữ cỡ 72, model chép lại
+   * chính xác `GROKBOT-CANARY-4417`. Nên nút thắt là hình dạng tấm ghép, không phải đường truyền.
+   *
+   * 4 khung xếp 2x2, mỗi khung 960 → tấm 1920x1080, đúng tỷ lệ màn hình và gần cỡ model nhìn tốt
+   * nhất. Muốn xem kỹ hơn thì gọi lại với `tu`/`den` cho từng đoạn, chứ không nhồi thêm khung vào
+   * một tấm — nhiều khung trong một ảnh thì mỗi khung nhỏ đi, đó là đánh đổi không lối thoát.
+   */
+  const frames = Math.min(Math.max(Number.isFinite(xin) && xin > 0 ? Math.round(xin) : 4, 2), 6);
 
   // 1) ffprobe — dài, kích thước, codec; đồng thời là bước xác nhận file có thật.
   const probe = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
@@ -965,13 +981,24 @@ TOOLS.watch_video = async (arg, ctx) => {
    * `readBytes` cho phép.
    */
   const cols = 2, rows = Math.ceil(frames / cols);
+  /*
+   * Cắt theo ĐOẠN: `tu` và `den` tính bằng giây.
+   *
+   * Một buổi demo 75 giây có bốn năm việc nối nhau; xem cả clip bằng 4 khung thì mỗi việc chỉ được
+   * một mẫu. Xem từng đoạn 15 giây thì mỗi việc có đủ khung để đọc ra thao tác, và mỗi tấm vẫn giữ
+   * kích thước model nhìn rõ.
+   */
+  const tu = Math.max(0, Number(spec?.tu ?? spec?.from ?? spec?.start ?? 0) || 0);
+  const den = Math.min(dur || 0, Number(spec?.den ?? spec?.to ?? spec?.end ?? dur) || dur);
+  const doan = Math.max(den - tu, 1);
+  const catDoan = tu > 0 || den < (dur || 0) - 0.5 ? `-ss ${tu} -t ${doan} ` : "";
   // KHÔNG ghi ra /tmp: exec chạy shell tự do nhưng readBytes đi qua safePath của daemon — mọi
   // đường dẫn phải nằm TRONG root của box. Đường dẫn tương đối resolve về root ở cả hai op
   // (exec có cwd mặc định là root), nên sheet nằm đúng chỗ đọc được. Đo được đúng lỗi này ở E2E
   // lần 1: bot tự khai "tool trích khung hình bị chặn vì nó ghi tạm ra /tmp".
   const sheet = `gb2-frames-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
   const mk = await boxCall<{ stdout: string; stderr: string; exitCode: number }>("exec", {
-    command: `ffmpeg -hide_banner -y -i ${q} -vf "fps=${frames}/${Math.max(dur, 1)},scale=960:-2,tile=${cols}x${rows}" -frames:v 1 ${sheet} 2>&1 | tail -2`,
+    command: `ffmpeg -hide_banner -y ${catDoan}-i ${q} -vf "fps=${frames}/${doan},scale=960:-2,tile=${cols}x${rows}" -frames:v 1 ${sheet} 2>&1 | tail -2`,
   });
   const info = `${path}: dài ${dur ? dur.toFixed(1) : "?"}s, ${w}x${h} ${codec}; ${audio}`;
   if (mk.exitCode !== 0) return `Đã đo được ${info} — nhưng không rút được khung hình: ${mk.stdout.trim().slice(0, 200)}`;
@@ -982,7 +1009,11 @@ TOOLS.watch_video = async (arg, ctx) => {
   const fileName = path.split("/").pop() || "video";
   ctx.attach(dataUrl, `${fileName}.khung-hinh.jpg`, `${frames} khung hình rải đều từ ${fileName}`);
   ctx.see(dataUrl);
-  return `Đã xem ${info}. ${frames} khung hình rải đều (đọc từ trái sang phải, trên xuống dưới) đã đặt trước mắt bạn — hãy nhìn và nhận xét nội dung thật, đừng đoán.`;
+  const pham = catDoan ? ` trong đoạn ${tu.toFixed(0)}–${den.toFixed(0)}s` : "";
+  const themDoan = dur > 20 && !catDoan
+    ? ` Clip dài ${dur.toFixed(0)}s: muốn đọc ra từng thao tác thì gọi lại theo từng đoạn — {"path":"…","tu":0,"den":15}, rồi 15–30, v.v.`
+    : "";
+  return `Đã xem ${info}. ${frames} khung hình rải đều${pham} (đọc từ trái sang phải, trên xuống dưới) đã đặt trước mắt bạn — hãy nhìn và nhận xét nội dung thật, đừng đoán.${themDoan}`;
 };
 
 /**
@@ -1828,7 +1859,9 @@ const VIDEO_PROTOCOL = boxConfigured()
   'TOOL_CALL: watch_video({"path":"clip.mp4"}) — đường dẫn tương đối gốc làm việc; you get duration, resolution, audio ' +
     // Thêm `frames` và `view_image` vào giao thức vì đo 01/09: bot muốn xem kỹ hơn 6 khung, tự trích
     // 25 khung ra ảnh, rồi tắc — nó không biết có đường nào mở tấm ảnh nó vừa tạo.
-    'Thêm "frames":24 khi cần đọc từng thao tác trong một buổi demo — 6 khung mặc định là để nắm nội dung, không đủ để đọc thao tác. ' +
+    'Clip dài thì xem theo ĐOẠN, đừng xin thêm khung: {"path":"clip.mp4","tu":0,"den":15} rồi 15–30, v.v. ' +
+    "Bốn khung một tấm là để mỗi khung còn đủ lớn mà đọc chữ trên màn hình; nhồi 24 khung vào một tấm " +
+    "thì tấm ấy bị co lại và không khung nào đọc được — đo rồi, không phải suy đoán. " +
     'TOOL_CALL: view_image({"path":"anh.png"}) mở MỘT ảnh có sẵn trên máy bạn và đặt nó trước mắt bạn — dùng cho ảnh bạn tự trích ra. ' +
     "loudness, and a grid of evenly-spaced frames placed before your eyes. ALWAYS watch your own " +
     "output before telling the user it is good — a black or silent clip is something you must catch " +
