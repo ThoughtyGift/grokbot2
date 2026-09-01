@@ -182,7 +182,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
 | 5 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
-| 7 | Cơ chế `generation` / `CursorTooOld` / `replay` | chưa đo được hệ quả trên màn hình | rút mạng giữa lượt, nối lại, so với `getAgentTranscriptTail` |
+| 7 | ~~Cơ chế `generation` / `CursorTooOld`~~ **hạ ưu tiên 02/09** | client tra tail 198.691 lượt với `limit:500`, ta trả đủ → nhịp tra kế tiếp tự lấp | chỉ còn hở khi mất kết nối mà bản ghi mọc **>500 entry** — xem [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §7 |
 | 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
 | 9 | Sáu trường của `SendGrokBotUserMessageRequest` ta bỏ qua | chưa rõ trường nào có hệ quả nhìn thấy | `message_id`, `sent_at_ms`, `is_fork`, `traceparent`, `enter_epoch_ms`, `composed_at_ms` |
 

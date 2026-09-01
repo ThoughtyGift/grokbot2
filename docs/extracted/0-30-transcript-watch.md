@@ -155,3 +155,28 @@ Chữ trong khối cắt ở **96 ký tự** (`lH("quote") = 96`), chip trong kh
 kind đích send-message` → 1/1 đạt. Trên màn hình app local: `sand-reply-quote__label` =
 `"Ảnh chưa tới được chỗ mình, mình chỉ thấy cái đường dẫn chứ không thấy nội dung sơ đồ. Bạn gửi…"`,
 đúng `e13968.message.content` cắt ở 96, và `(deleted)` không còn trên màn hình.
+
+
+## 7 · Vì sao thiếu `generation` KHÔNG phải một cái bệnh — đo 02/09
+
+§5 để ngỏ ba khả năng và nói phải đo trước khi vá. Hai con số khép được câu hỏi mà không cần rút dây
+mạng, vì chúng nói client thật sự làm gì:
+
+```
+getAgentTranscriptTail   n = 198.691   lastArgs {"id":"agent-…","limit":500}
+openAgentTail            n =   2.378   lastArgs {"id":"agent-…","limit":500}
+```
+
+Và `openAgentTail` trong hợp đồng renderer trả **`transcript-page`**, không phải một luồng — mở lại
+tail nghĩa là lấy nguyên một trang. Bên mình cả hai lệnh đều vào `conversation.transcriptTail`, hàm
+đó tôn trọng `limit` của client (trần 1000) và trả kèm `hasMore` · `nextBeforeSeq` · `cursor`.
+
+Ghép lại: sau một lần mất kết nối, client không cần ai nói cho nó biết đã lỡ gì — **nhịp tra kế tiếp
+trả về 500 entry cuối**, gồm cả những entry khung SSE không tới. Cơ chế `generation` + `CursorTooOld`
+của hãng là thứ cho phép họ **khỏi phải tra liên tục**; nó là tối ưu hoá băng thông, không phải điều
+kiện để bản ghi đúng.
+
+**Chỗ còn hở, và chỉ còn đúng chỗ này:** một lần mất kết nối mà trong đó bản ghi mọc thêm **hơn 500
+entry**. Lúc ấy trang cuối không phủ hết, và việc lật ngược bằng `nextBeforeSeq` là do client quyết
+định chứ không phải ta. Đó là ca hiếm (bot phải rất bận, mạng phải đứt lâu) nhưng nó có thật, và nó
+là thứ duy nhất còn đáng đo bằng cách rút dây mạng.
