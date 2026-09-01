@@ -177,14 +177,18 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | # | việc | chặn bởi | kiểm bằng |
 |---|---|---|---|
 | 1 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
-| 1b | Mở lớp tự soát sang `subagent` | — | ca thứ ba app gốc bắt; hai ca đầu đã xong |
 | 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
 | 3 | Box qua hầm từ máy khác (`T3`) | như trên | — |
 | 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
 | 5 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
-| 7 | Hai ca parity còn lệch | cần cách khác, không phải thêm luật | `parity-lap --lan 3` |
+| 7 | Cơ chế `generation` / `CursorTooOld` / `replay` | chưa đo được hệ quả trên màn hình | rút mạng giữa lượt, nối lại, so với `getAgentTranscriptTail` |
 | 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
+| 9 | Sáu trường của `SendGrokBotUserMessageRequest` ta bỏ qua | chưa rõ trường nào có hệ quả nhìn thấy | `message_id`, `sent_at_ms`, `is_fork`, `traceparent`, `enter_epoch_ms`, `composed_at_ms` |
+
+*Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
+`tools.ts` (`computer`, `automation_write`, `subagent`) và đo 7/7; và "hai ca parity còn lệch" —
+nay 0 ca lệch ổn định.*
 
 ## 6 · Đã xong — kết luận, không phải nhật ký
 
@@ -201,6 +205,9 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 9 · Skill trong menu `/` | 14 lệnh workflow hết stub; dạy xong gõ `/` là bot làm — đo end-to-end |
 | 10 · OBS trên box | AppImage 32.2.2 chạy không cần root, quay ra h264 720p + aac |
 | 11 · Trả lời tin (reply) | E2E trọn vòng 01/09: bấm Reply trong app → pill hiện đúng nội dung → gửi → tin mới mang khối trích dẫn, `(deleted)` hết. Dây 4/4, kể cả câu trả lời của bot cũng mang tham chiếu. Bài đo: `scripts/e2e-reply.mjs` + `scripts/do-reply-day.mjs`. Ba điều kiện của client: [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §6 |
+| 12 · Video phát được | `sand-media` thiếu `mime` + dùng nhầm trần 128 KB của bản xem trước văn bản → **mọi** video hỏng; nay `readyState=4`, khung 1920×1080 giải được thật trong app |
+| 13 · Teach a task qua giao diện | `e2e-teach.mjs` **11/11**: nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật |
+| 14 · Lớp tự soát 3 mặt | `computer` · `automation_write` · `subagent`, đo **7/7**; một ca không đo được là bỏ cả lượt (`khongDoDuoc`) |
 | 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
