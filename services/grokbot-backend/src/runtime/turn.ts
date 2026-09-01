@@ -343,6 +343,9 @@ export function nguCanhMoiChon(agentId: string): string {
 
 /** Everything presence-related back to idle. Called on every exit path, including failures. */
 const clearPresence = (agentId: string): void => {
+  // Lượt xong thì quên ảnh của nó. Không có dòng này thì lượt SAU cũng nhận lại tấm ảnh cũ và trả
+  // lời về một thứ người dùng không hề nhắc tới — tệ hơn cả bug nó vừa sửa.
+  anhCuaLuot.delete(agentId);
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
   // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
   // on screen, because that card exists precisely to make the user look at it.
@@ -482,6 +485,24 @@ export function interruptAgentRun(a: { agentId?: string; id?: string }) {
  * screenshot is looked at once instead of riding along on every later turn.
  */
 const pendingVision = new Map<string, string>();
+
+/*
+ * Ảnh NGƯỜI DÙNG gửi, giữ suốt lượt — không chỉ bước đầu.
+ *
+ * Bug đo được 01/09 từ ảnh chụp người dùng: họ kéo một sơ đồ vào khung chat, bot trả lời "Tin nhắn
+ * tới chỗ mình trống, không có ảnh nào hiện ra cả" và nhắc tới `/tmp/oc-img-…`. Ảnh vẫn hiện trong
+ * hội thoại, và gửi thẳng cùng ảnh ấy lên pool thì model mô tả đúng nội dung — nên cả kho ảnh lẫn
+ * đường truyền đều lành.
+ *
+ * Chỗ hỏng là vòng đời: `runTurn` nhận `image` ở bước đầu, còn `continueAfterTool` chỉ truyền
+ * `pendingVision` (ảnh do TOOL tạo). Model gọi đúng một tool là ảnh của người dùng biến mất khỏi
+ * bước sau — và nó trả lời dựa trên một lượt không còn ảnh nào.
+ *
+ * Giá phải trả: ảnh đi lại ở mỗi bước tool (tấm trong bug là 1,8 MB). Chấp nhận, vì mất ảnh giữa
+ * lượt là hỏng câu trả lời, còn tốn băng thông chỉ là tốn tiền — và người dùng đính ảnh vào thì họ
+ * muốn cả lượt nhìn thấy nó, không phải mỗi bước đầu.
+ */
+const anhCuaLuot = new Map<string, string>();
 
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
@@ -1416,6 +1437,7 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
     const next = await compact(history, key, prior, controller.signal);
     if (next) { compaction.set(agentId, next); persist(); }
   }
+  if (image) anhCuaLuot.set(agentId, image); else anhCuaLuot.delete(agentId);
   return runTurn(agentId, bubble, applyCompaction(history, compaction.get(agentId) ?? null), key, controller, image, speakAs);
 }
 
@@ -1821,7 +1843,9 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
-  const seen = pendingVision.get(agentId); pendingVision.delete(agentId);
+  // Ảnh do TOOL vừa tạo được ưu tiên (nó là thứ model vừa xin nhìn); không có thì giữ lại ảnh
+  // người dùng đính vào lượt này, nếu không bước sau sẽ trả lời như thể chưa từng có ảnh nào.
+  const seen = pendingVision.get(agentId) ?? anhCuaLuot.get(agentId); pendingVision.delete(agentId);
   void runTurn(agentId, bubble, [
     ...history,
     { role: "assistant", content: done.map((d) => `TOOL_CALL: ${d.name}(${d.arg})`).join("\n") },
@@ -1851,7 +1875,9 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
-  const seen = pendingVision.get(agentId); pendingVision.delete(agentId);
+  // Ảnh do TOOL vừa tạo được ưu tiên (nó là thứ model vừa xin nhìn); không có thì giữ lại ảnh
+  // người dùng đính vào lượt này, nếu không bước sau sẽ trả lời như thể chưa từng có ảnh nào.
+  const seen = pendingVision.get(agentId) ?? anhCuaLuot.get(agentId); pendingVision.delete(agentId);
   void runTurn(agentId, bubble, [
     ...history,
     { role: "assistant", content: `TOOL_CALL: ${toolName}(${arg})` },
