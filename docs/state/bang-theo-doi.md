@@ -101,6 +101,27 @@ Case 10 là câu trả lời cho dòng "đã chỉnh lời dặn, chưa đo lạ
 dụng**. Case 3 thì đáng chú ý vì nó là chính luồng *teach a task* — sau khi bản ghi kết thúc, app gốc
 học rồi làm, còn ta hỏi thêm một câu.
 
+**Đã sửa cả hai ca lệch, đo bằng `do-mot-ca` (01/09):**
+
+| ca | trước | sau | sửa bằng gì |
+|---|---|---|---|
+| **1** | 3/3 mời chọn | **0/3** · bot `web_search` ×2 → `web_fetch` ×2 → trả dữ kiện thật ("bản stable 0.29.0, ra 27/08…") | thêm **vế thứ ba** vào lời nhắc: *không biết thì đi TRA*, kèm ví dụ chép nguyên văn |
+| **3** | 2/2 mời chọn | **0/3** · bot gọi `demo_stop` rồi nói một câu | **chặn bằng công cụ**: cờ `luotHocTuBanGhi` khoá `ask_question` đúng lượt tin hệ thống `CAU_GHI_XONG` |
+| kiểm đầu kia | — | case 6 **3/3 CÓ** widget · case 11 **3/3 CÓ** widget | núm không bị vặn sang đầu kia |
+
+Case 3 là lần đầu chữa parity bằng **cấu trúc** thay vì câu chữ, và nó chỉ làm được vì ca đó có mốc
+để bám: văn bản tin là một hằng số do client gửi. Các ca khác không có mốc ấy — nên vế thứ ba của
+case 1 vẫn phải là một ví dụ trong lời nhắc.
+
+Một chỗ suýt sai khi chặn bằng công cụ: nhánh `ask_question` **park** lượt lại để chờ người bấm và
+tắt presence. Chặn mà vẫn đi vào nhánh ấy thì bot **IM** — tệ hơn hẳn widget thừa. Nên câu chặn trả
+về như kết quả của một tool thường, và đã kiểm bằng cách đọc chữ chứ không chỉ đếm widget: bot nói
+*"Ok, mình chốt bản ghi lại rồi xem nó dạy việc gì."* rồi gọi `demo_stop`.
+
+**Số ở bảng trên chưa đổi theo hai kết quả này**, và đó là cố ý: `do-mot-ca` đi thẳng cửa
+`sendPrompt`, còn bảng đo qua **giao diện thật** với ngữ cảnh các ca trước. Hai bài đo khác nhau thì
+không được trộn số. Muốn đổi bảng phải chạy lại `parity-lap --lan 3`.
+
 **Đọc con số này cho đúng.** Mẫu số phần lớn là **2**, không phải 3: lượt 1 cạn hạn mức sau 2 ca, nên
 chỉ case 1 có đủ ba lượt. Với hai lượt thì "1/2" nằm đúng giữa và không phân biệt được nhiễu với tín
 hiệu — đó là lý do 7 ca ghi "chưa đủ dữ liệu" thay vì bị đếm thành lệch. Và con số 2 này **không so

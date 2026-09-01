@@ -1712,7 +1712,33 @@ const ASK_PROTOCOL =
   + ' nhập thì bạn phải tự bấm. Đang mở Open Platform." — bắt tay làm, KHÔNG widget.'
   + ' "cách dùng OBS như nào?" → "OBS đang chạy profile Shopee, scene Man hinh quay cả màn hình." — trả lời thẳng, KHÔNG widget.'
   + " Phép thử: nếu bạn đã biết bước tiếp theo là gì thì làm nó; chỉ hỏi khi bước tiếp theo rẽ nhánh"
-  + " và bạn KHÔNG có cách nào đoán đúng nhánh nào.";
+  + " và bạn KHÔNG có cách nào đoán đúng nhánh nào."
+  /*
+   * Vế thứ BA: không biết thì đi TRA, đừng bắt người dùng làm rõ hộ.
+   *
+   * Ca này (case 1 · "bản moi nhất grok bpot có tinh năng nào mới") ra 3/3 mời chọn qua lượt đo
+   * 01/09 — con số vững nhất trong cả bảng vì nó là ca duy nhất đo đủ ba lượt. Và nó KHÔNG phải
+   * biến thể của hai vế trên: bot ta trả lời "không có changelog nên không biết" rồi dựng widget
+   * "Bạn đang hỏi cái nào? [App Grok Bot này | Grok của xAI | Thôi]".
+   *
+   * Nhập nhằng ấy là thật. Nhưng app gốc không hỏi — nó chọn nghĩa hiển nhiên (chính cái app người
+   * dùng đang ngồi trong) rồi đi tra, và trả về dữ kiện: ngày ra beta, gói nào dùng được, tính năng
+   * đang có, cái gì sắp ra. `web_search` không cần box lẫn key nên nó LUÔN bật — bot có công cụ
+   * trong tay mà tuyên bố không biết.
+   *
+   * Chi tiết cuối đáng chép: câu hỏi tiếp của app gốc nằm trong VĂN XUÔI ("Muốn mình đi sâu cái
+   * nào?"), không phải widget. Cùng một ý muốn, hai hình dạng khác nhau — và bộ ca chấm đúng hình
+   * dạng đó.
+   *
+   * Chép nguyên văn từ `docs/parity-runs/bo-ca-parity.json`, không diễn giải.
+   */
+  + " Vế thứ ba: KHÔNG BIẾT thì đi TRA, đừng bắt người dùng làm rõ hộ một thứ bạn tra được."
+  + ' Cùng app đó: "bản mới nhất Grok Bot có tính năng nào mới?" → "Để mình check bản Grok Bot mới'
+  + ' nhất xem có gì mới." rồi web_search, rồi trả về dữ kiện thật (ra beta 11/8; gói SuperGrok,'
+  + ' Cursor Pro, Cursor Teams đều dùng được; mỗi Bot có máy tính cloud riêng; template chia sẻ thì'
+  + ' chưa ship hết) — và câu hỏi tiếp ("Muốn mình đi sâu cái nào?") viết THÀNH CÂU, KHÔNG widget.'
+  + " Tên sản phẩm nghe nhập nhằng thì lấy nghĩa hiển nhiên nhất — chính app người dùng đang dùng —"
+  + " rồi tra; nói \"mình không biết\" khi chưa thử tra là bỏ dở việc.";
 
 /**
  * Memory only helps if the agent writes to it, and models do not volunteer that.

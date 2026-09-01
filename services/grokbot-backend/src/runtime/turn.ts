@@ -9,6 +9,7 @@ import { isBrowserConfigured } from "../browser.js";
 import { closeAgentTab } from "../browser.js";
 import { isAutoApproved, unquote } from "../tools.js";
 import { isDesktopLook, releaseDesktop } from "../desktop.js";
+import { CAU_GHI_XONG } from "../teach-demo.js";
 import { cachedSkillsSection, warmSkills } from "../skills.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
@@ -347,6 +348,7 @@ const clearPresence = (agentId: string): void => {
   // lời về một thứ người dùng không hề nhắc tới — tệ hơn cả bug nó vừa sửa.
   anhCuaLuot.delete(agentId);
   traLoiCuaLuot.delete(agentId);
+  luotHocTuBanGhi.delete(agentId);
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
   // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
   // on screen, because that card exists precisely to make the user look at it.
@@ -521,6 +523,20 @@ const anhCuaLuot = new Map<string, string>();
  */
 const traLoiCuaLuot = new Map<string, { entryId: string; author: string; excerpt: string }>();
 
+/**
+ * Lượt này là "đã ghi xong, học đi" — tin HỆ THỐNG, không phải câu người dùng gõ.
+ *
+ * Vì sao cần một cờ chứ không thêm một dòng vào lời nhắc: parity đo 01/09 cho case 3 ra **2/2 mời
+ * chọn** trong khi app gốc trả đúng một dòng rồi làm luôn (*"Mình đang xem bản ghi demo trên máy của
+ * mình, rồi rút thành skill dùng lại được."*). Sáu vòng vặn luật văn xuôi trước đó đã cho thấy giới
+ * hạn của cách ấy — §4 bảng theo dõi ghi thẳng: "muốn tiến thêm phải đổi thứ khác một luật văn xuôi
+ * … để mô hình phân biệt bằng CÔNG CỤ chứ không bằng cách hiểu chữ".
+ *
+ * Ở đây có mốc cấu trúc để bám mà các ca khác không có: văn bản tin là hằng số `CAU_GHI_XONG` do
+ * client gửi, nên nhận ra nó không cần model hiểu gì cả.
+ */
+const luotHocTuBanGhi = new Set<string>();
+
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
   agentId,
@@ -669,8 +685,21 @@ function runTool(
    * nên một `.then` gắn từ ngoài sẽ nằm ngoài ngữ cảnh — và `continueAfterTool` bên trong nó còn gọi
    * model tiếp.
    */
+  /*
+   * Lượt "học từ bản ghi" thì KHÔNG hỏi lại — chặn bằng công cụ, xem `luotHocTuBanGhi`.
+   *
+   * Chặn kiểu này chứ không trả lỗi rồi thôi: nhánh `ask_question` bên dưới **park** lượt để chờ
+   * người bấm, và tắt presence. Nếu chỉ từ chối mà vẫn đi vào nhánh ấy thì bot IM — tệ hơn hẳn một
+   * widget thừa. Nên câu chặn được trả về như kết quả của một tool THƯỜNG, và lượt chạy tiếp.
+   */
+  const chanHoi = name === "ask_question" && luotHocTuBanGhi.has(agentId);
+  const goiTool = chanHoi
+    ? async () => "Lượt này là tin hệ thống sau khi buổi ghi kết thúc: đừng hỏi lại người dùng. "
+      + "Xem bản ghi, rút thành skill, rồi nói một câu ngắn về việc mình vừa học được."
+    : () => fn(arg, ctxFor(agentId, history));
+
   const chuBot = ownerOf(agentId) ?? DEFAULT_USER.authId;
-  void runWithOwner(chuBot, () => Promise.resolve(fn(arg, ctxFor(agentId, history)))
+  void runWithOwner(chuBot, () => Promise.resolve(goiTool())
     .catch((e: Error) => `tool error: ${e.message}`)
     .then((result) => {
       tc.result = result;
@@ -679,16 +708,16 @@ function runTool(
       if (onDone) { onDone(result); return; }
       // A question is not a result to reason about — the follow-up turn happens when the
       // user answers it, not now, or the model talks over its own question.
-      if (history && name !== "ask_question") continueAfterTool(agentId, history, name, arg, result);
+      if (history && (name !== "ask_question" || chanHoi)) continueAfterTool(agentId, history, name, arg, result);
       // Ba tool đều DỪNG lượt để chờ người: câu hỏi, xin bí mật, và biểu mẫu. Dùng chung khoá
       // `widget` vì chúng mở khoá ở cùng một chỗ (`unpark("widget", …)` trong submitX).
-      if ((name === "ask_question" || name === "request_secret" || name === "request_user_form") && history) {
+      if ((name === "ask_question" || name === "request_secret" || name === "request_user_form") && history && !chanHoi) {
         park({ kind: "widget", key: agentId, agentId, history });
       }
       // A parked turn is waiting on the user, not working: leaving it "running" spins the
       // indicator forever behind a card that needs a click.
-      if (!history || name === "ask_question") clearPresence(agentId);
-      if (name === "ask_question") { const r = lyDoCho(agentId); if (r) choNguoi(agentId, r); }
+      if ((!history || name === "ask_question") && !chanHoi) clearPresence(agentId);
+      if (name === "ask_question" && !chanHoi) { const r = lyDoCho(agentId); if (r) choNguoi(agentId, r); }
     }));
 }
 
@@ -1147,6 +1176,8 @@ export function sendPrompt(args: SendArgs) {
    */
   // Nhớ tham chiếu cho CẢ lượt: mọi bubble trả lời phải dẫn lại cùng tin gốc, không riêng bubble đầu.
   if (replyTo) traLoiCuaLuot.set(agentId, replyTo); else traLoiCuaLuot.delete(agentId);
+  // Lượt "học từ bản ghi" — xem `luotHocTuBanGhi`.
+  if (text.trim() === CAU_GHI_XONG) luotHocTuBanGhi.add(agentId); else luotHocTuBanGhi.delete(agentId);
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
   if (!args.silent) t.push(userEntry);
