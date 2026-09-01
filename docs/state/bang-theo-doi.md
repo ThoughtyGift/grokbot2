@@ -74,6 +74,14 @@ renderer đọc)*.
 **Đọc bảng này thế nào.** "Thiếu" không đồng nghĩa "hỏng". Viết ra 14 lệnh sau cờ tắt thì client vẫn
 không gọi một dòng nào.
 
+**Xác nhận bằng đường trích thứ hai (01/09).** Con số 16 ở trên trước đây chỉ đến từ một nguồn:
+bảng `dl("gateway",{methods:{…}})` trong `electron-main`. Nay trích thêm **bảng nhóm lệnh trong
+renderer** — 21 nhóm, 122 lệnh (`transcript`, `send`, `roster`, `sharing`…). Hai nguồn khớp: bảng
+nhóm là **tập con thật sự** của hợp đồng 147 (0 lệnh nằm ngoài), và đúng 16 lệnh ấy là chỗ ta chưa
+có handler — 149 handler cho 147 lệnh. **Không có API BE nào còn thiếu ngoài 16 cái đã biết.**
+Phần còn thiếu không nằm ở *danh sách lệnh* mà ở *hình dạng luồng* — xem
+[0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §3 và §4.
+
 ## 4 · Bám app gốc
 
 `22/23` ca khớp (đo 01/09, 3 lượt đầy đủ 69/69). Ca duy nhất còn lệch là case 10 — và nó là cái giá của một tính năng vừa thêm, xem cuối mục. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
@@ -207,6 +215,17 @@ một ca không đo được là bỏ cả lượt.
 
 **`callPool` KHÔNG bao giờ ném.** Hết hạn mức, mạng đứt, HTTP lỗi — tất cả về dạng
 `{ok:false, text:""}`. Viết `try/catch` quanh nó là bắt một thứ không tồn tại; phải đọc `r.ok`.
+
+**`coverage.json` đếm cả lượt của chính bài đo.** 01/09 tôi thấy 5 lệnh phòng-chung có `n=1` và
+suýt báo "bảng theo dõi sai, client CÓ gọi". `lastArgs` cứu: `{"agentId":"agent-1","roomId":"r1"}`,
+cả 5 cùng một phút — script của tôi. Số lượt là bằng chứng cho "đường này có ai đi", **không** cho
+"client đi đường này". Đọc `lastArgs` trước khi kết luận.
+
+**Không có đường nào điều khiển được app GỐC.** Đo 01/09, ba cửa đều đóng: CDP (app từ chối mọi cờ
+lạ — `bad option: --enable-logging`), UIA/accessibility (12 node, chỉ vỏ `Chrome_WidgetWin_1` +
+Minimize/Restore/Close, ổn định qua 3 lượt), và MCP `chrome-devtools` (nó **tự mở Chrome riêng**,
+không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn hai nguồn, và cả hai đọc được: **bundle
+đã bung** và **SQLite của chính nó**. App local thì có CDP `:9222` — dùng CDP trần.
 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
