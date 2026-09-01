@@ -105,7 +105,7 @@ import { resetSkillsCache, warmSkills } from "../skills.js";
 import { obsProtocol } from "../box-obs.js";
 // Dựng đội cho ra hồn: mỗi con một lịch, và tên có tiền tố miền — xem `doi-bot.ts`.
 import { BUOC_DAT_LICH, LUAT_DAT_TEN } from "../doi-bot.js";
-import { taoWorkflowTuBot } from "../teach-demo.js";
+import { taoWorkflowTuBot, batDauQuayDemo, dungQuayDemo, dangQuayDemo, tinGiaoBaiHoc } from "../teach-demo.js";
 import { installedIds, installPlugin } from "../plugins.js";
 import { IMG_MIME, postAttachment, postFileAttachment } from "../conversation/index.js";
 
@@ -1924,7 +1924,10 @@ const desktopParagraph = (info: { width: number; height: number; dpi: number } |
   "on selectors and do not go stale when a window moves. The screen is SHARED between all bots on this box, and a desktop click lands in whatever window is frontmost — so read the screenshot and make sure what you see is YOUR page before acting; if it belongs to another task, stop and say so." +
   (desktopRecordConfigured()
     ? "\n\nDẠY VIỆC TRÊN MÁY: nếu người dùng muốn CHỈ cho bạn một việc ngoài trình duyệt, gọi "
-      + 'TOOL_CALL: desktop_teach_start(), để họ tự làm trong khung máy tính, rồi khi họ báo xong thì gọi '
+      + "Nếu việc cần HIỂU chứ không chỉ lặp lại — nhiều bước, nhiều trang, có chỗ người dùng đổi ý — "
+      + 'thì dùng đường VIDEO: TOOL_CALL: demo_start(), họ làm mẫu, xong thì TOOL_CALL: demo_stop(). '
+      + "Kết quả trả về chính là bài hướng dẫn để bạn tự xem video và viết ra skill. "
+      + 'TOOL_CALL: desktop_teach_start(), để họ tự làm trong khung máy tính, rồi khi họ báo xong thì gọi ' 
       + "TOOL_CALL: desktop_teach_stop() — nó lưu lại thành một routine. Trong lúc đang ghi, TUYỆT ĐỐI "
       + "không tự bấm hay gõ gì trên máy: thao tác của bạn cũng bị ghi vào bài dạy của họ."
     : "");
@@ -2109,6 +2112,48 @@ if (desktopConfigured()) TOOLS.computer_use = async (arg, ctx) => {
  * Bot KHÔNG được thao tác trong lúc ghi: XRecord thấy cả input do XTEST bơm vào, nên mỗi cú bấm
  * của bot cũng thành một bước trong bài dạy của người dùng.
  */
+/*
+ * Dạy việc bằng VIDEO — đường thứ ba, và là đường app gốc dùng.
+ *
+ * Hai bộ ghi kia bắt SỰ KIỆN (DOM hoặc X11) rồi backend tự dịch thành routine. Đường này quay màn
+ * hình rồi giao cho chính con bot tự học: nó xem video, đối chiếu, rồi VIẾT ra skill. Bài học thành
+ * văn bản đọc được và sửa được, và bắt được ý định chứ không chỉ chuỗi thao tác.
+ *
+ * Ảnh app gốc 01/09 cho thấy nó đi xa tới đâu — thứ chuỗi thao tác không làm được:
+ *
+ *     "Input là {query} (trong demo: nến thơm rồi Custom)."
+ *     "spider hoodie gõ rồi xóa, không search."
+ *
+ * Nó tham số hoá được cái cần thay, và phân biệt được thao tác THẬT với thao tác bỏ dở. Bộ ghi sự
+ * kiện chỉ thấy "gõ 13 ký tự rồi xoá 13 ký tự" và sẽ chép nguyên vào bài học.
+ */
+if (boxConfigured()) {
+  TOOLS.demo_start = async (_arg, ctx) => {
+    const r = await batDauQuayDemo(ctx.agentId);
+    if (!r.ok) return `không quay được: ${r.lyDo}`;
+    return "Đang quay màn hình máy tính của mình. Bạn cứ làm mẫu trong khung máy tính, xong thì nhắn"
+      + " tôi một tiếng. Trong lúc quay tôi không tự bấm gì cả.";
+  };
+  TOOLS.demo_stop = async (arg, ctx) => {
+    if (!dangQuayDemo()) return "không có bản ghi nào đang chạy";
+    /*
+     * Nhận "huỷ" bằng danh sách từ, KHÔNG bằng regex.
+     *
+     * Bản regex `(false|huỷ|huy|bỏ|bo)` thiếu ranh giới từ thì `demo_stop("xong rồi bot")` khớp
+     * ngay ở chữ "bo" trong "bot" và vứt cả buổi dạy. Một buổi dạy mất vì một chữ khớp nhầm là
+     * cái giá quá đắt cho một phép thử ngắn hơn ba dòng.
+     */
+    const loi = String(arg ?? "").toLowerCase();
+    const huy = ["false", "huỷ", "huy bỏ", "bỏ", "khong luu", "không lưu"].some((t) => loi.includes(t));
+    const r = await dungQuayDemo();
+    if (!r) return "đã dừng, không có video nào";
+    if (huy) return "đã dừng quay và bỏ bản ghi";
+    // Trả về CHÍNH bài giao việc: bot đọc nó ngay trong kết quả tool và làm tiếp trong cùng lượt,
+    // khỏi phải chờ một lượt nữa mới bắt đầu học.
+    return tinGiaoBaiHoc(ctx.agentId, r.videoPath, r.giay);
+  };
+}
+
 if (desktopRecordConfigured()) {
   TOOLS.desktop_teach_start = async (_arg, ctx) => {
     const s = await startDesktopRecording(ctx.agentId);
