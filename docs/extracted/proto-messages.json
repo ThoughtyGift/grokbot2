@@ -55825,5 +55825,197 @@
       "kind": "message",
       "type": "agent.v1.WriteShellStdinArgs"
     }
+  ],
+  "GrokBotTranscriptWatchConnected": [
+    {
+      "no": 1,
+      "name": "stream_id",
+      "kind": "scalar",
+      "T": "9"
+    },
+    {
+      "no": 2,
+      "name": "server_time_ms",
+      "kind": "scalar",
+      "T": "3"
+    },
+    {
+      "no": 3,
+      "name": "absolute_lifetime_ms",
+      "kind": "scalar",
+      "T": "3"
+    }
+  ],
+  "GrokBotTranscriptWatchRows": [
+    {
+      "no": 1,
+      "name": "agent_id",
+      "kind": "scalar",
+      "T": "9"
+    },
+    {
+      "no": 2,
+      "name": "generation",
+      "kind": "scalar",
+      "T": "13"
+    },
+    {
+      "no": 3,
+      "name": "entries",
+      "kind": "message",
+      "T": "Uw",
+      "repeated": true
+    },
+    {
+      "no": 4,
+      "name": "deletes",
+      "kind": "message",
+      "T": "qX",
+      "repeated": true
+    },
+    {
+      "no": 5,
+      "name": "replay",
+      "kind": "scalar",
+      "T": "8"
+    }
+  ],
+  "GrokBotTranscriptWatchCleared": [
+    {
+      "no": 1,
+      "name": "agent_id",
+      "kind": "scalar",
+      "T": "9"
+    },
+    {
+      "no": 2,
+      "name": "new_generation",
+      "kind": "scalar",
+      "T": "13"
+    }
+  ],
+  "GrokBotTranscriptWatchCursorTooOld": [
+    {
+      "no": 1,
+      "name": "agent_id",
+      "kind": "scalar",
+      "T": "9"
+    },
+    {
+      "no": 2,
+      "name": "generation",
+      "kind": "scalar",
+      "T": "13"
+    }
+  ],
+  "GrokBotTranscriptWatchHeartbeat": [
+    {
+      "no": 1,
+      "name": "server_time_ms",
+      "kind": "scalar",
+      "T": "3"
+    }
+  ],
+  "GrokBotTranscriptWatchAgentState": [
+    {
+      "no": 1,
+      "name": "live",
+      "kind": "message",
+      "T": "mUe",
+      "repeated": true
+    },
+    {
+      "no": 2,
+      "name": "snapshot",
+      "kind": "scalar",
+      "T": "8"
+    },
+    {
+      "no": 3,
+      "name": "client",
+      "kind": "message",
+      "T": "QX",
+      "repeated": true
+    }
+  ],
+  "GrokBotTranscriptWatchComputerActions": [
+    {
+      "no": 1,
+      "name": "actions",
+      "kind": "message",
+      "T": "pUe",
+      "repeated": true
+    }
+  ],
+  "GrokBotTranscriptWatchAgentStateChanged": [
+    {
+      "no": 1,
+      "name": "agent_id",
+      "kind": "scalar",
+      "T": "9"
+    },
+    {
+      "no": 2,
+      "name": "families",
+      "kind": "scalar",
+      "T": "9",
+      "repeated": true
+    },
+    {
+      "no": 3,
+      "name": "changed_at_ms",
+      "kind": "scalar",
+      "T": "3"
+    }
+  ],
+  "GrokBotTranscriptWatchFrame": [
+    {
+      "no": 1,
+      "name": "connected",
+      "kind": "message",
+      "T": "sUe"
+    },
+    {
+      "no": 2,
+      "name": "rows",
+      "kind": "message",
+      "T": "aUe"
+    },
+    {
+      "no": 3,
+      "name": "cleared",
+      "kind": "message",
+      "T": "oUe"
+    },
+    {
+      "no": 4,
+      "name": "cursor_too_old",
+      "kind": "message",
+      "T": "lUe"
+    },
+    {
+      "no": 5,
+      "name": "heartbeat",
+      "kind": "message",
+      "T": "uUe"
+    },
+    {
+      "no": 6,
+      "name": "agent_state",
+      "kind": "message",
+      "T": "fUe"
+    },
+    {
+      "no": 7,
+      "name": "computer_actions",
+      "kind": "message",
+      "T": "gUe"
+    },
+    {
+      "no": 8,
+      "name": "agent_state_changed",
+      "kind": "message",
+      "T": "hUe"
+    }
   ]
 }
