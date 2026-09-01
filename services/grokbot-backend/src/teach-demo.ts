@@ -75,8 +75,21 @@ export async function batDauQuayDemo(agentId: string): Promise<{ ok: boolean; ly
    * `-nostdin` là thứ đã cứu một lần: ffmpeg chạy nền mà còn đọc stdin sẽ nuốt phím của tiến trình
    * khác và tự dừng giữa chừng. `setsid` để nó sống qua lệnh exec này.
    */
-  const lenh = `mkdir -p ${thuMuc} && cd ${thuMuc} && DISPLAY=:77 setsid ffmpeg -nostdin -y `
-    + `-f x11grab -framerate 10 -i :77 -c:v libx264 -preset ultrafast -pix_fmt yuv420p `
+  /*
+   * `-video_size` LẤY TỪ MÀN HÌNH, không để ffmpeg tự đoán.
+   *
+   * Bỏ nó ra thì x11grab mặc định 640x480 và quay đúng một góc trên-trái. Đo bằng lượt thật 01/09:
+   * bot xem video xong báo lại "121 giây, 640x480, bitrate 16 kb/s, cả 6 khung hình y hệt nhau" —
+   * trong khi màn hình box là 1920x1080 và người làm mẫu thao tác ở giữa màn hình. Video có, dung
+   * lượng có, và không chứa buổi demo.
+   *
+   * Đọc `xdpyinfo` mỗi lần thay vì đóng cứng 1920x1080: box khác có thể dựng Xvfb kích thước khác,
+   * và một con số đóng cứng sai thì lại ra đúng loại video rỗng ruột này.
+   */
+  const lenh = `mkdir -p ${thuMuc} && cd ${thuMuc} && `
+    + `SZ=$(DISPLAY=:77 xdpyinfo 2>/dev/null | awk '/dimensions:/{print $2}') && `
+    + `SZ=\${SZ:-1920x1080} && DISPLAY=:77 setsid ffmpeg -nostdin -y `
+    + `-f x11grab -framerate 10 -video_size $SZ -i :77 -c:v libx264 -preset ultrafast -pix_fmt yuv420p `
     + `demo.mp4 > ffmpeg.log 2>&1 < /dev/null & sleep 2; pgrep -f "x11grab" | head -1`;
   const r = await sh(lenh, 40_000);
   if (!r.stdout.trim()) return { ok: false, lyDo: "ffmpeg không lên — xem ffmpeg.log trong thư mục phiên" };
@@ -109,7 +122,14 @@ export async function dungQuayDemo(): Promise<{ videoPath: string; giay: number 
   const giay = Number(r.stdout.trim()) || Math.round((Date.now() - p.batDauMs) / 1000);
   // Đường TƯƠNG ĐỐI gốc làm việc: `watch_video` chặn đường ngoài gốc, và bot đã một lần phải tự
   // copy file lòng vòng vì chuyện đó.
-  const tuongDoi = p.videoPath.replace("$HOME/workspace/", "");
+  /*
+   * Trả đường dẫn ĐÃ BỎ `$HOME` — chuỗi đó chưa được shell nở khi nó nằm trong biến của Node.
+   *
+   * Đo 01/09: bot nhận đường dẫn còn nguyên `$HOME/workspace/teach/…`, `watch_video` không mở được,
+   * và nó phải tự đi dò ("Thư mục không nằm ở $HOME, mình tìm lại đường dẫn thật"). Nó tìm ra, nhưng
+   * đó là một vòng lãng phí cho một chuỗi lẽ ra phải sạch ngay từ đây.
+   */
+  const tuongDoi = p.videoPath.replace(/^\$HOME\/workspace\//, "");
   console.log(`[grokbot2] [teach-video] dừng: ${tuongDoi}, ${giay}s`);
   return { videoPath: tuongDoi, giay };
 }
@@ -171,7 +191,13 @@ export const NOI_DUNG_SKILL = [
   "## 5. Báo lại",
   "",
   "Tóm tắt các bước đã học thành danh sách ngắn, nói rõ cái nào là INPUT, và nhắc người dùng gõ `/`",
-  "để gọi lại. Đừng tự chạy nó khi chưa ai nhờ.",
+  "để gọi lại.",
+  "",
+  "Rồi MỜI chạy thử, với chính giá trị họ vừa dùng trong demo — một câu, không widget:",
+  '"Muốn chạy thử với `nến thơm` không?" App gốc kết đúng như vậy.',
+  "",
+  "Mời thôi, đừng tự chạy: bài học vừa viết ra chưa ai kiểm, và một skill sai chạy ngay lần đầu thì",
+  "hỏng việc trước khi người dùng kịp đọc nó.",
 ].join(String.fromCharCode(10));
 
 /**

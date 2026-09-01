@@ -73,3 +73,11 @@ test("không có box thì không quay, và nói ra vì sao", async () => {
     if (cu2 != null) process.env.GROKBOT2_COMPUTER_URL = cu2;
   }
 });
+
+test("mời chạy thử với giá trị trong demo, và KHÔNG tự chạy", () => {
+  // App gốc kết ca học-từ-demo bằng đúng một câu: "Muốn chạy thử với nến thơm không?"
+  assert.match(NOI_DUNG_SKILL, /MỜI chạy thử/);
+  assert.match(NOI_DUNG_SKILL, /một câu, không widget/);
+  // Bài học vừa viết chưa ai kiểm; chạy ngay là hỏng việc trước khi người dùng kịp đọc nó.
+  assert.match(NOI_DUNG_SKILL, /đừng tự chạy/);
+});
