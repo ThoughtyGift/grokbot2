@@ -14,15 +14,16 @@ trong nó là nhật ký của cả chặng 4 → 8; thứ tự mục là 3 → 
 ## 1 · Hôm nay đang ở đâu
 
 Backend nói được **148/147** lệnh của hợp đồng 0.30, client không còn đường nào nhận 404, bot điều
-khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc **21/23** ca đo
-được. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang tắt**.
+khiển được **cả box Linux lẫn máy Windows thật** của người dùng, và bám app gốc với **2 ca lệch ổn
+định** trên 23 ca. Phần chưa làm gần như trọn vẹn nằm sau các cờ tính năng mà **chính client đang
+tắt**.
 
 ```
 lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 đều client tự tắt
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
 mã             72 file test · 82 file nguồn · 529 bài xanh · typecheck sạch
-parity         21/23 — số đo NGÀY 29/08, chưa tái lập: bài đo hỏng từ d1edf23, sửa 31/08 chưa chạy lại
+parity         2 ca lệch ỔN ĐỊNH (case 1, 3) — đo 01/09; 14 ca ổn định đúng, 7 ca chưa đủ dữ liệu
 bản vá client  6 bản, `--verify` còn nguyên
 ```
 
@@ -84,9 +85,28 @@ Phần còn thiếu không nằm ở *danh sách lệnh* mà ở *hình dạng l
 
 ## 4 · Bám app gốc
 
-`22/23` ca khớp (đo 01/09, 3 lượt đầy đủ 69/69). Ca duy nhất còn lệch là case 10 — và nó là cái giá của một tính năng vừa thêm, xem cuối mục. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
-vặn cho bot mời chọn nhiều hơn thì ca "biết edit video" khá lên và ca "tự đăng ký giúp" hỏng, vặn
-ngược lại thì ngược lại.
+**Số đo hiện hành — 01/09, `parity-lap --lan 3`:** 2 ca lệch **ổn định**, 14 ca ổn định đúng, 7 ca
+**chưa đủ dữ liệu**.
+
+| | ca | mong đợi | ta | đọc là |
+|---|---|---|---|---|
+| lệch | **1** · *"bản moi nhất grok bpot có tinh năng nào mới"* | không mời chọn | **3/3 mời chọn** | ổn định THỪA |
+| lệch | **3** · *"The recording is finished. Learn the task from it."* | không mời chọn | **2/2 mời chọn** | ổn định THỪA |
+| đã chữa | **10** · *"buid cho mình dàn bot"* | không mời chọn | 0/2 | ổn định đúng |
+| đã chữa | **6** · *"Partner ID … lấy ở đâu"* | mời chọn | 2/2 | ổn định đúng |
+| bỏ ngỏ | **9, 12, 14, 15, 17, 21, 22** | — | 1/2 | dao động |
+
+Case 10 là câu trả lời cho dòng "đã chỉnh lời dặn, chưa đo lại" của bản trước: **bản chỉnh có tác
+dụng**. Case 3 thì đáng chú ý vì nó là chính luồng *teach a task* — sau khi bản ghi kết thúc, app gốc
+học rồi làm, còn ta hỏi thêm một câu.
+
+**Đọc con số này cho đúng.** Mẫu số phần lớn là **2**, không phải 3: lượt 1 cạn hạn mức sau 2 ca, nên
+chỉ case 1 có đủ ba lượt. Với hai lượt thì "1/2" nằm đúng giữa và không phân biệt được nhiễu với tín
+hiệu — đó là lý do 7 ca ghi "chưa đủ dữ liệu" thay vì bị đếm thành lệch. Và con số 2 này **không so
+trừ được** với "21/23" hay "22/23" của các bản trước: §7 đã trả giá cho chuyện đó — hai lần đo cùng ra
+"4 ca lệch" nhưng là hai tập hợp khác hẳn.
+
+Lịch sử vặn lời nhắc dưới đây giữ lại vì nó giải thích vì sao case 6 và 10 hết lệch:
 
 | vòng | đổi gì | lệch ổn định |
 |---|---|---|
