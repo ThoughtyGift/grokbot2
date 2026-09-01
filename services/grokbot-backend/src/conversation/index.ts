@@ -85,11 +85,39 @@ export function nextTranscriptOrdered(agentId: string) {
 
 const numbered = (agentId: string | undefined, all: Entry[]) => stampSeq(agentId, all, persist);
 
+/*
+ * Entry gửi cho CLIENT GỐC: `replyTo` phải là một STRING id, không phải object.
+ *
+ * Đo 01/09. Backend nhận tham chiếu đúng — entry `e13969` mang
+ * `replyTo: {entryId:"e13968", author:"New Bot", excerpt:"Ảnh chưa tới được…"}` — mà client vẫn vẽ
+ * `↩ (deleted)`. Renderer 0.30 nói vì sao, ngay trong một dòng:
+ *
+ *     replyToId == null ? {} : { replyTo: e.replyToId }
+ *
+ * Với nó, `replyTo` LÀ id; nó tự tra tin gốc trong danh sách đang giữ, và "(deleted)" là câu nó nói
+ * khi tra không ra. Ta đưa một object vào chỗ chờ một chuỗi, nên nó không tra được gì cả.
+ *
+ * Gửi kèm `replyToId` (tên renderer dùng 55 lần) để khỏi phụ thuộc vào việc nó đọc tên nào.
+ *
+ * Object đầy đủ VẪN ở lại trong bản ghi nội bộ, và đó là cố ý: `historyFor` cần `author` +
+ * `excerpt` để dựng dòng "[trả lời tin của X: …]" cho model, còn `api-contract` của FE riêng cố
+ * tình mang object để FE khỏi tra ngược khi tin gốc đã rơi khỏi cửa sổ 150 entry. Ba nơi, ba shape
+ * — chỗ này chỉ đổi shape ở cửa ra `/gw`.
+ */
+type CoSeq = Entry & { seq: number };
+const choClientGoc = (e: CoSeq): CoSeq => {
+  const rt = (e as { replyTo?: { entryId: string } }).replyTo;
+  // Cast qua `unknown`: shape ra dây KHÁC `Entry` đúng ở một trường, và nói thật điều đó bằng một
+  // cast hẹp thì rõ hơn là dựng một kiểu song song chỉ để lệch một chỗ.
+  return rt ? ({ ...e, replyTo: rt.entryId, replyToId: rt.entryId } as unknown as CoSeq) : e;
+};
+
 export function latestEntry(agentId: string): (Entry & { seq: number }) | null {
   const all = transcripts.get(agentId) ?? [];
   if (!all.length) return null;
   const withSeq = numbered(agentId, all);
-  return withSeq[withSeq.length - 1] ?? null;
+  const cuoi = withSeq[withSeq.length - 1];
+  return cuoi ? choClientGoc(cuoi) : null;
 }
 
 const PAGE = 200;
@@ -109,7 +137,7 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
     if (at >= 0) end = at;
   }
   const start = Math.max(0, end - limit);
-  const entries = withSeq.slice(start, end);
+  const entries = withSeq.slice(start, end).map(choClientGoc);
   return {
     reachable: true,
     entries,

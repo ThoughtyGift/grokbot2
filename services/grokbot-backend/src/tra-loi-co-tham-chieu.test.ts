@@ -100,3 +100,46 @@ test("replyToEntryId vẫn chạy — caller nội bộ đang dùng tên đó", 
   const tinNguoi = tail(a).find((e) => e.kind === "message" && (e as { role?: string }).role === "user");
   assert.equal((tinNguoi as { replyTo?: { entryId: string } }).replyTo?.entryId, "e-goc-4");
 });
+
+/*
+ * ── Shape RA DÂY cho client gốc: `replyTo` là STRING id ─────────────────────────────────────────
+ *
+ * Đo 01/09: backend nhận tham chiếu đúng và bản ghi mang object đầy đủ, mà client vẫn vẽ
+ * `↩ (deleted)`. Renderer 0.30 nói vì sao, trong một dòng:
+ *
+ *     replyToId == null ? {} : { replyTo: e.replyToId }
+ *
+ * Với nó `replyTo` LÀ id; "(deleted)" là câu nó nói khi tra tin gốc không ra. Ta đưa object vào chỗ
+ * chờ một chuỗi nên nó không tra được gì.
+ *
+ * Ba nơi ba shape, và đó là cố ý: bản ghi nội bộ giữ object (model cần `author` + `excerpt`),
+ * `api-contract` của FE riêng cũng giữ object (FE khỏi tra ngược khi tin gốc rơi khỏi cửa sổ 150
+ * entry), còn cửa `/gw` trả string. Bài này khoá cửa `/gw`.
+ */
+test("cửa /gw trả replyTo là string id, kèm replyToId", async () => {
+  const { transcriptTail } = await import("./conversation/index.js");
+  const a = botThu();
+  tail(a).push({ id: "e-goc-9", kind: "send-message", author: { id: a, name: "bot" },
+    message: { type: "text", content: "câu hỏi gốc" }, timestampMs: Date.now() } as never);
+  sendPrompt({ agentId: a, content: "trả lời", replyToId: "e-goc-9" } as never);
+
+  const raDay = transcriptTail({ id: a, limit: 20 }).entries.find(
+    (e: { replyTo?: unknown }) => e.replyTo != null,
+  ) as { replyTo?: unknown; replyToId?: unknown } | undefined;
+  assert.ok(raDay, "phải có entry mang tham chiếu");
+  assert.equal(typeof raDay.replyTo, "string", "client chờ một chuỗi id, không phải object");
+  assert.equal(raDay.replyTo, "e-goc-9");
+  assert.equal(raDay.replyToId, "e-goc-9");
+});
+
+test("bản ghi NỘI BỘ vẫn giữ object — model cần author và excerpt", () => {
+  const a = botThu();
+  tail(a).push({ id: "e-goc-10", kind: "send-message", author: { id: a, name: "bot" },
+    message: { type: "text", content: "câu hỏi gốc" }, timestampMs: Date.now() } as never);
+  sendPrompt({ agentId: a, content: "trả lời", replyToId: "e-goc-10" } as never);
+  const trong = tail(a).find((e) => (e as { replyTo?: unknown }).replyTo != null) as
+    { replyTo?: { entryId?: string; author?: string; excerpt?: string } };
+  assert.equal(typeof trong.replyTo, "object", "đổi shape ở cửa ra, KHÔNG đổi trong bản ghi");
+  assert.equal(trong.replyTo?.entryId, "e-goc-10");
+  assert.ok(String(trong.replyTo?.excerpt ?? "").length > 0);
+});
