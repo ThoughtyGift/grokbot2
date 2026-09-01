@@ -156,11 +156,14 @@ const daMoDungBot = async () => {
    * được, và khi nó gọn thì guard luôn trả `false` — script bấm đúng bot rồi vẫn kết luận "không mở
    * được", bỏ cả lượt đo. Ngày 31/08 lượt 2 và 3 chết đúng kiểu đó, còn lượt 1 thì chạy.
    *
-   * `[aria-selected="true"][data-agent-id]` là thứ app tự dùng để tô hàng đang mở, nên nó đúng bất
-   * kể panel phải bật hay tắt, và so id thì không sợ hai bot trùng tên.
+   * Thuộc tính đúng là `data-active="true"` (app còn đặt kèm `aria-current="page"`) — đo 01/09 bằng
+   * cách in RA mọi thuộc tính của hàng sidebar. Bản vá 31/08 dùng `aria-selected`, thứ app **không
+   * đặt**, nên `theoId` luôn `null` và mọi lượt vẫn rơi về đúng cái nhãn panel thu-gọn-được mà bản
+   * vá ấy định thay: guard trông như đã sửa mà chưa từng chạy một lần. Đây là guard thứ BA cho cùng
+   * một việc, và là lần đầu được đo thay vì đoán.
    */
   const theoId = await js(
-    "(() => { const el = document.querySelector('[aria-selected=\"true\"][data-agent-id]');"
+    "(() => { const el = document.querySelector('[data-agent-id][data-active=\"true\"]');"
     + " return el ? el.getAttribute('data-agent-id') : null; })()",
   );
   if (theoId) return theoId === bot.id;

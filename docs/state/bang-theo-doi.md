@@ -142,6 +142,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 7 · Lên client 0.29 | chạy tốt hơn dự đoán; bộ vá chuyển sang xong |
 | 9 · Skill trong menu `/` | 14 lệnh workflow hết stub; dạy xong gõ `/` là bot làm — đo end-to-end |
 | 10 · OBS trên box | AppImage 32.2.2 chạy không cần root, quay ra h264 720p + aac |
+| 11 · Trả lời tin (reply) | đo cả hai vế 01/09: dây 1/1 đạt, màn hình vẽ đúng nội dung tin gốc cắt ở 96 ký tự, `(deleted)` hết. Ba điều kiện của client: [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §6 |
 | 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
@@ -190,8 +191,15 @@ của nhiều lần đo độc lập. Tôi đã kết luận sai một lần vì
 bằng chuỗi `"<tên bot>'s screen"` — nhãn của panel PHẢI. Panel đó thu gọn được, và khi nó gọn thì
 guard luôn trả `false`: script bấm đúng bot rồi vẫn kết luận "không mở được" và bỏ cả lượt. Ngày
 31/08 lượt 1 chạy, lượt 2 và 3 chết đúng kiểu đó, và thông báo lỗi ("không mở được sau 6 lần bấm")
-chỉ đường sang chuyện khác. Nay guard so `[aria-selected="true"][data-agent-id]` với **id** bot —
-thứ app tự dùng để tô hàng đang mở, đúng bất kể panel bật hay tắt, và không sợ hai bot trùng tên.
+chỉ đường sang chuyện khác.
+
+Bản vá 31/08 đổi sang `[aria-selected="true"][data-agent-id]` và **cũng sai** — app không đặt
+`aria-selected` bao giờ, nên biểu thức luôn trả `null` và mọi lượt vẫn rơi về đúng cái nhãn panel
+thu-gọn-được mà bản vá ấy định thay. Guard trông như đã sửa suốt một ngày mà chưa từng chạy một lần.
+Thuộc tính thật là **`data-active="true"`** (kèm `aria-current="page"`), đo 01/09 bằng cách in RA mọi
+thuộc tính của hàng sidebar thay vì đoán tiếp. Bài học không phải "dùng data-active" mà là: **một
+guard chỉ đáng tin khi đã thấy nó trả TRUE một lần** — cả hai bản trước đều chỉ được kiểm ở nhánh
+sai, và nhánh dự phòng đã che mất chuyện đó.
 
 **Bài test ghi thẳng vào kho THẬT của người dùng.** `workflows.test.ts` gọi `create()` thật, hàm đó
 lưu xuống đĩa, và đường dẫn là `.data` của máy đang chạy — nên chạy `npx tsx --test` một lần là menu

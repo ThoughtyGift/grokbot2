@@ -114,3 +114,44 @@ Cách đo: rút mạng vài phút trong lúc một bot đang trả lời, nối 
 vào danh sách **chưa chắc chắn** từ trước — cùng một chỗ trống.
 
 Vá trước khi đo là dựng một cơ chế `generation` cho một cái bệnh chưa biết có tồn tại.
+
+## 6 · Khối trích dẫn trả lời: ba điều kiện, không phải một
+
+Trích 01/09 từ renderer 0.30. `(deleted)` không phải thông báo lỗi — nó là nhãn i18n `JKr1yF`, vẽ
+bởi nhánh `{kind:"missing"}` của preview. Đường đi đầy đủ:
+
+```js
+function f$t({targetId}) { … bT(resolveEntry(targetId)) … }      // component khối trích dẫn
+entryById = new Map(entries.map(e => [e.id, e]))                 // khoá là entry.id
+resolveEntry(id) → entryById.get(id) ?? null
+
+function bT(t) {
+  if (t == null) return {kind:"missing"};                         // → "(deleted)"
+  switch (t.kind) {
+    case "message":          return {kind: t.role==="user"&&t.fromAgent==null ? "user-text":"assistant-text", text:t.content};
+    case "send-message":     return zzt(t.message);
+    case "user-attachment":  return …;
+    case "tool-call": case "notice": case "event":
+    case "feedback": case "voice-call":  return {kind:"missing"}; // → CŨNG "(deleted)"
+  }
+}
+```
+
+Nên một tham chiếu trả lời chỉ vẽ đúng khi **cả ba** đều đạt:
+
+| # | điều kiện | hỏng thì thấy gì |
+|---|---|---|
+| ① | `replyTo` là **string id**, không phải object | `(deleted)` |
+| ② | trong **cùng cửa sổ transcript đang nạp** có entry `id === replyTo` | `(deleted)` |
+| ③ | entry đích có `kind ∈ {message, send-message, user-attachment}` | `(deleted)` |
+
+Điều kiện ② là chỗ đáng nhớ nhất: khối trích dẫn tra trong **tập entry client đang giữ**, nên một
+tin nằm ngoài cửa sổ tail vẫn ra `(deleted)` dù dây hoàn toàn đúng. Điều kiện ③ thì chưa từng nghĩ
+tới — trả lời một `tool-call` là `(deleted)` **theo thiết kế của hãng**, không phải lỗi.
+
+Chữ trong khối cắt ở **96 ký tự** (`lH("quote") = 96`), chip trong khung soạn cắt ở 56.
+
+**Đo 01/09, cả hai vế.** Trên dây: `e13969 kind=message · replyTo="e13968" (string) · tra được ·
+kind đích send-message` → 1/1 đạt. Trên màn hình app local: `sand-reply-quote__label` =
+`"Ảnh chưa tới được chỗ mình, mình chỉ thấy cái đường dẫn chứ không thấy nội dung sơ đồ. Bạn gửi…"`,
+đúng `e13968.message.content` cắt ở 96, và `(deleted)` không còn trên màn hình.
