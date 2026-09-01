@@ -51,6 +51,7 @@ Vì sao **không** thêm đường nâng quyền — đo từ chính daemon củ
 | cài phần mềm không cần root | ✅ | OBS 32.2.2 AppImage, glibc 2.31 nhận |
 | bot tự quay màn hình box | ✅ | một lượt thật: bot tự bật OBS, quay, đo file, gửi clip |
 | skill: dạy xong gõ `/` gọi lại | ✅ | menu `/` có mục thật; chọn → gửi `@tên` → bot làm |
+| teach a task qua GIAO DIỆN | ✅ | `e2e-teach.mjs` xanh 11/11 (01/09): nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật |
 | dựng đội: tên `<Miền> <Vai>` | ✅ | lượt thật: `Shopee CS · Kho · Ads · Kế toán`, phòng `Shopee Ops` |
 | dựng đội: mỗi con một lịch | ✅ | 4 routine, 4 bot con khác nhau, nhịp riêng theo vai |
 
@@ -257,6 +258,20 @@ một ca không đo được là bỏ cả lượt.
 
 **`callPool` KHÔNG bao giờ ném.** Hết hạn mức, mạng đứt, HTTP lỗi — tất cả về dạng
 `{ok:false, text:""}`. Viết `try/catch` quanh nó là bắt một thứ không tồn tại; phải đọc `r.ok`.
+
+**Lớp phủ của client bật TRƯỚC khi backend vũ trang.** `startTeach` đặt `active` chỉ SAU năm lượt
+`await cdpForAgent` tới Chrome của box qua hầm ssh, còn lớp phủ *"watching and learning"* là trạng
+thái của client nên nó hiện ngay lúc bấm. `e2e-teach.mjs` đọc `getTeachRecordingStatus` **một lần**
+ngay sau cú bấm, luôn trúng `IDLE`, và báo RED cho một sản phẩm đang chạy đúng — tôi mất một vòng
+chẩn đoán nhầm sang "app không gọi RPC" trước khi `coverage.lastArgs` nói ra sự thật. Hai điều rút
+ra: **trạng thái của client không phải trạng thái của backend**, và khoảng trống ấy là rủi ro thật
+của sản phẩm chứ không riêng của bài đo — thao tác diễn trong giây đầu sẽ không được ghi.
+
+**Bài đo đếm ở KHO CŨ sau khi sản phẩm đổi kho.** Cùng lượt đó, mốc "routine MỚI" đếm
+`getAgentAutomations` trong khi teach nay lưu thành *skill* (`getAgentWorkflows`, khoá `id` chứ không
+phải `agentId`). Kho cũ luôn `0 → 0`, nên bài đo nói "không tạo được" trong khi kho mới đã có bản ghi
+đúng giây `stopTeachRecording` tới. Một bài đo trỏ vào kho cũ thì **không bao giờ xanh lại được**, và
+nó tố cáo sản phẩm chứ không tố cáo chính nó.
 
 **Một trần dùng đúng chỗ, sai việc.** `readAttachmentChunk` — đường client nạp VIDEO qua scheme
 `sand-media://` — gọi `loadBytes`, và `loadBytes` đọc từ box với `length: TEXT_PREVIEW_CAP` (128 KB)

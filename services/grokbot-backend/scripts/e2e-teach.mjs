@@ -157,10 +157,42 @@ ok("bấm Start recording thì bắt đầu ghi", overlay);
  * `agentId` chỉ biết được LÚC ĐANG GHI — trạng thái rảnh trả `agentId: null`. Và số routine
  * phải đếm ở đây, sau khi bot đã được chọn, để hai đầu so sánh cùng một con bot.
  */
-const trangThai = await gw("getTeachRecordingStatus", {});
-const agentId = trangThai?.agentId ?? "";
+/*
+ * CHỜ backend vũ trang, đừng đọc một lần rồi kết luận.
+ *
+ * Lớp phủ "watching and learning" là trạng thái của CLIENT: nó hiện ngay khi bấm. Backend thì đặt
+ * `active` chỉ SAU năm lượt `await cdpForAgent` tới Chrome của box qua hầm ssh (`Runtime.enable`,
+ * `Page.enable`, `addBinding`, `addScriptToEvaluateOnNewDocument`, `evaluate`). Đọc một lần ngay sau
+ * cú bấm thì luôn trúng `IDLE`, và bài đo báo RED cho một sản phẩm đang chạy đúng — đo 01/09, mất
+ * một vòng chẩn đoán nhầm sang "app không gọi RPC" trước khi `coverage.lastArgs` nói ra sự thật:
+ * `startTeachRecording {"agentId":"agent-645","entryPoint":"composer_menu"}` tới đủ và đúng.
+ *
+ * Khoảng trống đó cũng là một rủi ro thật của sản phẩm, không chỉ của bài đo: thao tác diễn trong
+ * giây đầu — khi lớp phủ đã nói "đang học" mà binding chưa gắn — sẽ KHÔNG được ghi.
+ */
+let trangThai = null;
+let agentId = "";
+for (let cho = 0; cho < 25 && agentId === ""; cho += 1) {
+  trangThai = await gw("getTeachRecordingStatus", {});
+  agentId = trangThai?.agentId ?? "";
+  if (agentId === "") await page.waitForTimeout(400);
+}
 ok("backend đang ghi cho một bot cụ thể", agentId !== "", JSON.stringify(trangThai));
-const truoc = ((await gw("getAgentAutomations", { agentId })) ?? []).filter((a) => /Việc đã dạy/.test(a?.name ?? "")).length;
+
+/*
+ * Đếm SKILL, không phải routine.
+ *
+ * Đây là chỗ bài đo lạc hậu so với sản phẩm: bản teach cũ lưu kết quả thành một *routine*
+ * (`getAgentAutomations`), bản hiện tại lưu thành *skill* trong menu `/` (`getAgentWorkflows`, và
+ * client hỏi bằng khoá `id` chứ không phải `agentId` — đo từ `coverage.lastArgs`:
+ * `{"id":"agent-645"}`). Đếm ở kho cũ thì luôn ra `0 → 0`, và bài đo báo "không tạo được routine"
+ * trong khi kho mới đã có bản ghi đúng giây `stopTeachRecording` tới.
+ */
+const demSkill = async () => {
+  const ds = await gw("getAgentWorkflows", { id: agentId });
+  return Array.isArray(ds) ? ds.length : 0;
+};
+const truoc = await demSkill();
 
 // ── C · recorder có ở đúng tab người dùng nhìn thấy không ─────────────────────────────────────
 const box = await chromium.connectOverCDP(CDP_BOX, { timeout: 10_000 });
@@ -230,9 +262,20 @@ ok("lớp phủ đã tắt", await page.evaluate(() => !/watching and learning/i
  * ghi lúc nãy. Đây là khẳng định hẹp nhất mà vẫn đúng câu hỏi: "con bot vừa dạy có routine mới
  * chưa".
  */
-const sau = ((await gw("getAgentAutomations", { agentId })) ?? []).filter((a) => /Việc đã dạy/.test(a?.name ?? "")).length;
-ok("routine MỚI cho đúng bot vừa dạy", sau > truoc, `${agentId}: truoc ${truoc} → sau ${sau}`);
-if (sau > truoc) console.log("  ·    routine thu de lai — xoa tay neu khong muon giu");
+// Skill được ghi trong lượt `stopTeachRecording`, nhưng lượt đó cũng đi qua box (`finish()` gỡ
+// binding) — nên chờ vài nhịp thay vì đọc một lần, cùng lý do như chỗ vũ trang phía trên.
+let sau = truoc;
+for (let cho = 0; cho < 15 && sau <= truoc; cho += 1) {
+  sau = await demSkill();
+  if (sau <= truoc) await page.waitForTimeout(500);
+}
+ok("skill MỚI cho đúng bot vừa dạy", sau > truoc, `${agentId}: truoc ${truoc} → sau ${sau}`);
+if (sau > truoc) {
+  const ds = await gw("getAgentWorkflows", { id: agentId });
+  const moi = Array.isArray(ds) ? ds[ds.length - 1] : null;
+  console.log(`  ·    skill: "${moi?.name ?? "?"}" — ${String(moi?.instructions ?? "").replace(/\s+/g, " ").slice(0, 90)}`);
+  console.log("  ·    skill thu de lai — xoa tay neu khong muon giu");
+}
 
 // ── dọn ───────────────────────────────────────────────────────────────────────────────────────
 if (armed && restoreUrl && !/^about:/.test(restoreUrl)) {
