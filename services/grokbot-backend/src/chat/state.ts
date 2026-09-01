@@ -131,7 +131,26 @@ function migrate(e: any, agentName: string): Entry | null {
     if (empty) return null;
     if (e.message?.type === "text") e.message.content += "\n\n⏹ (bị ngắt giữa chừng)";
   }
-  if (e.kind === "message" || e.kind === "send-message" || e.kind === "tool-call") {
+  /*
+   * MỌI kind của `Entry` phải có mặt ở đây — thiếu một cái là XOÁ nó khỏi bản ghi.
+   *
+   * Bug đo được 01/09, và nó im lặng suốt: hàm này nạp bản ghi từ đĩa lúc backend lên, và bất cứ
+   * entry nào không khớp danh sách thì trả `null` rồi bị `.filter()` loại. Danh sách cũ có ba kind;
+   * `user-attachment` (thêm 31/08), `notice` và `event` đều không có. Hệ quả:
+   *
+   *     kind trong `Entry`:  message · send-message · tool-call · user-attachment · notice · event
+   *     kind trong SQLite:   send-message 394 · tool-call 275 · message 111 · (không cái nào khác)
+   *
+   * Nên ảnh người dùng gửi được ghi đúng vào DB rồi biến mất ở lần khởi động kế tiếp — và hôm nay
+   * `tsx watch` nạp lại hàng chục lần vì tôi sửa `src` liên tục, nên nó mất gần như tức thì. Biểu
+   * hiện trên màn hình: một khoảng trống chỗ đáng ra là thumbnail, và bot nói "ảnh chưa tới chỗ
+   * mình" — trong khi ảnh có thật, kho ảnh lành, và đường tới model cũng lành.
+   *
+   * Đây là lý do một danh sách trắng theo tên kind là kiểu kiểm tra tệ: thêm một kind ở `types.ts`
+   * không làm chỗ này đỏ, nó chỉ làm dữ liệu lặng lẽ rơi.
+   */
+  if (e.kind === "message" || e.kind === "send-message" || e.kind === "tool-call"
+    || e.kind === "user-attachment" || e.kind === "notice" || e.kind === "event") {
     if (Array.isArray(e.reactions)) {
       e.reactions = e.reactions
         .map((r: any) => (typeof r === "string" ? { emoji: r, by: ME } : r))
