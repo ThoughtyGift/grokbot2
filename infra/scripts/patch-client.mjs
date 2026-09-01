@@ -171,6 +171,16 @@ if (mode === "--verify") {
   try {
     const pkg = JSON.parse(readFileSync(join(APP_UNPACKED, "package.json"), "utf8"));
     pkg.name === "sand" ? ok('package.json name is "sand" (userData intact)') : fail(`package.json name is "${pkg.name}", must be "sand" — userData would move`);
+    /*
+     * `sandLab` phải còn đó, và đây là chốt duy nhất nhìn thấy nếu nó mất.
+     *
+     * Không như sáu bản vá kia, khoá này không để lại marker trong một file JS nào, nên vòng kiểm
+     * `PATCHES` bên dưới hoàn toàn không biết nó tồn tại. Mất khoá thì `--verify` vẫn xanh trong khi
+     * app đã có lại quyền tự cập nhật — đúng loại lỗ im lặng mà thư mục này sinh ra để chặn.
+     */
+    pkg.sandLab === true
+      ? ok("sandLab: true (updater bat dong o moi duong mo)")
+      : fail('package.json thieu "sandLab": true — app CO THE tu cap nhat va xoa sach ban va; chay lai --apply');
   } catch { fail("cannot read resources/app/package.json"); }
 
   for (const p of PATCHES) {
@@ -346,6 +356,41 @@ ${chk.stderr}`); process.exit(1); }
     console.error(`  ${p.summary}`);
     console.error("  The vendor bundle changed. Re-locate the function and add a variant — do not patch blind.");
     process.exit(1);
+  }
+}
+
+/*
+ * `sandLab: true` — chặn tự cập nhật KHÔNG phụ thuộc biến môi trường.
+ *
+ * Vì sao đây là một bước riêng chứ không phải bản vá thứ bảy trong `PATCHES`: vòng trên chạy
+ * `node --check` lên mọi file nó vừa ghi, và `package.json` không phải JS — nó sẽ đỏ ở chính chỗ
+ * kiểm an toàn. Và dòng ngay dưới trong `--verify` đã ghi luật "package.json must stay verbatim"
+ * vì `name` quyết định thư mục userData; sửa file này bằng find/replace mù là cách làm sai hình
+ * dạng. Đọc JSON, đặt đúng một khoá, ghi lại — không đụng khoá nào khác.
+ *
+ * Cổng thật, trích 02/09 từ `electron-main` 0.30:
+ *
+ *     aye = yWe.sandLab === true                    // yWe = package.json của chính gói
+ *     computeUpdateDisabledReason: n.isLabBuild ? "lab-build" : …   ← KHÔNG đọc process.env
+ *
+ * Cách cũ (`SAND_DISABLE_UPDATES=1`) chỉ giữ khi app mở qua shortcut của launcher; bấm đúp thẳng
+ * vào `.exe` là app tự cập nhật và xoá sạch `resources/app`. Và không đặt toàn cục được vì
+ * `CURSOR_API_BASE_URL` bị Cursor IDE thật đọc chung. Khoá này đóng lỗ đó ở MỌI đường mở.
+ *
+ * Tác dụng phụ đã kê đủ 20 chỗ dùng `isLabBuild` (0 chỗ trong renderer) —
+ * xem `docs/reverse/spike-findings.md`. Đáng nhớ nhất: nó cũng tắt bước DỜI GỐC DỮ LIỆU
+ * (`route:"unchanged", reason:"lab"`), nên app giữ nguyên gốc đang dùng thay vì tự dời.
+ */
+{
+  const pkgPath = join(staging, "package.json");
+  const raw = readFileSync(pkgPath, "utf8");
+  const pkg = JSON.parse(raw);
+  if (pkg.sandLab === true) ok("sandLab: da bat san trong bundle nay");
+  else {
+    pkg.sandLab = true;
+    // Giữ đúng 2 dấu cách + xuống dòng cuối như bundle của hãng, để `diff` chỉ hiện MỘT dòng thêm.
+    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+    ok('sandLab: dat true — updater bat dong o moi duong mo (khong can SAND_DISABLE_UPDATES)');
   }
 }
 

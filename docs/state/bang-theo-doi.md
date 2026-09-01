@@ -192,7 +192,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 5 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | ~~Cơ chế `generation` / `CursorTooOld`~~ **hạ ưu tiên 02/09** | client tra tail 198.691 lượt với `limit:500`, ta trả đủ → nhịp tra kế tiếp tự lấp | chỉ còn hở khi mất kết nối mà bản ghi mọc **>500 entry** — xem [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §7 |
-| 8 | Tự cập nhật client | đã moi xong cơ chế, chưa dựng | — |
+| 8 | Tự cập nhật client | **chặn: xong trong bộ vá, CHƯA áp lên `C:\cai029`** · kênh của mình: chưa dựng | `--verify` đang báo đỏ đúng một dòng: thiếu `sandLab` |
 | ~~9~~ | ~~Sáu trường bỏ qua~~ **ĐÓNG 02/09** | cả sáu đều không có hệ quả đo được: `branched` không ai đọc, khoá gốc luồng là chuyện nội bộ client | [§8 + §8b](../extracted/0-30-transcript-watch.md) |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
