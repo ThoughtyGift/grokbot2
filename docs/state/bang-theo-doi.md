@@ -22,7 +22,7 @@ tắt**.
 lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 đều client tự tắt
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
-mã             72 file test · 82 file nguồn · 529 bài xanh · typecheck sạch
+mã             74 file test · 82 file nguồn · 587 bài xanh · typecheck sạch (đo 01/09)
 parity         2 ca lệch ỔN ĐỊNH (case 1, 3) — đo 01/09; 14 ca ổn định đúng, 7 ca chưa đủ dữ liệu
 bản vá client  6 bản, `--verify` còn nguyên
 ```
@@ -123,9 +123,9 @@ không đi vào chuỗi nào. Ba vòng vặn luật văn xuôi trước đó là
 bản mô tả chính xác nhất của nó nằm cách đó mười dòng và chưa bao giờ được gửi đi.
 
 Vòng 6 thêm vế ngược, vì vòng 5 chữa hết THIẾU nhưng sinh THỪA — dạy "khi nào mời chọn" mà không
-dạy "khi nào thôi" thì được đúng một nửa. Ca lệch duy nhất còn lại (case 10 · "dựng dàn bot") là
-cái giá của bước đặt lịch vừa thêm: bot ta hỏi bằng widget, app gốc hỏi bằng một câu thường. Đã
-chỉnh lời dặn cho khớp, chưa đo lại.
+dạy "khi nào thôi" thì được đúng một nửa. Ca lệch của vòng đó (case 10 · "dựng dàn bot") là cái giá
+của bước đặt lịch vừa thêm: bot ta hỏi bằng widget, app gốc hỏi bằng một câu thường. Lời dặn đã chỉnh,
+và **lượt đo 01/09 xác nhận nó hết lệch** (0/2) — xem bảng đầu mục.
 
 Vòng 4 là lần đầu đo TRỌN bộ (23 ca × 3 lượt, 69/69 có trả lời). Nó cũng dạy cách đọc con số: bản
 có hàm ấy ra 4 ca lệch (5, 6, 15 thiếu · 7 thừa), bản đã tắt cũng ra 4 — nhưng là (6, 11, 15 thiếu ·
