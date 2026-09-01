@@ -214,7 +214,11 @@ cái client tự tắt" mới quyết định được.
 ## 8 · Chưa chắc chắn
 
 - **Mất mạng:** lịch sử chắc chắn đọc được (SQLite cục bộ), nhưng **chưa thử rút mạng** xem app có
-  boot trọn không.
+  boot trọn không. Trích 01/09 cho thấy app gốc có hẳn một cơ chế cho chuyện này mà ta không có —
+  `generation` + `CursorTooOld` + cờ `replay` để client biết nó đã bỏ lỡ gì:
+  [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md). Chưa vá, vì chưa biết hệ quả
+  trên màn hình là gì — kể cả khả năng client tự xử được nhờ gọi `getAgentTranscriptTail` mỗi lần mở
+  lại một bot.
 - **Cloudflare có nhận ra Chrome của mình không** — chưa thử trang thật.
 - **Tên binary cưỡng chế sandbox của hãng** — hàm trả đường dẫn bị minify, chưa truy ra.
 - **Box của HÃNG** — chỉ đo được box của mình (`gb2u003`, không root, `sudo` đòi mật khẩu, có
