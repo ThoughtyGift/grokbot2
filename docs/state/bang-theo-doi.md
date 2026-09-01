@@ -142,7 +142,7 @@ riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ kh
 | 7 · Lên client 0.29 | chạy tốt hơn dự đoán; bộ vá chuyển sang xong |
 | 9 · Skill trong menu `/` | 14 lệnh workflow hết stub; dạy xong gõ `/` là bot làm — đo end-to-end |
 | 10 · OBS trên box | AppImage 32.2.2 chạy không cần root, quay ra h264 720p + aac |
-| 11 · Trả lời tin (reply) | đo cả hai vế 01/09: dây 1/1 đạt, màn hình vẽ đúng nội dung tin gốc cắt ở 96 ký tự, `(deleted)` hết. Ba điều kiện của client: [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §6 |
+| 11 · Trả lời tin (reply) | E2E trọn vòng 01/09: bấm Reply trong app → pill hiện đúng nội dung → gửi → tin mới mang khối trích dẫn, `(deleted)` hết. Dây 4/4, kể cả câu trả lời của bot cũng mang tham chiếu. Bài đo: `scripts/e2e-reply.mjs` + `scripts/do-reply-day.mjs`. Ba điều kiện của client: [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §6 |
 | 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
@@ -200,6 +200,20 @@ Thuộc tính thật là **`data-active="true"`** (kèm `aria-current="page"`), 
 thuộc tính của hàng sidebar thay vì đoán tiếp. Bài học không phải "dùng data-active" mà là: **một
 guard chỉ đáng tin khi đã thấy nó trả TRUE một lần** — cả hai bản trước đều chỉ được kiểm ở nhánh
 sai, và nhánh dự phòng đã che mất chuyện đó.
+
+**Bốn selector đoán, bốn lần sai — cách chữa là IN RA rồi đọc.** Đo E2E Reply ngày 01/09 vấp đúng
+bốn lần, mỗi lần một chỗ khác: hàng đang mở (`aria-selected` → thật là `data-active`), bong bóng tin
+(tiêu chí "phần tử nhiều chữ" bắt vào panel PHẢI — *"Routines are recurring tasks…"* — rồi vào hàng
+sidebar), hàng transcript (thật là `[data-row-key]`), và nhãn nút Reply (thật là
+**`"Reply to <tên bot> message"`**, có tên bot BÊN TRONG nhãn, nên khớp chính xác `"reply"` trượt).
+Cả bốn chỉ mất vài phút khi đổi cách: đếm mọi thuộc tính `data-*` trên trang, và hover từng hàng rồi
+**so danh sách nhãn nút trước/sau** — thanh công cụ tự nói ra nó có gì. Hàng của bot mọc ra ba nút,
+hàng của người dùng mọc ra 0.
+
+**`Runtime.evaluate` nuốt lỗi im lặng.** Một biểu thức sai cú pháp không trả lỗi: `result.value` là
+`undefined`, rồi `JSON.parse` ngã ở dòng khác với thông báo `"undefined" is not valid JSON` — chỉ
+đường sang chuyện khác. Phải đọc `result.exceptionDetails` và ném ngay tại chỗ. Lần này nó che một
+dấu `)` thừa.
 
 **Bài test ghi thẳng vào kho THẬT của người dùng.** `workflows.test.ts` gọi `create()` thật, hàm đó
 lưu xuống đĩa, và đường dẫn là `.data` của máy đang chạy — nên chạy `npx tsx --test` một lần là menu
