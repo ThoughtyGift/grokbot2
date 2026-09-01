@@ -76,7 +76,7 @@ không gọi một dòng nào.
 
 ## 4 · Bám app gốc
 
-`21/23` ca khớp — số này là GIAO của nhiều lần đo, không phải kết quả một lượt. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
+`22/23` ca khớp (đo 01/09, 3 lượt đầy đủ 69/69). Ca duy nhất còn lệch là case 10 — và nó là cái giá của một tính năng vừa thêm, xem cuối mục. Hai ca còn lệch là hai **đầu đối nghịch của cùng một cái núm**:
 vặn cho bot mời chọn nhiều hơn thì ca "biết edit video" khá lên và ca "tự đăng ký giúp" hỏng, vặn
 ngược lại thì ngược lại.
 
@@ -86,6 +86,18 @@ ngược lại thì ngược lại.
 | 2 | thêm "việc cụ thể thì phải đi TRA" | 3 |
 | 3 | thu hẹp còn "hỏi mình CÓ CÔNG CỤ gì" | 3 |
 | 4 | dữ kiện "mảng này đã mở chưa" (`nguCanhMoiChon`) | 4 → **đã tắt** |
+| 5 | ba VÍ DỤ thật đưa vào lời nhắc (trước nằm trong chú thích) | 5 — hết THIẾU, sinh THỪA |
+| 6 | thêm vế NGƯỢC ("biết bước tiếp thì làm, đừng hỏi") | **1** ← bản hiện tại |
+
+Vòng 5 mới là chỗ đổi cục diện, và nó buồn cười: bốn ví dụ mô tả chính xác luật ĐÃ nằm trong
+`tools.ts` từ lâu — trong một khối chú thích. Người đọc code thấy; model thì không, vì chú thích
+không đi vào chuỗi nào. Ba vòng vặn luật văn xuôi trước đó là ba lần diễn đạt lại một quy tắc mà
+bản mô tả chính xác nhất của nó nằm cách đó mười dòng và chưa bao giờ được gửi đi.
+
+Vòng 6 thêm vế ngược, vì vòng 5 chữa hết THIẾU nhưng sinh THỪA — dạy "khi nào mời chọn" mà không
+dạy "khi nào thôi" thì được đúng một nửa. Ca lệch duy nhất còn lại (case 10 · "dựng dàn bot") là
+cái giá của bước đặt lịch vừa thêm: bot ta hỏi bằng widget, app gốc hỏi bằng một câu thường. Đã
+chỉnh lời dặn cho khớp, chưa đo lại.
 
 Vòng 4 là lần đầu đo TRỌN bộ (23 ca × 3 lượt, 69/69 có trả lời). Nó cũng dạy cách đọc con số: bản
 có hàm ấy ra 4 ca lệch (5, 6, 15 thiếu · 7 thừa), bản đã tắt cũng ra 4 — nhưng là (6, 11, 15 thiếu ·

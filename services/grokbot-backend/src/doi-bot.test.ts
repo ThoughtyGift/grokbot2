@@ -55,3 +55,11 @@ test("cấm đúng bốn thứ làm tên khó đọc trong hàng hẹp", async (
   const { LUAT_DAT_TEN } = await import("./doi-bot.js");
   for (const c of [/`Bot`/, /đánh số/, /`&`/, /ĐƠN HÀNG/]) assert.match(LUAT_DAT_TEN, c);
 });
+
+test("ca dựng đội: hỏi bằng câu thường, KHÔNG widget", async () => {
+  const { BUOC_DAT_LICH } = await import("./doi-bot.js");
+  // Đo 01/09: dựng widget ở ca này là ca lệch DUY NHẤT còn lại so với app gốc (case 10 của bộ ca).
+  // App gốc kết bằng một câu: "Muốn mình chạy standup group mỗi sáng 8h thứ 2–6 không?"
+  assert.match(BUOC_DAT_LICH, /MỘT CÂU THƯỜNG/);
+  assert.match(BUOC_DAT_LICH, /đừng dựng widget/);
+});

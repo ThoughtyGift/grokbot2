@@ -49,6 +49,10 @@ export const BUOC_DAT_LICH = [
   "không phải cùng một giờ cho tất cả.",
   "",
   "Đừng tự đặt rồi báo sau: một cái lịch chạy mãi về sau, nên hỏi một câu trước khi tạo.",
+  "",
+  "Hỏi bằng MỘT CÂU THƯỜNG ở cuối câu trả lời, đừng dựng widget cho việc này. App gốc kết ca dựng",
+  'đội đúng như vậy: "Muốn mình chạy standup group mỗi sáng 8h thứ 2–6 không?" — một câu, không ô',
+  "chọn. Đo 01/09: bản dựng widget ở đây là ca lệch DUY NHẤT còn lại so với app gốc (case 10).",
 ].join(String.fromCharCode(10));
 
 /**
