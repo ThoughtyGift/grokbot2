@@ -17,6 +17,7 @@ một cấp thư mục không đáng cái rủi ro đó. Muốn chuyển thật 
 | `pnpm phase:gate` / `phase:advance` | gate của phase hiện tại · dời con trỏ |
 | `pnpm soak` / `soak:status` | ghi một ngày dùng thật (F7) |
 | `pnpm ui:diff` / `ui:shots` / `ui:xray` | so giao diện với app gốc: bằng số · bằng hình · bóc tách tương tác |
+| `npx tsx scripts/do-mot-ca.mts <số ca> [--lan 3]` | đo MỘT ca parity qua `sendPrompt`, không cần app — ~2 phút/lượt thay vì 20–50 phút cả bộ. Dùng khi đã biết ca nào lệch; chốt bảng vẫn bằng `parity-lap` |
 | `npx tsx scripts/do-auto-review.mts [--surface subagent]` | lớp tự soát có chặn đúng 3 ca app gốc chặn không — báo riêng lượt **không đo được** (hết hạn mức pool) thay vì tính thành "cho qua" |
 | `pnpm test:avatar` / `test:avatar-ui` / `test:reaction` | ba bộ e2e có ghi nhật ký |
 | `pnpm e2e:history` | đọc nhật ký các lượt e2e |
