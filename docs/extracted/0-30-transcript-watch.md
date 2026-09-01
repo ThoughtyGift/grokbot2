@@ -213,3 +213,29 @@ theo giả thuyết ấy thì đã thêm một cơ chế khử trùng cho một 
 **Việc còn lại thu về đúng một trường:** `is_fork`. Nó đã có chỗ trong `conversation/types.ts`
 (`isFork?: boolean`) nhưng chưa được đọc lẫn phát lại. `composed_at_ms` là mục thẩm mỹ, chỉ thấy khi
 soạn lúc mất mạng. Bốn trường còn lại: bỏ qua là ĐÚNG, không phải nợ.
+
+
+### 8b · …và `is_fork` cũng không có hệ quả đo được (02/09, cùng ngày)
+
+§8 kết luận "việc còn lại thu về đúng một trường: `is_fork`". Truy thêm một bước thì nó cũng rơi.
+
+Client CÓ gửi trường ấy, và giao diện CÓ hành động bật nó:
+
+```js
+Fue(t) = { agentId, prompt, clientNonce, …, ...e.isFork === !0 ? {isFork:!0} : {} }
+i18n   : jhOiFA "Reply in thread" · TwqvO1 "Open reply thread"
+```
+
+Nhưng entry nó dựng mang khoá **`branched`**, và `branched` xuất hiện **đúng 2 lần trong toàn bộ
+renderer — cả hai đều là chỗ client TỰ dựng entry lạc quan của chính nó. Không có chỗ nào ĐỌC nó.**
+Còn `dpt()`/`fpt()` — hai hàm tính khoá gốc luồng `sand:thread …` — chạy trên trạng thái nháp của
+composer (`boundComposer` / `mainComposer` / `parkStore`), tức chúng đọc `isFork` từ *draft của chính
+client*, không từ entry backend gửi về.
+
+Nên: backend nhận `is_fork` rồi phát lại `branched` sẽ **không đổi một pixel nào**. Việc tách nhánh mà
+người dùng thấy được đi bằng `replyTo` — thứ ta đã làm đúng và đã đo (§6).
+
+**Ba cái bóng trong một buổi, cùng một hình dạng.** `generation` (§7), `message_id` (§8), `is_fork`
+(§8b): cả ba đều là trường có tên nghe rất hệ quả, đều có mặt trong hợp đồng, và đều KHÔNG có ai đọc
+ở đầu bên kia. Thứ phân biệt được chúng với việc thật không phải đọc proto — proto nói trường tồn tại
+— mà là **đếm chỗ ĐỌC trong renderer**. Một trường không có người đọc thì cài nó là cài cho không ai.
