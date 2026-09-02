@@ -23,7 +23,7 @@ lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
 mã             74 file test · 82 file nguồn · 587 bài xanh · typecheck sạch (đo 01/09)
-parity         2 ca lệch ỔN ĐỊNH (case 12, 21) — đo 02/09 SAU khi sửa nhịp chờ; 14 đúng, 7 dao động
+parity         0 ca lệch HÀNH VI — còn 21 (khác môi trường: WebGL) + 23 (khác cách vẽ: widget vs câu)
 bản vá client  6 bản, `--verify` còn nguyên
 ```
 
@@ -177,11 +177,19 @@ Chưa vá tại chỗ được: Chrome đó do `flow-chrome@.service` bật dư�
 `GROKBOT2_BROWSER_CDP` vào — đã chạy thử được — nhưng đó là quyết định hạ tầng *"ai sở hữu trình duyệt
 bot lái"*, không phải một cờ thêm vào. Chi tiết + cách đo lại: [infra/box/README.md](../../infra/box/README.md).
 
-**Case 23 là lệch thật, nhưng luật phân biệt thì CHƯA suy ra được.** App gốc trao lựa chọn bằng
-**link trong văn xuôi**, ta trao bằng widget. Nghe như một luật mới ("liệt kê thì đừng widget") —
-nhưng case 5 (*"tìm mcp shopee"*) cùng hình dạng "gắn cái nào" và app gốc **DÙNG widget** ở đó, còn
-bộ ca chấm ta đúng 3/3. Nên một luật thứ tư ở đây là đoán, không phải suy ra. Việc cần làm trước là
-tìm ra app gốc phân biệt bằng gì, chứ không phải viết thêm một câu.
+**Case 23 là lệch HÌNH THỨC, không phải hành vi** — đọc trọn transcript app gốc (02/09) mới thấy.
+App gốc ở ca đó **cũng hỏi**: entry [3] kết thúc bằng *"Muốn mình gắn Kinocut giống OBS không?"*, chỉ
+là hỏi bằng **văn xuôi**. Ta hỏi cùng một ý bằng **widget**. Cùng ý định, khác cách vẽ — và bộ ca chỉ
+chấm *có widget hay không*, nên nó tính là lệch.
+
+Luật phân biệt vẫn **không suy ra được**, và đây là bằng chứng vì sao đừng viết luật thứ tư: case 5
+entry [8] là một câu **có/không** (*"Gắn MCP Shopee Open Platform này chứ?" [Gắn MCP shop | Thôi]*) và
+app gốc **dùng widget**; case 23 cũng là câu có/không và nó **dùng văn xuôi**. Cùng hình dạng, hai lựa
+chọn ngược nhau. Muốn có luật thì cần thêm dữ liệu từ app gốc, không phải thêm một câu vào lời nhắc.
+
+**Nên đọc số parity hiện hành thế này:** 0 ca lệch HÀNH VI. Hai ca còn lại là **một khác biệt môi
+trường** (21 · WebGL) và **một khác biệt cách vẽ** (23 · widget thay vì câu). Cả hai đều không sửa
+được bằng cách vặn lời nhắc, và ba vòng vặn nữa cũng vậy.
 
 Lịch sử vặn lời nhắc dưới đây giữ lại vì nó giải thích vì sao case 6 và 10 hết lệch:
 
