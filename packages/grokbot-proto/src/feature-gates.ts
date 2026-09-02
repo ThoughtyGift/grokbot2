@@ -37,6 +37,14 @@
 const DEFAULT_GATES: Readonly<Record<string, boolean>> = {
   sand_teach_by_demonstration: true,
   /*
+   * Mục `Settings → Usage & Billing`. Renderer lọc mục "usage" ra khỏi Settings khi cổng này đóng
+   * (`yrn()`: `ZL.filter(o => o.id === "usage" ? sand_usage_page && … : …)`), nên thiếu nó thì mọi
+   * thứ phía sau vô hình dù đúng đến đâu. Bật được vì phía máy chủ có thật từ 02/09: billing
+   * `enforce` chạy, `GetCurrentPeriodUsage` + `GetSandUsageStatus` trả số từ bảng `usage`/`plans`.
+   * Luồng đã trích + ánh xạ: docs/plan/usage-billing-page.md.
+   */
+  sand_usage_page: true,
+  /*
    * Bảng `Settings → Computer` — máy THẬT của người dùng.
    *
    * Gốc của bảng đó chỉ vẽ mục *Computers* khi cả ba điều kiện đúng, đọc từ renderer:

@@ -14,7 +14,7 @@ enableWriting();
 import { handleAuth, verifyJwt, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { handleLoginPage, handleAuthPoll, handleAuthApprove } from "./login-page.js";
 import { handleWebApp } from "./web-app.js";
-import { accessVerdict, currentPeriodUsage, billingMode, seedPlans } from "./billing.js";
+import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser } from "./billing.js";
 
 // Bảng giá phải có TRƯỚC lượt chat đầu tiên, không phải lúc ai đó tình cờ hỏi gói.
 // `off` thì không đụng vào sổ: một cài đặt không dùng billing không nên tự mọc thêm bảng.
@@ -400,6 +400,9 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     gatewayTicket: mintTicket(rpcUser.authId),
     access: accessVerdict(rpcUser),
     usage: currentPeriodUsage(rpcUser) ?? undefined,
+    // Nhãn plan cho trang Usage & Billing (GetSandUsageStatus). Chỉ khi billing đang đo: lúc `off`
+    // để absent, builder khi đó trả đúng stub lịch sử — byte không đổi.
+    plan: billingMode() === "off" ? undefined : getUser(rpcUser.authId)?.plan,
     body,
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
     // Where a sign-in is kept, so the app's own OAuth flow has somewhere to write. Without this the

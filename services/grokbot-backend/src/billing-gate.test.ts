@@ -16,7 +16,16 @@ import { test } from "node:test";
 
 import { accessVerdict, recordUsage, setPlan, getPlan } from "./billing.js";
 
-const ID = (ten: string) => ({ authId: `test|billing-gate-${ten}`, email: `${ten}@test.local` });
+/*
+ * Hậu tố ngẫu nhiên THEO LẦN CHẠY, không chỉ theo tên ca.
+ *
+ * Kho tạm của test (`grokbot2-test-store` trong tmpdir) sống QUA các lần chạy. Bản đầu dùng authId
+ * cố định, nên lần chạy thứ hai user `free-qua-tran` vẫn đang vượt trần từ lần trước, và assertion
+ * "TRƯỚC khi vượt → granted" sập — đúng bẫy "sổ trắng hoá ra không trắng" (§7 bảng theo dõi), lần
+ * này ở quy mô sandbox. Đo được: chạy một mình thì 5/5 xanh, chạy lần hai đỏ đúng một bài.
+ */
+const LAN_CHAY = Math.random().toString(36).slice(2, 8);
+const ID = (ten: string) => ({ authId: `test|billing-gate-${LAN_CHAY}-${ten}`, email: `${ten}@test.local` });
 
 /** Đặt mode cho MỘT khối rồi trả lại như cũ — .env thật của máy đang là "warn". */
 const voiMode = async (mode: string, than: () => void | Promise<void>) => {

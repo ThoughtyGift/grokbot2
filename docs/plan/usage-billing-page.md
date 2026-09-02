@@ -54,7 +54,25 @@ là một backend trả THIẾU field vẫn ra một trang đúng, chỉ gọn h
 | khối On-Demand + spend limit | `on_demand_settings` | **không có khái niệm này** (ta đếm token, không mét tiền theo lượt) → trả vắng mặt, FE tự ẩn |
 | nút mở dashboard | link cursor.com | trỏ `GROKBOT2_CHECKOUT_URL` / trang quản trị của mình khi có |
 
-## 3 · Việc phải làm, theo thứ tự (chưa làm cái nào)
+## 3 · ĐÃ LÀM 03/09 — cả ba bước, mỗi bước một phép đo
+
+1. ✅ Cờ `sand_usage_page` bật trong `feature-gates.ts` — đo: `BootstrapStatsig` trả cổng ấy.
+2. ✅ Builder `GetSandUsageStatus` (nâng từ stub 4-bool): ba nhánh — billing tắt giữ NGUYÊN byte stub
+   lịch sử (khoá bằng test `2000380140015800`); pro không trần → vắng field 3 + `15="pro"`; free →
+   Timestamp ×2 + double % + nhãn. `plan` chở vào `RpcCtx` từ `index.ts`. Test byte 4/4
+   (`bootstrap-usage.test.ts`), kể cả ca vượt trần (%=250, `has_available_usage=false`).
+   Dây đo sống: `20003801400058007a0370726f` — đúng từng byte thiết kế.
+3. ✅ Đo bằng chính trang: app local → account menu → Settings → **Usage & Billing hiện ra** và vẽ
+   `pro · "Separate from existing Grok usage."` — không thanh % (đúng: không trần), không khối
+   On-Demand (đúng: không phát field cents). Khác ảnh app gốc đúng ở chỗ PHẢI khác (bên gốc plan có
+   trần tuần nên có thanh 2%).
+
+Một vết thẩm mỹ ghi lại, chưa sửa: dòng *"No included usage available on your plan right now"* hơi
+lệch nghĩa với plan KHÔNG TRẦN (nghe như "hết hạn mức"). Nó đến từ nhánh disclaimer khi
+`has_non_zero_included_limit=false`; muốn đổi phải đọc thêm nhánh `srn()`/`MD()` — làm khi có nhu
+cầu thật, đừng đoán field để tắt một câu chữ.
+
+## (kế hoạch gốc, giữ để đối chiếu)
 
 1. **Bật cờ `sand_usage_page`** trong `feature-gates.ts` — không có nó thì mục không hiện, khỏi bàn tiếp.
 2. **Dựng builder `GetSandUsageStatus`** trong `bootstrap.ts` (hiện CHƯA có — app sẽ nhận nhánh

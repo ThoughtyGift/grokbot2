@@ -6,7 +6,7 @@
  * descriptors (see docs/protocol-reference.md). Gate values:
  *   SandAccessState.GRANTED = 1, SandAccessBlockReason.NONE = 1, SandTrialClaimStatus.NONE = 1.
  */
-import { message, pbStr, pbVar, pbBool, pbMsg, readVarintField, unframe } from "./encode.js";
+import { message, pbStr, pbVar, pbBool, pbMsg, pbF64, readVarintField, unframe } from "./encode.js";
 import { pbStruct, readStringMapField, type StructValue } from "./struct.js";
 import {
   LOCAL_PLUGINS, plugin, userPluginInstall, accountIdentifier, splitAccountIdentifier, toolStatus,
@@ -93,6 +93,11 @@ export interface RpcCtx {
    * the historical behaviour when the RPC returned an empty message.
    */
   usage?: { used: number; limit: number; cycleStartMs: number; cycleEndMs: number; message?: string };
+  /**
+   * Tên plan của người gọi ("free"/"pro"), cho `grok_plan_label` của trang Usage & Billing.
+   * Absent khi billing tắt — builder khi đó trả đúng stub lịch sử, không thêm field nào.
+   */
+  plan?: string;
   /** The raw (unframed) request body, for the one RPC whose argument matters: InstallUserPlugin. */
   body?: Buffer;
   /**
@@ -220,8 +225,46 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
   GetUserPrivacyMode: () =>
     message(pbVar(1, 1), pbVar(2, 0), pbBool(3, false), pbBool(4, false), pbBool(6, true)),
 
-  // DashboardService.GetSandUsageStatus -> usage available
-  GetSandUsageStatus: () => message(pbBool(4, false), pbBool(7, true), pbBool(8, true), pbBool(11, false)),
+  /*
+   * DashboardService.GetSandUsageStatus — nguồn CHÍNH của trang Settings → Usage & Billing.
+   *
+   * Field trích 03/09 từ proto trong `electron-main` 0.30 (docs/plan/usage-billing-page.md):
+   *   1 current_period_start (Timestamp) · 2 next_reset_timestamp_utc (Timestamp)
+   *   3 usage_percent (double, opt)      · 4 included_limit_zero (bool)
+   *   7 has_available_usage (bool)       · 8 has_non_zero_included_limit (bool)
+   *   11 sand_trial_cancelable (bool)    · 15 grok_plan_label (string, opt)
+   *
+   * FE tự ẨN từng khối khi field vắng mặt: không `usage_percent` thì không có thanh %, không
+   * `on_demand_settings` (field 13 — cố ý KHÔNG phát: đơn vị của nó là CENTS, số của ta là TOKEN)
+   * thì cả khối On-Demand biến mất. Trả thiếu tốt hơn trả bịa.
+   *
+   * Ba nhánh, phân biệt bằng ctx:
+   *   billing tắt  (không plan, không usage) → đúng stub lịch sử, byte không đổi — inert.
+   *   plan không trần (pro: usage absent)    → không thanh %, chỉ nhãn plan; 8=false vì
+   *                                            "included limit" thật sự không tồn tại.
+   *   plan có trần (free: usage đủ bốn số)   → % + hai mốc chu kỳ + nhãn plan.
+   */
+  GetSandUsageStatus: (ctx) => {
+    // google.protobuf.Timestamp: {1 seconds (varint)} — bỏ nanos, độ phân giải giây là thừa đủ.
+    const moc = (ms: number) => message(pbVar(1, Math.max(0, Math.floor(ms / 1000))));
+    const u = ctx.usage;
+    if (!u) {
+      return ctx.plan == null
+        ? message(pbBool(4, false), pbBool(7, true), pbBool(8, true), pbBool(11, false))
+        : message(pbBool(4, false), pbBool(7, true), pbBool(8, false), pbBool(11, false), pbStr(15, ctx.plan));
+    }
+    const pct = u.limit > 0 ? Math.max(0, (u.used / u.limit) * 100) : 0;
+    return message(
+      pbMsg(1, moc(u.cycleStartMs)),
+      pbMsg(2, moc(u.cycleEndMs)),
+      pbF64(3, pct),
+      pbBool(4, u.limit <= 0),
+      pbBool(7, u.used < u.limit),
+      pbBool(8, u.limit > 0),
+      pbBool(11, false),
+      ...(ctx.plan == null ? [] : [pbStr(15, ctx.plan)]),
+    );
+  },
 
   // DashboardService.GetSandTrialClaimStatus -> NONE(1)
   GetSandTrialClaimStatus: () => message(pbVar(1, 1)),
