@@ -333,8 +333,12 @@ cái client tự tắt" mới quyết định được.
 
 ## 8 · Chưa chắc chắn
 
-- **App GỐC không mở lên được nữa (từ 02/09).** Tôi đóng nó bằng `run.ps1` (bản cũ giết theo TÊN,
-  xem §7) và nó không trở lại. Đã loại **sáu** nghi phạm, chép ra để phiên sau khỏi làm lại:
+- ~~**App GỐC không mở lên được nữa (từ 02/09).**~~ **ĐÃ SỬA 03/09** — chạy chính trình cài
+  `sand-update-0.30.0.exe` mà app đã tự tải về Temp (chữ ký Valid, `Anysphere, Inc.`): cài ~30 giây,
+  app tự bật, 9 tiến trình, cửa sổ lên, và sống qua nhiều phút. Nguyên nhân gốc **chưa bao giờ tìm
+  ra** — sáu nghi phạm dưới đây đều bị loại, và cái sửa được là *cài đè*, tức bệnh nằm đâu đó trong
+  bản cài cũ mà `app.asar` 31 MB còn nguyên không nói lên được. Giữ bảng để phiên sau biết đường nào
+  đã đi rồi:
 
   | nghi phạm | cách loại |
   |---|---|
