@@ -10,7 +10,7 @@
  */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -142,4 +142,38 @@ test("bật GROKBOT2_ALLOW_REGISTER=1 thì đăng ký không bị chặn vì lý
     if (before === undefined) delete process.env.GROKBOT2_ALLOW_REGISTER;
     else process.env.GROKBOT2_ALLOW_REGISTER = before;
   }
+});
+
+/*
+ * Gói CŨ thuộc loại "sang" không được thắng gói MỚI thuộc loại thường.
+ *
+ * Đo 03/09 trên máy thật: `/download/windows` phát `Bot-Noi-Bo-Setup-20260827.exe` trong khi
+ * `Cai-dat-Bot-Noi-Bo-20260902.exe` đã nằm cạnh — vì bản cũ duyệt theo THỨ TỰ LOẠI và trả về ngay
+ * khi loại đầu tiên có file. Người tải nhận gói thiếu sáu ngày tính năng, gồm cả bản vá chặn app tự
+ * cập nhật, và không có cách nào tự biết.
+ */
+test("trang tải phát gói MỚI NHẤT, kể cả khi nó thuộc loại xếp sau", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-site-"));
+  // Loại ưu tiên cao (chở-cả-app) nhưng CŨ.
+  writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260827.exe"), "cu");
+  // Loại xếp sau nhưng MỚI.
+  const moi = join(dir, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+  writeFileSync(moi, "moi");
+  utimesSync(join(dir, "Bot-Noi-Bo-Setup-20260827.exe"), new Date(1), new Date(1));
+  utimesSync(moi, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
+
+  assert.equal(newestSetup(dir, "windows")?.name, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+});
+
+test("bằng tuổi thì loại đứng trước trong danh sách thắng", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-site-"));
+  const a = join(dir, "Bot-Noi-Bo-Setup-20260902.exe");
+  const b = join(dir, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+  writeFileSync(a, "a");
+  writeFileSync(b, "b");
+  const t = new Date(1_900_000_000_000);
+  utimesSync(a, t, t);
+  utimesSync(b, t, t);
+
+  assert.equal(newestSetup(dir, "windows")?.name, "Bot-Noi-Bo-Setup-20260902.exe");
 });

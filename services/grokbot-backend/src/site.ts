@@ -65,13 +65,31 @@ function landingHtml(): string | null {
   }
 }
 
-/** Gói mới nhất trong `.data/dist`, hoặc null khi chưa ai chạy build-setup. */
+/**
+ * Gói mới nhất trong `.data/dist`, hoặc null khi chưa ai chạy build-setup.
+ *
+ * **Độ MỚI thắng trước, loại chỉ để phá hoà.** Bản trước duyệt theo thứ tự loại và trả về ngay khi
+ * loại đầu tiên có file — nên một gói CŨ thuộc loại "sang" (bản chở-cả-app) luôn thắng một gói MỚI
+ * thuộc loại thường. Đo 03/09: trang tải phát `Bot-Noi-Bo-Setup-20260827.exe` trong khi bản
+ * `Cai-dat-Bot-Noi-Bo-20260902.exe` đã nằm cạnh đó — người tải nhận gói thiếu sáu ngày tính năng,
+ * trong đó có cả bản vá chặn app tự cập nhật.
+ *
+ * Đổi lại: một gói cũ hơn không bao giờ được phát chỉ vì nó tiện hơn. Tiện mà cũ thì vẫn là sai
+ * phiên bản, và sai phiên bản là thứ người dùng không tự phát hiện được.
+ */
 export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
-  for (const { prefix, ext } of SETUP_KINDS[kind]) {
+  const uu = SETUP_KINDS[kind];
+  let best: { name: string; path: string; size: number; mtimeMs: number; hang: number } | null = null;
+  for (const [hang, { prefix, ext }] of uu.entries()) {
     const hit = newestMatching(dir, prefix, ext);
-    if (hit) return hit;
+    if (!hit) continue;
+    const mtimeMs = statSync(hit.path).mtimeMs;
+    // Mới hơn thì thắng; bằng tuổi thì loại đứng trước trong danh sách thắng.
+    if (!best || mtimeMs > best.mtimeMs || (mtimeMs === best.mtimeMs && hang < best.hang)) {
+      best = { ...hit, mtimeMs, hang };
+    }
   }
-  return null;
+  return best ? { name: best.name, path: best.path, size: best.size } : null;
 }
 
 function newestMatching(dir: string, prefix: string, ext: string): { name: string; path: string; size: number } | null {
