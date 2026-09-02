@@ -91,3 +91,31 @@ quyết định hạ tầng "ai sở hữu trình duyệt bot lái", không ph�
 **Cách đo lại mà không cần hầm ssh:** trang tự đặt `document.title` thành kết quả, rồi
 `curl 127.0.0.1:<cổng>/json/list | grep '"title"'`. Endpoint HTTP của CDP báo title từng target, nên
 không cần WebSocket — hữu ích cho mọi cổng chưa nằm trong hầm.
+
+
+### Chrome của MÌNH, có WebGL — `chrome-dam-bao.sh` (02/09)
+
+```
+sh chrome-dam-bao.sh                 # idempotent; CHROME_CDP_PORT mặc định 9224
+npx tsx --env-file=.env services/grokbot-backend/scripts/chrome-webgl.mts   # bật + ĐO
+```
+
+Đo được, qua hầm, từ đúng vị trí backend nhìn:
+
+| cổng | chủ | webgl2 | renderer |
+|---|---|---|---|
+| 9223 | user `box`, `flow-chrome@.service` | **KHÔNG** | — |
+| **9224** | **`gb2u003` (của ta)** | **CÓ** | ANGLE / Vulkan 1.3.0 / SwiftShader (Subzero) |
+
+**Chưa đổi `GROKBOT2_BROWSER_CDP`, và đây là lý do — một đánh đổi thật, không phải sự cẩn thận suông:**
+con 9223 **được supervise** (`flow-chrome@.service` bật lại nếu chết), con 9224 thì **không** — box
+không có systemd cấp user (`XDG_RUNTIME_DIR` trống, `systemctl --user` không nối được bus, bật
+lingering cần root mà `sudo` đòi mật khẩu). Đổi ngay bây giờ là đánh đổi "bot mù WebGL" lấy "bot có
+thể mất hẳn trình duyệt", và vế thứ hai tệ hơn.
+
+Nên bước còn lại **không phải sửa `.env`** mà là cho `browser.ts` tự lành: khi CDP dùng chung không
+trả lời thì gọi `chrome-dam-bao.sh` rồi thử lại — đúng khuôn `obs-dam-bao.sh` đã dùng cho OBS. Có
+vế đó rồi thì đổi `.env` mới an toàn.
+
+Hầm: `box-tunnel.ps1 -LocalPort 9224 -RemotePort 9224 -Slots 0` (tham số đã có sẵn, không cần đổi mã).
+Trên VPS thì backend chạy CÙNG box nên không cần hầm.
