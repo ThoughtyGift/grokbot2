@@ -124,6 +124,19 @@ Vòng 5 là chỗ đổi cục diện: bốn ví dụ mô tả chính xác luậ
 một khối chú thích, chưa bao giờ được gửi đi. Người đọc code thấy; model thì không. (Và bài học ấy
 lặp lại lần hai: ví dụ case 21 cũng mắc trong chú thích thêm một ngày nữa.)
 
+**Lượt đo sau khi đổi trình duyệt (02/09, Chrome 9224 + SwiftShader) — KHÔNG so số được với các lượt
+trước, vì môi trường đổi.** Ba điều đo được:
+
+1. **Case 21: bức tường DỜI.** Widget giờ là *"Làm gì tiếp trên CapCut?"* — bot **vào được editor**
+   (trước: *"chặn vì thiếu WebGL2"*). WebGL fix ăn ở tầng năng lực; lệch còn lại thuộc họ
+   widget-vs-văn-xuôi của case 23.
+2. **SwiftShader có giá:** render bằng CPU nên lượt dài ra — 2/3 lượt CHẠM HẠN CỨNG 900s ở case
+   22–23 (lần đầu), một ca treo 180s (lưới an toàn bắn thật lần đầu, đúng thiết kế). 11 ca dao động
+   so với 7 của lượt trước.
+3. **Case 15 tụt kiểu mới:** bot viết lựa chọn thành văn xuôi A/B thay vì widget, và nói sai một dữ
+   kiện ("không cài nổi OBS" — OBS AppImage ĐÃ cài). Chưa rõ do trình duyệt chậm đổi ngữ cảnh hay
+   nhiễu model; **đừng vặn lời nhắc trước khi tách được hai cái đó**.
+
 Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git của chính file này.
 
 ## 5 · Việc còn lại, theo thứ tự đáng làm
@@ -138,7 +151,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | ~~Cơ chế `generation` / `CursorTooOld`~~ **hạ ưu tiên 02/09** | client tra tail 198.691 lượt với `limit:500`, ta trả đủ → nhịp tra kế tiếp tự lấp | chỉ còn hở khi mất kết nối mà bản ghi mọc **>500 entry** — xem [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §7 |
 | 8 | Tự cập nhật client | **chặn: XONG và đã áp** (`sandLab: true`, `--verify` xanh 02/09) · **kênh của mình: chặn bởi CHỮ KÝ SỐ**, không phải bởi mã | giao thức đã moi đủ: [spike-findings.md](../reverse/spike-findings.md) |
-| **10** | **Trình duyệt bot lái: tự sở hữu, có WebGL** | — (trong quyền của mình) | A/B đo 02/09: headful + `--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader` → `webgl2 CÓ`; hiện `GROKBOT2_BROWSER_CDP` trỏ Chrome của user `box`, **không có WebGL** |
+| **10** | **Trình duyệt bot lái** | **ĐÃ ĐỔI 02/09** sang Chrome của mình (9224, WebGL, tự lành) — đo: tab mọc đúng bên, CapCut vào được editor | giá còn lại: SwiftShader chậm (2/3 lượt parity chạm trần 900s ở ca cuối) — nếu thành vấn đề thật, cân nhắc quay lại 9223 cho ca không cần WebGL |
 | ~~9~~ | ~~Sáu trường bỏ qua~~ **ĐÓNG 02/09** | cả sáu đều không có hệ quả đo được: `branched` không ai đọc, khoá gốc luồng là chuyện nội bộ client | [§8 + §8b](../extracted/0-30-transcript-watch.md) |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
