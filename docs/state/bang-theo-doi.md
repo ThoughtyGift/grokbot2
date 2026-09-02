@@ -168,9 +168,14 @@ bước SAU đó.
 (CDP 9223): `webgl: KHÔNG · webgl2: KHÔNG`. Dòng lệnh có `--disable-gpu-compositing` và **không** có
 `--use-gl` lẫn `--enable-unsafe-swiftshader`; Chrome từ ~119 đã bỏ fallback SwiftShader ngầm. Box của
 hãng có WebGL nên nó vào được editor. Mọi vòng vặn lời nhắc cho ca này là **đuổi theo một card đồ
-hoạ**. Cách sửa thật: thêm `--enable-unsafe-swiftshader` vào chỗ bật Chrome — nhưng chỗ đó nằm TRÊN
-BOX dưới user `box` (`/home/box/.config/grok-chrome-77`, mode 700), **không nằm trong repo này**, và
-box dùng chung với sáu Chrome của phần mềm khác. Đổi có chủ ý, không đổi lẫn.
+hoạ**. Và A/B ngày 02/09 chỉ ra chính xác cái card ấy là gì: cùng box, cùng binary, **headless CÓ
+WebGL2 sẵn**, **headful KHÔNG**, **headful + `--enable-unsafe-swiftshader --use-gl=angle
+--use-angle=swiftshader` thì CÓ**. Chrome ta lái chạy headful dưới Xvfb, nên nó rơi vào ô giữa.
+
+Chưa vá tại chỗ được: Chrome đó do `flow-chrome@.service` bật dưới user **`box`**, ta là `gb2u003`,
+`sudo` đòi mật khẩu. Đường trong quyền mình là tự bật Chrome của `gb2u003` kèm hai cờ rồi trỏ
+`GROKBOT2_BROWSER_CDP` vào — đã chạy thử được — nhưng đó là quyết định hạ tầng *"ai sở hữu trình duyệt
+bot lái"*, không phải một cờ thêm vào. Chi tiết + cách đo lại: [infra/box/README.md](../../infra/box/README.md).
 
 **Case 23 là lệch thật, nhưng luật phân biệt thì CHƯA suy ra được.** App gốc trao lựa chọn bằng
 **link trong văn xuôi**, ta trao bằng widget. Nghe như một luật mới ("liệt kê thì đừng widget") —

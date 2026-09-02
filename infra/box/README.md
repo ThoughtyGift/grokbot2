@@ -65,3 +65,29 @@ obs-dam-bao lần 1 → DA-BAT: OBS lên sau 4s, websocket 4455 mở
 obs-dam-bao lần 2,3 → SAN-SANG (không khởi động lại)
 quay 6s → h264 1280x720 + aac · 7,5 giây · 245 KB, ffprobe đọc được ngay
 ```
+
+
+## WebGL trên box: thiếu vì HEADFUL, và hai cờ chữa được (đo 02/09)
+
+Case 21 của bộ parity lệch vì bot mở CapCut Web rồi báo "chặn vì thiếu WebGL2". Đo trực tiếp trên
+Chrome ta đang lái (CDP 9223): `webgl: KHÔNG · webgl2: KHÔNG`. Nhưng nguyên nhân **không phải box
+không có khả năng** — A/B trên cùng box, cùng `/usr/bin/google-chrome`:
+
+| chế độ | cờ | webgl2 | renderer |
+|---|---|---|---|
+| `--headless=new` | không | **CÓ** | ANGLE / Vulkan 1.3.0 / SwiftShader (Subzero) |
+| **headful** (`DISPLAY=:77`) | không | **KHÔNG** | — |
+| **headful** | `--enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader` | **CÓ** | như trên |
+
+Tức Chrome ta lái chạy headful dưới Xvfb, và ở chế độ đó Chrome ≥119 không tự rơi về SwiftShader nữa
+— phải xin bằng cờ.
+
+**Vì sao chưa vá được tại chỗ:** Chrome 9223 do `flow-chrome@.service` bật dưới user **`box`**
+(`/home/box/.config/grok-chrome-77`, mode 700), còn ta là `gb2u003` và `sudo` đòi mật khẩu. Không đổi
+được cờ của tiến trình người khác. Đường trong quyền của mình: **tự bật Chrome của `gb2u003`** kèm hai
+cờ trên rồi trỏ `GROKBOT2_BROWSER_CDP` vào nó — đã thử chạy được (cổng 9226, `webgl2=CO`), nhưng đó là
+quyết định hạ tầng "ai sở hữu trình duyệt bot lái", không phải một cờ thêm vào.
+
+**Cách đo lại mà không cần hầm ssh:** trang tự đặt `document.title` thành kết quả, rồi
+`curl 127.0.0.1:<cổng>/json/list | grep '"title"'`. Endpoint HTTP của CDP báo title từng target, nên
+không cần WebSocket — hữu ích cho mọi cổng chưa nằm trong hầm.
