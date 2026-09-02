@@ -147,7 +147,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
 | 3 | Box qua hầm từ máy khác (`T3`) | như trên | — |
 | 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
-| 5 | Billing `enforce` | cố ý chờ đủ số một tuần | `GROKBOT2_BILLING=enforce` |
+| ~~5~~ | ~~Billing `enforce`~~ **BẬT 02/09** | 11 ngày warn là đủ số; trình tự: test nhánh từ chối (5/5, lần đầu có) → chủ lên `pro` qua webhook → bật → đo sống: chủ được trả lời 8s, không bong bóng chặn | lùi: `GROKBOT2_BILLING=warn` trong `.env` + reload |
 | 6 | Voice-call (5) + phòng chung (9) | cờ client đang tắt | chỉ làm khi bật cờ |
 | 7 | ~~Cơ chế `generation` / `CursorTooOld`~~ **hạ ưu tiên 02/09** | client tra tail 198.691 lượt với `limit:500`, ta trả đủ → nhịp tra kế tiếp tự lấp | chỉ còn hở khi mất kết nối mà bản ghi mọc **>500 entry** — xem [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §7 |
 | 8 | Tự cập nhật client | **chặn: XONG và đã áp** (`sandLab: true`, `--verify` xanh 02/09) · **kênh của mình: chặn bởi CHỮ KÝ SỐ**, không phải bởi mã | giao thức đã moi đủ: [spike-findings.md](../reverse/spike-findings.md) |
@@ -163,7 +163,7 @@ nay 0 ca lệch ổn định.*
 | chặng | kết quả |
 |---|---|
 | 0 · Dọn mã | cổng 9/9; `mcp.ts` 936 → <800; `bootstrap.ts` 862 → <800 |
-| 1 · Đo được tiền | `GROKBOT2_BILLING=warn` có số thật; `enforce` cố ý chưa bật |
+| 1 · Đo được tiền | **`enforce` BẬT 02/09** sau 11 ngày warn (chủ ~18,7M token / trần free 100k → chủ lên `pro` TRƯỚC khi bật, không có cửa sổ bị khoá). Nhánh từ chối có test lần đầu (`billing-gate.test.ts`). Webhook đổi plan hoạt động (secret trong `.env`). Chưa đặt `GROKBOT2_CHECKOUT_URL` nên lời chặn không kèm link nâng cấp — đặt khi có trang thanh toán |
 | 2 · Ba lỗ đăng nhập | thu hồi token 200→204→**401** · đoán mật khẩu 6 lần → **429** · `/register` **403** · JWT 365 → **30 ngày** |
 | 3 · Máy thứ hai | T1 ✅ · T4 ✅ (cài trên máy sạch thật, 118 MB) · T2/T3/T5 chờ máy thật |
 | 4 · BE ra khỏi máy cá nhân | VPS + HTTPS qua Cloudflare Tunnel; `/oauth/token` bịt xong — đo 403/403/**200**/403 |
