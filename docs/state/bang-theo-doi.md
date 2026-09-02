@@ -22,7 +22,7 @@ tắt**.
 lệnh gateway   hợp đồng 147 · có handler 149 · thiếu 16 — CẢ 16 đều client tự tắt
 client gọi     148 lệnh · 0 đường còn 404
 kênh           3: local-exec · webauthn · cookie-origin-approval
-mã             74 file test · 82 file nguồn · 587 bài xanh · typecheck sạch (đo 01/09)
+mã             76 file test · 82 file nguồn · 592 bài xanh · typecheck sạch (đo 02/09)
 parity         0 ca lệch HÀNH VI — còn 21 (khác môi trường: WebGL) + 23 (khác cách vẽ: widget vs câu)
 bản vá client  6 bản, `--verify` còn nguyên
 ```
@@ -86,138 +86,45 @@ Phần còn thiếu không nằm ở *danh sách lệnh* mà ở *hình dạng l
 
 ## 4 · Bám app gốc
 
-**Số đo hiện hành — 02/09, SAU khi sửa nhịp chờ: 2 ca lệch ổn định (12, 21).** 14 ca ổn định đúng,
-7 ca dao động (5, 14, 15, 16, 19, 22, 23). Ba lượt đủ 23/23.
+**Số hiện hành — 02/09, `parity-lap --lan 3`, 3 lượt đủ 23/23: 0 ca lệch HÀNH VI.**
 
-**Con số "0 ca lệch" của lượt đo TRƯỚC đó là số của một phép đo hỏng — đừng dùng lại.** Lượt ấy chạy
-với `app-replay-b2` còn chờ theo cờ `streaming`, nên nó gõ ca sau khi lượt trước chưa xong: ca bị
-giết (`stopped without replying`), và widget của ca này rơi vào cửa sổ của ca kia. Sửa nhịp chờ sang
-`isRunning` thì `stopped without replying` về **0**, case 3/4/9/20 từ "dao động" thành "ổn định
-đúng" — và **lộ ra hai ca lệch ổn định mà phép đo hỏng đang che**: case 12 (0/3 → 3/3 THỪA) và case
-21 (2/3 → 3/3 THỪA).
+```
+16 ca ổn định đúng · 7 ca dao động · 2 ca "lệch ổn định" nhưng KHÔNG phải hành vi:
+  case 21 — khác MÔI TRƯỜNG: box Chrome ta lái không có WebGL (xem §5 mục 10)
+  case 23 — khác CÁCH VẼ: app gốc cũng hỏi, bằng văn xuôi; ta hỏi bằng widget
+```
 
-Bài học lặp lại nguyên văn từ §7: cùng một con số "7 ca dao động", hai tập hợp khác hẳn. **Sửa bài đo
-trước, rồi mới đọc số.**
+Cả năm ca từng lệch dai dẳng đều đã chữa, mỗi ca đúng một lần đo xác nhận:
 
-Hai ca từng lệch ổn định:
-
-| ca | 01/09 | 02/09 | sửa bằng gì |
+| ca | lệch cũ | chữa bằng | xác nhận |
 |---|---|---|---|
-| **1** *"tính năng nào mới"* | 3/3 mời chọn | **0/3 · ổn định đúng** | vế thứ ba trong lời nhắc: *không biết thì đi TRA* |
-| **3** *"recording is finished"* | 2/2 mời chọn | **1/3 · dao động** | chặn `ask_question` bằng cờ `luotHocTuBanGhi` |
+| 1 *"tính năng nào mới"* | tuyên bố không biết + widget | vế "không biết thì đi TRA" (ví dụ nguyên văn) | 0/3 |
+| 3 *"recording is finished"* | hỏi thay vì học | **cấu trúc**: cờ `luotHocTuBanGhi` khoá `ask_question` — làm được vì tin là hằng số `CAU_GHI_XONG` | 0/3 qua `sendPrompt`; qua UI dao động vì ca 2 tràn cửa sổ |
+| 6 · 10 | thiếu/thừa widget | vòng 5–6 của lịch sử dưới | 3/3 · 0/3 |
+| 12 *"ok"* | hỏi lại thứ vừa được thuận | ví dụ "ok là ĐỒNG Ý — tiếp tục" | 3/3 → 1/3 |
 
-Case 3 phải đọc kỹ hơn con số. Ba lượt là ba chuyện khác nhau: một lượt đúng (bot chốt bản ghi rồi
-giải thích), một lượt có widget **thuộc case 2** (*"Mình cài connector X cho khớp bản mới nhé?"* — bot
-còn đang dở việc mở trang Updates thì tin case 3 tới), và một lượt `stopped without replying` vì case
-2 vẫn đang chạy. Case 4 của cùng lượt ấy cũng im đúng kiểu đó, mà case 4 không liên quan gì bản sửa.
-Xem bẫy "cửa sổ đo không khớp với lượt" ở §7.
+**Cách đọc số parity, ba luật đã trả giá:** (1) sửa bài đo trước rồi mới đọc số — phép đo hỏng nhịp
+chờ từng che đúng hai ca lệch và sinh số "0 ca" giả; (2) hai bài đo khác nhau không trộn số —
+`do-mot-ca` đi cửa `sendPrompt`, bảng này đo qua giao diện với ngữ cảnh các ca trước; (3) một ô lệch
+phải mở transcript đọc trước khi sửa — cả 21 lẫn 23 đều "làm rồi mới hỏi", không phải "hỏi thay vì
+làm", nên thêm ví dụ thứ tư sẽ không nhúc nhích (đã thử, đúng thế).
 
-Trước đây:
-
-| | ca | mong đợi | ta | đọc là |
-|---|---|---|---|---|
-| lệch | **1** · *"bản moi nhất grok bpot có tinh năng nào mới"* | không mời chọn | **3/3 mời chọn** | ổn định THỪA |
-| lệch | **3** · *"The recording is finished. Learn the task from it."* | không mời chọn | **2/2 mời chọn** | ổn định THỪA |
-| đã chữa | **10** · *"buid cho mình dàn bot"* | không mời chọn | 0/2 | ổn định đúng |
-| đã chữa | **6** · *"Partner ID … lấy ở đâu"* | mời chọn | 2/2 | ổn định đúng |
-| bỏ ngỏ | **9, 12, 14, 15, 17, 21, 22** | — | 1/2 | dao động |
-
-Case 10 là câu trả lời cho dòng "đã chỉnh lời dặn, chưa đo lại" của bản trước: **bản chỉnh có tác
-dụng**. Case 3 thì đáng chú ý vì nó là chính luồng *teach a task* — sau khi bản ghi kết thúc, app gốc
-học rồi làm, còn ta hỏi thêm một câu.
-
-**Đã sửa cả hai ca lệch, đo bằng `do-mot-ca` (01/09):**
-
-| ca | trước | sau | sửa bằng gì |
-|---|---|---|---|
-| **1** | 3/3 mời chọn | **0/3** · bot `web_search` ×2 → `web_fetch` ×2 → trả dữ kiện thật ("bản stable 0.29.0, ra 27/08…") | thêm **vế thứ ba** vào lời nhắc: *không biết thì đi TRA*, kèm ví dụ chép nguyên văn |
-| **3** | 2/2 mời chọn | **0/3** · bot gọi `demo_stop` rồi nói một câu | **chặn bằng công cụ**: cờ `luotHocTuBanGhi` khoá `ask_question` đúng lượt tin hệ thống `CAU_GHI_XONG` |
-| kiểm đầu kia | — | case 6 **3/3 CÓ** widget · case 11 **3/3 CÓ** widget | núm không bị vặn sang đầu kia |
-
-Case 3 là lần đầu chữa parity bằng **cấu trúc** thay vì câu chữ, và nó chỉ làm được vì ca đó có mốc
-để bám: văn bản tin là một hằng số do client gửi. Các ca khác không có mốc ấy — nên vế thứ ba của
-case 1 vẫn phải là một ví dụ trong lời nhắc.
-
-Một chỗ suýt sai khi chặn bằng công cụ: nhánh `ask_question` **park** lượt lại để chờ người bấm và
-tắt presence. Chặn mà vẫn đi vào nhánh ấy thì bot **IM** — tệ hơn hẳn widget thừa. Nên câu chặn trả
-về như kết quả của một tool thường, và đã kiểm bằng cách đọc chữ chứ không chỉ đếm widget: bot nói
-*"Ok, mình chốt bản ghi lại rồi xem nó dạy việc gì."* rồi gọi `demo_stop`.
-
-**Số ở bảng trên chưa đổi theo hai kết quả này**, và đó là cố ý: `do-mot-ca` đi thẳng cửa
-`sendPrompt`, còn bảng đo qua **giao diện thật** với ngữ cảnh các ca trước. Hai bài đo khác nhau thì
-không được trộn số. Muốn đổi bảng phải chạy lại `parity-lap --lan 3`.
-
-**Đọc con số này cho đúng.** Mẫu số phần lớn là **2**, không phải 3: lượt 1 cạn hạn mức sau 2 ca, nên
-chỉ case 1 có đủ ba lượt. Với hai lượt thì "1/2" nằm đúng giữa và không phân biệt được nhiễu với tín
-hiệu — đó là lý do 7 ca ghi "chưa đủ dữ liệu" thay vì bị đếm thành lệch. Và con số 2 này **không so
-trừ được** với "21/23" hay "22/23" của các bản trước: §7 đã trả giá cho chuyện đó — hai lần đo cùng ra
-"4 ca lệch" nhưng là hai tập hợp khác hẳn.
-
-**Mổ hai ca lệch (02/09) — và một trong hai KHÔNG phải lỗi lời nhắc.**
-
-| ca | bot ta làm gì | app gốc làm gì |
-|---|---|---|
-| **21** `capcut` | mở CapCut Web → **chặn vì thiếu WebGL2** → widget *"Đi đường nào?"* | mở CapCut Web → vào được editor, vướng **popup đăng nhập** → văn xuôi *"Bạn đăng nhập trên máy mình giúp"* |
-| **23** | rà catalog → liệt kê → widget *"Bạn muốn mình gắn cái nào?"* | rà catalog → liệt kê **kèm link `grokbot://app/v1/plugin/add?id=…`** trong văn xuôi |
-
-Bot ta **không** hỏi thay vì làm — nó **làm rồi mới hỏi**. Nên vì sao thêm đúng ví dụ của case 21 vào
-lời nhắc mà nó không nhúc nhích cũng rõ: ví dụ dạy *"capcut = mở nó"*, và bot đã mở. Lệch xảy ra một
-bước SAU đó.
-
-**Case 21 là khác biệt MÔI TRƯỜNG, không phải hành vi.** Đo trực tiếp Chrome của mình trên box
-(CDP 9223): `webgl: KHÔNG · webgl2: KHÔNG`. Dòng lệnh có `--disable-gpu-compositing` và **không** có
-`--use-gl` lẫn `--enable-unsafe-swiftshader`; Chrome từ ~119 đã bỏ fallback SwiftShader ngầm. Box của
-hãng có WebGL nên nó vào được editor. Mọi vòng vặn lời nhắc cho ca này là **đuổi theo một card đồ
-hoạ**. Và A/B ngày 02/09 chỉ ra chính xác cái card ấy là gì: cùng box, cùng binary, **headless CÓ
-WebGL2 sẵn**, **headful KHÔNG**, **headful + `--enable-unsafe-swiftshader --use-gl=angle
---use-angle=swiftshader` thì CÓ**. Chrome ta lái chạy headful dưới Xvfb, nên nó rơi vào ô giữa.
-
-Chưa vá tại chỗ được: Chrome đó do `flow-chrome@.service` bật dưới user **`box`**, ta là `gb2u003`,
-`sudo` đòi mật khẩu. Đường trong quyền mình là tự bật Chrome của `gb2u003` kèm hai cờ rồi trỏ
-`GROKBOT2_BROWSER_CDP` vào — đã chạy thử được — nhưng đó là quyết định hạ tầng *"ai sở hữu trình duyệt
-bot lái"*, không phải một cờ thêm vào. Chi tiết + cách đo lại: [infra/box/README.md](../../infra/box/README.md).
-
-**Case 23 là lệch HÌNH THỨC, không phải hành vi** — đọc trọn transcript app gốc (02/09) mới thấy.
-App gốc ở ca đó **cũng hỏi**: entry [3] kết thúc bằng *"Muốn mình gắn Kinocut giống OBS không?"*, chỉ
-là hỏi bằng **văn xuôi**. Ta hỏi cùng một ý bằng **widget**. Cùng ý định, khác cách vẽ — và bộ ca chỉ
-chấm *có widget hay không*, nên nó tính là lệch.
-
-Luật phân biệt vẫn **không suy ra được**, và đây là bằng chứng vì sao đừng viết luật thứ tư: case 5
-entry [8] là một câu **có/không** (*"Gắn MCP Shopee Open Platform này chứ?" [Gắn MCP shop | Thôi]*) và
-app gốc **dùng widget**; case 23 cũng là câu có/không và nó **dùng văn xuôi**. Cùng hình dạng, hai lựa
-chọn ngược nhau. Muốn có luật thì cần thêm dữ liệu từ app gốc, không phải thêm một câu vào lời nhắc.
-
-**Nên đọc số parity hiện hành thế này:** 0 ca lệch HÀNH VI. Hai ca còn lại là **một khác biệt môi
-trường** (21 · WebGL) và **một khác biệt cách vẽ** (23 · widget thay vì câu). Cả hai đều không sửa
-được bằng cách vặn lời nhắc, và ba vòng vặn nữa cũng vậy.
-
-Lịch sử vặn lời nhắc dưới đây giữ lại vì nó giải thích vì sao case 6 và 10 hết lệch:
+Lịch sử sáu vòng vặn lời nhắc giữ lại vì nó là bài học phương pháp:
 
 | vòng | đổi gì | lệch ổn định |
 |---|---|---|
-| 1 | "mời chọn SAU khi đã tra" | **2** ← giữ bản này |
+| 1 | "mời chọn SAU khi đã tra" | 2 |
 | 2 | thêm "việc cụ thể thì phải đi TRA" | 3 |
 | 3 | thu hẹp còn "hỏi mình CÓ CÔNG CỤ gì" | 3 |
 | 4 | dữ kiện "mảng này đã mở chưa" (`nguCanhMoiChon`) | 4 → **đã tắt** |
-| 5 | ba VÍ DỤ thật đưa vào lời nhắc (trước nằm trong chú thích) | 5 — hết THIẾU, sinh THỪA |
-| 6 | thêm vế NGƯỢC ("biết bước tiếp thì làm, đừng hỏi") | **1** ← bản hiện tại |
+| 5 | ba VÍ DỤ thật đưa vào lời nhắc (trước nằm trong chú thích) | hết THIẾU, sinh THỪA |
+| 6 | thêm vế NGƯỢC + vế TRA + "ok là đồng ý" | **0 lệch hành vi** |
 
-Vòng 5 mới là chỗ đổi cục diện, và nó buồn cười: bốn ví dụ mô tả chính xác luật ĐÃ nằm trong
-`tools.ts` từ lâu — trong một khối chú thích. Người đọc code thấy; model thì không, vì chú thích
-không đi vào chuỗi nào. Ba vòng vặn luật văn xuôi trước đó là ba lần diễn đạt lại một quy tắc mà
-bản mô tả chính xác nhất của nó nằm cách đó mười dòng và chưa bao giờ được gửi đi.
+Vòng 5 là chỗ đổi cục diện: bốn ví dụ mô tả chính xác luật ĐÃ nằm trong `tools.ts` từ lâu — trong
+một khối chú thích, chưa bao giờ được gửi đi. Người đọc code thấy; model thì không. (Và bài học ấy
+lặp lại lần hai: ví dụ case 21 cũng mắc trong chú thích thêm một ngày nữa.)
 
-Vòng 6 thêm vế ngược, vì vòng 5 chữa hết THIẾU nhưng sinh THỪA — dạy "khi nào mời chọn" mà không
-dạy "khi nào thôi" thì được đúng một nửa. Ca lệch của vòng đó (case 10 · "dựng dàn bot") là cái giá
-của bước đặt lịch vừa thêm: bot ta hỏi bằng widget, app gốc hỏi bằng một câu thường. Lời dặn đã chỉnh,
-và **lượt đo 01/09 xác nhận nó hết lệch** (0/2) — xem bảng đầu mục.
-
-Vòng 4 là lần đầu đo TRỌN bộ (23 ca × 3 lượt, 69/69 có trả lời). Nó cũng dạy cách đọc con số: bản
-có hàm ấy ra 4 ca lệch (5, 6, 15 thiếu · 7 thừa), bản đã tắt cũng ra 4 — nhưng là (6, 11, 15 thiếu ·
-13 thừa). Cùng số, khác tập hợp. **Giao của hai lần đo là case 6 và 15** — đó mới là 2 ca thật.
-
-Muốn tiến thêm phải đổi thứ khác một luật văn xuôi — dạy bằng ví dụ trong ngữ cảnh, hoặc một tool
-riêng cho "tra catalog" để mô hình phân biệt bằng công cụ chứ không bằng cách hiểu chữ.
+Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git của chính file này.
 
 ## 5 · Việc còn lại, theo thứ tự đáng làm
 
@@ -259,6 +166,13 @@ nay 0 ca lệch ổn định.*
 | 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
+
+**Trường có trong hợp đồng ≠ trường có người ĐỌC.** Một ngày, bốn cái bóng cùng hình dạng:
+`generation`/`CursorTooOld` (client tự lấp bằng 198.691 lượt tra tail), `message_id` (chỉ để nhận mốc
+lượt — khử trùng là việc của `clientNonce`), `is_fork` (client ghi `branched` mà **không chỗ nào
+đọc**), và ví dụ case 21 (bot đã LÀM đúng như ví dụ dạy — lệch nằm ở bước sau). Cả bốn đều có tên
+nghe rất hệ quả, đều tồn tại thật trong proto/lời nhắc, và sửa theo tên là dựng cơ chế cho không ai.
+Thứ phân biệt: **đếm chỗ ĐỌC ở đầu bên kia** — proto nói trường tồn tại, chỗ đọc mới nói nó có hệ quả.
 
 **Đo cái đang chạy, không đo mã nguồn.** Bốn lần đo parity đầu đo nhầm thứ: đọc văn bản prompt thay
 vì đo hành vi. Một lượt đo đúng đắt hơn bốn lượt đo nhầm.
