@@ -153,6 +153,31 @@ hiệu — đó là lý do 7 ca ghi "chưa đủ dữ liệu" thay vì bị đ�
 trừ được** với "21/23" hay "22/23" của các bản trước: §7 đã trả giá cho chuyện đó — hai lần đo cùng ra
 "4 ca lệch" nhưng là hai tập hợp khác hẳn.
 
+**Mổ hai ca lệch (02/09) — và một trong hai KHÔNG phải lỗi lời nhắc.**
+
+| ca | bot ta làm gì | app gốc làm gì |
+|---|---|---|
+| **21** `capcut` | mở CapCut Web → **chặn vì thiếu WebGL2** → widget *"Đi đường nào?"* | mở CapCut Web → vào được editor, vướng **popup đăng nhập** → văn xuôi *"Bạn đăng nhập trên máy mình giúp"* |
+| **23** | rà catalog → liệt kê → widget *"Bạn muốn mình gắn cái nào?"* | rà catalog → liệt kê **kèm link `grokbot://app/v1/plugin/add?id=…`** trong văn xuôi |
+
+Bot ta **không** hỏi thay vì làm — nó **làm rồi mới hỏi**. Nên vì sao thêm đúng ví dụ của case 21 vào
+lời nhắc mà nó không nhúc nhích cũng rõ: ví dụ dạy *"capcut = mở nó"*, và bot đã mở. Lệch xảy ra một
+bước SAU đó.
+
+**Case 21 là khác biệt MÔI TRƯỜNG, không phải hành vi.** Đo trực tiếp Chrome của mình trên box
+(CDP 9223): `webgl: KHÔNG · webgl2: KHÔNG`. Dòng lệnh có `--disable-gpu-compositing` và **không** có
+`--use-gl` lẫn `--enable-unsafe-swiftshader`; Chrome từ ~119 đã bỏ fallback SwiftShader ngầm. Box của
+hãng có WebGL nên nó vào được editor. Mọi vòng vặn lời nhắc cho ca này là **đuổi theo một card đồ
+hoạ**. Cách sửa thật: thêm `--enable-unsafe-swiftshader` vào chỗ bật Chrome — nhưng chỗ đó nằm TRÊN
+BOX dưới user `box` (`/home/box/.config/grok-chrome-77`, mode 700), **không nằm trong repo này**, và
+box dùng chung với sáu Chrome của phần mềm khác. Đổi có chủ ý, không đổi lẫn.
+
+**Case 23 là lệch thật, nhưng luật phân biệt thì CHƯA suy ra được.** App gốc trao lựa chọn bằng
+**link trong văn xuôi**, ta trao bằng widget. Nghe như một luật mới ("liệt kê thì đừng widget") —
+nhưng case 5 (*"tìm mcp shopee"*) cùng hình dạng "gắn cái nào" và app gốc **DÙNG widget** ở đó, còn
+bộ ca chấm ta đúng 3/3. Nên một luật thứ tư ở đây là đoán, không phải suy ra. Việc cần làm trước là
+tìm ra app gốc phân biệt bằng gì, chứ không phải viết thêm một câu.
+
 Lịch sử vặn lời nhắc dưới đây giữ lại vì nó giải thích vì sao case 6 và 10 hết lệch:
 
 | vòng | đổi gì | lệch ổn định |
