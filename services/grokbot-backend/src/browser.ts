@@ -65,10 +65,78 @@ const pendingCalls = new Map<number, { resolve: (v: any) => void; reject: (e: Er
 
 interface Target { id: string; type: string; title: string; url: string; webSocketDebuggerUrl?: string }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Tự lành: trình duyệt dùng chung chết thì bật lại, đừng để bot mù.
+ *
+ * Vì sao cần, đo 02/09: con Chrome mặc định (cổng 9223) do `flow-chrome@.service` bật dưới user
+ * `box` và **không có WebGL** — bot mù với CapCut Web, Canva, Figma, mọi editor. Con của mình
+ * (`chrome-dam-bao.sh`, cổng 9224) CÓ WebGL2, nhưng nó **không được supervise**: box không có
+ * systemd cấp user (`XDG_RUNTIME_DIR` trống, bật lingering cần root mà `sudo` đòi mật khẩu).
+ *
+ * Nên đổi sang con của mình mà KHÔNG có vế này là đánh đổi "bot mù WebGL" lấy "bot mất hẳn trình
+ * duyệt" — vế sau tệ hơn. Vế này là điều kiện để đổi `GROKBOT2_BROWSER_CDP` cho an toàn.
+ *
+ * Ba giới hạn có chủ ý:
+ *   · CHỈ cho con dùng chung. Bot có màn hình riêng thì Chrome của nó thuộc `displays.ts`, vòng đời
+ *     khác, và gọi script này sẽ bật một con thứ hai không ai dùng.
+ *   · Có khoảng nghỉ. Không có nó thì mỗi thao tác browser thất bại lại gọi box một lần — một
+ *     trình duyệt chết biến thành một cơn bão lệnh lên box DÙNG CHUNG.
+ *   · Chở script từ repo lên rồi chạy, thay vì nhúng lệnh vào đây: một nguồn sự thật. Bản triển
+ *     khai không có thư mục `infra/` thì hàm này nói ra và trả `false`, không đoán.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const KHOANG_LANH_MS = 60_000;
+let lanLanhCuoi = 0;
+
+/** Tách riêng để test được mà không cần box: quyết định có thử lành hay không. */
+export function nenThuLanh(now: number, lanCuoi: number, coManHinhRieng: boolean): boolean {
+  if (coManHinhRieng) return false;
+  return now - lanCuoi >= KHOANG_LANH_MS;
+}
+
+async function tuLanhChromeDungChung(): Promise<boolean> {
+  if (!nenThuLanh(Date.now(), lanLanhCuoi, displayOf(currentAgent) != null)) return false;
+  lanLanhCuoi = Date.now();
+  try {
+    const { boxCall, boxConfigured } = await import("./box-exec.js");
+    if (!boxConfigured()) return false;
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    // src → grokbot-backend → services → gốc repo
+    const sh = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "infra", "box", "chrome-dam-bao.sh");
+    let noiDung: string;
+    try { noiDung = readFileSync(sh, "utf8"); } catch {
+      console.warn(`[grokbot2] browser: không thấy ${sh} — không tự lành được trình duyệt`);
+      return false;
+    }
+    await boxCall("write", { target_file: "chrome-dam-bao.sh", content: noiDung });
+    const r = await boxCall<{ stdout?: string; exitCode?: number }>("exec", {
+      command: "chmod +x ~/workspace/chrome-dam-bao.sh && sh ~/workspace/chrome-dam-bao.sh",
+    });
+    const noi = String(r?.stdout ?? "").trim().split("\n").pop() ?? "";
+    console.log(`[grokbot2] browser: tự lành trình duyệt dùng chung → ${noi || `exit ${r?.exitCode}`}`);
+    return (r?.exitCode ?? 1) === 0;
+  } catch (e) {
+    console.warn(`[grokbot2] browser: tự lành thất bại — ${(e as Error).message}`);
+    return false;
+  }
+}
+
 async function listTargets(): Promise<Target[]> {
-  const res = await fetch(`${CDP_BASE()}/json/list`, { signal: AbortSignal.timeout(5000) });
-  if (!res.ok) throw new Error(`CDP /json/list returned ${res.status}`);
-  return (await res.json()) as Target[];
+  const goi = async () => {
+    const res = await fetch(`${CDP_BASE()}/json/list`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`CDP /json/list returned ${res.status}`);
+    return (await res.json()) as Target[];
+  };
+  try {
+    return await goi();
+  } catch (e) {
+    // Thử lành đúng MỘT lần rồi gọi lại. Lành không được thì ném lỗi GỐC — lỗi "không nối được
+    // trình duyệt" nói đúng bệnh hơn "script ensure trả về 1".
+    if (!(await tuLanhChromeDungChung())) throw e;
+    return await goi();
+  }
 }
 
 /**

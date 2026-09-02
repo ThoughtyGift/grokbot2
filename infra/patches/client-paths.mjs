@@ -82,7 +82,15 @@ function runningProbe(platform, appDir = "") {
      * Không có `appDir` thì quay về chốt theo tên: thà từ chối quá rộng còn hơn vá lên một app đang
      * mở — nửa lần vá để lại asar gốc cạnh `resources/app` và app boot bản gốc trong im lặng.
      */
-    if (!appDir) {
+    /*
+     * Đòi đường TUYỆT ĐỐI, không chỉ đòi "không rỗng".
+     *
+     * `appDir` dựng bằng `join(env.LOCALAPPDATA ?? "", "Programs", "Grok Bot")`, nên khi không có
+     * `LOCALAPPDATA` nó ra `"Programs\Grok Bot"` — tương đối, vô nghĩa, mà **không rỗng**. Chốt
+     * path-aware với đường đó sẽ khớp KHÔNG tiến trình nào, tức báo "app đã đóng" trong khi nó đang
+     * mở, và `--apply` vá đè lên một client đang chạy. Bài test bắt được đúng chỗ này.
+     */
+    if (!/^[A-Za-z]:[\\/]/.test(appDir)) {
       return { cmd: "tasklist", args: ["/FI", "IMAGENAME eq Grok Bot.exe", "/NH"], match: /Grok Bot\.exe/i };
     }
     return {

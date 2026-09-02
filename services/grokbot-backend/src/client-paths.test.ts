@@ -52,11 +52,32 @@ test("Linux không đoán bừa một đường dẫn không có thật", () => 
 });
 
 test("mỗi hệ có cách hỏi 'app đang chạy chưa' — và hệ lạ trả null, không phải false", () => {
-  assert.equal(clientPaths({ platform: "win32", env: {} }).running?.cmd, "tasklist");
   assert.equal(clientPaths({ platform: "darwin", env: {} }).running?.cmd, "pgrep");
   // null = KHÔNG BIẾT. Người gọi phải nói ra điều đó, không được coi như "không chạy" —
   // vá đè lên một client đang mở là cách chắc chắn nhất để hỏng nửa chừng.
   assert.equal(clientPaths({ platform: "freebsd", env: { GROKBOT2_CLIENT_DIR: "/x" } }).running, null);
+});
+
+/*
+ * Trên Windows chốt phải hỏi theo ĐƯỜNG DẪN, vì máy này có HAI bản cài.
+ *
+ * Bài này trước đây khoá `cmd === "tasklist"` — tức khoá đúng cái lỗi: `tasklist` chỉ biết TÊN ảnh,
+ * nên `--apply` từ chối vá bản ở `C:\cai029` khi app của HÃNG ở `C:\Program Files` đang mở. Đo
+ * 02/09: app local 0 tiến trình, app gốc 10, và `--apply` vẫn dừng đỏ.
+ *
+ * Không có `appDir` thì vẫn về `tasklist`: thà từ chối quá rộng còn hơn vá lên một app đang mở.
+ */
+test("win32: có appDir thì hỏi theo đường dẫn, không có thì mới về tasklist", () => {
+  const coDir = clientPaths({ platform: "win32", env: { GROKBOT2_CLIENT_DIR: "C:\\cai029" } });
+  assert.equal(coDir.running?.cmd, "powershell");
+  const lenh = (coDir.running?.args ?? []).join(" ");
+  assert.match(lenh, /C:\\cai029/, "đường dẫn của bản ĐANG vá phải nằm trong câu hỏi");
+  assert.match(lenh, /Get-Process/);
+  assert.ok(coDir.running?.match.test("DANG-CHAY"), "khớp khi có tiến trình đúng đường dẫn");
+  assert.equal(coDir.running?.match.test("KHONG"), false, "không khớp khi không có");
+
+  // Không biết thư mục nào (không LOCALAPPDATA, không ghi đè) → chốt rộng theo tên.
+  assert.equal(clientPaths({ platform: "win32", env: {} }).running?.cmd, "tasklist");
 });
 
 test("tên file dời sang một bên giống nhau ở mọi hệ", () => {

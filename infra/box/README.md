@@ -113,9 +113,31 @@ không có systemd cấp user (`XDG_RUNTIME_DIR` trống, `systemctl --user` kh�
 lingering cần root mà `sudo` đòi mật khẩu). Đổi ngay bây giờ là đánh đổi "bot mù WebGL" lấy "bot có
 thể mất hẳn trình duyệt", và vế thứ hai tệ hơn.
 
-Nên bước còn lại **không phải sửa `.env`** mà là cho `browser.ts` tự lành: khi CDP dùng chung không
-trả lời thì gọi `chrome-dam-bao.sh` rồi thử lại — đúng khuôn `obs-dam-bao.sh` đã dùng cho OBS. Có
-vế đó rồi thì đổi `.env` mới an toàn.
+**Vế tự lành: XONG và đo được (02/09).** `browser.ts` gọi `chrome-dam-bao.sh` khi CDP dùng chung
+không trả lời, rồi thử lại đúng MỘT lần. Đo bằng `scripts/do-tu-lanh-chrome.mts` — giết Chrome trên
+cổng của mình rồi bảo backend mở một trang:
+
+```
+cổng 9224 trước khi giết: MỞ  →  sau khi giết: đóng
+[grokbot2] browser: tự lành trình duyệt dùng chung → DA-BAT: CDP 9224 mở sau 1s
+kết quả: url: about:blank …          cổng 9224 sau lượt gọi: MỞ
+```
+
+Ba giới hạn có chủ ý, và cái thứ nhất là chỗ suýt sai: chỉ lành con DÙNG CHUNG (bot có màn hình riêng
+thì Chrome của nó thuộc `displays.ts`, gọi script sẽ bật thêm một con ~300 MB không ai dùng), có
+khoảng nghỉ 60s (không thì một trình duyệt chết biến thành cơn bão `exec` lên box dùng chung), và chở
+script từ repo lên mỗi lần thay vì nhúng lệnh — một nguồn sự thật.
 
 Hầm: `box-tunnel.ps1 -LocalPort 9224 -RemotePort 9224 -Slots 0` (tham số đã có sẵn, không cần đổi mã).
 Trên VPS thì backend chạy CÙNG box nên không cần hầm.
+
+
+**Cái giá của việc đổi `GROKBOT2_BROWSER_CDP` — đo 02/09, và nó KHÔNG nhỏ:** kho của con 9223 nằm ở
+`/home/box/.config/grok-chrome-77` và ta **không đọc được** (`Permission denied`). Nghĩa là mọi phiên
+đăng nhập bot đã tạo trong đó — Shopee và bất cứ thứ gì khác — sẽ **mất** khi đổi sang kho mới, và ta
+không kiểm được trước là mất những gì. Có đường bù: `injectChromeCookies` (xong 31/08) chở phiên từ
+máy người dùng sang box, nên phiên dựng lại được chứ không mất vĩnh viễn. Nhưng đó là quyết định của
+người dùng, không phải quyết định kỹ thuật.
+
+Đổi khi nào muốn: `GROKBOT2_BROWSER_CDP=http://127.0.0.1:9224` trong `.env`, rồi khởi động lại backend
+(biến đọc lúc nạp tiến trình). Trên VPS thì đổi cổng, không cần hầm.
