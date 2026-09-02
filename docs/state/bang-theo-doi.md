@@ -405,6 +405,29 @@ cái client tự tắt" mới quyết định được.
 
 ## 8 · Chưa chắc chắn
 
+- **App GỐC không mở lên được nữa (từ 02/09).** Tôi đóng nó bằng `run.ps1` (bản cũ giết theo TÊN,
+  xem §7) và nó không trở lại. Đã loại **sáu** nghi phạm, chép ra để phiên sau khỏi làm lại:
+
+  | nghi phạm | cách loại |
+  |---|---|
+  | khoá một-thực-thể với app local | đóng app local sạch (0 tiến trình) → vẫn thoát |
+  | khoá treo trong `userData` | cho `SAND_USER_DATA_DIR` một thư mục mới → vẫn thoát |
+  | biến môi trường mức User/Machine | cả 7 biến đều trống ở cả hai mức |
+  | trình cài nạp sẵn tự chạy rồi thoát | không tiến trình `sand-update*` nào sinh ra, không UAC |
+  | thư mục làm việc / cách gọi | `-WorkingDirectory` đúng như shortcut, và **chính shortcut** cũng thất bại |
+  | hosts/DNS/proxy chặn miền hãng | hosts chỉ có `halcion.vn`; `api2.cursor.sh` phân giải được; không proxy |
+
+  Dấu hiệu còn lại: thoát **dưới 3 giây**, im lặng (`ELECTRON_ENABLE_LOGGING=1` ra 0 byte), **không
+  crash dump**, cài đặt nguyên vẹn (`app.asar` 31 MB, không dấu vết bộ vá). Nhưng nó **đi được khá
+  xa**: `~/.grokbot` và `%APPDATA%\Grok Bot` đều có mốc ghi đúng lúc thử mở — nên không phải bail ở
+  dòng đầu. Việc rẻ nhất chưa thử: **khởi động lại máy**. Việc tìm được nguyên nhân: trace Process
+  Monitor đúng cửa sổ 3 giây đó.
+
+  **Mất nó tốn gì:** app gốc là nguồn đối chiếu hành vi. Nhưng bộ ca parity ĐÃ chứa transcript của nó
+  và SQLite của nó vẫn đọc được, nên phần lớn việc đối chiếu không cần app chạy — đúng như case 5 vs
+  23 hôm nay làm được mà không mở app.
+
+
 - **Mất mạng:** lịch sử chắc chắn đọc được (SQLite cục bộ), nhưng **chưa thử rút mạng** xem app có
   boot trọn không. Trích 01/09 cho thấy app gốc có hẳn một cơ chế cho chuyện này mà ta không có —
   `generation` + `CursorTooOld` + cờ `replay` để client biết nó đã bỏ lỡ gì:
