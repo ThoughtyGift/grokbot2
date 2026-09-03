@@ -74,8 +74,34 @@ const readState = () => {
   try { return JSON.parse(readFileSync(STATE_FILE, "utf8")); } catch { return null; }
 };
 
+/**
+ * Phiên bản GỐC của client (của hãng), không phải phiên bản đã đóng dấu của ta.
+ *
+ * `--apply` đóng dấu bản phát hành của mình vào `version` (xem `NEN_TANG` bên dưới), nên đọc thẳng
+ * `version` sẽ thấy `0.29.20260903` và mọi chốt so-với-bản-ghi sẽ báo "client đã tự cập nhật" sai.
+ * `gb2Base` giữ số gốc để những chốt ấy vẫn so đúng thứ chúng định so.
+ */
 const clientVersion = (root) => {
-  try { return JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version; } catch { return null; }
+  try {
+    const p = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    return p.gb2Base ?? p.version;
+  } catch { return null; }
+};
+
+/**
+ * Số phiên bản mà app sẽ KHAI khi hỏi kênh cập nhật: `<major>.<minor>.<YYYYMMDD>`.
+ *
+ * Vì sao phải đóng dấu — đo 03/09, và nó suýt lọt: bộ cài của ta **vá lên một client sẵn có**, nó
+ * không đổi `version` của client. Nên client mãi mãi khai `0.29.0`, còn manifest thì ghi số của bản
+ * phát hành. Kết quả: mọi máy thấy banner, bấm Install, cài xong khai lại `0.29.0`, **thấy banner
+ * tiếp** — một vòng lặp làm phiền vĩnh viễn mà không có lỗi nào nổi lên.
+ *
+ * Giữ `major.minor` của hãng (biết mình đang trên nền 0.29) và thay `patch` bằng ngày phát hành:
+ * tăng đơn điệu, không ai phải nhớ bump số, và nhìn là biết bản ấy ra ngày nào.
+ */
+const NEN_TANG = (base, stamp) => {
+  const [maj = "0", min = "0"] = String(base ?? "0.0.0").split(".");
+  return `${maj}.${min}.${stamp}`;
 };
 
 /**
@@ -178,9 +204,17 @@ if (mode === "--verify") {
      * `PATCHES` bên dưới hoàn toàn không biết nó tồn tại. Mất khoá thì `--verify` vẫn xanh trong khi
      * app đã có lại quyền tự cập nhật — đúng loại lỗ im lặng mà thư mục này sinh ra để chặn.
      */
-    pkg.sandLab === true
-      ? ok("sandLab: true (updater bat dong o moi duong mo)")
-      : fail('package.json thieu "sandLab": true — app CO THE tu cap nhat va xoa sach ban va; chay lai --apply');
+    /*
+     * Từ 03/09 chốt NGƯỢC lại: `sandLab` phải VẮNG.
+     *
+     * Bảo vệ nay nằm ở bản vá `update-feed` (kênh cập nhật trỏ backend của mình), còn `sandLab` thì
+     * khoá updater ở nhánh trước nhánh feed nên nó chặn luôn banner của CHÍNH ta. Hai chốt đi cùng
+     * nhau: thiếu vá feed là đỏ ở vòng `PATCHES` bên dưới, `sandLab` sót lại là đỏ ở đây. Mất một
+     * trong hai là mất cả lớp bảo vệ lẫn tính năng.
+     */
+    pkg.sandLab === undefined
+      ? ok("sandLab: vang mat (dung) — updater dung kenh cua minh")
+      : fail('package.json con "sandLab" — updater bi khoa, banner cua MINH khong bao gio hien; chay lai --apply');
   } catch { fail("cannot read resources/app/package.json"); }
 
   for (const p of PATCHES) {
@@ -383,15 +417,48 @@ ${chk.stderr}`); process.exit(1); }
  */
 {
   const pkgPath = join(staging, "package.json");
-  const raw = readFileSync(pkgPath, "utf8");
-  const pkg = JSON.parse(raw);
-  if (pkg.sandLab === true) ok("sandLab: da bat san trong bundle nay");
-  else {
-    pkg.sandLab = true;
-    // Giữ đúng 2 dấu cách + xuống dòng cuối như bundle của hãng, để `diff` chỉ hiện MỘT dòng thêm.
-    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
-    ok('sandLab: dat true — updater bat dong o moi duong mo (khong can SAND_DISABLE_UPDATES)');
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+
+  /*
+   * `sandLab` PHẢI vắng mặt — và điều kiện là bản vá `update-feed` đã áp.
+   *
+   * Cổng cập nhật của client xét theo thứ tự:
+   *   envDisabled → isLabBuild → hasDevFeedOverride → …
+   * nên `sandLab: true` (isLabBuild) khoá updater ở nhánh TRƯỚC nhánh feed. Còn nó thì banner
+   * "New update available" của CHÍNH TA không bao giờ hiện, dù feed chạy đúng đến đâu.
+   *
+   * Gỡ nó chỉ AN TOÀN sau khi hằng feed đã trỏ backend của mình: lúc ấy updater sống lại nhưng
+   * không còn đường nào tới máy chủ hãng. Gỡ khi feed CHƯA vá là mở lại đúng cái bẫy `sandLab` sinh
+   * ra để đóng — nên kiểm bằng DẤU VẾT THẬT trên đĩa, không tin vào thứ tự chạy của vòng lặp trên.
+   */
+  const feedDaVa = readFileSync(join(staging, "dist/electron-main/main.cjs"), "utf8")
+    .includes("/*grokbot2:update-feed*/");
+  if (!feedDaVa) {
+    console.error("FAIL update-feed chua ap — KHONG go sandLab.");
+    console.error("  Go khoa khi kenh cap nhat con tro api2.cursor.sh nghia la app co the tu cai ban");
+    console.error("  cua hang de len resources/app va xoa sach bo va.");
+    process.exit(1);
   }
+  let doiPkg = false;
+  if (pkg.sandLab !== undefined) { delete pkg.sandLab; doiPkg = true; ok("sandLab: da go — updater song lai, va no chi hoi backend cua minh"); }
+  else ok("sandLab: khong co san trong bundle nay (dung)");
+
+  /*
+   * Đóng dấu bản phát hành vào `version` — xem `NEN_TANG` ở đầu file cho lý do đầy đủ.
+   *
+   * `GROKBOT2_RELEASE_STAMP` do bộ cài truyền vào (nó biết ngày dựng của chính nó). Không có thì
+   * lấy ngày hôm nay: một lần vá thủ công trên máy dev vẫn cần một số để khai, và ngày hôm nay là
+   * số đúng nhất có thể biết ở đây.
+   */
+  const stamp = (process.env.GROKBOT2_RELEASE_STAMP ?? new Date().toISOString().slice(0, 10).replace(/-/g, "")).trim();
+  if (!/^\d{8}$/.test(stamp)) { console.error(`FAIL GROKBOT2_RELEASE_STAMP phai la YYYYMMDD, nhan duoc: ${stamp}`); process.exit(1); }
+  // `gb2Base` ghi MỘT LẦN: lần vá thứ hai không được lấy số đã đóng dấu làm nền.
+  if (pkg.gb2Base === undefined) { pkg.gb2Base = pkg.version; doiPkg = true; }
+  const moi = NEN_TANG(pkg.gb2Base, stamp);
+  if (pkg.version !== moi) { pkg.version = moi; doiPkg = true; }
+  ok(`version: ${pkg.gb2Base} → ${moi} (nen ${pkg.gb2Base}, ban phat hanh ${stamp})`);
+
+  if (doiPkg) writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
 if (DRY) {

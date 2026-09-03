@@ -13,7 +13,8 @@ import winDrivePath from "./win-drive-path.mjs";
 import attachUploadObservable from "./attach-upload-observable.mjs";
 import getUltraRedirect from "./get-ultra-redirect.mjs";
 import computerTab from "./computer-tab.mjs";
+import updateFeed from "./update-feed.mjs";
 
 // `computerTab` là một MẢNG hai bản vá — cờ ở renderer, cầu IPC ở main. Xem chú thích đầu
 // file đó: gộp chúng vào một id thì bộ vá `break` sau file đầu và bỏ im file sau.
-export const PATCHES = [winDrivePath, attachUploadObservable, getUltraRedirect, ...computerTab];
+export const PATCHES = [winDrivePath, attachUploadObservable, getUltraRedirect, ...computerTab, updateFeed];

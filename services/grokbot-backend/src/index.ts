@@ -44,6 +44,7 @@ import { ensureGatewayToken } from "./auth-gate.js";
 import { authMode } from "./auth-mode.js";
 import { handleAdmin } from "./admin.js";
 import { handleSite } from "./site.js";
+import { traLoi } from "./update-feed.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
@@ -230,6 +231,24 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   //
   // Đứng trước /admin và /gw vì nó là cửa cho người CHƯA có gì trong tay: chưa token, chưa app.
   if (await handleSite(url, req, res)) return;
+
+  /*
+   * ── kênh cập nhật của app local (update-feed.ts) ──
+   *
+   * Công khai như trang tải, và vì cùng một lý do: người hỏi là một app đã cài trên máy người khác,
+   * nó chưa có và không cần token nào. Câu trả lời không tiết lộ gì ngoài "có bản mới hay không" —
+   * đúng thứ ai tải bộ cài cũng biết.
+   *
+   * Đứng trước `/gw` vì nó không phải lệnh gateway. Đường do client (đã vá `update-feed`) ghép:
+   * `{backend}/updates/api/update/{nền}/{kênh}/{ver}/{máy}/stable`.
+   */
+  if (url.startsWith("/updates/api/update/") && (req.method ?? "GET") === "GET") {
+    const kq = traLoi(url.split("?")[0]);
+    if (kq.status === 204) { res.writeHead(204); return res.end(); }
+    if (kq.status === 400) { res.writeHead(400, { "content-type": "application/json" }); return res.end('{"error":"bad update path"}'); }
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify(kq.body));
+  }
 
   // ── /admin — bảng theo dõi sức chứa box (admin.ts) ──
   //

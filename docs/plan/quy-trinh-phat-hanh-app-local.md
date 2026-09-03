@@ -72,7 +72,37 @@ chạy bản cũ hơn sẽ thấy banner ở lần hỏi kế tiếp.
 Khác biệt duy nhất đáng kể: web thì F5 là xong, app phải **tải + cài + mở lại** — nên phiên bản trong
 manifest phải là một gói đã dựng và đã kiểm băm, không phải một commit.
 
-## 5 · Cần dựng gì (chưa có cái nào)
+## 5 · ĐÃ DỰNG 03/09 — cả bốn
+
+| # | việc | trạng thái |
+|---|---|---|
+| 1 | Vá hằng feed | ✅ `infra/patches/update-feed.mjs` — hai biến thể (0.29 `JBn`, 0.30 `t4n`). Không ghim địa chỉ: nó đọc `SAND_BACKEND_URL` → `CURSOR_API_BASE_URL` → localhost, nên máy nào trỏ backend nào thì hỏi đúng backend ấy. Không có biến (mở trần) thì rơi về localhost — **tuyệt đối không rơi về hãng**. |
+| 2 | Gỡ `sandLab` | ✅ `--apply` gỡ, và **từ chối gỡ nếu chưa thấy dấu vết vá feed trên đĩa**. `--verify` chốt ngược: còn `sandLab` là đỏ. |
+| 3 | Route feed | ✅ `src/update-feed.ts` + `/updates/api/update/…` trong `index.ts`. Đọc manifest, không đọc git. Test 9/9. |
+| 4 | Lệnh phát hành | ✅ `scripts/phat-hanh.mjs` — test → dựng gói → băm → ghi manifest; **test đỏ thì từ chối ghi**. |
+
+### Một lỗi suýt lọt, và nó là lý do bước 4 phải có test thật
+
+Bản đầu của `phat-hanh` đặt số phiên bản theo ngày (`2026.9.2`) trong khi client khai `0.29.0`. So
+số thì `2026 > 0` **vĩnh viễn**: mọi máy thấy banner, bấm Install, cài xong khai lại `0.29.0`, **thấy
+banner tiếp** — một vòng lặp làm phiền không có lỗi nào nổi lên.
+
+Gốc rễ: **bộ cài của ta vá lên một client sẵn có, nó không đổi `version` của client.** Nên "máy này
+đang dùng bản nào của MÌNH" là thứ kênh cập nhật hoàn toàn không nhìn thấy.
+
+Chữa: `--apply` **đóng dấu** `version` thành `<major>.<minor>.<YYYYMMDD>` (ví dụ `0.29.20260903`) và
+ghi `gb2Base` giữ số gốc để những chốt so-phiên-bản khác vẫn so đúng thứ chúng định so. `phat-hanh`
+dựng số y hệt từ `client-patch-state.json`, nên hai bên không thể lệch nhau.
+
+Đo cả ba hướng sau khi chữa:
+
+```
+máy chưa vá     (0.29.0)          → 200 {url, version: 0.29.20260903, sha256hash}
+máy đã vá 03/09 (0.29.20260903)   → 204   ← vòng lặp đã hết
+người dùng stable                 → 204   ← dogfood không rò sang
+```
+
+## (kế hoạch gốc, giữ để đối chiếu)
 
 | # | việc | mô tả ngắn |
 |---|---|---|
