@@ -333,6 +333,22 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Cửa sức khoẻ chỉ kiểm thứ nó biết kiểm.** `deploy.sh` build `./packages/*`, `dist/` nằm trong
+`.gitignore`, và `git archive` chỉ lấy file đã theo dõi. Ba thứ đều đúng việc của chúng, và khoảng
+trống nằm GIỮA chúng: `apps/grokbot-web` **chưa bao giờ được dựng trên VPS**. Hậu quả rơi xa nhất
+khỏi nguyên nhân — app desktop mở `{backend}/loginDeepControl`, backend chuyển hướng vào `/app/`,
+`/app/` trả 503 kèm câu *"Chạy `pnpm --filter @grokbot2/web build`"*, và người đọc câu đó là một
+người dùng vừa cài app lên **máy thứ tư**, không có kho mã lẫn pnpm. Suốt thời gian ấy `/gw/health`
+xanh 200. Nay `deploy.sh` build luôn web, kiểm `dist/index.html` tồn tại, và cửa sức khoẻ dò thêm
+`/app/` (chỉ CẢNH BÁO, không tự lùi — bản cũ không có `apps/grokbot-web` vẫn chạy được). Bài học
+chung: **một cửa sức khoẻ kiểm đúng thứ nó biết kiểm thì sẽ bỏ lọt đúng thứ nó không biết** — và
+đường người dùng đi (tải → cài → đăng nhập) phải có ít nhất một mốc trong cửa ấy.
+
+**Câu lỗi viết cho lập trình viên, hiện ra trước mặt người dùng cuối.** Cùng sự cố trên: trang 503
+nói đúng lệnh cần chạy, và đó là lý do nó vô dụng ở nơi nó thật sự xuất hiện. Nay
+`chuaDungHtml()` đọc `GROKBOT2_PUBLIC_PATH` — biến CHỈ máy chủ công khai mới đặt — để nói hai câu
+khác nhau, thay vì thêm một cờ nữa phải nhớ đồng bộ.
+
 **Hỏi sai KHOÁ thì hạ tầng khoẻ vẫn trả lời như đang sập.** Dò `/grok-exec/health` với
 `x-grokbot2-owner: admin@cinai.tv` nhận `per-user mode: pool exhausted (5 in use)` — tôi suýt báo
 "cả nhóm tool box đang chết". Owner thật là `auth0|grokbot2-user` (`DEFAULT_USER.authId`), và với

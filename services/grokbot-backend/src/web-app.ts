@@ -39,6 +39,27 @@ export function webAppBuilt(): boolean {
 }
 
 /**
+ * Trang báo "chưa dựng" — và nó nói với AI thì tuỳ chỗ đang chạy.
+ *
+ * Câu cũ là *"Chạy `pnpm --filter @grokbot2/web build`"* ở mọi nơi. Trên máy lập trình viên thì
+ * đúng; trên `cinai.app/agent` thì nó hiện ra trước mặt một người vừa tải app về máy thứ tư và bấm
+ * Đăng nhập — người đó không có kho mã, không có pnpm, và câu ấy chỉ nói cho họ biết rằng có thứ gì
+ * đó hỏng ở phía chúng ta. Đo 03/09, đúng tình huống đó.
+ *
+ * `GROKBOT2_PUBLIC_PATH` là thứ CHỈ máy chủ công khai mới đặt (nginx cắt tiền tố `/agent`), nên nó
+ * là dấu hiệu sẵn có để phân biệt hai chỗ mà không cần thêm một cờ nữa phải nhớ đồng bộ.
+ */
+export function chuaDungHtml(): string {
+  const congKhai = Boolean((process.env.GROKBOT2_PUBLIC_PATH ?? "").trim());
+  return congKhai
+    ? "<h1>Đăng nhập đang tạm gián đoạn</h1>"
+      + "<p>Máy chủ chưa phát được màn hình đăng nhập. Đây là sự cố phía chúng tôi, không phải do máy bạn — "
+      + "vui lòng báo quản trị viên và thử lại sau ít phút.</p>"
+    : "<h1>Giao diện web chưa được dựng</h1>"
+      + "<p>Chạy <code>pnpm --filter @grokbot2/web build</code> rồi tải lại trang.</p>";
+}
+
+/**
  * `GET /app/...` — trả file trong bản build.
  *
  * Đường nào không phải file thì trả `index.html`: đây là ứng dụng một trang, và `/app/xyz` phải để
@@ -49,8 +70,7 @@ export function handleWebApp(url: string, res: ServerResponse): boolean {
 
   if (!webAppBuilt()) {
     res.writeHead(503, { "content-type": "text/html; charset=utf-8" });
-    res.end("<h1>Giao diện web chưa được dựng</h1>"
-      + "<p>Chạy <code>pnpm --filter @grokbot2/web build</code> rồi tải lại trang.</p>");
+    res.end(chuaDungHtml());
     return true;
   }
 

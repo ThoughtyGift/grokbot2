@@ -24,7 +24,7 @@ import type { ServerResponse } from "node:http";
 import { DEFAULT_USER, tokenPayload, verifyJwt } from "./auth.js";
 import { authMode } from "./auth-mode.js";
 import { approveLogin, claimLogin, noteLoginOpened } from "./device-login.js";
-import { webAppBuilt } from "./web-app.js";
+import { webAppBuilt, chuaDungHtml } from "./web-app.js";
 
 const html = (res: ServerResponse, body: string, status = 200): void => {
   res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
@@ -72,10 +72,7 @@ export function handleLoginPage(url: string, res: ServerResponse): void {
   // Ghi nhận ô chờ ở ĐÂY, trước khi chuyển hướng: đây là lượt duy nhất mang `challenge`.
   noteLoginOpened(uuid, challenge);
 
-  if (!webAppBuilt()) {
-    return html(res, "<h1>Giao diện web chưa được dựng</h1>"
-      + "<p>Chạy <code>pnpm --filter @grokbot2/web build</code> rồi bấm đăng nhập lại trong ứng dụng.</p>", 503);
-  }
+  if (!webAppBuilt()) return html(res, chuaDungHtml(), 503);
 
   /*
    * Chuyển hướng vào giao diện đã có, mang theo uuid.

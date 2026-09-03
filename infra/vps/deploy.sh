@@ -79,6 +79,20 @@ log "phu thuoc"
 log "dung goi (packages/*)"
 ( cd "$NEW" && pnpm -r --filter './packages/*' build 2>&1 | tail -5 ) || die "build that bai"
 
+# **Giao dien dang nhap.** Bo qua dong nay la ca duong DANG NHAP chet, va chet o cho xa nhat khoi
+# nguyen nhan: app desktop mo `{backend}/loginDeepControl`, backend chuyen huong vao `/app/`, va
+# `/app/` tra 503 "Giao dien web chua duoc dung" — mot cau viet cho LAP TRINH VIEN, hien ra truoc
+# mat NGUOI DUNG CUOI vua tai app ve.
+#
+# Vi sao no thoat duoc lau the: `dist/` nam trong `.gitignore`, `git archive` chi lay file da theo
+# doi, va dong build ngay tren chi loc `./packages/*`. Ba thu deu dung viec cua chung, va khoang
+# trong nam giua chung. Do 03/09 tren cinai.app/agent: HTTP 503, tren MAY THU TU cua nguoi dung.
+#
+# `--if-present` de mot ban khong co script `build` khong lam do ca lan trien khai.
+log "dung giao dien dang nhap (apps/grokbot-web)"
+( cd "$NEW" && pnpm --filter @grokbot2/web build 2>&1 | tail -5 ) || die "build web that bai"
+[ -f "$NEW/apps/grokbot-web/dist/index.html" ] || die "build web xong ma khong co dist/index.html"
+
 log "doi liên ket current -> $STAMP"
 ln -sfn "$NEW" "$ROOT/current.new" && mv -Tf "$ROOT/current.new" "$ROOT/current"
 
@@ -92,6 +106,26 @@ for i in $(seq 1 20); do
   code="$(curl -s -o /dev/null -w '%{http_code}' -m 4 "$HEALTH_URL" || true)"
   if [ "$code" = "200" ]; then ok=1; echo "    $HEALTH_URL = 200 sau $((i*2))s"; break; fi
 done
+
+# **Cua thu HAI: duong dang nhap.**
+#
+# `/health` xanh khong noi gi ve viec nguoi dung co dang nhap duoc khong. Ngay 03/09 backend tra
+# `/health` = 200 suot trong khi `/agent/app/` tra 503, va khong ai biet cho toi luc mot nguoi that
+# cai app tren may thu tu roi bam Dang nhap. Mot cua suc khoe chi kiem thu no biet kiem la mot cua
+# se bo lot dung thu no khong biet.
+#
+# Chi CANH BAO, khong tu lui: mot bo may cu chua co `apps/grokbot-web` van dang chay duoc, va lui
+# ban vi mot canh bao thi con hai hon.
+if [ "$ok" = "1" ]; then
+  # Dat thang, khong cat tu HEALTH_URL: HEALTH_URL la `.../gw/health`, nen mot phep cat "bo /health"
+  # ra `.../gw/app/` — mot duong khong ton tai, va cua se im lang bao 404 thay vi bao dung thu can bao.
+  app_code="$(curl -s -o /dev/null -w '%{http_code}' -m 4 "${GROKBOT2_APP_URL:-http://127.0.0.1:8788/app/}" || true)"
+  if [ "$app_code" = "503" ]; then
+    printf '\033[33m[!] /app/ = 503 — giao dien dang nhap CHUA DUNG. Nguoi dung se khong dang nhap duoc.\033[0m\n'
+  else
+    echo "    /app/ = $app_code"
+  fi
+fi
 
 if [ "$ok" != "1" ]; then
   printf '\n\033[31m[X] khong dat cua suc khoe — TU LUI\033[0m\n'
