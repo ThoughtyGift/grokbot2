@@ -43,7 +43,7 @@ if (!KENH_HOP_LE.includes(KENH)) {
   process.exit(2);
 }
 
-const buoc = (n, m) => console.log(`\n[${n}/4] ${m}`);
+const buoc = (n, m) => console.log(`\n[${n}/5] ${m}`);
 const chay = (cmd, args) => execFileSync(cmd, args, { cwd: REPO, stdio: "inherit", shell: process.platform === "win32" });
 
 // ── 1 · nghiệm thu ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +126,38 @@ const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256h
 writeFileSync(MANIFEST, `${JSON.stringify(moi, null, 2)}\n`);
 
 console.log(`  ✓ ${MANIFEST}`);
+
+// ── 5 · lên VPS ────────────────────────────────────────────────────────────────────────────────
+/*
+ * Bước này SINH RA vì thiếu nó thì bốn bước trên không tới được ai.
+ *
+ * Đo 03/09: manifest và gói nằm trong `.data` của MÁY CHẠY LỆNH, còn `deploy.sh` thì cố ý không đụng
+ * `shared/` — vùng giữ dữ liệu người dùng. Hai thứ đều đúng việc của chúng, và đường phát hành đứt ở
+ * giữa: VPS chỉ có gói ngày 27/08, không có manifest nào, nên feed trả 204 "không có gì mới" cho mọi
+ * máy, mãi mãi. Người dùng máy thứ tư không thấy banner, và không lỗi nào nổi lên ở đâu cả.
+ *
+ * Thứ tự trong bước này cũng có lý do: GÓI lên trước, MANIFEST lên sau. Manifest là thứ duy nhất
+ * người dùng nhìn thấy — đưa nó lên trước gói thì có một khoảng thời gian banner đã hiện mà file tải
+ * về vẫn là bản cũ, và sha256 sẽ không khớp.
+ */
+if (argv.includes("--len-vps")) {
+  buoc(5, "đưa gói + manifest lên VPS");
+  const SSH = process.env.GROKBOT2_VPS_SSH ?? "";
+  if (!SSH) {
+    console.error("✘ --len-vps cần GROKBOT2_VPS_SSH (ví dụ root@103.75.186.63).");
+    console.error("  Manifest ĐÃ ghi ở máy này; chạy lại chỉ bước lên VPS bằng scp là đủ.");
+    process.exit(1);
+  }
+  const PORT = process.env.GROKBOT2_VPS_PORT ?? "24700";
+  const DATA = process.env.GROKBOT2_VPS_DATA ?? "/opt/grokbot2/shared/data";
+  chay("scp", ["-P", PORT, "-o", "BatchMode=yes", goi.path, `${SSH}:${DATA}/dist/`]);
+  console.log(`  ✓ gói → ${DATA}/dist/${goi.name}`);
+  chay("scp", ["-P", PORT, "-o", "BatchMode=yes", MANIFEST, `${SSH}:${DATA}/phat-hanh.json`]);
+  console.log(`  ✓ manifest → ${DATA}/phat-hanh.json`);
+} else {
+  console.log("\n  (chưa lên VPS — thêm --len-vps, hoặc người dùng sẽ không thấy gì)");
+}
+
 console.log(`\nĐÃ PHÁT HÀNH  ${version}  →  kênh ${KENH}`);
 console.log(`  gói   : ${goi.name}`);
 console.log(`  tải ở : ${base}/download/windows`);
