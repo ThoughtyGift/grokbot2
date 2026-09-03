@@ -333,6 +333,27 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**`-forever` giữ được client ngắt, KHÔNG giữ được segfault.** Khung "màn hình của bot" trong app chỉ
+còn một nút Connect không bao giờ nối được. Chuỗi là `nginx /flowvnc-grokbox/ → 127.0.0.1:7077
+(websockify) → 5977 (x11vnc) → Xvfb :77`, và nó đứt ở đúng mắt cuối: `/var/log/x11vnc-grokbox.log`
+ghi **`caught signal: 11`** lúc 12:45:37 ngay sau khi một viewer vừa bắt tay xong. Xvfb còn sống,
+websockify còn sống, nên mọi thứ *trông như* đang chạy — không dòng lỗi nào ở phía backend, vì
+backend không nằm trên chuỗi đó. Nặng hơn: **không ai sở hữu tiến trình ấy** — nó từng được bật bằng
+tay, `grep -rln` cả `/root /opt /etc/systemd` không thấy script nào nhắc tên. Nay là
+`grokbot2-vnc-grokbox.service` với `Restart=always`. Bài học: một mắt trong chuỗi mà không có ai
+giám sát thì lần chết đầu tiên của nó là lần chết cuối cùng.
+
+**Đếm tiến trình bằng `pgrep -af <tên>` là tự đếm chính mình.** Trong đúng lượt chẩn đoán trên, tôi
+đọc "còn 1 x11vnc" và suýt kết luận sai — cái duy nhất khớp là **dòng lệnh ssh của chính tôi** có
+chữ `x11vnc` trong đó. `pgrep -c` cho `0`, và `ss -ltn` mới là thứ trả lời được câu thật: cổng có
+lắng nghe hay không. Cùng họ với bẫy `[x]11vnc` mà `displays.ts` đã chép; lần này nó bắt tôi ở cửa
+chẩn đoán thay vì ở cửa dựng.
+
+**Bash nuốt backtick TRONG heredoc, kể cả khi nội dung là chú thích.** Viết unit systemd qua
+`<<EOF` (không đóng nháy) với chú thích chứa `` `-forever` `` → bash chạy nó và báo
+`-forever: command not found`, unit ghi ra thiếu chữ. Đây là biến thể thứ hai của bẫy backslash đã
+biết; cách chữa cùng một chỗ: **`<<"EOF"`**, luôn luôn.
+
 **Một đường lúc nào cũng "có gì đó" thì không bao giờ kêu.** Đo E2E 03/09 bằng chính trình duyệt
 trên `cinai.app/agent`: `/download/windows` trả gói hôm nay, `/download/mac` trả gói **27/08** —
 thiếu bảy ngày. Không lỗi nào nổi lên, vì đường mac luôn có MỘT file để phát; chỉ là file cũ.
