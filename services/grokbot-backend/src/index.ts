@@ -256,8 +256,9 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
    */
   if (url.startsWith("/updates/ban-moi") && (req.method ?? "GET") === "GET") {
     const q = new URL(url, "http://x").searchParams;
-    const kq = traLoiLauncher((q.get("ver") ?? "").trim(), (q.get("nen") ?? "windows").trim());
-    console.log(`[grokbot2] launcher-update: ver=${q.get("ver") ?? "?"} → ${kq.status}${kq.body ? ` v${kq.body.version}` : ""}`);
+    const kq = traLoiLauncher((q.get("ver") ?? "").trim(), (q.get("nen") ?? "windows").trim(), (q.get("k") ?? "").trim());
+    // KHÔNG log token: một dòng log là một chỗ rò. Chỉ log "có trình token hay không".
+    console.log(`[grokbot2] launcher-update: ver=${q.get("ver") ?? "?"} k=${q.get("k") ? "co" : "khong"} → ${kq.status}${kq.body ? ` v${kq.body.version} ${kq.body.ten ?? ""}` : ""}`);
     if (kq.status === 204) { res.writeHead(204); return res.end(); }
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     return res.end(JSON.stringify(kq.body));

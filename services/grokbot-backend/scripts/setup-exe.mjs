@@ -296,6 +296,11 @@ Source: "${appSrc}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs 
   Excludes: "app.asar.disabled-by-grokbot2"
 Source: "{#SourceDir}\start-bot.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\*.ico";         DestDir: "{app}"; Flags: ignoreversion
+${process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN
+    ? `; token.txt — de launcher tu cap nhat hoi DUNG goi cua no (/updates/ban-moi?k=). Chi co khi
+; GROKBOT2_FULL_DOWNLOAD_TOKEN duoc dat luc dung goi; Inno bao loi neu Source thieu nen dong nay co dieu kien.
+Source: "{#SourceDir}\token.txt";     DestDir: "{app}"; Flags: ignoreversion`
+    : `; (khong co token.txt — dung goi ma khong dat GROKBOT2_FULL_DOWNLOAD_TOKEN: launcher se khong tu cap nhat)`}
 
 [Icons]
 ; Tro vao start-bot.cmd, KHONG tro thang vao exe: bon bien moi truong nam trong do.
@@ -357,7 +362,7 @@ export function coVaUpdateFeed(appSrc) {
  *
  * @param {boolean} khoaCapNhat giữ `SAND_DISABLE_UPDATES=1` hay không — xem `coVaUpdateFeed`
  */
-export const startBundled = (khoaCapNhat = true) => `@echo off
+export const startBundled = () => `@echo off
 REM Mo Bot Noi Bo. App nam ngay canh file nay — day la ban tu chua, khong can client cua hang.
 REM
 REM Bon bien duoi day la toan bo hop dong voi client, thieu cai nao cung hong theo kieu rieng:
@@ -383,17 +388,68 @@ REM   {CURSOR_WEBSITE_URL}/loginDeepControl?challenge=...&uuid=...
 REM trong trinh duyet. De cursor.com o day thi may nay mo trang cua HANG: dang nhap khong bao gio
 REM xong, va uuid + challenge cua phien tren may nay bi giao cho ho.
 set "CURSOR_WEBSITE_URL=%BE%"
-${khoaCapNhat
-    ? `REM Ban app nay CHUA co va update-feed: hang so feed van tro ve api2.cursor.sh, nen phai khoa.
-set "SAND_DISABLE_UPDATES=1"`
-    : `REM KHONG khoa cap nhat: ban app nay DA co va update-feed, hang so feed tro ve backend cua minh,
-REM nen app hoi minh chu khong hoi nha phat hanh. Do la ca duong banner "New update available".`}
+
+REM ── Updater GOC: tat, co chu dich ────────────────────────────────────────────
+REM Updater goc KHONG cai duoc ban cua minh: truoc khi chay installer no do chu ky Authenticode va
+REM doi ten nguoi ky nam trong ["Anysphere, Inc.","Anysphere"] (trich main.cjs 0.30). Mo no chi de
+REM duoc mot banner dan toi nut Install luon that bai. Cap nhat do khoi duoi day lo.
+REM GROKBOT2_NATIVE_UPDATES=1 mo lai — cho ngay co chung chi ky so + ban va noi danh sach trang.
+if not "%GROKBOT2_NATIVE_UPDATES%"=="1" set "SAND_DISABLE_UPDATES=1"
 
 if not exist "%~dp0Grok Bot.exe" (
   echo Thieu "%~dp0Grok Bot.exe" — cai dat khong tron. Chay lai bo cai.
   pause
   exit /b 1
 )
+
+REM ── TU CAP NHAT, HAI PHA ─────────────────────────────────────────────────────
+REM
+REM Vi sao hai pha: bo cai ghi de CHINH file start-bot.cmd nay. cmd doc batch tu dia theo tung dong,
+REM nen neu bo cai chay DONG BO tu trong day, sau khi no xong cmd doc dong ke tiep tu file MOI o
+REM offset CU — hanh vi khong doan duoc. Pha 1 (o day) chi kiem + tai + ghi mot script ra %TEMP% roi
+REM THOAT; pha 2 chay tach roi, sau khi cmd nay da thoat, moi cai va mo lai app.
+REM
+REM Token: bo cai dat token.txt canh app luc dung goi. Co no thi hoi DUNG goi cua minh (ban cho-app,
+REM qua ?k=); khong co thi 204 la dung — cai ban 50 KB len may nay la sai goi.
+REM
+REM Ba luat nhu launcher cong khai: HONG THI MO APP · kiem sha256 truoc khi CHAY · tiet che (24h, vi
+REM goi nang ~105 MB). Tat han: GROKBOT2_NO_SELF_UPDATE=1.
+if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "try{" ^
+  "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
+  "  $moc=Join-Path $dir '.lan-hoi-cuoi';" ^
+  "  if(Test-Path $moc){ if(((Get-Date)-(Get-Item $moc).LastWriteTime).TotalHours -lt 24){ exit 0 } }" ^
+  "  $tk=Join-Path $dir 'token.txt'; if(-not (Test-Path $tk)){ exit 0 }" ^
+  "  $k=(Get-Content $tk -Raw).Trim(); if(-not $k){ exit 0 }" ^
+  "  $pkg=Join-Path $dir 'resources\\app\\package.json';" ^
+  "  $ver=if(Test-Path $pkg){ (Get-Content $pkg -Raw | ConvertFrom-Json).version } else { '' };" ^
+  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&k='+[uri]::EscapeDataString($k));" ^
+  "  Set-Content -Path $moc -Value (Get-Date -Format o) -Encoding utf8;" ^
+  "  if($r.StatusCode -ne 200){ exit 0 }" ^
+  "  $b=$r.Content | ConvertFrom-Json;" ^
+  "  if(-not $b.ten -or -not $b.sha256hash){ exit 0 }" ^
+  "  $tmp=Join-Path $env:TEMP $b.ten;" ^
+  "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 -Uri $b.url -OutFile $tmp;" ^
+  "  $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
+  "  if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; exit 0 }" ^
+  "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
+  "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^
+  "    'Start-Sleep -Seconds 2'," ^
+  "    ('$d=''' + $dir + ''''),"  ^
+  "    ('$f=''' + $tmp + ''''),"  ^
+  "    'Start-Process -FilePath $f -ArgumentList ''/VERYSILENT'',''/SUPPRESSMSGBOXES'',''/NORESTART'',(''/DIR=''+[char]34+$d+[char]34) -Wait'," ^
+  "    'Remove-Item $f -Force -ErrorAction SilentlyContinue'," ^
+  "    'Start-Process -FilePath (Join-Path $d ''start-bot.cmd'') -WorkingDirectory $d'" ^
+  "  );" ^
+  "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$pha2;" ^
+  "  exit 7" ^
+  "}catch{ exit 0 }"
+REM Ma 7 = pha 2 da duoc giao viec: no se cai roi tu mo app. Cmd nay phai THOAT NGAY de file khong bi giu.
+if errorlevel 7 exit /b 0
+:sau_cap_nhat
+
 start "" "%~dp0Grok Bot.exe" %*
 `;
 
@@ -412,7 +468,11 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
 
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
-  writeFileSync(join(stagingDir, "start-bot.cmd"), startBundled(!coVaUpdateFeed(appSrc)).replace(/\r?\n/g, "\r\n"), "utf8");
+  writeFileSync(join(stagingDir, "start-bot.cmd"), startBundled().replace(/\r?\n/g, "\r\n"), "utf8");
+  // token.txt — launcher dùng nó để hỏi ĐÚNG gói của mình (bản chở-app) qua /updates/ban-moi?k=.
+  // Chỉ ghi khi có token; ISS_FULL cũng chỉ liệt kê file này khi cùng biến ấy được đặt.
+  const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
+  if (tokenDay) writeFileSync(join(stagingDir, "token.txt"), `${tokenDay}\r\n`, "utf8");
   // Icon của chính ứng dụng được cài; lấy không được thì rơi về dấu "B" — một cái icon không được
   // phép chặn cả bản dựng.
   const iconPath = appIcon(join(appSrc, "Grok Bot.exe"), stagingDir) ?? makeIcon(stagingDir);
@@ -466,7 +526,11 @@ export function buildZip({ distDir, stagingDir, appSrc, outName }) {
   }
   // Windows doc file .cmd/.txt bang CRLF; ghi LF thi Notepad hien mot dong dai dinh lien.
   const crlf = (t) => t.split(String.fromCharCode(10)).join(String.fromCharCode(13,10));
-  writeFileSync(join(root, "start-bot.cmd"), crlf(startBundled(!coVaUpdateFeed(appSrc))), "utf8");
+  writeFileSync(join(root, "start-bot.cmd"), crlf(startBundled()), "utf8");
+  {
+    const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
+    if (tokenDay) writeFileSync(join(root, "token.txt"), `${tokenDay}\r\n`, "utf8");
+  }
   writeFileSync(join(root, "backend.txt"), "http://localhost:8788" + String.fromCharCode(13,10), "utf8");
   writeFileSync(join(root, "DOC-DAY-TRUOC.txt"), crlf(README_ZIP), "utf8");
 

@@ -23,7 +23,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, statSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,7 +67,24 @@ if (BO_QUA_TEST) {
 
 // ── 2 · dựng gói ───────────────────────────────────────────────────────────────────────────────
 buoc(2, "dựng bộ cài");
-chay("node", ["services/grokbot-backend/scripts/build-setup.mjs"]);
+/*
+ * `--with-app` dựng thêm bản CHỞ CẢ APP (`Bot-Noi-Bo-Setup-*.exe`, ~105 MB). Cần hai biến môi trường,
+ * và thiếu cái nào cũng hỏng theo kiểu im lặng nên nói ra ở đây:
+ *   GROKBOT2_CLIENT_DIR      — cây client đã vá để đóng gói (vd `C:\cai029`); thiếu thì build-setup
+ *                              tìm ở %LOCALAPPDATA%\Programs\Grok Bot và báo "không có gì để chở".
+ *   GROKBOT2_PUBLIC_BACKEND  — địa chỉ backend nướng vào bộ cài làm mặc định. Thiếu thì mặc định là
+ *                              `localhost:8788` — đúng cho máy dựng, SAI cho mọi máy khác (đo 03/09:
+ *                              bản đầu cài lên máy thử ra `backend.txt = http://localhost:8788/`).
+ *   GROKBOT2_FULL_DOWNLOAD_TOKEN — nướng `token.txt` cạnh app, để launcher bản chở-app tự cập nhật
+ *                              được đúng gói của nó qua `/updates/ban-moi?k=`.
+ */
+const WITH_APP = argv.includes("--with-app");
+if (WITH_APP) {
+  for (const b of ["GROKBOT2_CLIENT_DIR", "GROKBOT2_PUBLIC_BACKEND", "GROKBOT2_FULL_DOWNLOAD_TOKEN"]) {
+    if (!process.env[b]) console.log(`  ⚠ --with-app mà thiếu ${b} — xem chú thích trong phat-hanh.mjs`);
+  }
+}
+chay("node", ["services/grokbot-backend/scripts/build-setup.mjs", ...(WITH_APP ? ["--with-app"] : [])]);
 
 /**
  * Gói vừa dựng, chọn ĐÚNG như trang tải chọn: mới nhất thắng, loại chỉ phá hoà.
@@ -135,7 +152,28 @@ const macPhan = goiMac
   : {};
 if (goiMac) console.log(`  goi mac : ${goiMac.name}`);
 else console.log("  (khong co goi mac — manifest se khong co khoa mac, launcher Mac se thay 204)");
-const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name, ...macPhan } };
+/*
+ * Bản CHỞ CẢ APP — khoá `full`, chỉ trả cho launcher trình đúng token (`traLoiLauncher`).
+ *
+ * Tìm bằng tay chứ không qua `newestSetup`: hàm ấy cố ý BỎ gói này (cờ `chiRieng`) để nó không bao
+ * giờ ra nút Tải công khai. Ở đây ta muốn đúng cái nó bỏ. Không có `url` trong khoá `full`: đường
+ * tải ghép lúc trả lời từ token người hỏi, để manifest trên đĩa không chứa token.
+ */
+const goiFull = (() => {
+  try {
+    const ds = readdirSync(DIST)
+      .filter((n) => n.startsWith("Bot-Noi-Bo-Setup") && n.endsWith(".exe"))
+      .map((n) => ({ name: n, path: join(DIST, n), mtimeMs: statSync(join(DIST, n)).mtimeMs }))
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return ds[0] ?? null;
+  } catch { return null; }
+})();
+const fullPhan = goiFull
+  ? { full: { sha256hash: createHash("sha256").update(readFileSync(goiFull.path)).digest("hex"), ten: goiFull.name } }
+  : {};
+if (goiFull) console.log(`  goi cho-app: ${goiFull.name} (${(statSync(goiFull.path).size / 1024 / 1024).toFixed(1)} MB) — chi tra qua ?k=`);
+else console.log("  (khong co goi cho-app — launcher ban 105 MB se thay 204)");
+const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name, ...macPhan, ...fullPhan } };
 writeFileSync(MANIFEST, `${JSON.stringify(moi, null, 2)}\n`);
 
 console.log(`  ✓ ${MANIFEST}`);
@@ -198,6 +236,12 @@ if (argv.includes("--len-vps")) {
     if (!g) { console.log(`  (không có gói ${hang} — bỏ qua)`); continue; }
     chay("scp", ["-P", PORT, "-o", "BatchMode=yes", g.path, `${SSH}:${DATA}/dist/`]);
     console.log(`  ✓ gói ${hang} → ${DATA}/dist/${g.name}`);
+  }
+  // Gói chở-app đi cùng lượt với manifest có khoá `full` — lệch nhau là launcher bản 105 MB tải về
+  // một file khác hash rồi lặng lẽ bỏ qua cập nhật mãi mãi (đúng bẫy hash Mac).
+  if (goiFull) {
+    chay("scp", ["-P", PORT, "-o", "BatchMode=yes", goiFull.path, `${SSH}:${DATA}/dist/`]);
+    console.log(`  ✓ gói chở-app → ${DATA}/dist/${goiFull.name}`);
   }
   chay("scp", ["-P", PORT, "-o", "BatchMode=yes", MANIFEST, `${SSH}:${DATA}/phat-hanh.json`]);
   console.log(`  ✓ manifest → ${DATA}/phat-hanh.json`);

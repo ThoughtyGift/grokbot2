@@ -208,3 +208,56 @@ test("manifest chưa có khoá mac → Mac nhận 204, KHÔNG nhận gói Window
   assert.equal(traLoiLauncher("0.29.0", "mac").status, 204);
   assert.equal(traLoiLauncher("0.29.0", "windows").status, 200);
 });
+
+/*
+ * ── Launcher của bản CHỞ CẢ APP trình token ────────────────────────────────────────────────────
+ *
+ * Máy cài bản 105 MB có client nằm CẠNH launcher, không ở `%LOCALAPPDATA%\Programs\Grok Bot`. Cài
+ * bản 50 KB lên máy ấy là sai gói: nó vá một client không tồn tại rồi báo lỗi. Nên launcher đọc
+ * `token.txt` (bộ cài đặt cạnh app lúc dựng) và hỏi kèm `k=`; đúng token thì nhận khoá `full`.
+ */
+const voiToken = <T>(token: string | undefined, f: () => T): T => {
+  const cu = process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN;
+  if (token == null) delete process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN; else process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN = token;
+  try { return f(); } finally {
+    if (cu != null) process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN = cu; else delete process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN;
+  }
+};
+const MANIFEST_FULL = {
+  stable: {
+    version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "hash-cmd", ten: "Cai-dat.cmd",
+    full: { sha256hash: "hash-full", ten: "Bot-Noi-Bo-Setup-20260904.exe" },
+  },
+};
+
+test("launcher + token ĐÚNG → gói chở-app, url mang ?k=, hash + tên của gói ấy", () => {
+  datManifest(MANIFEST_FULL);
+  const b = voiToken("bi-mat", () => traLoiLauncher("0.29.0", "windows", "bi-mat")).body;
+  assert.equal(b?.ten, "Bot-Noi-Bo-Setup-20260904.exe");
+  assert.equal(b?.sha256hash, "hash-full", "hash phải là của gói chở-app — lấy hash bản 50 KB là launcher xoá file rồi bỏ qua mãi mãi");
+  assert.equal(b?.url, "https://x/download/windows?k=bi-mat", "đường tải ghép token lúc trả lời; manifest không chứa token");
+});
+
+test("launcher + token SAI → rơi về gói công khai, KHÔNG 403, không lộ là có bản khác", () => {
+  datManifest(MANIFEST_FULL);
+  const r = voiToken("bi-mat", () => traLoiLauncher("0.29.0", "windows", "doan-bua"));
+  assert.equal(r.status, 200);
+  assert.equal(r.body?.ten, "Cai-dat.cmd");
+  assert.equal(r.body?.sha256hash, "hash-cmd");
+});
+
+test("token ĐÚNG nhưng manifest chưa có `full` → 204, không đội lốt bản 50 KB", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "hash-cmd", ten: "Cai-dat.cmd" } });
+  assert.equal(voiToken("bi-mat", () => traLoiLauncher("0.29.0", "windows", "bi-mat")).status, 204);
+});
+
+test("máy chủ chưa đặt token → mọi `k` đều bị coi như không có", () => {
+  datManifest(MANIFEST_FULL);
+  const r = voiToken(undefined, () => traLoiLauncher("0.29.0", "windows", "bi-mat"));
+  assert.equal(r.body?.ten, "Cai-dat.cmd", "token rỗng ở máy chủ phải là 'đóng', không phải 'ai gửi gì cũng khớp'");
+});
+
+test("launcher chở-app đã ở bản mới → 204, dù trình đúng token", () => {
+  datManifest(MANIFEST_FULL);
+  assert.equal(voiToken("bi-mat", () => traLoiLauncher("0.29.20260904", "windows", "bi-mat")).status, 204);
+});

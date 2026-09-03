@@ -53,6 +53,14 @@ export interface BanPhatHanh {
    * và không ai thấy vì nhánh đó in một dòng rồi thoát 0. Đo 03/09, ngay lượt curl đầu sau phát hành.
    */
   mac?: { url: string; sha256hash?: string; ten?: string };
+  /**
+   * Bản CHỞ CẢ APP (`Bot-Noi-Bo-Setup-*.exe`) — chỉ trả cho launcher nào trình đúng token.
+   *
+   * Không có `url` ở đây: đường tải là `{url Windows}?k=<token>`, ghép lúc trả lời từ chính token
+   * người hỏi vừa trình — để manifest trên đĩa không chứa token, và để đổi token không phải phát
+   * hành lại.
+   */
+  full?: { sha256hash?: string; ten?: string };
 }
 
 /** Đường tới manifest. Env cho phép trỏ chỗ khác khi chạy test hoặc khi VPS để nơi riêng. */
@@ -114,11 +122,34 @@ export interface KetQua {
  * `ver` rỗng ⇒ trả bản mới nhất (dùng khi launcher không đọc được phiên bản đang cài — thà cài lại
  * đúng bản đang có còn hơn im lặng bỏ qua cập nhật).
  */
-export function traLoiLauncher(ver: string, nen = "windows"): KetQua {
+export function traLoiLauncher(ver: string, nen = "windows", k = ""): KetQua {
   const kenhLauncher = process.env.GROKBOT2_LAUNCHER_KENH ?? "stable";
   const ban = docManifest()[kenhLauncher];
   if (!ban?.version || !ban?.url) return { status: 204 };
   if (ver && !moiHon(ban.version, ver)) return { status: 204 };
+
+  /*
+   * Launcher của bản CHỞ CẢ APP trình token (`token.txt` được bộ cài đặt cạnh nó lúc dựng gói).
+   * Đúng token ⇒ trả bản chở-app, vì cài bản 50 KB lên máy ấy là sai gói: bản 50 KB vá client ở
+   * `%LOCALAPPDATA%\Programs\Grok Bot`, còn máy này có client nằm cạnh launcher.
+   *
+   * Sai token ⇒ **rơi về gói công khai**, cùng luật với cửa tải: một câu 403 xác nhận "có bản khác ở
+   * đây" cho bất kỳ ai thử đoán. Có token nhưng manifest chưa có `full` ⇒ 204, không đội lốt bản 50 KB
+   * — cùng bài học với hash Mac: cơ chế an toàn (kiểm hash) mà chạy trên gói sai thì thành cơ chế chặn.
+   */
+  const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
+  if (k && tokenDay && k === tokenDay) {
+    if (!ban.full?.ten) return { status: 204 };
+    return {
+      status: 200,
+      body: {
+        version: ban.version,
+        url: `${ban.url}?k=${encodeURIComponent(k)}`,
+        ...(ban.full.sha256hash ? { sha256hash: ban.full.sha256hash } : {}),
+        ten: ban.full.ten,
+      },
+    };
+  }
   /*
    * Mỗi nền tảng lấy ĐÚNG gói của nó — url, hash và tên file phải đi cùng một bộ ba.
    *

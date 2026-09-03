@@ -43,6 +43,21 @@ test("macOS: cùng luật, khác vỏ", () => {
   assert.match(s, /export SAND_DISABLE_UPDATES=1/, "nhánh chưa vá vẫn khoá");
 });
 
+test("HAI PHA: bộ cài KHÔNG chạy đồng bộ từ trong launcher đang chạy", () => {
+  /*
+   * Bộ cài .cmd ghi đè chính `%DEST%\start-bot.cmd` — file đang được cmd đọc theo từng dòng. Chạy nó
+   * đồng bộ (bản sáng 03/09: `& cmd /c $tmp`) là để cmd đọc dòng kế từ file MỚI ở offset CŨ. Pha 2
+   * phải là một script riêng, khởi chạy tách rời, sau khi launcher đã thoát (mã 7).
+   */
+  const s = winStart as string;
+  assert.match(s, /bot-noi-bo-cap-nhat\.ps1/, "pha 2 là script riêng trong %TEMP%");
+  assert.match(s, /Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',\$pha2/, "pha 2 chạy TÁCH RỜI");
+  assert.match(s, /'Start-Sleep -Seconds 2'/, "pha 2 chờ cmd thoát rồi mới cài");
+  assert.match(s, /GROKBOT2_SETUP_UNATTENDED=''1''/, "bộ cài chạy không người trực — không được treo ở set /p");
+  assert.match(s, /if errorlevel 7 exit \/b 0/, "mã 7 ⇒ thoát ngay, không mở app lần hai (bộ cài .cmd tự mở)");
+  assert.doesNotMatch(s, /& cmd \/c \$tmp/, "nhánh cài ĐỒNG BỘ phải biến mất");
+});
+
 test("bốn biến hợp đồng với client còn đủ trong cả hai launcher", () => {
   for (const [ten, s] of [["win", winStart as string], ["mac", macStart as string]] as const) {
     for (const bien of ["CURSOR_API_BASE_URL", "SAND_BACKEND_URL", "CURSOR_WEBSITE_URL"]) {

@@ -201,6 +201,11 @@ REM   2. Kiem HASH truoc khi chay. File tai ve la mot .exe/.cmd sap duoc thuc th
 REM      manifest la thu duy nhat noi rang no dung la thu minh phat hanh.
 REM   3. Co tiet che. Moi lan mo app mot lan hoi la nhieu; dau thoi gian trong %~dp0 chan viec do.
 REM
+REM   4. HAI PHA. Bo cai ghi de CHINH file start-bot.cmd nay, ma cmd doc batch tu dia theo tung dong:
+REM      chay bo cai DONG BO tu trong day thi sau khi no xong, cmd doc dong ke tiep tu file MOI o
+REM      offset CU — hanh vi khong doan duoc. Ban dau cua khoi nay lam dung the (03/09, sang). Nay pha 1
+REM      chi kiem + tai + ghi mot script ra %TEMP% roi THOAT; pha 2 chay tach roi sau khi cmd da thoat.
+REM
 REM Tat han: dat GROKBOT2_NO_SELF_UPDATE=1.
 if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -220,14 +225,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 180 -Uri $b.url -OutFile $tmp;" ^
   "  if($b.sha256hash){" ^
   "    $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
-  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; Write-Host '  [!] hash lech — bo qua ban cap nhat'; exit 0 }" ^
+  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; exit 0 }" ^
   "  }" ^
-  "  Write-Host ('  Dang cap nhat len '+$b.version+' ...');" ^
-  "  $env:GROKBOT2_SETUP_UNATTENDED='1';" ^
-  "  & cmd /c $tmp;" ^
+  "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
+  "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^
+  "    'Start-Sleep -Seconds 2'," ^
+  "    ('$f=''' + $tmp + ''''),"  ^
+  "    '$env:GROKBOT2_SETUP_UNATTENDED=''1''',"  ^
+  "    'Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c'',([char]34+$f+[char]34) -Wait'," ^
+  "    'Remove-Item $f -Force -ErrorAction SilentlyContinue'" ^
+  "  );" ^
+  "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$pha2;" ^
   "  exit 7" ^
   "}catch{ exit 0 }"
-REM Ma 7 = bo cai da chay va da tu mo app lai. Khong mo lan hai.
+REM Ma 7 = pha 2 da duoc giao viec. Bo cai .cmd tu mo lai app o buoc cuoi, nen o day KHONG mo lan hai;
+REM va cmd nay phai THOAT NGAY de file start-bot.cmd khong con bi doc trong luc bo cai ghi de no.
 if errorlevel 7 exit /b 0
 :sau_cap_nhat
 
