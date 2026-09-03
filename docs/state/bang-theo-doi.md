@@ -333,6 +333,19 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Mở một đường làm đường kia tự mở theo.** Phát hành kênh `stable` cho LAUNCHER khiến cửa updater
+GỐC bắt đầu trả 200, vì hai cửa đọc chung một khoá manifest — tức vừa dựng xong đường chạy được thì
+đồng thời dựng lại cái bẫy "banner hiện, Install thất bại". Nay `traLoi` (cửa gốc) **im lặng theo mặc
+định**, mở lại bằng `GROKBOT2_NATIVE_FEED=1` cho ngày có chứng chỉ. Hai cửa dùng chung dữ liệu thì
+phải có hai công tắc riêng.
+
+**Một cơ chế an toàn có thể biến thành cơ chế chặn, và chặn thì im.** Cửa launcher bản đầu đổi đuôi
+URL sang `/download/mac` nhưng vẫn trả `sha256hash` + `ten` của gói **Windows**. Launcher Mac sẽ tải
+đúng gói mac, so với hash sai, thấy lệch, in một dòng rồi `exit 0` — **bỏ qua cập nhật mãi mãi**, mỗi
+lần mở app một lần, không ai thấy. Bắt được ở lượt `curl` đầu tiên sau phát hành, không phải bằng đọc
+mã. Nay mỗi nền một **bộ ba** `url + sha256 + tên file`, và manifest thiếu khoá `mac` thì Mac nhận
+**204** chứ không nhận gói Windows đội lốt.
+
 **Banner hiện ≠ cài được.** Hôm nay tôi mở đủ bốn cổng của kênh cập nhật rồi nói với người dùng
 "đổi `--kenh stable` là người dùng thật thấy banner" — **nửa đúng, và nửa sai là nửa quan trọng**.
 Trích `main.cjs` 0.30, hàm chạy installer:
