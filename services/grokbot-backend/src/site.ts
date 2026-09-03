@@ -37,9 +37,25 @@ export const SETUP_KINDS = {
     // Bản CHỞ CẢ APP trước: người tải không cần cài client trước, cũng không cần Node — đúng hình
     // dạng bộ cài của hãng. Dựng bằng `build-setup.mjs --with-app`, không dựng mặc định.
     { prefix: "Bot-Noi-Bo-Setup", ext: ".exe" },
-    // Bản 2 MB chỉ cấu hình: dùng khi máy đã có client sẵn.
-    { prefix: "Cai-dat-Bot-Noi-Bo-2", ext: ".exe" },
     { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
+    /*
+     * Bản 2 MB `.exe` — **KHÔNG phát công khai**, và đây là lý do đo được.
+     *
+     * 03/09, người dùng bấm Tải trên `cinai.app/agent`: Chrome hiện "Virus detected" và **xoá file**.
+     * Đo bằng chính Defender trên máy này (`MpCmdRun -Scan`), không đoán:
+     *
+     *     Trojan:Win32/Wacatac.B!ml   ThreatID 2147735505   SeverityID 5
+     *
+     * Hậu tố `!ml` = phán đoán của mô hình học máy, tức dương tính giả kinh điển với một installer
+     * VỪA DỰNG, CHƯA KÝ SỐ, chưa có tiếng. Cùng lượt quét, bản `.cmd` 44 KB cho "no threats".
+     *
+     * Nên tạm dừng phát `.exe`: một bộ cài bị xoá trước khi chạy thì không phải bộ cài. `.cmd` cài
+     * y hệt — mất cái icon riêng và mục trong Apps & features, đổi lấy việc nó tải về được.
+     *
+     * Mở lại khi có chứng chỉ ký số (đó mới là cách chữa thật), hoặc tạm bằng
+     * `GROKBOT2_PHAT_EXE_CHUA_KY=1` nếu cần thử.
+     */
+    { prefix: "Cai-dat-Bot-Noi-Bo-2", ext: ".exe", avXoa: true },
   ],
   mac: [{ prefix: "Cai-dat-Bot-Noi-Bo-mac", ext: ".command" }],
 } as const;
@@ -114,8 +130,12 @@ function landingHtml(): string | null {
  */
 export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
   const uu = SETUP_KINDS[kind];
+  // Loại bị antivirus xoá thì KHÔNG phát, dù nó mới hơn — xem chú thích `avXoa` trong SETUP_KINDS.
+  const choExe = process.env.GROKBOT2_PHAT_EXE_CHUA_KY === "1";
   let best: { name: string; path: string; size: number; mtimeMs: number; hang: number } | null = null;
-  for (const [hang, { prefix, ext }] of uu.entries()) {
+  for (const [hang, muc] of uu.entries()) {
+    const { prefix, ext } = muc;
+    if ("avXoa" in muc && muc.avXoa && !choExe) continue;
     const hit = newestMatching(dir, prefix, ext);
     if (!hit) continue;
     const mtimeMs = statSync(hit.path).mtimeMs;

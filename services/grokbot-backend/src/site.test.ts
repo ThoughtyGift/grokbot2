@@ -84,25 +84,56 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
   }
 });
 
-test("thứ tự ưu tiên: bản chở app → bản cấu hình → .cmd", () => {
+/*
+ * Tiền tố viết THẲNG, không lấy theo vị trí trong `SETUP_KINDS`.
+ *
+ * Bản trước dùng `SETUP_KINDS.windows.at(-1)!` với chú thích "dạng cuối là .cmd". Ngày 03/09 tôi sắp
+ * lại danh sách và ba bài test đổi nghĩa trong im lặng — chúng vẫn xanh/đỏ vì lý do khác hẳn thứ
+ * chúng định khoá. Một bài test trỏ vào "phần tử cuối" là một bài test có thể bị đổi ý nghĩa bởi một
+ * lần sắp lại mảng.
+ */
+const CMD = { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" };
+const EXE_CHUA_KY = { prefix: "Cai-dat-Bot-Noi-Bo-2", ext: ".exe" };
+const CHO_APP = { prefix: "Bot-Noi-Bo-Setup", ext: ".exe" };
+
+test("KHÔNG phát .exe chưa ký số, dù nó mới hơn — Defender xoá nó", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup3-"));
-  const [full, cfg, cmd] = SETUP_KINDS.windows;
-  // Chỉ có .cmd: phải dùng nó, không được trả null.
-  writeFileSync(join(dir, `${cmd.prefix}-20260825${cmd.ext}`), "ban cmd");
-  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/, "chưa có .exe thì dùng .cmd");
-  // Thêm bản cấu hình: .exe thắng .cmd dù .cmd mới hơn — dạng quan trọng hơn thời gian.
-  writeFileSync(join(dir, `${cfg.prefix}0260825${cfg.ext}`), "ban cau hinh");
-  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Cai-dat-Bot-Noi-Bo-2/, "có bản .exe cấu hình thì dùng nó");
-  // Thêm bản chở app: nó phải thắng cả hai, vì nó là bản người tải về không cần chuẩn bị gì.
-  writeFileSync(join(dir, `${full.prefix}-20260825${full.ext}`), "ban cho app");
-  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Bot-Noi-Bo-Setup/, "bản chở app phải thắng");
+  writeFileSync(join(dir, `${CMD.prefix}-20260825${CMD.ext}`), "ban cmd");
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/);
+
+  // `.exe` 2 MB mới hơn hẳn. Trước 03/09 nó thắng; nay bị loại vì `Trojan:Win32/Wacatac.B!ml`.
+  const exe = join(dir, `${EXE_CHUA_KY.prefix}0260903${EXE_CHUA_KY.ext}`);
+  writeFileSync(exe, "ban cau hinh");
+  utimesSync(exe, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/, "một bộ cài bị xoá trước khi chạy thì không phải bộ cài");
+
+  // Bản chở-cả-app vẫn phát được: nó đi đường riêng `?k=` và không nằm trong lượt đo Wacatac.
+  const full = join(dir, `${CHO_APP.prefix}-20260903${CHO_APP.ext}`);
+  writeFileSync(full, "ban cho app");
+  utimesSync(full, new Date(2_100_000_000_000), new Date(2_100_000_000_000));
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Bot-Noi-Bo-Setup/);
+});
+
+test("cờ GROKBOT2_PHAT_EXE_CHUA_KY=1 mở lại .exe — để thử, không phải mặc định", () => {
+  const dir = mkdtempSync(join(tmpdir(), "setup4-"));
+  writeFileSync(join(dir, `${CMD.prefix}-20260825${CMD.ext}`), "cmd");
+  const exe = join(dir, `${EXE_CHUA_KY.prefix}0260903${EXE_CHUA_KY.ext}`);
+  writeFileSync(exe, "exe");
+  utimesSync(exe, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
+
+  const cu = process.env.GROKBOT2_PHAT_EXE_CHUA_KY;
+  process.env.GROKBOT2_PHAT_EXE_CHUA_KY = "1";
+  try {
+    assert.match(newestSetup(dir, "windows")?.name ?? "", /\.exe$/);
+  } finally {
+    if (cu != null) process.env.GROKBOT2_PHAT_EXE_CHUA_KY = cu; else delete process.env.GROKBOT2_PHAT_EXE_CHUA_KY;
+  }
 });
 
 test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup2-"));
-  // Lấy dạng cuối của mỗi hệ (.cmd cho Windows) — dạng đầu là .exe, chỉ có khi máy dựng có Inno Setup.
-  const win = SETUP_KINDS.windows.at(-1)!, mac = SETUP_KINDS.mac.at(-1)!;
-  writeFileSync(join(dir, `${win.prefix}-20260825${win.ext}`), "win");
+  const mac = SETUP_KINDS.mac[0];
+  writeFileSync(join(dir, `${CMD.prefix}-20260825${CMD.ext}`), "win");
   writeFileSync(join(dir, `${mac.prefix}-20260825${mac.ext}`), "mac-dai-hon");
   assert.equal(newestSetup(dir, "windows")?.size, "win".length);
   assert.equal(newestSetup(dir, "mac")?.size, "mac-dai-hon".length);
@@ -111,13 +142,12 @@ test("hai hệ hai tiền tố khác nhau — không chọn nhầm nhau", () => 
 test("newestSetup chọn gói mới nhất và bỏ qua file lạ", () => {
   const dir = mkdtempSync(join(tmpdir(), "setup-"));
   mkdirSync(dir, { recursive: true });
-  const { prefix, ext } = SETUP_KINDS.windows.at(-1)!;
-  writeFileSync(join(dir, `${prefix}-20260101${ext}`), "cu");
+  writeFileSync(join(dir, `${CMD.prefix}-20260101${CMD.ext}`), "cu");
   writeFileSync(join(dir, "ghi-chu.txt"), "khong phai goi");
-  writeFileSync(join(dir, `${prefix}-20260825${ext}`), "moi hon");
+  writeFileSync(join(dir, `${CMD.prefix}-20260825${CMD.ext}`), "moi hon");
   const found = newestSetup(dir);
   assert.ok(found, "phải thấy một gói");
-  assert.equal(found.name, `${prefix}-20260825${ext}`);
+  assert.equal(found.name, `${CMD.prefix}-20260825${CMD.ext}`);
   assert.equal(found.size, "moi hon".length);
 });
 
@@ -155,15 +185,16 @@ test("bật GROKBOT2_ALLOW_REGISTER=1 thì đăng ký không bị chặn vì lý
  */
 test("trang tải phát gói MỚI NHẤT, kể cả khi nó thuộc loại xếp sau", () => {
   const dir = mkdtempSync(join(tmpdir(), "gb2-site-"));
-  // Loại ưu tiên cao (chở-cả-app) nhưng CŨ.
+  // Loại xếp TRƯỚC (chở-cả-app) nhưng CŨ.
   writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260827.exe"), "cu");
-  // Loại xếp sau nhưng MỚI.
-  const moi = join(dir, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+  // Loại xếp sau nhưng MỚI. Dùng `.cmd` chứ không `.exe` 2 MB: bản `.exe` nay bị loại vì antivirus,
+  // nên nếu viết bằng nó thì bài này khoá sai luật — độ mới thắng, không phải "exe thắng".
+  const moi = join(dir, "Cai-dat-Bot-Noi-Bo-win-20260902.cmd");
   writeFileSync(moi, "moi");
   utimesSync(join(dir, "Bot-Noi-Bo-Setup-20260827.exe"), new Date(1), new Date(1));
   utimesSync(moi, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
 
-  assert.equal(newestSetup(dir, "windows")?.name, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+  assert.equal(newestSetup(dir, "windows")?.name, "Cai-dat-Bot-Noi-Bo-win-20260902.cmd");
 });
 
 test("bằng tuổi thì loại đứng trước trong danh sách thắng", () => {
