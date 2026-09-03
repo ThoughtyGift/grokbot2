@@ -246,6 +246,25 @@ test("trang tải không ghi cứng kích cỡ bộ cài — phải là placehol
   assert.ok(html.includes("{{CO_MAC}}"), "thiếu {{CO_MAC}} — kích cỡ Mac đang bị gõ tay?");
   // "bộ cài <số> KB/MB" là dạng câu đã sai một lần. Không cho nó quay lại dưới bất kỳ con số nào.
   assert.doesNotMatch(html, /bộ cài\s+\d+([.,]\d+)?\s*(KB|MB)/i, "có người gõ lại một con số kích cỡ");
+  /*
+   * Phiên bản cũng vậy: đọc từ manifest qua `{{PHIEN_BAN}}`/`{{NGAY_BAN}}`, không gõ tay. Một số
+   * phiên bản viết cứng trong HTML sẽ sai ngay lần phát hành kế tiếp — và sai ở đúng chỗ người dùng
+   * nhìn để biết mình tải bản nào.
+   */
+  assert.ok(html.includes("{{PHIEN_BAN}}"), "thiếu {{PHIEN_BAN}} — trang phải nói rõ bản nào");
+  assert.ok(html.includes("{{NGAY_BAN}}"), "thiếu {{NGAY_BAN}}");
+  assert.doesNotMatch(html, /Phiên bản\s+\d+\.\d+\.\d+/i, "có người gõ cứng một số phiên bản");
+});
+
+test("trang tải có ĐÚNG MỘT nút tải (hero) ngoài nav — khối CTA cuối trang lặp đã bỏ", () => {
+  const html = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "grokbot-site", "index.html"),
+    "utf8",
+  );
+  // nav "Tải xuống" + hero "Tải cho Windows" = 2. Cái thứ ba từng là khối `.close` ở cuối trang.
+  const soNutWin = (html.match(/href="download\/windows"/g) ?? []).length;
+  assert.equal(soNutWin, 2, `có ${soNutWin} link download/windows — hai nút tải trỏ cùng chỗ là một câu hỏi phải trả lời hai lần`);
+  assert.doesNotMatch(html, /class="close"/, "khối CTA lặp cuối trang phải bỏ");
 });
 
 /*

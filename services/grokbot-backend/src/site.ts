@@ -16,6 +16,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createReadStream, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// Phiên bản in trên trang đọc từ manifest phát hành — cùng nguồn với feed và launcher.
+import { docManifest } from "./update-feed.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -116,7 +118,20 @@ function landingHtml(): string | null {
      * thì không: đọc HTML bằng mắt bỏ sót đúng chỗ JS chạy sau.
      */
     const full = newestMatching(distDir(), "Bot-Noi-Bo-Setup", ".exe");
-    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}:${full?.size ?? 0}`;
+    /*
+     * Phiên bản ghi trên trang lấy từ MANIFEST — cùng nguồn với feed và launcher, nên trang, banner
+     * và file tải về không thể nói ba số khác nhau. Chưa phát hành lần nào thì nói thẳng "chưa phát
+     * hành", không bịa một số.
+     *
+     * `NGAY_BAN` suy từ đuôi `YYYYMMDD` của phiên bản (`0.29.20260903` → 03/09/2026): ngày phát hành
+     * *là* phần cuối số phiên bản, theo đúng cách `phat-hanh.mjs` đặt số — không có trường ngày riêng
+     * để mà lệch.
+     */
+    const ban = docManifest()[process.env.GROKBOT2_LAUNCHER_KENH ?? "stable"];
+    const phienBan = ban?.version ?? "chưa phát hành";
+    const ngay = /\.(\d{4})(\d{2})(\d{2})$/.exec(phienBan);
+    const ngayBan = ngay ? `${ngay[3]}/${ngay[2]}/${ngay[1]}` : "—";
+    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}:${full?.size ?? 0}:${phienBan}`;
     if (!cached || cached.dau !== dau) {
       const raw = readFileSync(LANDING, "utf8");
       cached = {
@@ -124,7 +139,9 @@ function landingHtml(): string | null {
         html: raw
           .replaceAll("{{CO_WIN}}", co("windows"))
           .replaceAll("{{CO_MAC}}", co("mac"))
-          .replaceAll("{{CO_FULL}}", full ? coChu(full.size) : "bản đầy đủ"),
+          .replaceAll("{{CO_FULL}}", full ? coChu(full.size) : "bản đầy đủ")
+          .replaceAll("{{PHIEN_BAN}}", phienBan)
+          .replaceAll("{{NGAY_BAN}}", ngayBan),
       };
     }
     return cached.html;

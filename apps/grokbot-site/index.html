@@ -183,7 +183,7 @@
     <a class="btn btn-hot" id="tai-mac" href="download/mac" hidden>Tải cho macOS</a>
     <a class="btn btn-ghost" href="#chay">Xem cách chạy</a>
   </div>
-  <p class="fine" id="fine-win">Windows 10/11 · bộ cài {{CO_WIN}} · <b>máy phải có sẵn client desktop + Node.js</b></p>
+  <p class="fine" id="fine-win">Phiên bản <b>{{PHIEN_BAN}}</b> · phát hành {{NGAY_BAN}} · Windows 10/11 · bộ cài {{CO_WIN}} · <b>máy phải có sẵn client desktop + Node.js</b></p>
   <div class="soon" id="chon-ban">
     <b>Máy chưa từng cài client thì bản này KHÔNG chạy.</b>
     Nó chỉ là bộ cấu hình: nó vá bản client bạn đã có, chứ không mang app theo. Máy trắng chạy nó sẽ
@@ -195,7 +195,7 @@
           để lấy đường tải riêng</li>
     </ol>
   </div>
-  <p class="fine" id="fine-mac" hidden>macOS · bộ cài {{CO_MAC}} · chạy bằng <code>bash</code> ở bước đầu · một VPS Linux cho phần việc tay chân</p>
+  <p class="fine" id="fine-mac" hidden>Phiên bản <b>{{PHIEN_BAN}}</b> · phát hành {{NGAY_BAN}} · macOS · bộ cài {{CO_MAC}} · chạy bằng <code>bash</code> ở bước đầu · một VPS Linux cho phần việc tay chân</p>
   <div class="soon" id="mac" hidden>
     <b>Đọc một phút trước khi cài trên Mac.</b>
     Bước đầu chạy trong Terminal — <code>bash install.command</code> — vì file .zip không giữ được
@@ -307,17 +307,14 @@
   </table>
 </div></section>
 
-<div class="close"><div class="wrap">
-  <h2>Cái máy tính đó đang chờ người giao việc.</h2>
-  <div class="cta">
-    <a class="btn btn-hot" href="download/windows">⊞&nbsp; Tải cho Windows</a>
-    <a class="btn btn-ghost" href="#o-dau">Cần chuẩn bị gì</a>
-  </div>
-</div></div>
-
+<!--
+  Khối "close" (nút Tải thứ HAI + link #o-dau thứ HAI) và hai link điều hướng lặp trong footer đã bỏ
+  03/09: trang có đúng MỘT nút tải (hero) và MỘT bộ điều hướng (nav). Hai nút tải trỏ cùng một chỗ
+  không thêm được gì cho người đọc, nhưng khiến câu "nút tải phát bản nào" phải trả lời hai lần.
+-->
 <footer><div class="wrap">
   <span class="mark" style="font-size:14px"><i>B</i> Bot Nội Bộ</span>
-  <a href="#chay">Cách chạy</a><a href="#that">Khác gì bản hãng</a>
+  <p class="note"><b>Phiên bản {{PHIEN_BAN}}</b> · phát hành {{NGAY_BAN}} · gói Windows {{CO_WIN}} · gói macOS {{CO_MAC}}</p>
   <p class="note">Bản tự vận hành cho mục đích cá nhân và nghiên cứu. Client desktop thuộc về nhà
      phát hành của nó; bộ cài này chỉ cấu hình bản mà bạn đã tự cài trên máy mình.</p>
 </div></footer>
@@ -383,7 +380,8 @@
         + "<li>Cảnh báo đó <b>không</b> chặn được việc cài — nó chỉ giấu nút đi một lớp.</li></ol>";
     }
     const fine = document.getElementById("fine-win");
-    if (fine) fine.textContent = "Windows 10/11 · bộ cài {{CO_FULL}} · không cần chuẩn bị gì trước";
+    // Giữ dòng phiên bản khi đổi sang bản chở-app: người tải bản 105 MB cũng phải biết mình đang lấy số nào.
+    if (fine) fine.textContent = "Phiên bản {{PHIEN_BAN}} · phát hành {{NGAY_BAN}} · Windows 10/11 · bộ cài {{CO_FULL}} · không cần chuẩn bị gì trước";
   })();
 </script>
 
