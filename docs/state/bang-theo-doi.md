@@ -153,6 +153,8 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | 8 | Tự cập nhật client | **chặn: XONG và đã áp** (`sandLab: true`, `--verify` xanh 02/09) · **kênh của mình: chặn bởi CHỮ KÝ SỐ**, không phải bởi mã | giao thức đã moi đủ: [spike-findings.md](../reverse/spike-findings.md) |
 | **10** | **Trình duyệt bot lái** | **ĐÃ ĐỔI 02/09** sang Chrome của mình (9224, WebGL, tự lành) — đo: tab mọc đúng bên, CapCut vào được editor | giá còn lại: SwiftShader chậm (2/3 lượt parity chạm trần 900s ở ca cuối) — nếu thành vấn đề thật, cân nhắc quay lại 9223 cho ca không cần WebGL |
 | ~~9~~ | ~~Sáu trường bỏ qua~~ **ĐÓNG 02/09** | cả sáu đều không có hệ quả đo được: `branched` không ai đọc, khoá gốc luồng là chuyện nội bộ client | [§8 + §8b](../extracted/0-30-transcript-watch.md) |
+| **11** | **4 tool máy-người-dùng còn thiếu so app gốc** — `write-file`, `send-input` (stdin), chạy nền vượt lượt, (`send-imessage`/`read-messages` là macOS, bỏ qua) | không bị chặn — daemon hãng khai đủ 7, ta làm 3 | [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) §2b |
+| **12** | **Dải tài khoản box chỉ 5, đã cấp hết 5** | người thứ 6 mất TOÀN BỘ tool box cùng lúc, lỗi viết cho quản trị viên | `GROKBOT2_USER_POOL` trong `infra/vps/exec-router.mjs` |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
 `tools.ts` (`computer`, `automation_write`, `subagent`) và đo 7/7; và "hai ca parity còn lệch" —
@@ -331,6 +333,20 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Hỏi sai KHOÁ thì hạ tầng khoẻ vẫn trả lời như đang sập.** Dò `/grok-exec/health` với
+`x-grokbot2-owner: admin@cinai.tv` nhận `per-user mode: pool exhausted (5 in use)` — tôi suýt báo
+"cả nhóm tool box đang chết". Owner thật là `auth0|grokbot2-user` (`DEFAULT_USER.authId`), và với
+khoá đúng box trả `ok:true`, `root=/home/gb2u003/workspace`. Câu lỗi mô tả đúng trạng thái của một
+câu hỏi SAI, nên nó nghe rất thuyết phục. Cùng lượt đó lộ một trần thật: dải chỉ có **5 tài khoản**
+`gb2u001…005` và **cả 5 đã cấp** — người thứ 6 sẽ thấy mọi tool box hỏng cùng lúc, kèm câu lỗi viết
+cho quản trị viên. Trần này chặn sớm hơn nhiều so với trần RAM (14 bot).
+
+**Bảng tool dựng bằng grep thiếu đúng nhóm hay hỏng nhất.** 16 tool `browser_*` và 8 tool box nạp
+vào `TOOLS` bằng vòng lặp ở mức module, nên grep tĩnh ra 47 trong khi thật là **75**. "Thiếu trong
+bảng" trông y hệt "không tồn tại" — bảng tool phải lấy LÚC CHẠY
+(`scripts/tool-hien-co.mts`). Và `boxHealth()` không bao giờ ném, nó *trả về* chuỗi lỗi: bản đầu
+của script ấy bọc `try/catch` rồi in `SỐNG` đè lên đúng câu `KHÔNG tới được`.
+
 ## 8 · Chưa chắc chắn
 
 - ~~**App GỐC không mở lên được nữa (từ 02/09).**~~ **ĐÃ SỬA 03/09** — chạy chính trình cài
@@ -384,6 +400,7 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [con-thieu-so-voi-0-30.md](../plan/con-thieu-so-voi-0-30.md) | cách CHIA LOẠI thiếu: năng lực · dữ liệu · không thuộc về ta |
 | [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
 | [nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md) | nâng quyền: app gốc cho tới đâu |
+| [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) | 75 tool bên mình · vì sao không đếm được tool hãng · 4 cái thiếu trên máy người dùng |
 | [ship-to-users.md](../plan/ship-to-users.md) | website → tải → cài · billing |
 | [per-user-on-one-box.md](../plan/per-user-on-one-box.md) | tách OS user · thu hồi khi nghỉ |
 | [one-display-per-bot.md](../plan/one-display-per-bot.md) | một màn hình mỗi bot · sức chứa box |
