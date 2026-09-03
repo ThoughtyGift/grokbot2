@@ -190,7 +190,7 @@
     báo <code>Chua thay client desktop</code> rồi dừng.
     <ol>
       <li><b>Máy đã có client</b> → dùng bản {{CO_WIN}} ở trên, xong trong một phút</li>
-      <li><b>Máy trắng</b> → cần <b>bản chở cả ứng dụng (118 MB)</b>: không cần client, không cần
+      <li><b>Máy trắng</b> → cần <b>bản chở cả ứng dụng ({{CO_FULL}})</b>: không cần client, không cần
           Node. Bản đó không để công khai vì nó mang theo client của nhà phát hành — hỏi chủ trang
           để lấy đường tải riêng</li>
     </ol>
@@ -376,14 +376,14 @@
          * chủ là bản cũ, mang lối mở trỏ sai — một lối thoát hỏng còn tệ hơn không có.)
        */
       note.innerHTML = "<b>Bạn đang dùng đường tải đầy đủ.</b> Nút trên phát <b>bản chở cả ứng dụng"
-        + " (118 MB)</b>: máy chưa có gì cũng chạy — không cần cài client, không cần Node."
+        + " ({{CO_FULL}})</b>: máy chưa có gì cũng chạy — không cần cài client, không cần Node."
         + "<ol><li>Windows hiện <b>“Windows protected your PC”</b>? Bấm <b>More info</b> trước —"
         + " nút <b>Run anyway</b> chỉ hiện sau đó. Cảnh báo này là vì bộ cài chưa ký số, không phải"
         + " vì file hỏng.</li>"
         + "<li>Cảnh báo đó <b>không</b> chặn được việc cài — nó chỉ giấu nút đi một lớp.</li></ol>";
     }
     const fine = document.getElementById("fine-win");
-    if (fine) fine.textContent = "Windows 10/11 · bộ cài 118 MB · không cần chuẩn bị gì trước";
+    if (fine) fine.textContent = "Windows 10/11 · bộ cài {{CO_FULL}} · không cần chuẩn bị gì trước";
   })();
 </script>
 

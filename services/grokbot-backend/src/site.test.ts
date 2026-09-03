@@ -10,9 +10,10 @@
  */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, utimesSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const { handleSite, newestSetup, SETUP_KINDS } = await import("./site.js");
@@ -176,4 +177,24 @@ test("bằng tuổi thì loại đứng trước trong danh sách thắng", () =
   utimesSync(b, t, t);
 
   assert.equal(newestSetup(dir, "windows")?.name, "Bot-Noi-Bo-Setup-20260902.exe");
+});
+
+/*
+ * ── Kích cỡ gói: ĐO, không gõ tay ───────────────────────────────────────────────────────────────
+ *
+ * Trang từng ghi cứng "bộ cài 28 KB" ở hai chỗ và "27 KB" cho Mac. Đo E2E 03/09 bằng chính trình
+ * duyệt trên `cinai.app/agent`: gói Windows đang phát là **2.0 MB**. Con số sai gần trăm lần, và nó
+ * sai một cách không ai thấy được — vì nó nằm trong HTML còn file thì đổi theo mỗi lần phát hành.
+ *
+ * Bài này khoá đúng cái hồi quy đó: một con số về FILE không được nằm trong HTML.
+ */
+test("trang tải không ghi cứng kích cỡ bộ cài — phải là placeholder", () => {
+  const html = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "grokbot-site", "index.html"),
+    "utf8",
+  );
+  assert.ok(html.includes("{{CO_WIN}}"), "thiếu {{CO_WIN}} — kích cỡ Windows đang bị gõ tay?");
+  assert.ok(html.includes("{{CO_MAC}}"), "thiếu {{CO_MAC}} — kích cỡ Mac đang bị gõ tay?");
+  // "bộ cài <số> KB/MB" là dạng câu đã sai một lần. Không cho nó quay lại dưới bất kỳ con số nào.
+  assert.doesNotMatch(html, /bộ cài\s+\d+([.,]\d+)?\s*(KB|MB)/i, "có người gõ lại một con số kích cỡ");
 });

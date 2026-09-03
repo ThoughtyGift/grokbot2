@@ -74,14 +74,24 @@ function landingHtml(): string | null {
     };
     // Cache theo mtime của HTML **và** của gói: phát hành bản mới mà trang giữ con số cũ thì đúng
     // cái lỗi này quay lại, chỉ chậm hơn một nhịp.
-    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}`;
+    /*
+     * `{{CO_FULL}}` — bản CHỞ CẢ APP, chỉ hiện trên đường `?k=<token>`.
+     *
+     * Nó là một FILE KHÁC (`Bot-Noi-Bo-Setup*.exe`), nên phải đo riêng. Con số này từng được gõ tay
+     * là "118 MB" trong một đoạn `<script>` ghi đè lại chính dòng vừa được thay ở trên — tức kể cả
+     * sau khi sửa hai chỗ kia, đường `?k=` vẫn hiện một con số cố định. Bài test bắt được nó, tôi
+     * thì không: đọc HTML bằng mắt bỏ sót đúng chỗ JS chạy sau.
+     */
+    const full = newestMatching(DIST, "Bot-Noi-Bo-Setup", ".exe");
+    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}:${full?.size ?? 0}`;
     if (!cached || cached.dau !== dau) {
       const raw = readFileSync(LANDING, "utf8");
       cached = {
         dau,
         html: raw
           .replaceAll("{{CO_WIN}}", co("windows"))
-          .replaceAll("{{CO_MAC}}", co("mac")),
+          .replaceAll("{{CO_MAC}}", co("mac"))
+          .replaceAll("{{CO_FULL}}", full ? coChu(full.size) : "bản đầy đủ"),
       };
     }
     return cached.html;
