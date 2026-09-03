@@ -127,7 +127,10 @@ Ba nơi, và người dùng giữ nơi quan trọng nhất: **hội thoại nằ
 | trang | ai phát | gói Windows đang phát | tình trạng |
 |---|---|---|---|
 | `cinai.app/agent/` | BFF `:8788` — `site.ts`, nằm trong đường phát hành (`phat-hanh.mjs` → manifest → feed → launcher) | `Cai-dat-Bot-Noi-Bo-win-20260903.cmd` | **chính thức** |
-| `cinai.app/tai/` | `/opt/botnoibo/serve-static.mjs` :8099, unit `botnoibo-site`, dựng tay 26/08, **không có trong repo** | `Cai-dat-Bot-Noi-Bo-20260826.exe`; `?k=<token>` → `full/<token>/Bot-Noi-Bo-Setup-20260826.exe` (**client 0.20**) | cũ 8 ngày, không ai cập nhật |
+| `cinai.app/tai/` | ~~`/opt/botnoibo/serve-static.mjs` :8099, unit `botnoibo-site`, dựng tay 26/08, **không có trong repo**~~ | ~~`Cai-dat-Bot-Noi-Bo-20260826.exe`; `?k=<token>` → `Bot-Noi-Bo-Setup-20260826.exe` (**client 0.20**)~~ | **→ 301 `/agent/` từ 03/09**, giữ nguyên đường con và `?k=`; unit disabled, `:8099` không còn nghe. Lùi: `cinai-app.bak-*` + enable unit |
+
+Sau gộp, `/agent/` là **một địa chỉ cho cả hai gói**: nút công khai → 50 KB; `?k=1bab0936…` →
+`Bot-Noi-Bo-Setup-20260903.exe` (105 MB, client 0.29 đã vá 8 chỗ, sha `66702e2c…`, Defender sạch).
 
 Máy thứ tư cài từ `/tai/?k=…` nên ra 0.20.0 — không phải lỗi của bản mới, mà là **cài từ trang cũ**.
 Token `1bab0936…` của `/tai/` là tên thư mục trên đĩa; `/agent/` nay có cửa `?k=` tương đương, đọc

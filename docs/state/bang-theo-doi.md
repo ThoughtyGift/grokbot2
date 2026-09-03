@@ -154,7 +154,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | **10** | **Trình duyệt bot lái** | **ĐÃ ĐỔI 02/09** sang Chrome của mình (9224, WebGL, tự lành) — đo: tab mọc đúng bên, CapCut vào được editor | giá còn lại: SwiftShader chậm (2/3 lượt parity chạm trần 900s ở ca cuối) — nếu thành vấn đề thật, cân nhắc quay lại 9223 cho ca không cần WebGL |
 | ~~9~~ | ~~Sáu trường bỏ qua~~ **ĐÓNG 02/09** | cả sáu đều không có hệ quả đo được: `branched` không ai đọc, khoá gốc luồng là chuyện nội bộ client | [§8 + §8b](../extracted/0-30-transcript-watch.md) |
 | **11** | **4 tool máy-người-dùng còn thiếu so app gốc** — `write-file`, `send-input` (stdin), chạy nền vượt lượt, (`send-imessage`/`read-messages` là macOS, bỏ qua) | không bị chặn — daemon hãng khai đủ 7, ta làm 3 | [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) §2b |
-| **13** | **Gộp `/tai/` vào `/agent/`** — `/tai/` là máy chủ tĩnh cũ (`/opt/botnoibo`, unit `botnoibo-site`, cổng 8099) phát gói **26/08 = client 0.20**; máy thứ tư cài từ đó | chờ gật: sửa nginx `cinai-app` (`/tai/` → 301 `/agent/`, giữ `?k=`), đặt `GROKBOT2_FULL_DOWNLOAD_TOKEN=1bab0936…` cho `/agent/`, dựng + đưa bản chở-app **0.29** lên, tắt unit cũ | `curl -I cinai.app/tai/?k=… → 301` · `/agent/download/windows?k=… → Bot-Noi-Bo-Setup-20260903.exe` |
+| ~~13~~ | ~~Gộp `/tai/` vào `/agent/`~~ **XONG 03/09** — bốn bước, đo qua Internet: `/tai/?k=…` → **301** `/agent/?k=…` · `/agent/download/windows?k=…` → `Bot-Noi-Bo-Setup-20260903.exe` (110.552.768 B, sha `66702e2c…` khớp cục bộ, Defender sạch) · không token → gói 50 KB · token sai → 50 KB, **200 không 403** · unit `botnoibo-site` disabled, `:8099` không còn nghe | lùi: khôi phục `cinai-app.bak-*` + `systemctl enable --now botnoibo-site` | — |
 | **12** | **Dải tài khoản box chỉ 5, đã cấp hết 5** | người thứ 6 mất TOÀN BỘ tool box cùng lúc, lỗi viết cho quản trị viên | `GROKBOT2_USER_POOL` trong `infra/vps/exec-router.mjs` |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
@@ -179,7 +179,8 @@ nay 0 ca lệch ổn định.*
 | 12 · Video phát được | `sand-media` thiếu `mime` + dùng nhầm trần 128 KB của bản xem trước văn bản → **mọi** video hỏng; nay `readyState=4`, khung 1920×1080 giải được thật trong app |
 | 13 · Teach a task qua giao diện | `e2e-teach.mjs` **11/11**: nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật |
 | 14 · Lớp tự soát 3 mặt | `computer` · `automation_write` · `subagent`, đo **7/7**; một ca không đo được là bỏ cả lượt (`khongDoDuoc`) |
-| 8 · Tự cập nhật | moi xong cơ chế của hãng, chưa dựng |
+| 8 · Tự cập nhật | **Đường của mình xong 03/09**: launcher hỏi `/updates/ban-moi`, kiểm sha256, chạy bộ cài, fail-open; updater gốc tắt hẳn vì nó dò chữ ký người ký của HÃNG (`["Anysphere, Inc.","Anysphere"]`) — banner hiện được nhưng Install không bao giờ chạy, nên không mời nó thử. Mỗi nền một bộ ba `url+sha+tên` trong manifest |
+| 15 · Một trang tải | **XONG 03/09** — `/tai/` (máy chủ tĩnh cũ ngoài repo, phát client 0.20) → 301 `/agent/`; `?k=<token>` trên `/agent/` phát bản chở-app **0.29** (`Bot-Noi-Bo-Setup-20260903.exe`, 105 MB, Defender sạch); nút công khai phát gói 50 KB; cờ `chiRieng` chặn bản chở-app khỏi nút công khai **vô điều kiện** |
 
 ## 7 · Bẫy đã trả giá — chép nguyên văn để khỏi trả lần hai
 
