@@ -333,6 +333,28 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Banner hiện ≠ cài được.** Hôm nay tôi mở đủ bốn cổng của kênh cập nhật rồi nói với người dùng
+"đổi `--kenh stable` là người dùng thật thấy banner" — **nửa đúng, và nửa sai là nửa quan trọng**.
+Trích `main.cjs` 0.30, hàm chạy installer:
+
+```
+if (c.data.status !== "Valid") throw new SandInstallerSignatureError(`signature status ...`);
+if (!(signerAllowlist ?? nhi).includes(c.data.signerCommonName)) throw ... `unexpected signer`;
+installOnQuit(e,t){ this.runInstaller(e, ["--updated","/S", …]) }        // NSIS
+var nhi = ["Anysphere, Inc.", "Anysphere"];
+```
+
+Client **dò chữ ký Authenticode** trước khi chạy, đòi `status === "Valid"` **và** tên người ký nằm
+trong một **danh sách trắng ghi cứng là tên của HÃNG**. Nên trình tự thật là: feed trả bản mới ✅ →
+tải + xếp chỗ ✅ → banner hiện ✅ → bấm Install ❌ ném lỗi chữ ký. Publish lên `stable` lúc này sẽ dạy
+người dùng bấm một cái nút không bao giờ chạy — tệ hơn là không hiện banner.
+
+Điều đáng chép không phải kết luận (§5 mục 8 **đã ghi đúng** điều này: "kênh của mình: chặn bởi CHỮ
+KÝ SỐ, không phải bởi mã"), mà là việc tôi vẫn nói sai **trong khi câu trả lời nằm trong tài liệu tôi
+đang mở**. Bốn cổng mở được làm tôi tưởng cả đường đã mở, và tôi kiểm cổng thay vì kiểm ĐÍCH. Muốn
+auto-update chạy thật thì cần một chứng chỉ ký số **cộng** một bản vá nới danh sách trắng — hai việc,
+không phải một.
+
 **`-forever` giữ được client ngắt, KHÔNG giữ được segfault.** Khung "màn hình của bot" trong app chỉ
 còn một nút Connect không bao giờ nối được. Chuỗi là `nginx /flowvnc-grokbox/ → 127.0.0.1:7077
 (websockify) → 5977 (x11vnc) → Xvfb :77`, và nó đứt ở đúng mắt cuối: `/var/log/x11vnc-grokbox.log`
