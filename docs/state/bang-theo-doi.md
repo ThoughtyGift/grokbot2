@@ -154,6 +154,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | **10** | **Trình duyệt bot lái** | **ĐÃ ĐỔI 02/09** sang Chrome của mình (9224, WebGL, tự lành) — đo: tab mọc đúng bên, CapCut vào được editor | giá còn lại: SwiftShader chậm (2/3 lượt parity chạm trần 900s ở ca cuối) — nếu thành vấn đề thật, cân nhắc quay lại 9223 cho ca không cần WebGL |
 | ~~9~~ | ~~Sáu trường bỏ qua~~ **ĐÓNG 02/09** | cả sáu đều không có hệ quả đo được: `branched` không ai đọc, khoá gốc luồng là chuyện nội bộ client | [§8 + §8b](../extracted/0-30-transcript-watch.md) |
 | **11** | **4 tool máy-người-dùng còn thiếu so app gốc** — `write-file`, `send-input` (stdin), chạy nền vượt lượt, (`send-imessage`/`read-messages` là macOS, bỏ qua) | không bị chặn — daemon hãng khai đủ 7, ta làm 3 | [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) §2b |
+| **13** | **Gộp `/tai/` vào `/agent/`** — `/tai/` là máy chủ tĩnh cũ (`/opt/botnoibo`, unit `botnoibo-site`, cổng 8099) phát gói **26/08 = client 0.20**; máy thứ tư cài từ đó | chờ gật: sửa nginx `cinai-app` (`/tai/` → 301 `/agent/`, giữ `?k=`), đặt `GROKBOT2_FULL_DOWNLOAD_TOKEN=1bab0936…` cho `/agent/`, dựng + đưa bản chở-app **0.29** lên, tắt unit cũ | `curl -I cinai.app/tai/?k=… → 301` · `/agent/download/windows?k=… → Bot-Noi-Bo-Setup-20260903.exe` |
 | **12** | **Dải tài khoản box chỉ 5, đã cấp hết 5** | người thứ 6 mất TOÀN BỘ tool box cùng lúc, lỗi viết cho quản trị viên | `GROKBOT2_USER_POOL` trong `infra/vps/exec-router.mjs` |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong
@@ -332,6 +333,17 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
+
+**Hai trang tải, một cái nằm ngoài repo và ngoài đường phát hành.** Máy thứ tư cài từ
+`cinai.app/tai/?k=1bab0936…` và ra client **0.20.0** dù `/agent/` đã phát bản hôm nay. Truy ra: `/tai/`
+→ nginx `cinai-app` → `127.0.0.1:8099` → **`/opt/botnoibo/serve-static.mjs`** (unit `botnoibo-site`),
+một máy chủ tĩnh dựng tay ngày 26/08, file **không có trong repo**, phục vụ `dist/` **26/08** và bản
+chở-app `full/<token>/Bot-Noi-Bo-Setup-20260826.exe` (123.874.690 B) — token là **tên thư mục**, nên
+`grep` nội dung không thấy nó. `clientVersion` chỉ lên 0.29 từ 31/08 (`ac876c0`), nên mọi gói 26–27/08
+đều là 0.20 với bộ vá cũ. `phat-hanh.mjs`, `deploy.sh`, feed, launcher tự cập nhật — **không cái nào
+chạm tới `/tai/`**, và nó vẫn trả 200 đều đặn nên không cửa sức khoẻ nào kêu. Bài học: một đường
+người dùng đi mà không nằm trong đường phát hành thì sẽ **cũ đi trong im lặng**, và nó cũ đúng vào lúc
+mình tưởng mọi thứ đã mới. Chính thức là `/agent/`; `/tai/` phải 301 về đó.
 
 **Một ranh giới pháp lý không được dựa vào ngày tháng của file.** Gói chở-cả-app (118 MB) chứa client
 ĐÃ VÁ của nhà phát hành, và `docs/legal.md` viết thẳng *"Do not redistribute a modified client"*. Nó
