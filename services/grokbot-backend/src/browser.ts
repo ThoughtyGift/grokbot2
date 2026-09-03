@@ -29,7 +29,15 @@ import { displayOf, ensureDisplay, touchDisplay, perBotDisplays } from "./displa
  * browser của mọi bot đều đi qua nó. Nên khi cờ tắt, `displayOf` luôn trả null và hàm này trả về
  * đúng chuỗi cũ — đường đang chạy tốt không đổi một byte nào.
  */
-const SHARED_CDP = (): string => process.env.GROKBOT2_BROWSER_CDP ?? "http://127.0.0.1:9223";
+/*
+ * Mặc định 9224 = Chrome CỦA MÌNH (có WebGL, tự lành), không phải 9223 của user `box`.
+ *
+ * Đổi 03/09 cùng lúc với `box-tunnel.ps1`: hầm cài-lúc-đăng-nhập nay forward 9224, nên một fallback
+ * trỏ 9223 sẽ dẫn tới một cổng KHÔNG còn được forward — và triệu chứng lộ ra ở chỗ xa nhất: bot nói
+ * "trình duyệt không mở được trang, lỗi fetch failed". Đã xảy ra thật hôm nay, vì `.env` đổi mà hầm
+ * bền thì không.
+ */
+const SHARED_CDP = (): string => process.env.GROKBOT2_BROWSER_CDP ?? "http://127.0.0.1:9224";
 
 const CDP_BASE = (agentId: string = currentAgent): string => {
   const lease = displayOf(agentId);

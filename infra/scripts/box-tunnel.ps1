@@ -19,8 +19,13 @@ param(
   [switch]$Install,
   [switch]$Uninstall,
   [switch]$Status,
-  [int]$LocalPort = 9223,
-  [int]$RemotePort = 9223,
+  # 9224 = Chrome CUA MINH tren box (co WebGL, tu lanh). 9223 la con cua user `box` — khong co
+  # WebGL, va khong phai cua ta. Doi mac dinh sang 9224 ngay 03/09 vi `.env` da tro sang do:
+  # ham cai-luc-dang-nhap PHAI forward dung cong ma backend hoi, neu khong thi sau moi lan khoi dong
+  # lai may, moi lenh browser cua bot bao "fetch failed" va khong co gi noi ra tai sao.
+  # Do duoc 03/09: dung chuyen do da xay ra that.
+  [int]$LocalPort = 9224,
+  [int]$RemotePort = 9224,
   # One display per bot needs one CDP port per bot, and ssh must forward every one of them
   # BEFORE any of them exists. Measured the hard way: the tunnel forwarded exactly 9223, so a
   # second Chrome on the box was invisible to the backend no matter how correct the code was.

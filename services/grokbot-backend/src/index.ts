@@ -244,6 +244,10 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
    */
   if (url.startsWith("/updates/api/update/") && (req.method ?? "GET") === "GET") {
     const kq = traLoi(url.split("?")[0]);
+    // Ghi ra một dòng: đường này im lặng theo thiết kế (204 gần như luôn luôn), nên không có log
+    // thì "app có hỏi mình không" là câu không đo được — và đó đúng là câu phải trả lời đầu tiên
+    // mỗi khi banner không hiện.
+    console.log(`[grokbot2] update-feed: ${url.split("?")[0]} → ${kq.status}${kq.body ? ` v${kq.body.version}` : ""}`);
     if (kq.status === 204) { res.writeHead(204); return res.end(); }
     if (kq.status === 400) { res.writeHead(400, { "content-type": "application/json" }); return res.end('{"error":"bad update path"}'); }
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });

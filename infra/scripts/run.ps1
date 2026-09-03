@@ -157,13 +157,20 @@ $env:SAND_BACKEND_URL = "http://localhost:$bff"
 # session on this machine are handed to them. Harmless while `/auth/poll` answered everyone; a real
 # bug now that it does not.
 $env:CURSOR_WEBSITE_URL = "http://localhost:$bff"
-# ROADMAP F6 / risk R1. The app's own kill switch, not a hack: main.cjs decides with
-#   hzn(t) { return t.envDisabled ? "disabled-by-env" : t.isLabBuild ? ... }
-# and `envDisabled` is `process.env.SAND_DISABLE_UPDATES === "1"`, checked FIRST, so it wins over
-# every other branch. An update would overwrite resources/app and silently drop the patch set —
-# the app would keep working and quietly stop being ours. Pin the version instead; re-apply
-# deliberately with `node infra/scripts/patch-client.mjs --apply` after reviewing a new release.
-$env:SAND_DISABLE_UPDATES = '1'
+# KHONG dat SAND_DISABLE_UPDATES nua — tu 03/09 bao ve nam o cho khac, va bien nay chan luon
+# banner cua CHINH TA.
+#
+# Cong cap nhat cua client xet theo thu tu:
+#   envDisabled -> isLabBuild -> hasDevFeedOverride -> ...
+# nen `SAND_DISABLE_UPDATES=1` thang moi nhanh khac. Truoc day dung no la dung: hang so feed van tro
+# `api2.cursor.sh`, mot lan tu cap nhat la `resources/app` bi xoa va bo va bien mat trong im lang.
+#
+# Nay ban va `update-feed` doi hang so ay sang backend cua minh (do: chuoi `api2.cursor.sh/updates`
+# xuat hien 0 lan trong bundle da cai). App khong con duong nao toi may chu hang, ke ca mo tran —
+# nen updater song lai la AN TOAN, va no phuc vu kenh phat hanh cua minh:
+# docs/plan/quy-trinh-phat-hanh-app-local.md
+#
+# `--verify` chot ca hai ve: thieu va feed la do, con `sandLab` sot lai cung la do.
 
 # Khoa gateway cho tien trinh main cua app.
 #
