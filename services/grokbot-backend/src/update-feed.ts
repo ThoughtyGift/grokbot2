@@ -35,6 +35,15 @@ export interface BanPhatHanh {
   sha256hash?: string;
   /** macOS dùng `name` thay cho `version` trong phản hồi (schema squirrel). */
   name?: string;
+  /*
+   * Tên file của gói — CHỈ cho cửa launcher, không bao giờ gửi cho updater gốc (schema zod của nó
+   * chỉ nhận `url`/`version`/`sha256hash`).
+   *
+   * Có nó vì launcher phải lưu file tải về với ĐÚNG đuôi rồi mới chạy được: hôm nay gói là `.cmd`
+   * (Defender xoá `.exe` chưa ký), ngày có chứng chỉ nó thành `.exe`. Một đuôi ghim cứng trong
+   * launcher sẽ hỏng đúng vào ngày mọi thứ khác vừa được sửa.
+   */
+  ten?: string;
 }
 
 /** Đường tới manifest. Env cho phép trỏ chỗ khác khi chạy test hoặc khi VPS để nơi riêng. */
@@ -74,6 +83,43 @@ export function moiHon(a: string, b: string): boolean {
 export interface KetQua {
   status: 204 | 200 | 400;
   body?: BanPhatHanh;
+}
+
+/**
+ * Cửa cho LAUNCHER của mình — `start-bot.cmd` hỏi trước khi mở app.
+ *
+ * ── Vì sao có cửa thứ hai, không dùng lại `traLoi` ─────────────────────────────────────────────
+ *
+ * Updater gốc của client **không cài được bản của mình**, và đó là chuyện đóng bằng mã chứ không
+ * bằng cấu hình: trước khi chạy installer nó dò chữ ký Authenticode và đòi tên người ký nằm trong
+ * `["Anysphere, Inc.","Anysphere"]` (trích `main.cjs` 0.30). Nên banner gốc chỉ dẫn tới một nút
+ * Install luôn thất bại.
+ *
+ * Đường đi được là: launcher — thứ chạy TRƯỚC client, mỗi lần mở app, và do mình viết trọn — tự hỏi,
+ * tự tải, tự chạy bộ cài. Nó không phải client, nên không có lý do gì bắt nó nói hình dạng URL của
+ * hãng (`/api/update/{nền}/{tênKênh}/{ver}/{máy}/stable`) hay hai schema zod khác nhau.
+ *
+ * Tách hẳn cửa cũng để hai đường KHÔNG dính nhau: `traLoi` phục vụ updater gốc và phải giữ đúng
+ * hợp đồng của nó; cửa này phục vụ mình và đổi được tự do.
+ *
+ * `ver` rỗng ⇒ trả bản mới nhất (dùng khi launcher không đọc được phiên bản đang cài — thà cài lại
+ * đúng bản đang có còn hơn im lặng bỏ qua cập nhật).
+ */
+export function traLoiLauncher(ver: string, nen = "windows"): KetQua {
+  const kenhLauncher = process.env.GROKBOT2_LAUNCHER_KENH ?? "stable";
+  const ban = docManifest()[kenhLauncher];
+  if (!ban?.version || !ban?.url) return { status: 204 };
+  if (ver && !moiHon(ban.version, ver)) return { status: 204 };
+  return {
+    status: 200,
+    body: {
+      version: ban.version,
+      // Launcher tải qua đúng cửa trang tải, nên nó nhận cùng gói mà người bấm Tải nhận được.
+      url: ban.url.replace(/\/download\/(windows|mac)$/, `/download/${nen === "mac" ? "mac" : "windows"}`),
+      ...(ban.sha256hash ? { sha256hash: ban.sha256hash } : {}),
+      ...(ban.ten ? { ten: ban.ten } : {}),
+    },
+  };
 }
 
 /**

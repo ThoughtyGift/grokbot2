@@ -87,3 +87,56 @@ test("so phiên bản: 0.29.10 mới hơn 0.29.9", () => {
   assert.equal(moiHon("1.0.0", "0.99.99"), true);
   assert.equal(moiHon("0.29.3", "0.29.3"), false);
 });
+
+/*
+ * ── Cửa của LAUNCHER ───────────────────────────────────────────────────────────────────────────
+ *
+ * Đường auto-update thật sự chạy được, vì updater gốc thì không: nó dò chữ ký Authenticode và đòi
+ * tên người ký nằm trong `["Anysphere, Inc.","Anysphere"]`. Launcher của mình chạy TRƯỚC client, mỗi
+ * lần mở app, nên nó là chỗ duy nhất mình vừa sở hữu trọn vừa chắc chắn được gọi.
+ *
+ * Khoá hai hướng sai, cùng hai hướng như `traLoi`: trả 200 khi không nên (mọi máy tự cài một bản
+ * chưa nghiệm thu) và trả 204 khi đáng ra có bản mới (không ai bao giờ lên bản).
+ */
+const { traLoiLauncher } = await import("./update-feed.js");
+
+test("launcher: chưa phát hành → 204", () => {
+  process.env.GROKBOT2_RELEASE_MANIFEST = join(tmpdir(), "khong-ton-tai-gb2-launcher.json");
+  assert.equal(traLoiLauncher("0.29.0").status, 204);
+});
+
+test("launcher: bản mới hơn → 200 kèm version + url + hash", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "abc" } });
+  const r = traLoiLauncher("0.29.20260903");
+  assert.equal(r.status, 200);
+  assert.equal(r.body?.version, "0.29.20260904");
+  assert.equal(r.body?.sha256hash, "abc");
+});
+
+test("launcher: bằng hoặc cũ hơn → 204", () => {
+  datManifest({ stable: { version: "0.29.20260903", url: "https://x/download/windows", sha256hash: "abc" } });
+  assert.equal(traLoiLauncher("0.29.20260903").status, 204, "bằng thì đừng cài lại");
+  assert.equal(traLoiLauncher("0.29.20260904").status, 204, "máy mới hơn manifest thì cũng đừng");
+});
+
+test("launcher: KHÔNG đọc được phiên bản đang cài thì vẫn trả bản mới nhất", () => {
+  // Thà cài lại đúng bản đang có còn hơn im lặng bỏ qua cập nhật mãi mãi. Một client mà launcher
+  // không đọc nổi `package.json` là client vừa bị thay bởi thứ gì đó — đúng lúc cần cài lại nhất.
+  datManifest({ stable: { version: "0.29.20260903", url: "https://x/download/windows" } });
+  assert.equal(traLoiLauncher("").status, 200);
+});
+
+test("launcher: nền mac nhận gói mac", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "abc" } });
+  assert.match(traLoiLauncher("0.29.1", "mac").body?.url ?? "", /\/download\/mac$/);
+  assert.match(traLoiLauncher("0.29.1", "windows").body?.url ?? "", /\/download\/windows$/);
+});
+
+test("launcher: kênh đọc từ GROKBOT2_LAUNCHER_KENH", () => {
+  datManifest({ dogfood: { version: "0.29.20260905", url: "https://x/download/windows" } });
+  assert.equal(traLoiLauncher("0.29.1").status, 204, "mặc định là stable, mà manifest chỉ có dogfood");
+  const cu = process.env.GROKBOT2_LAUNCHER_KENH;
+  process.env.GROKBOT2_LAUNCHER_KENH = "dogfood";
+  try { assert.equal(traLoiLauncher("0.29.1").status, 200); }
+  finally { if (cu != null) process.env.GROKBOT2_LAUNCHER_KENH = cu; else delete process.env.GROKBOT2_LAUNCHER_KENH; }
+});

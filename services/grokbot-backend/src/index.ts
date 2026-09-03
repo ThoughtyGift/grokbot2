@@ -44,7 +44,7 @@ import { ensureGatewayToken } from "./auth-gate.js";
 import { authMode } from "./auth-mode.js";
 import { handleAdmin } from "./admin.js";
 import { handleSite } from "./site.js";
-import { traLoi } from "./update-feed.js";
+import { traLoi, traLoiLauncher } from "./update-feed.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
@@ -242,6 +242,27 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
    * Đứng trước `/gw` vì nó không phải lệnh gateway. Đường do client (đã vá `update-feed`) ghép:
    * `{backend}/updates/api/update/{nền}/{kênh}/{ver}/{máy}/stable`.
    */
+  /*
+   * ── Cửa cho LAUNCHER của mình ──
+   *
+   * `GET /updates/ban-moi?ver=<đang cài>&nen=windows|mac` → 204, hoặc `{version,url,sha256hash?}`.
+   *
+   * Công khai như hai đường trên và cùng lý do: người hỏi là một launcher trên máy người khác, chưa
+   * có token nào. Câu trả lời không tiết lộ gì ngoài "có bản mới hay không" — đúng thứ ai mở trang
+   * tải cũng biết.
+   *
+   * Đứng TRƯỚC đường `/updates/api/update/` vì đường kia dùng `startsWith` và regex của nó sẽ trả
+   * 400 cho mọi đường `/updates/...` không đúng hình dạng của hãng.
+   */
+  if (url.startsWith("/updates/ban-moi") && (req.method ?? "GET") === "GET") {
+    const q = new URL(url, "http://x").searchParams;
+    const kq = traLoiLauncher((q.get("ver") ?? "").trim(), (q.get("nen") ?? "windows").trim());
+    console.log(`[grokbot2] launcher-update: ver=${q.get("ver") ?? "?"} → ${kq.status}${kq.body ? ` v${kq.body.version}` : ""}`);
+    if (kq.status === 204) { res.writeHead(204); return res.end(); }
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify(kq.body));
+  }
+
   if (url.startsWith("/updates/api/update/") && (req.method ?? "GET") === "GET") {
     const kq = traLoi(url.split("?")[0]);
     // Ghi ra một dòng: đường này im lặng theo thiết kế (204 gần như luôn luôn), nên không có log

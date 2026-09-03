@@ -122,7 +122,8 @@ console.log(`  nền client: ${nen} → phiên bản phát hành: ${version}`);
 buoc(4, `ghi manifest — kênh ${KENH}`);
 const cu = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, "utf8")) : {};
 const base = (process.env.GROKBOT2_PUBLIC_URL ?? "http://localhost:8788").replace(/\/+$/, "");
-const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash } };
+// `ten` — de launcher luu file tai ve dung duoi roi moi chay. Xem chu thich trong update-feed.ts.
+const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name } };
 writeFileSync(MANIFEST, `${JSON.stringify(moi, null, 2)}\n`);
 
 console.log(`  ✓ ${MANIFEST}`);

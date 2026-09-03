@@ -92,9 +92,29 @@ if errorlevel 1 (
 )
 echo   [3/5] Da va client.
 
-set "BE=${beMacDinh}"
-set /p "BE=  Dia chi backend [%BE%]: "
-> "%DEST%\\backend.txt" echo %BE%
+REM ── Dia chi backend: hoi NGUOI, tru khi khong co nguoi ─────────────────────
+REM
+REM Ba nhanh, va nhanh giua la ly do khoi nay ton tai: tu 03/09 launcher tu cap nhat, tuc chinh no
+REM chay lai file cai nay KHONG CO AI NGOI TRUOC MAY. Mot dong "set /p" o day se treo mai mai va
+REM nguoi dung chi thay app khong mo len — hong o cho xa nhat khoi nguyen nhan.
+REM
+REM   1. backend.txt da co  -> giu nguyen, khong hoi. Dung cho ca nguoi chay lai bo cai bang tay:
+REM                            dia chi cu la cai dung, hoi lai chi de go sai.
+REM   2. UNATTENDED=1       -> dung mac dinh, khong hoi, khong pause.
+REM   3. con lai            -> hoi nhu cu.
+if exist "%DEST%\\backend.txt" (
+  set /p BE=<"%DEST%\\backend.txt"
+  echo   Backend: %BE%  ^(giu nguyen tu lan cai truoc^)
+) else (
+  set "BE=${beMacDinh}"
+  if not "%GROKBOT2_SETUP_BE%"=="" set "BE=%GROKBOT2_SETUP_BE%"
+  if "%GROKBOT2_SETUP_UNATTENDED%"=="1" (
+    echo   Backend: %BE%  ^(khong hoi — chay tu dong^)
+  ) else (
+    set /p "BE=  Dia chi backend [%BE%]: "
+  )
+  > "%DEST%\\backend.txt" echo %BE%
+)
 
 REM IconLocation tro vao chinh client, nen shortcut mang LOGO THAT cua app — khong phai icon .cmd.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -110,7 +130,8 @@ echo.
 echo   XONG. Tu gio LUON mo bang shortcut "Bot Noi Bo" tren Desktop.
 echo   Bam thang vao app da cai la no noi chuyen voi server nha phat hanh.
 echo.
-timeout /t 8 >nul
+REM Chay tu dong thi dung nam giu cua so 8 giay — khong ai doc no.
+if not "%GROKBOT2_SETUP_UNATTENDED%"=="1" timeout /t 8 >nul
 exit /b 0
 
 REM ==========================================================================
@@ -162,30 +183,68 @@ if not exist "%APP%" (
   exit /b 1
 )
 
-REM ── Khoa cap nhat, nhung CHI khi can ────────────────────────────────────────
-REM
-REM Dat cung "SAND_DISABLE_UPDATES=1" thi khong bao gio thay banner "New update available", vi bien
-REM nay dung DAU thu tu cong cua client (envDisabled -> isLabBuild -> hasDevFeedOverride ->
-REM isPackaged): no thang moi thu khac, ke ca mot ban va feed da an.
-REM
-REM Do 03/09 tren may thu tu cua nguoi dung: Settings -> Updates hien dung dong "Updates are disabled
-REM by SAND_DISABLE_UPDATES". Bon cong cung chan mot tinh nang, va day la cong cuoi cung.
-REM
-REM Nhung BO han thi te hon: mot client CHUA co ban va update-feed se hoi api2.cursor.sh, tai ban cua
-REM hang, cai de va XOA SACH bo va. Nen quyet dinh phai dua vao dung mot du kien — client nay da co
-REM ban va chua — va phai kiem LUC CHAY, khong phai luc dung goi: bo cai va client TREN MAY NGUOI
-REM DUNG, nen luc dung goi khong the biet ket qua.
-REM
-REM Tu chinh no la co che tu sua: lan dau chua va thi khoa; sau khi va xong, lan mo ke tiep tu mo.
-REM Suy ra tu %APP% chu khong viet lai duong dan: hai chuoi giong nhau o hai dong la hai chuoi se
-REM lech nhau. Client da va co thu muc "resources\\app\\" (asar da bung); client goc thi khong — nen
-REM chinh su TON TAI cua file nay da la mot nua cau tra loi.
+REM Thu muc cai cua client, suy ra tu %APP% chu khong viet lai duong dan: hai chuoi giong nhau o hai
+REM dong la hai chuoi se lech nhau. Hai khoi duoi day deu dung no.
 for %%I in ("%APP%") do set "APPDIR=%%~dpI"
-findstr /c:"grokbot2:update-feed" "%APPDIR%resources\\app\\dist\\electron-main\\main.cjs" >nul 2>nul
-if errorlevel 1 (
-  REM Chua va — hoac khong doc duoc file. Huong hong an toan: KHOA. Mat banner con hon mat bo va.
-  set "SAND_DISABLE_UPDATES=1"
-)
+
+REM ── TU CAP NHAT: hoi backend cua minh, tai, chay bo cai ─────────────────────
+REM
+REM Vi sao o DAY chu khong dung updater cua client: updater goc do chu ky Authenticode truoc khi
+REM chay installer va doi ten nguoi ky nam trong ["Anysphere, Inc.","Anysphere"] (trich main.cjs
+REM 0.30). Nen banner goc chi dan toi mot nut Install luon that bai. Launcher thi chay TRUOC client,
+REM MOI LAN mo app, va do minh viet tron — day la cho duy nhat vua so huu duoc vua chac chan duoc goi.
+REM
+REM Ba luat, va ca ba deu la "dung im lang lam hong viec cua nguoi dung":
+REM   1. HONG THI MO APP. Mang dut, backend chet, hash lech — tat ca deu roi ve mo app nhu thuong.
+REM      Mot lop cap nhat tu chan duong vao san pham la lop se bi go.
+REM   2. Kiem HASH truoc khi chay. File tai ve la mot .exe/.cmd sap duoc thuc thi; sha256 trong
+REM      manifest la thu duy nhat noi rang no dung la thu minh phat hanh.
+REM   3. Co tiet che. Moi lan mo app mot lan hoi la nhieu; dau thoi gian trong %~dp0 chan viec do.
+REM
+REM Tat han: dat GROKBOT2_NO_SELF_UPDATE=1.
+if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "try{" ^
+  "  $moc=Join-Path '%~dp0' '.lan-hoi-cuoi';" ^
+  "  $gioTietChe=6;" ^
+  "  if(Test-Path $moc){ if(((Get-Date)-(Get-Item $moc).LastWriteTime).TotalHours -lt $gioTietChe){ exit 0 } }" ^
+  "  $pkg=Join-Path '%APPDIR%' 'resources\\app\\package.json';" ^
+  "  $ver=if(Test-Path $pkg){ (Get-Content $pkg -Raw | ConvertFrom-Json).version } else { '' };" ^
+  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver);" ^
+  "  Set-Content -Path $moc -Value (Get-Date -Format o) -Encoding utf8;" ^
+  "  if($r.StatusCode -ne 200){ exit 0 }" ^
+  "  $b=$r.Content | ConvertFrom-Json;" ^
+  "  $ten=if($b.ten){ $b.ten } else { 'bot-noi-bo-'+$b.version+'.cmd' };" ^
+  "  $tmp=Join-Path $env:TEMP $ten;" ^
+  "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 180 -Uri $b.url -OutFile $tmp;" ^
+  "  if($b.sha256hash){" ^
+  "    $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
+  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; Write-Host '  [!] hash lech — bo qua ban cap nhat'; exit 0 }" ^
+  "  }" ^
+  "  Write-Host ('  Dang cap nhat len '+$b.version+' ...');" ^
+  "  $env:GROKBOT2_SETUP_UNATTENDED='1';" ^
+  "  & cmd /c $tmp;" ^
+  "  exit 7" ^
+  "}catch{ exit 0 }"
+REM Ma 7 = bo cai da chay va da tu mo app lai. Khong mo lan hai.
+if errorlevel 7 exit /b 0
+:sau_cap_nhat
+
+REM ── Updater GOC: tat, va tat CO CHU DICH ────────────────────────────────────
+REM
+REM Sang 03/09 cho nay tung co dieu kien: "client da va update-feed thi mo cap nhat". Do xong moi
+REM biet la sai huong — updater goc KHONG THE cai ban cua minh, va no dong bang MA chu khong bang
+REM cau hinh: truoc khi chay installer no do chu ky Authenticode va doi ten nguoi ky nam trong
+REM ["Anysphere, Inc.","Anysphere"] (trich main.cjs 0.30). Nen mo no ra chi de duoc mot banner dan
+REM toi cai nut Install luon that bai — te hon la khong co banner.
+REM
+REM Nay cap nhat do khoi TU CAP NHAT o tren lo, va no chay duoc thuc su. Updater goc thi tat, vi hai
+REM ly do cung huong: no khong cai duoc, va de no song la de app co duong hoi api2.cursor.sh.
+REM
+REM GROKBOT2_NATIVE_UPDATES=1 mo lai — de danh cho ngay co chung chi ky so + ban va noi danh sach
+REM trang nguoi ky. Luc do banner + Install goc chay that, va khoi tren tu tat (dat NO_SELF_UPDATE).
+if not "%GROKBOT2_NATIVE_UPDATES%"=="1" set "SAND_DISABLE_UPDATES=1"
 
 start "" "%APP%" %*
 `;
