@@ -48,24 +48,46 @@ test("bản đang chạy MỚI HƠN (máy nội bộ) → 204, không ép hạ c
   assert.equal(traLoi(WIN("0.30.0")).status, 204);
 });
 
+
+/**
+ * Chạy một phép kiểm hợp đồng của cửa GỐC.
+ *
+ * Cửa ấy im lặng theo mặc định từ 03/09 (updater gốc không cài được bản của mình — nó dò chữ ký và
+ * đòi tên người ký của HÃNG). Nhưng hình dạng phản hồi vẫn phải đúng, vì ngày có chứng chỉ ta bật
+ * lại bằng đúng cờ này. Nên ba bài dưới bật cờ tường minh thay vì dựa vào một mặc định đã đổi.
+ */
+const voiCuaGoc = (f: () => void): void => {
+  const cu = process.env.GROKBOT2_NATIVE_FEED;
+  process.env.GROKBOT2_NATIVE_FEED = "1";
+  try { f(); } finally {
+    if (cu != null) process.env.GROKBOT2_NATIVE_FEED = cu; else delete process.env.GROKBOT2_NATIVE_FEED;
+  }
+};
+
 test("bản đang chạy CŨ HƠN → 200 kèm url + version + sha256", () => {
-  datManifest({ stable: { version: "0.29.3", url: "https://x/y.exe", sha256hash: "abc123" } });
-  const r = traLoi(WIN("0.29.0"));
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { url: "https://x/y.exe", version: "0.29.3", sha256hash: "abc123" });
+  voiCuaGoc(() => {
+    datManifest({ stable: { version: "0.29.3", url: "https://x/y.exe", sha256hash: "abc123" } });
+    const r = traLoi(WIN("0.29.0"));
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { url: "https://x/y.exe", version: "0.29.3", sha256hash: "abc123" });
+  });
 });
 
 test("macOS nhận hình dạng của NÓ — có `name`, vì schema squirrel khác iupdate", () => {
-  datManifest({ stable: { version: "0.29.3", url: "https://x/y.zip" } });
-  const r = traLoi(MAC("0.29.0"));
-  assert.equal(r.status, 200);
-  assert.equal(r.body?.name, "0.29.3", "thiếu `name` là feed_malformed phía client");
+  voiCuaGoc(() => {
+    datManifest({ stable: { version: "0.29.3", url: "https://x/y.zip" } });
+    const r = traLoi(MAC("0.29.0"));
+    assert.equal(r.status, 200);
+    assert.equal(r.body?.name, "0.29.3", "thiếu `name` là feed_malformed phía client");
+  });
 });
 
 test("kênh riêng biệt: dogfood có bản mới KHÔNG làm stable thấy gì", () => {
-  datManifest({ dogfood: { version: "0.30.0", url: "https://x/thu.exe" } });
-  assert.equal(traLoi(WIN("0.29.0")).status, 204, "người dùng stable phải im lặng");
-  assert.equal(traLoi("/updates/api/update/win32-x64/sand-dogfood/0.29.0/may-1/stable").status, 200);
+  voiCuaGoc(() => {
+    datManifest({ dogfood: { version: "0.30.0", url: "https://x/thu.exe" } });
+    assert.equal(traLoi(WIN("0.29.0")).status, 204, "người dùng stable phải im lặng");
+    assert.equal(traLoi("/updates/api/update/win32-x64/sand-dogfood/0.29.0/may-1/stable").status, 200);
+  });
 });
 
 test("đường sai hoặc kênh lạ → 400, không đoán bừa", () => {
@@ -127,7 +149,12 @@ test("launcher: KHÔNG đọc được phiên bản đang cài thì vẫn trả 
 });
 
 test("launcher: nền mac nhận gói mac", () => {
-  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "abc" } });
+  datManifest({
+    stable: {
+      version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "abc",
+      mac: { url: "https://x/download/mac", sha256hash: "abc-mac" },
+    },
+  });
   assert.match(traLoiLauncher("0.29.1", "mac").body?.url ?? "", /\/download\/mac$/);
   assert.match(traLoiLauncher("0.29.1", "windows").body?.url ?? "", /\/download\/windows$/);
 });
@@ -139,4 +166,45 @@ test("launcher: kênh đọc từ GROKBOT2_LAUNCHER_KENH", () => {
   process.env.GROKBOT2_LAUNCHER_KENH = "dogfood";
   try { assert.equal(traLoiLauncher("0.29.1").status, 200); }
   finally { if (cu != null) process.env.GROKBOT2_LAUNCHER_KENH = cu; else delete process.env.GROKBOT2_LAUNCHER_KENH; }
+});
+
+/*
+ * ── Hai cửa, một manifest: chúng KHÔNG được kéo nhau ───────────────────────────────────────────
+ *
+ * Đo 03/09: phát hành kênh `stable` cho LAUNCHER làm cửa updater GỐC tự trả 200 theo, vì cả hai đọc
+ * cùng một khoá manifest. Cửa gốc trả 200 nghĩa là banner hiện rồi Install thất bại ở phép dò chữ ký
+ * — tệ hơn là không có banner. Mở một đường không được phép tự mở đường kia.
+ */
+test("cửa GỐC im lặng theo mặc định, kể cả khi manifest đã có bản mới", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "a" } });
+  assert.equal(traLoi(WIN("0.29.0")).status, 204, "updater gốc không cài được bản của mình — đừng mời nó thử");
+  assert.equal(traLoiLauncher("0.29.0").status, 200, "cửa launcher thì phải trả — đó là đường chạy được");
+});
+
+test("cửa GỐC mở lại bằng GROKBOT2_NATIVE_FEED=1 — dành cho ngày có chứng chỉ", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "a" } });
+  const cu = process.env.GROKBOT2_NATIVE_FEED;
+  process.env.GROKBOT2_NATIVE_FEED = "1";
+  try { assert.equal(traLoi(WIN("0.29.0")).status, 200); }
+  finally { if (cu != null) process.env.GROKBOT2_NATIVE_FEED = cu; else delete process.env.GROKBOT2_NATIVE_FEED; }
+});
+
+test("launcher Mac nhận ĐÚNG hash và tên file của gói mac", () => {
+  datManifest({
+    stable: {
+      version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "hash-win", ten: "win.cmd",
+      mac: { url: "https://x/download/mac", sha256hash: "hash-mac", ten: "mac.command" },
+    },
+  });
+  const w = traLoiLauncher("0.29.0", "windows").body;
+  const m = traLoiLauncher("0.29.0", "mac").body;
+  assert.equal(w?.sha256hash, "hash-win");
+  assert.equal(m?.sha256hash, "hash-mac", "trả hash Windows cho Mac là làm launcher Mac bỏ qua cập nhật MÃI MÃI");
+  assert.equal(m?.ten, "mac.command");
+});
+
+test("manifest chưa có khoá mac → Mac nhận 204, KHÔNG nhận gói Windows đội lốt", () => {
+  datManifest({ stable: { version: "0.29.20260904", url: "https://x/download/windows", sha256hash: "hash-win" } });
+  assert.equal(traLoiLauncher("0.29.0", "mac").status, 204);
+  assert.equal(traLoiLauncher("0.29.0", "windows").status, 200);
 });

@@ -44,6 +44,15 @@ export interface BanPhatHanh {
    * launcher sẽ hỏng đúng vào ngày mọi thứ khác vừa được sửa.
    */
   ten?: string;
+  /**
+   * Gói của macOS — khoá THÊM, vì `url`/`sha256hash`/`ten` ở mức trên là của Windows.
+   *
+   * Bản đầu của cửa launcher chỉ đổi đuôi URL sang `/download/mac` mà vẫn trả hash và tên file của
+   * gói Windows. Launcher Mac sẽ tải đúng gói mac, so với hash sai, thấy lệch, rồi **lặng lẽ bỏ qua
+   * cập nhật mãi mãi** — kiểu hỏng tệ nhất: một cơ chế an toàn (kiểm hash) biến thành cơ chế chặn,
+   * và không ai thấy vì nhánh đó in một dòng rồi thoát 0. Đo 03/09, ngay lượt curl đầu sau phát hành.
+   */
+  mac?: { url: string; sha256hash?: string; ten?: string };
 }
 
 /** Đường tới manifest. Env cho phép trỏ chỗ khác khi chạy test hoặc khi VPS để nơi riêng. */
@@ -110,12 +119,31 @@ export function traLoiLauncher(ver: string, nen = "windows"): KetQua {
   const ban = docManifest()[kenhLauncher];
   if (!ban?.version || !ban?.url) return { status: 204 };
   if (ver && !moiHon(ban.version, ver)) return { status: 204 };
+  /*
+   * Mỗi nền tảng lấy ĐÚNG gói của nó — url, hash và tên file phải đi cùng một bộ ba.
+   *
+   * Nền mac mà manifest chưa có khoá `mac` ⇒ **204**, không phải "trả gói Windows với đuôi mac". Thà
+   * người dùng Mac không thấy cập nhật còn hơn thấy rồi hỏng ở bước kiểm hash — hỏng ở đó là hỏng
+   * lặng, và nó lặp lại mỗi lần mở app.
+   */
+  if (nen === "mac") {
+    if (!ban.mac?.url) return { status: 204 };
+    return {
+      status: 200,
+      body: {
+        version: ban.version,
+        url: ban.mac.url,
+        ...(ban.mac.sha256hash ? { sha256hash: ban.mac.sha256hash } : {}),
+        ...(ban.mac.ten ? { ten: ban.mac.ten } : {}),
+      },
+    };
+  }
   return {
     status: 200,
     body: {
       version: ban.version,
       // Launcher tải qua đúng cửa trang tải, nên nó nhận cùng gói mà người bấm Tải nhận được.
-      url: ban.url.replace(/\/download\/(windows|mac)$/, `/download/${nen === "mac" ? "mac" : "windows"}`),
+      url: ban.url,
       ...(ban.sha256hash ? { sha256hash: ban.sha256hash } : {}),
       ...(ban.ten ? { ten: ban.ten } : {}),
     },
@@ -135,6 +163,21 @@ export function traLoi(duong: string): KetQua {
   const [, nen, tenKenh, verDangChay] = m;
   const kenh = KENH[tenKenh];
   if (!kenh) return { status: 400 };
+
+  /*
+   * ── Cửa này IM LẶNG theo mặc định, và đó là một quyết định, không phải một thiếu sót ──
+   *
+   * Updater gốc **không cài được** bản của mình: trước khi chạy installer nó dò chữ ký Authenticode
+   * và đòi tên người ký nằm trong `["Anysphere, Inc.","Anysphere"]` (trích `main.cjs` 0.30). Nên trả
+   * 200 ở đây chỉ dựng một banner dẫn tới cái nút Install luôn thất bại — tệ hơn không có banner.
+   *
+   * Đo 03/09: ngay sau khi phát hành kênh `stable` cho LAUNCHER, cửa này bắt đầu trả 200, vì hai cửa
+   * đọc chung một manifest. Đó là cái bẫy: mở một đường làm đường kia tự mở theo.
+   *
+   * Giữ nguyên phần hợp đồng phía dưới thay vì xoá — ngày có chứng chỉ ký số + bản vá nới danh sách
+   * trắng, bật `GROKBOT2_NATIVE_FEED=1` là nó chạy, không phải viết lại.
+   */
+  if (process.env.GROKBOT2_NATIVE_FEED !== "1") return { status: 204 };
 
   const ban = docManifest()[kenh];
   if (!ban?.version || !ban?.url) return { status: 204 };

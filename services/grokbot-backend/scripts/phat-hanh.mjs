@@ -123,7 +123,19 @@ buoc(4, `ghi manifest — kênh ${KENH}`);
 const cu = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, "utf8")) : {};
 const base = (process.env.GROKBOT2_PUBLIC_URL ?? "http://localhost:8788").replace(/\/+$/, "");
 // `ten` — de launcher luu file tai ve dung duoi roi moi chay. Xem chu thich trong update-feed.ts.
-const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name } };
+/*
+ * Manifest giu MOT bo ba cho MOI nen tang: url + sha256 + ten file.
+ *
+ * Bo qua gia tri cua goi mac la lam launcher Mac tai dung goi, so voi hash Windows, thay lech, roi
+ * lang le bo qua cap nhat mai mai. Do 03/09 ngay luot curl dau sau phat hanh.
+ */
+const goiMac = newestSetup(DIST, "mac");
+const macPhan = goiMac
+  ? { mac: { url: `${base}/download/mac`, sha256hash: createHash("sha256").update(readFileSync(goiMac.path)).digest("hex"), ten: goiMac.name } }
+  : {};
+if (goiMac) console.log(`  goi mac : ${goiMac.name}`);
+else console.log("  (khong co goi mac — manifest se khong co khoa mac, launcher Mac se thay 204)");
+const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name, ...macPhan } };
 writeFileSync(MANIFEST, `${JSON.stringify(moi, null, 2)}\n`);
 
 console.log(`  ✓ ${MANIFEST}`);
