@@ -154,7 +154,6 @@ REM   {CURSOR_WEBSITE_URL}/loginDeepControl?challenge=...&uuid=...
 REM trong trinh duyet. De cursor.com o day thi trinh duyet mo trang cua HANG, dang nhap
 REM khong bao gio xong, va uuid + challenge cua may nay bi giao cho ho.
 set "CURSOR_WEBSITE_URL=%BE%"
-set "SAND_DISABLE_UPDATES=1"
 
 set "APP=%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe"
 if not exist "%APP%" (
@@ -162,6 +161,32 @@ if not exist "%APP%" (
   pause
   exit /b 1
 )
+
+REM ── Khoa cap nhat, nhung CHI khi can ────────────────────────────────────────
+REM
+REM Dat cung "SAND_DISABLE_UPDATES=1" thi khong bao gio thay banner "New update available", vi bien
+REM nay dung DAU thu tu cong cua client (envDisabled -> isLabBuild -> hasDevFeedOverride ->
+REM isPackaged): no thang moi thu khac, ke ca mot ban va feed da an.
+REM
+REM Do 03/09 tren may thu tu cua nguoi dung: Settings -> Updates hien dung dong "Updates are disabled
+REM by SAND_DISABLE_UPDATES". Bon cong cung chan mot tinh nang, va day la cong cuoi cung.
+REM
+REM Nhung BO han thi te hon: mot client CHUA co ban va update-feed se hoi api2.cursor.sh, tai ban cua
+REM hang, cai de va XOA SACH bo va. Nen quyet dinh phai dua vao dung mot du kien — client nay da co
+REM ban va chua — va phai kiem LUC CHAY, khong phai luc dung goi: bo cai va client TREN MAY NGUOI
+REM DUNG, nen luc dung goi khong the biet ket qua.
+REM
+REM Tu chinh no la co che tu sua: lan dau chua va thi khoa; sau khi va xong, lan mo ke tiep tu mo.
+REM Suy ra tu %APP% chu khong viet lai duong dan: hai chuoi giong nhau o hai dong la hai chuoi se
+REM lech nhau. Client da va co thu muc "resources\\app\\" (asar da bung); client goc thi khong — nen
+REM chinh su TON TAI cua file nay da la mot nua cau tra loi.
+for %%I in ("%APP%") do set "APPDIR=%%~dpI"
+findstr /c:"grokbot2:update-feed" "%APPDIR%resources\\app\\dist\\electron-main\\main.cjs" >nul 2>nul
+if errorlevel 1 (
+  REM Chua va — hoac khong doc duoc file. Huong hong an toan: KHOA. Mat banner con hon mat bo va.
+  set "SAND_DISABLE_UPDATES=1"
+)
+
 start "" "%APP%" %*
 `;
 
@@ -252,9 +277,15 @@ export CURSOR_API_BASE_URL="$BE"
 export SAND_BACKEND_URL="$BE"
 # Tro vao BACKEND, khong phai cursor.com — xem chu thich o ban Windows ben tren.
 export CURSOR_WEBSITE_URL="$BE"
-export SAND_DISABLE_UPDATES=1
 
 APP="\${GROKBOT2_CLIENT_DIR:-/Applications/Grok Bot.app}"
+
+# Khoa cap nhat CHI khi client chua co ban va update-feed — xem chu thich dai o ban Windows.
+# Huong hong la KHOA: doc khong duoc file thi cu coi nhu chua va.
+if ! grep -q "grokbot2:update-feed" "$APP/Contents/Resources/app/dist/electron-main/main.cjs" 2>/dev/null; then
+  export SAND_DISABLE_UPDATES=1
+fi
+
 # Ten file thuc thi do CFBundleExecutable quyet dinh — lay cai dau tien thay vi doan ten.
 BIN="$(ls "$APP/Contents/MacOS" 2>/dev/null | head -1)"
 [ -n "$BIN" ] || { echo "Khong thay file thuc thi trong $APP/Contents/MacOS"; exit 1; }
