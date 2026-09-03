@@ -297,10 +297,15 @@ Source: "${appSrc}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs 
 Source: "{#SourceDir}\start-bot.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\*.ico";         DestDir: "{app}"; Flags: ignoreversion
 ${process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN
-    ? `; token.txt — de launcher tu cap nhat hoi DUNG goi cua no (/updates/ban-moi?k=). Chi co khi
+    /*
+     * String.raw CHO CA hai nhanh: template cha la String.raw nhung literal long trong ${} thi KHONG,
+     * nen "\token.txt" thanh "<TAB>oken.txt" va ISCC bao "Error on line 31" — do 03/09, ngay lan dung
+     * dau tien sau khi them dong nay. Cung ho voi bay backslash cua bash/heredoc, chi khac vo.
+     */
+    ? String.raw`; token.txt — de launcher tu cap nhat hoi DUNG goi cua no (/updates/ban-moi?k=). Chi co khi
 ; GROKBOT2_FULL_DOWNLOAD_TOKEN duoc dat luc dung goi; Inno bao loi neu Source thieu nen dong nay co dieu kien.
 Source: "{#SourceDir}\token.txt";     DestDir: "{app}"; Flags: ignoreversion`
-    : `; (khong co token.txt — dung goi ma khong dat GROKBOT2_FULL_DOWNLOAD_TOKEN: launcher se khong tu cap nhat)`}
+    : String.raw`; (khong co token.txt — dung goi ma khong dat GROKBOT2_FULL_DOWNLOAD_TOKEN: launcher se khong tu cap nhat)`}
 
 [Icons]
 ; Tro vao start-bot.cmd, KHONG tro thang vao exe: bon bien moi truong nam trong do.

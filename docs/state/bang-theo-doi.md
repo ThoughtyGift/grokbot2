@@ -180,6 +180,7 @@ nay 0 ca lệch ổn định.*
 | 13 · Teach a task qua giao diện | `e2e-teach.mjs` **11/11**: nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật |
 | 14 · Lớp tự soát 3 mặt | `computer` · `automation_write` · `subagent`, đo **7/7**; một ca không đo được là bỏ cả lượt (`khongDoDuoc`) |
 | 8 · Tự cập nhật | **Đường của mình xong 03/09**: launcher hỏi `/updates/ban-moi`, kiểm sha256, chạy bộ cài, fail-open; updater gốc tắt hẳn vì nó dò chữ ký người ký của HÃNG (`["Anysphere, Inc.","Anysphere"]`) — banner hiện được nhưng Install không bao giờ chạy, nên không mời nó thử. Mỗi nền một bộ ba `url+sha+tên` trong manifest |
+| 17 · Bản chở-app tự cập nhật | **XONG 03/09** — bộ cài nướng `token.txt` cạnh app (từ `GROKBOT2_FULL_DOWNLOAD_TOKEN` lúc dựng); launcher hỏi `/updates/ban-moi?k=` và nhận khoá `full` của manifest (đo qua Internet: `ten=Bot-Noi-Bo-Setup-20260903.exe`, sha `c59bebeb…` khớp file trên VPS và bản cài thử). **Cả hai launcher chuyển sang HAI PHA** vì bộ cài ghi đè chính `start-bot.cmd` đang chạy — xem §7. Đo bằng bộ đo chạy PowerShell thật với máy chủ giả: backend chết → exit 0; trả 200 → tải, kiểm hash, ghi pha 2, exit 7; pha 2 parse được. `phat-hanh.mjs --with-app` dựng + đưa cả gói chở-app lên |
 | 16 · Trang tải nói rõ bản nào | **XONG 03/09** — `{{PHIEN_BAN}}` · `{{NGAY_BAN}}` đọc từ **manifest** (cùng nguồn với feed và launcher, không gõ tay), hiện ở hero + footer + cả nhánh `?k=`; bỏ khối CTA cuối trang (nút tải thứ 3) và hai link footer lặp nav — trang còn đúng **một** nút tải ngoài nav. E2E cài từ web: bản cài **khớp từng byte** bản đang chạy (375/375 file, 288 chunk renderer, `Grok Bot.exe` cùng hash). Bẫy bắt được: bản chở-app dựng lần đầu mặc định `backend.txt = localhost:8788` vì thiếu `GROKBOT2_PUBLIC_BACKEND` lúc dựng — dựng lại, sha `0683b6db…` |
 | 15 · Một trang tải | **XONG 03/09** — `/tai/` (máy chủ tĩnh cũ ngoài repo, phát client 0.20) → 301 `/agent/`; `?k=<token>` trên `/agent/` phát bản chở-app **0.29** (`Bot-Noi-Bo-Setup-20260903.exe`, 105 MB, Defender sạch); nút công khai phát gói 50 KB; cờ `chiRieng` chặn bản chở-app khỏi nút công khai **vô điều kiện** |
 
@@ -479,6 +480,28 @@ khoá đúng box trả `ok:true`, `root=/home/gb2u003/workspace`. Câu lỗi mô
 câu hỏi SAI, nên nó nghe rất thuyết phục. Cùng lượt đó lộ một trần thật: dải chỉ có **5 tài khoản**
 `gb2u001…005` và **cả 5 đã cấp** — người thứ 6 sẽ thấy mọi tool box hỏng cùng lúc, kèm câu lỗi viết
 cho quản trị viên. Trần này chặn sớm hơn nhiều so với trần RAM (14 bot).
+
+**`cmd` đọc file batch theo TỪNG DÒNG từ đĩa — nên bộ cài không được chạy đồng bộ từ trong launcher.**
+Bộ cài ghi đè chính `start-bot.cmd`. Bản đầu của khối tự cập nhật (sáng 03/09) gọi `& cmd /c $tmp`
+ngay trong launcher đang chạy: khi bộ cài xong, `cmd` đọc dòng kế tiếp từ file MỚI ở offset CŨ —
+hành vi không đoán được, và không lỗi nào báo. Nay hai pha: pha 1 chỉ kiểm + tải + kiểm hash + ghi
+một script ra `%TEMP%` rồi **thoát mã 7**; pha 2 chạy tách rời (`Start-Process powershell -File`),
+chờ 2 giây cho `cmd` thoát, cài, rồi (chỉ bản chở-app, vì `[Run]` của Inno có `skipifsilent`) mở lại
+`start-bot.cmd`. Khoá bằng test `doesNotMatch /& cmd \/c \$tmp/` và bằng bộ đo chạy PowerShell thật.
+
+**Template literal lồng trong `String.raw` thì KHÔNG raw.** `ISS_FULL` là `String.raw\`…\``, nhưng
+nhánh `${cond ? \`…\` : \`…\`}` bên trong là literal thường — nên `"{#SourceDir}\token.txt"` thành
+`{#SourceDir}<TAB>oken.txt` và ISCC báo *"Error on line 31"*. Cùng họ với bẫy backslash của bash và
+heredoc, chỉ khác vỏ; và lần này nó nằm sau **hai lớp** grep của tôi nên câu lỗi thật chỉ lộ khi chạy
+`build-setup.mjs` trần. Cách chữa: `String.raw` cho cả hai nhánh lồng.
+
+**Bộ đo tự chặn mình, rồi báo lỗi lên sản phẩm — hai lần trong một giờ.** (1) Regex tách dòng
+PowerShell đòi đúng MỘT dấu cách trước `^`; ba dòng có hai → lệnh bị cắt cụt giữa mảng → PS báo
+*"Missing expression after ','"* và tôi đã tưởng template hỏng. (2) Máy chủ giả chạy CÙNG tiến trình
+với `execFileSync` — vòng lặp sự kiện bị khoá trong lúc PowerShell chờ → *"The operation has timed
+out"*. Cả hai lần launcher đều đúng. Bài học cũ mặc áo mới: **một bộ đo báo đỏ thì nghi bộ đo trước**,
+và một `catch{ exit 0 }` đúng trong sản phẩm là thứ phải **mở ra** trong bộ đo, nếu không nguyên nhân
+không bao giờ lộ.
 
 **Bảng tool dựng bằng grep thiếu đúng nhóm hay hỏng nhất.** 16 tool `browser_*` và 8 tool box nạp
 vào `TOOLS` bằng vòng lặp ở mức module, nên grep tĩnh ra 47 trong khi thật là **75**. "Thiếu trong

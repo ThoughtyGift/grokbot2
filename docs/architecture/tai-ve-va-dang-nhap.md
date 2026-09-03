@@ -142,7 +142,7 @@ theo thứ tự:
 
 | # | việc | thay đổi | trạng thái |
 |---|---|---|---|
-| 1 | Launcher gói 118 MB **tự cập nhật** | đưa khối `/updates/ban-moi` từ `winStart` sang `startBundled`; nhịp hỏi 1 lần/ngày (gói nặng); tải theo `ten` từ manifest | chưa |
+| ~~1~~ | ~~Launcher gói 118 MB **tự cập nhật**~~ **XONG 03/09** | bộ cài nướng `token.txt`; launcher hỏi `/updates/ban-moi?k=` → khoá `full` của manifest; nhịp 1 lần/ngày; **hai pha** (bộ cài ghi đè chính `start-bot.cmd`); đo qua Internet + cài thử: `token.txt` đúng, launcher đủ dấu | xong |
 | 2 | Nút công khai phát gói 118 MB | bỏ cờ `chiRieng` ở `Bot-Noi-Bo-Setup` trong `site.ts`; `phat-hanh.mjs` dựng `--with-app` và `scp` gói ấy; manifest trỏ `Bot-Noi-Bo-Setup-*.exe` | chưa — **chờ gật**, xem ranh giới dưới |
 | 3 | Gói 50 KB | giữ làm đường phụ cho máy đã có client, hoặc bỏ | tuỳ |
 
