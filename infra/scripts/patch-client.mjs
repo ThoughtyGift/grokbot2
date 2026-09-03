@@ -212,9 +212,27 @@ if (mode === "--verify") {
      * nhau: thiếu vá feed là đỏ ở vòng `PATCHES` bên dưới, `sandLab` sót lại là đỏ ở đây. Mất một
      * trong hai là mất cả lớp bảo vệ lẫn tính năng.
      */
-    pkg.sandLab === undefined
-      ? ok("sandLab: vang mat (dung) — updater dung kenh cua minh")
-      : fail('package.json con "sandLab" — updater bi khoa, banner cua MINH khong bao gio hien; chay lai --apply');
+    /*
+     * …nhưng CHỈ khi bản vá feed thật sự áp được. Trên client không có biến thể `update-feed` (0.20),
+     * `sandLab` được GIỮ LẠI có chủ ý — và một `--verify` đỏ ở đó sẽ tố cáo đúng cái quyết định an
+     * toàn mà `--apply` vừa đưa ra. Hai bên phải đọc CÙNG một dữ kiện, nếu không chúng sẽ mâu thuẫn
+     * nhau trên đúng những máy cũ nhất.
+     */
+    const feedApDuoc = (() => {
+      try {
+        return readFileSync(join(APP_UNPACKED, "dist/electron-main/main.cjs"), "utf8")
+          .includes("/*grokbot2:update-feed*/");
+      } catch { return false; }
+    })();
+    if (!feedApDuoc) {
+      pkg.sandLab === true
+        ? ok("sandLab: con day (dung) — client nay khong va duoc update-feed, nen updater phai khoa")
+        : fail('client khong co ban va update-feed MA "sandLab" cung mat — app co the tu cai ban cua hang');
+    } else {
+      pkg.sandLab === undefined
+        ? ok("sandLab: vang mat (dung) — updater dung kenh cua minh")
+        : fail('package.json con "sandLab" — updater bi khoa, banner cua MINH khong bao gio hien; chay lai --apply');
+    }
   } catch { fail("cannot read resources/app/package.json"); }
 
   for (const p of PATCHES) {
@@ -433,15 +451,30 @@ ${chk.stderr}`); process.exit(1); }
    */
   const feedDaVa = readFileSync(join(staging, "dist/electron-main/main.cjs"), "utf8")
     .includes("/*grokbot2:update-feed*/");
-  if (!feedDaVa) {
-    console.error("FAIL update-feed chua ap — KHONG go sandLab.");
-    console.error("  Go khoa khi kenh cap nhat con tro api2.cursor.sh nghia la app co the tu cai ban");
-    console.error("  cua hang de len resources/app va xoa sach bo va.");
-    process.exit(1);
-  }
   let doiPkg = false;
-  if (pkg.sandLab !== undefined) { delete pkg.sandLab; doiPkg = true; ok("sandLab: da go — updater song lai, va no chi hoi backend cua minh"); }
-  else ok("sandLab: khong co san trong bundle nay (dung)");
+  if (!feedDaVa) {
+    /*
+     * Chưa vá được feed ⇒ GIỮ `sandLab`, và **đi tiếp**.
+     *
+     * Bản đầu của cửa này `process.exit(1)`. Sai, và sai nặng: câu thông báo tự nói "KHONG go
+     * sandLab" trong khi hành động lại là *bỏ cả lần cài*. Trên client **0.20** — bản mà
+     * `update-feed.mjs` không có biến thể nào — dấu vá không bao giờ xuất hiện, nên bộ cài tải từ
+     * website dừng ở bước 3 với "Va client that bai" và người dùng mất luôn cả những bản vá CHẠY
+     * ĐƯỢC trên 0.20 (`win-drive-path`, `get-ultra-redirect`). Đo 03/09, ngay sau khi tôi vừa
+     * khuyên người dùng "tải lại bộ cài rồi chạy".
+     *
+     * Gỡ `sandLab` chỉ là mở đường cho BANNER — một tính năng thêm. Giữ nó lại là mất banner, không
+     * mất gì khác. Một điều kiện của tính năng thêm không được phép đánh sập cả lần cài.
+     */
+    ok("update-feed chua ap (client nay khong co bien the) — GIU sandLab, updater van khoa");
+    console.log("       Hau qua: khong co banner 'New update available'. Cai dat van hoan tat.");
+    console.log("       Muon co banner thi phai len client 0.29+ roi chay lai bo cai.");
+  } else if (pkg.sandLab !== undefined) {
+    delete pkg.sandLab; doiPkg = true;
+    ok("sandLab: da go — updater song lai, va no chi hoi backend cua minh");
+  } else {
+    ok("sandLab: khong co san trong bundle nay (dung)");
+  }
 
   /*
    * Đóng dấu bản phát hành vào `version` — xem `NEN_TANG` ở đầu file cho lý do đầy đủ.
