@@ -171,8 +171,21 @@ if (argv.includes("--len-vps")) {
 
   const PORT = process.env.GROKBOT2_VPS_PORT ?? "24700";
   const DATA = process.env.GROKBOT2_VPS_DATA ?? "/opt/grokbot2/shared/data";
-  chay("scp", ["-P", PORT, "-o", "BatchMode=yes", goi.path, `${SSH}:${DATA}/dist/`]);
-  console.log(`  ✓ gói → ${DATA}/dist/${goi.name}`);
+  /*
+   * Đưa gói của CẢ HAI nền tảng, không chỉ nền tảng dùng cho manifest.
+   *
+   * Bản đầu chỉ `scp` đúng `goi` — tức gói Windows, vì manifest cần băm của nó. Đo E2E 03/09 bằng
+   * chính trình duyệt trên trang tải: `/download/windows` trả gói hôm nay, còn `/download/mac` vẫn
+   * trả `...mac-20260827.command` **thiếu bảy ngày**. Không lỗi nào nổi lên, vì trang tải luôn có
+   * MỘT gói mac để phát — chỉ là gói cũ. Một đường mà lúc nào cũng "có gì đó" thì không bao giờ
+   * kêu; nó chỉ lặng lẽ phát bản sai.
+   */
+  for (const hang of ["windows", "mac"]) {
+    const g = newestSetup(DIST, hang);
+    if (!g) { console.log(`  (không có gói ${hang} — bỏ qua)`); continue; }
+    chay("scp", ["-P", PORT, "-o", "BatchMode=yes", g.path, `${SSH}:${DATA}/dist/`]);
+    console.log(`  ✓ gói ${hang} → ${DATA}/dist/${g.name}`);
+  }
   chay("scp", ["-P", PORT, "-o", "BatchMode=yes", MANIFEST, `${SSH}:${DATA}/phat-hanh.json`]);
   console.log(`  ✓ manifest → ${DATA}/phat-hanh.json`);
 } else {

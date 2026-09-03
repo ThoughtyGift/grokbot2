@@ -51,13 +51,38 @@ export type SetupKind = keyof typeof SETUP_KINDS;
  * Sửa CSS rồi F5 mà không thấy gì đổi là kiểu bực mình vô nghĩa; còn đọc lại 20 KB mỗi lần thì
  * lãng phí. `mtimeMs` giải quyết cả hai.
  */
-let cached: { mtimeMs: number; html: string } | null = null;
+let cached: { dau: string; html: string } | null = null;
+
+/**
+ * Kích cỡ gói, in ra từ chính FILE ĐANG ĐƯỢC PHÁT.
+ *
+ * Trước đây trang ghi cứng "bộ cài 28 KB" ở hai chỗ và "27 KB" cho Mac. Đo 03/09 bằng chính trình
+ * duyệt: gói Windows đang phát là **2.0 MB** — trang nói sai gần trăm lần, và nó sai một cách không
+ * ai phát hiện được vì con số nằm trong HTML còn file thì đổi theo mỗi lần phát hành.
+ *
+ * Một con số về file thì phải ĐO file, không được gõ tay. Lấy lúc dựng trang, cùng nhịp với
+ * `newestSetup` mà `/download/*` dùng — nên hai chỗ không thể lệch nhau.
+ */
+const coChu = (b: number): string => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`);
 
 function landingHtml(): string | null {
   try {
     const { mtimeMs } = statSync(LANDING);
-    if (!cached || cached.mtimeMs !== mtimeMs) {
-      cached = { mtimeMs, html: readFileSync(LANDING, "utf8") };
+    const co = (hang: SetupKind): string => {
+      const g = newestSetup(DIST, hang);
+      return g ? coChu(g.size) : "—";
+    };
+    // Cache theo mtime của HTML **và** của gói: phát hành bản mới mà trang giữ con số cũ thì đúng
+    // cái lỗi này quay lại, chỉ chậm hơn một nhịp.
+    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}`;
+    if (!cached || cached.dau !== dau) {
+      const raw = readFileSync(LANDING, "utf8");
+      cached = {
+        dau,
+        html: raw
+          .replaceAll("{{CO_WIN}}", co("windows"))
+          .replaceAll("{{CO_MAC}}", co("mac")),
+      };
     }
     return cached.html;
   } catch {
