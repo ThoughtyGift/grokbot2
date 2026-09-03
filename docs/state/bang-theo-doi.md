@@ -333,6 +333,24 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Một đường lúc nào cũng "có gì đó" thì không bao giờ kêu.** Đo E2E 03/09 bằng chính trình duyệt
+trên `cinai.app/agent`: `/download/windows` trả gói hôm nay, `/download/mac` trả gói **27/08** —
+thiếu bảy ngày. Không lỗi nào nổi lên, vì đường mac luôn có MỘT file để phát; chỉ là file cũ.
+Nguyên nhân: `phat-hanh.mjs` chỉ `scp` gói của nền tảng dùng cho manifest. Nay đưa cả hai.
+
+**Con số về một FILE thì phải ĐO file.** Trang tải ghi cứng "bộ cài 28 KB" trong khi gói đang phát
+là **2.0 MB** — sai gần trăm lần, và sai theo cách không ai thấy được: con số nằm trong HTML còn file
+đổi theo mỗi lần phát hành. Nay `site.ts` thay `{{CO_WIN}}` · `{{CO_MAC}}` · `{{CO_FULL}}` bằng kích
+cỡ lấy từ chính file `/download/*` phát ra. Phần đáng chép là **cách tìm ra chỗ cuối cùng**: tôi sửa
+hai chỗ nhìn thấy trong HTML, rồi bài test mới (`site.test.ts`, chặn dạng câu `bộ cài <số> KB|MB`)
+bắt được chỗ THỨ BA — một đoạn `<script>` chạy sau, ghi đè lại đúng dòng vừa thay, chỉ trên đường
+`?k=`. Đọc HTML bằng mắt không thấy được thứ JS ghi vào sau.
+
+**Cùng một số phiên bản, hai lần dựng ra hai file khác nhau.** Phát hành lại `0.29.20260903` cho băm
+`95d6d24f…` thay vì `8789fc41…` — bản dựng không tái lập được (dấu thời gian bên trong exe). Hiện
+không hại vì manifest và file luôn lên cùng lượt, và **manifest lên SAU** (đúng thứ tự trong bước 5).
+Nhưng đừng bao giờ chỉ chép lại manifest mà không chép gói.
+
 **BỐN cổng cùng chặn một tính năng, và mỗi cổng đều "đúng".** Máy thứ tư của người dùng không thấy
 banner cập nhật. Không có một nguyên nhân nào cả — có bốn, độc lập, mỗi cái đủ để chặn:
 
