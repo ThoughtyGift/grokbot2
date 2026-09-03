@@ -148,6 +148,27 @@ if (argv.includes("--len-vps")) {
     console.error("  Manifest ĐÃ ghi ở máy này; chạy lại chỉ bước lên VPS bằng scp là đủ.");
     process.exit(1);
   }
+  /*
+   * Manifest mang địa chỉ `localhost` thì KHÔNG được lên máy chủ công khai.
+   *
+   * Đo 03/09, và là lỗi tôi tự gây ra trong chính lượt phát hành đầu tiên: manifest cục bộ còn khoá
+   * `stable` từ một lần chạy thử trước, ghi khi `GROKBOT2_PUBLIC_URL` chưa đặt — nên nó mang
+   * `http://localhost:8788/download/windows` và băm của một gói khác. `scp` chép cả file, nên cái
+   * rác ấy lên thẳng production: mọi máy kênh stable sẽ thấy banner, bấm Install, rồi tải từ chính
+   * máy mình và băm không khớp. Một tính năng vừa dựng xong đã sai theo kiểu tệ nhất — nó CHẠY.
+   *
+   * Chặn ở đây chứ không ở bước ghi: ghi manifest localhost là chuyện bình thường khi thử trên máy
+   * cá nhân. Thứ không bình thường là ĐEM NÓ LÊN.
+   */
+  const raRac = Object.entries(JSON.parse(readFileSync(MANIFEST, "utf8")))
+    .filter(([, v]) => /\/\/(localhost|127\.0\.0\.1)\b/.test(String(v?.url ?? "")));
+  if (raRac.length) {
+    console.error(`✘ manifest có ${raRac.length} kênh trỏ localhost: ${raRac.map(([k]) => k).join(", ")}`);
+    console.error("  Đưa lên là người dùng thấy banner rồi tải từ chính máy họ. Sửa hoặc xoá khoá đó,");
+    console.error("  hoặc phát hành lại kênh ấy với GROKBOT2_PUBLIC_URL đặt đúng.");
+    process.exit(1);
+  }
+
   const PORT = process.env.GROKBOT2_VPS_PORT ?? "24700";
   const DATA = process.env.GROKBOT2_VPS_DATA ?? "/opt/grokbot2/shared/data";
   chay("scp", ["-P", PORT, "-o", "BatchMode=yes", goi.path, `${SSH}:${DATA}/dist/`]);
