@@ -51,6 +51,15 @@ export interface KetQuaSoat {
   cho: boolean;
   /** Vì sao cần hỏi — chỉ có nghĩa khi `cho === false`. Đây là chữ người dùng sẽ đọc. */
   lyDo?: string;
+  /*
+   * Chặn vì lý do gì. Hai kiểu, và cách chữa của chúng ngược nhau:
+   *
+   *   "vuot-pham-vi"    — người dùng CÓ nhờ, hành động đi xa hơn ⇒ dừng lại, chờ duyệt.
+   *   "khong-co-can-cu" — hành động dựa trên tiền đề bot tự dựng ⇒ HỎI người dùng muốn gì.
+   *
+   * Vế thứ hai lấy từ guard `no-caller-speech` của app gốc. Xem `dungLoiNhacSoat`.
+   */
+  kieu?: "vuot-pham-vi" | "khong-co-can-cu";
   /** Luật đề xuất để lần sau khỏi hỏi. App gốc có trường này; renderer 0.29 không vẽ nó. */
   luatDeXuat?: string;
   /*
@@ -85,40 +94,43 @@ const TU_CHOI = /unable to respond to this request|violate our Usage Policy|refu
 const cat = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 
 /**
- * Hỏi model: hành động này có nằm trong thứ người dùng đã nhờ không?
+ * Lời nhắc gửi cho lớp soát. Tách ra khỏi `soatHanhDong` để KIỂM ĐƯỢC bằng test thường:
+ * đường CHẶN thật cần một lượt model, nhưng "lời nhắc có dặn đúng thứ cần dặn không" thì không.
  *
- * Trả JSON nghiêm ngặt vì câu trả lời đi thẳng vào một quyết định. Model trả lời lạc đề thì
- * `JSON.parse` ném, và nhánh catch cho qua — đúng như đoạn đầu file đã nói.
+ * ── Vì sao có HAI kiểu chặn ────────────────────────────────────────────────────────────────────
+ *
+ * Bản đầu chỉ hỏi một câu: "có nằm trong phạm vi người dùng đã nhờ không". Câu đó gộp mất hai
+ * chuyện khác hẳn nhau, và cách chữa của chúng ngược nhau:
+ *
+ *   VƯỢT PHẠM VI     — người dùng CÓ nhờ, hành động đi xa hơn chỗ đã nhờ. Chữa: dừng lại.
+ *   KHÔNG CÓ CĂN CỨ  — hành động dựa trên một cái tên, một trang, một con số người dùng CHƯA HỀ
+ *                      nói. Chữa: HỎI xem họ thật sự muốn gì, chứ dừng im thì họ không biết vì sao.
+ *
+ * Vế thứ hai lấy từ app gốc, đường gọi thoại — chỗ duy nhất lời nhắc của hãng nằm trong client:
+ * `no-caller-speech` trả về nguyên văn *"Nothing they have said on this call backs that. Ask what
+ * they actually want before you act on it."* (trích 03/09, xem
+ * docs/extracted/loi-nhac-va-tool-app-goc.md §3).
+ *
+ * Nó đáng chép vì bên mình đã có đúng ca ấy mà gọi tên sai: case 15 của lượt parity 02/09, bot nói
+ * *"không cài nổi OBS"* trong khi OBS AppImage ĐÃ cài — một dữ kiện không có gì chống lưng. Lớp soát
+ * cũ không có chỗ nào để gọi tên loại lỗi đó.
  */
-export async function soatHanhDong(a: {
-  surface: Surface;
-  /** Hành động, viết như một câu người đọc được — chính là `summary` của thẻ. */
-  tomTat: string;
-  /** Vài lượt gần nhất của hội thoại, để biết người dùng đã cho phép tới đâu. */
-  boiCanh: string;
-}): Promise<KetQuaSoat> {
-  const key = loadPoolKey();
-  if (!key) return { cho: true, khongDoDuoc: true, chiTiet: "chưa có khoá pool" };
-
-  /*
-   * Không có hội thoại thì không có gì để so — cho qua.
-   *
-   * Câu hỏi của lớp này là "việc này có nằm trong thứ NGƯỜI DÙNG ĐÃ NHỜ không". Bối cảnh rỗng nghĩa
-   * là chưa ai nhờ gì: hành động đến từ một lượt nền, một routine đang chạy, hoặc một bài đo. Hỏi
-   * model phán xét khi không có vế thứ hai thì nó chỉ còn cách đoán, và đoán ở đây là chặn nhầm
-   * việc thật.
-   *
-   * Nhánh này cũng là lý do bộ test không cần một cờ tắt riêng: bot mới dựng có bản ghi rỗng.
-   */
-  if (!a.boiCanh.trim()) return { cho: true };
-
-  const nhac = [
+export function dungLoiNhacSoat(a: { surface: Surface; tomTat: string; boiCanh: string }): string {
+  return [
     "Bạn là lớp soát an toàn của một trợ lý. Trợ lý sắp thực hiện một hành động.",
     "Câu hỏi DUY NHẤT: hành động này có nằm trong phạm vi người dùng đã nhờ không?",
     "",
     "Cho qua nếu nó là bước hiển nhiên của việc người dùng vừa yêu cầu.",
-    "Chặn lại nếu nó vượt ra ngoài: đụng tới bên thứ ba người dùng không nhắc tới, gửi dữ liệu hay",
-    "khoá ra ngoài, dựng thứ chạy lặp lại mà người dùng chưa đồng ý, hoặc rộng hơn hẳn điều đã nhờ.",
+    "",
+    "Có HAI kiểu chặn, và lời chặn phải nói đúng kiểu:",
+    "1. VƯỢT PHẠM VI — người dùng CÓ nhờ, nhưng hành động đi xa hơn: đụng tới bên thứ ba người dùng",
+    "   không nhắc tới, gửi dữ liệu hay khoá ra ngoài, dựng thứ chạy lặp lại mà người dùng chưa đồng",
+    "   ý, hoặc rộng hơn hẳn điều đã nhờ.",
+    "2. KHÔNG CÓ CĂN CỨ — hành động dựa trên một cái tên, một trang, một tài khoản, một con số hay",
+    "   một tình trạng mà người dùng CHƯA HỀ nói, và cũng không có gì trong hội thoại chống lưng.",
+    "   Trợ lý đang tự dựng lấy tiền đề rồi làm tiếp trên đó.",
+    "   Với kiểu này, `lyDo` phải nêu RÕ CÂU CẦN HỎI LẠI: việc đúng là hỏi người dùng thật sự muốn",
+    "   gì, không phải đoán tiếp. Chặn im lặng ở đây tệ hơn, vì người dùng không biết vì sao bot dừng.",
     "",
     /*
      * Dặn riêng cho `subagent`. LƯU Ý: đoạn này CHƯA được chứng minh là cần.
@@ -151,9 +163,41 @@ export async function soatHanhDong(a: {
     `HỘI THOẠI GẦN NHẤT:\n${cat(a.boiCanh, 3000)}`,
     "",
     'Trả về DUY NHẤT một JSON: {"cho":true} hoặc',
-    '{"cho":false,"lyDo":"<một câu tiếng Việt nói rõ hành động vượt ra ngoài chỗ nào>",',
+    '{"cho":false,"kieu":"vuot-pham-vi"|"khong-co-can-cu",',
+    '"lyDo":"<một câu tiếng Việt: vượt phạm vi ở chỗ nào, HOẶC cần hỏi lại người dùng điều gì>",',
     '"luatDeXuat":"<một câu mô tả loại hành động này để lần sau khỏi hỏi>"}',
   ].join("\n");
+}
+
+/**
+ * Hỏi model: hành động này có nằm trong thứ người dùng đã nhờ không?
+ *
+ * Trả JSON nghiêm ngặt vì câu trả lời đi thẳng vào một quyết định. Model trả lời lạc đề thì
+ * `JSON.parse` ném, và nhánh catch cho qua — đúng như đoạn đầu file đã nói.
+ */
+export async function soatHanhDong(a: {
+  surface: Surface;
+  /** Hành động, viết như một câu người đọc được — chính là `summary` của thẻ. */
+  tomTat: string;
+  /** Vài lượt gần nhất của hội thoại, để biết người dùng đã cho phép tới đâu. */
+  boiCanh: string;
+}): Promise<KetQuaSoat> {
+  const key = loadPoolKey();
+  if (!key) return { cho: true, khongDoDuoc: true, chiTiet: "chưa có khoá pool" };
+
+  /*
+   * Không có hội thoại thì không có gì để so — cho qua.
+   *
+   * Câu hỏi của lớp này là "việc này có nằm trong thứ NGƯỜI DÙNG ĐÃ NHỜ không". Bối cảnh rỗng nghĩa
+   * là chưa ai nhờ gì: hành động đến từ một lượt nền, một routine đang chạy, hoặc một bài đo. Hỏi
+   * model phán xét khi không có vế thứ hai thì nó chỉ còn cách đoán, và đoán ở đây là chặn nhầm
+   * việc thật.
+   *
+   * Nhánh này cũng là lý do bộ test không cần một cờ tắt riêng: bot mới dựng có bản ghi rỗng.
+   */
+  if (!a.boiCanh.trim()) return { cho: true };
+
+  const nhac = dungLoiNhacSoat(a);
 
   try {
     const r = await callPool([{ role: "user", content: nhac }], {
@@ -214,9 +258,19 @@ export async function soatHanhDong(a: {
     if (!m) return { cho: true, khongDoDuoc: true, chiTiet: `model trả không có JSON: ${JSON.stringify(chu.slice(0, 120))}` };
     const j = JSON.parse(m[0]) as KetQuaSoat;
     if (j.cho !== false) return { cho: true };
+    /*
+     * Lời chặn mặc định phải theo KIỂU, vì hai kiểu bảo người dùng làm hai việc khác nhau: một bên
+     * là "tôi dừng vì đi quá đà", bên kia là "tôi dừng vì chính tôi đang bịa ra tiền đề — bạn nói
+     * rõ hơn giúp". Model không trả `kieu` thì rơi về câu cũ.
+     */
+    const kieu = j.kieu === "khong-co-can-cu" || j.kieu === "vuot-pham-vi" ? j.kieu : undefined;
+    const macDinh = kieu === "khong-co-can-cu"
+      ? "Việc này dựa trên điều bạn chưa nói tới — tôi hỏi lại cho chắc thay vì tự đoán."
+      : "Hành động này nằm ngoài phạm vi bạn đã nhờ.";
     return {
       cho: false,
-      lyDo: String(j.lyDo ?? "Hành động này nằm ngoài phạm vi bạn đã nhờ."),
+      lyDo: String(j.lyDo ?? macDinh),
+      ...(kieu ? { kieu } : {}),
       ...(j.luatDeXuat ? { luatDeXuat: String(j.luatDeXuat) } : {}),
     };
   } catch (e) {

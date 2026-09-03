@@ -43,6 +43,27 @@ export interface SubagentType {
  */
 const SUBAGENT_MODEL = process.env.GROKBOT2_SUBAGENT_MODEL ?? config.model;
 
+/**
+ * Model cho MỘT subagent, đọc LÚC GỌI.
+ *
+ * `browserUse` có knob riêng (`GROKBOT2_BROWSER_MODEL`) vì app gốc cũng tách nó ra: `sand_default_model`
+ * là một cấu hình, còn `sand_browser_use_model` và `sand_computer_use_playwright_config` là hai cấu
+ * hình khác — và cả hai đều ghi `thinking:false, effort:low` trên cùng model. Nghĩa là hãng lái trình
+ * duyệt bằng một cấu hình RẺ HƠN hẳn cấu hình nghĩ ngợi của lượt chính. Lái trình duyệt là việc nhìn
+ * ảnh rồi bấm, không phải việc suy luận, nên nó không đáng giá tiền của lượt chính.
+ * (Trích 03/09 — xem docs/extracted/loi-nhac-va-tool-app-goc.md §2.)
+ *
+ * Pool bên mình KHÔNG có tham số effort, nên cần rẻ hơn thì phải đổi sang model khác. Mặc định giữ
+ * nguyên `SUBAGENT_MODEL`: đổi mặc định phải có số đo, và số đo nằm trong
+ * `scripts/do-model-lai-trinh-duyet.mts`.
+ *
+ * Đọc lúc gọi chứ không lúc nạp module, vì đúng bài đo ấy cần thử nhiều model trong MỘT tiến trình.
+ */
+export function modelChoSubagent(typeName: string, type: SubagentType): string {
+  if (typeName === "browserUse" && process.env.GROKBOT2_BROWSER_MODEL) return process.env.GROKBOT2_BROWSER_MODEL;
+  return type.model ?? SUBAGENT_MODEL;
+}
+
 export const SUBAGENT_TYPES: Record<string, SubagentType> = {
   /**
    * The original pins `claude-4.5-sonnet` here (BROWSER_USE_SUBAGENT_CONFIG, AGENT_ONLY).
@@ -235,7 +256,7 @@ export async function runSubagent(
     "Khi đã đủ thông tin, trả lời bằng văn bản thường — đó là báo cáo cuối cùng của bạn.";
 
   const history: PoolMessage[] = [{ role: "user", content: task }];
-  const opts = { url: config.poolUrl, key, model: type.model ?? config.model, system };
+  const opts = { url: config.poolUrl, key, model: modelChoSubagent(typeName, type), system };
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const r = await callPool(history, opts);

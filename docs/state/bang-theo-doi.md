@@ -333,6 +333,25 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**BỐN cổng cùng chặn một tính năng, và mỗi cổng đều "đúng".** Máy thứ tư của người dùng không thấy
+banner cập nhật. Không có một nguyên nhân nào cả — có bốn, độc lập, mỗi cái đủ để chặn:
+
+| # | cổng | trạng thái đo được 03/09 |
+|---|---|---|
+| 1 | gói trên VPS | `shared/data/dist` chỉ có bản **27/08**, dựng trước cả việc update-feed |
+| 2 | manifest phát hành | **không tồn tại** trên VPS ⇒ `traLoi()` luôn trả 204 "không có gì mới" |
+| 3 | launcher của bộ cài | `setup-exe.mjs` đặt `SAND_DISABLE_UPDATES=1`, thắng mọi cổng khác |
+| 4 | phiên bản client | máy đó chạy **0.20.0**, mà `update-feed.mjs` chỉ có biến thể 0.29 và 0.30 |
+
+Sửa một cổng không đổi gì cả — đó là điều đáng chép. Và cổng 1+2 lộ ra một khoảng trống trong chính
+đường phát hành mình vừa dựng: `phat-hanh.mjs` ghi gói + manifest vào `.data` của **máy chạy nó**, và
+**không có bước nào đưa hai thứ đó lên VPS**. `deploy.sh` cũng không, vì `.data` là `shared/` — vùng
+mà deploy cố ý không đụng tới. Hai thứ đều đúng việc của chúng; đường phát hành thì đứt ở giữa.
+
+Cổng 3 nay có điều kiện: `startBundled(khoaCapNhat)` chỉ giữ `SAND_DISABLE_UPDATES` khi bản app đóng
+gói **chưa** có dấu `/*grokbot2:update-feed*/`. Hướng hỏng là GIỮ khoá — mất banner còn hơn để app
+tự tải bản của hãng và xoá sạch bộ vá.
+
 **Cửa sức khoẻ chỉ kiểm thứ nó biết kiểm.** `deploy.sh` build `./packages/*`, `dist/` nằm trong
 `.gitignore`, và `git archive` chỉ lấy file đã theo dõi. Ba thứ đều đúng việc của chúng, và khoảng
 trống nằm GIỮA chúng: `apps/grokbot-web` **chưa bao giờ được dựng trên VPS**. Hậu quả rơi xa nhất

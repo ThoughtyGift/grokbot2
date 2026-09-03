@@ -19,7 +19,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { soatHanhDong } from "./runtime/auto-review.js";
+import { soatHanhDong, dungLoiNhacSoat } from "./runtime/auto-review.js";
 
 const BOI_CANH = "NGƯỜI DÙNG: dựng cho tôi routine rà đơn Shopee mỗi sáng\nBOT: được, tôi tạo ngay";
 
@@ -123,4 +123,34 @@ test("KHÔNG bắt nhầm câu trả lời bình thường có nhắc tới chí
     "Usage policy của Shopee yêu cầu shop công bố nguồn gốc sản phẩm.",
     "Tôi không trả lời được câu này.",
   ]) assert.equal(TU_CHOI.test(t), false, t.slice(0, 40));
+});
+
+/*
+ * ── Guard "chưa ai nói thế" ─────────────────────────────────────────────────────────────────────
+ *
+ * Lấy từ `no-caller-speech` của app gốc. Bài dưới kiểm LỜI NHẮC chứ không kiểm phán đoán của model:
+ * đường chặn thật cần một lượt model (xem chú thích đầu file), nhưng "lời nhắc có dặn đúng thứ cần
+ * dặn không" thì kiểm được bằng test thường — và đó chính là thứ hồi quy khi ai đó vặn lại prompt.
+ */
+test("lời nhắc soát nêu ĐỦ HAI kiểu chặn, và bảo phải HỎI cho kiểu không-có-căn-cứ", () => {
+  const n = dungLoiNhacSoat({ surface: "computer", tomTat: "Mở trang x", boiCanh: BOI_CANH });
+  assert.match(n, /VƯỢT PHẠM VI/, "thiếu kiểu 1 thì lớp soát mất nhánh cũ");
+  assert.match(n, /KHÔNG CÓ CĂN CỨ/, "thiếu kiểu 2 thì guard này chưa bao giờ tới tay model");
+  assert.match(n, /CÂU CẦN HỎI LẠI/, "kiểu 2 mà không dặn HỎI thì nó chỉ là một cách chặn im lặng nữa");
+  assert.match(n, /"kieu":"vuot-pham-vi"\|"khong-co-can-cu"/, "không xin `kieu` thì không phân loại được");
+});
+
+test("dặn riêng cho subagent CHỈ xuất hiện ở surface subagent", () => {
+  const a = { tomTat: "Giao việc cho bot con", boiCanh: BOI_CANH };
+  assert.match(dungLoiNhacSoat({ ...a, surface: "subagent" }), /BẢN GIAO VIỆC/);
+  for (const s of ["computer", "automation_write"] as const) {
+    assert.doesNotMatch(dungLoiNhacSoat({ ...a, surface: s }), /BẢN GIAO VIỆC/, s);
+  }
+});
+
+test("hành động và hội thoại bị CẮT, không đi nguyên vào lời nhắc", () => {
+  // Trần 1200 / 3000. Không cắt thì một bản giao việc dài tự đẩy phần dặn ra khỏi tầm chú ý.
+  const n = dungLoiNhacSoat({ surface: "subagent", tomTat: "x".repeat(5000), boiCanh: "y".repeat(9000) });
+  assert.ok(n.includes(`${"x".repeat(1199)}…`), "tomTat phải cắt ở 1200");
+  assert.ok(n.includes(`${"y".repeat(2999)}…`), "boiCanh phải cắt ở 3000");
 });

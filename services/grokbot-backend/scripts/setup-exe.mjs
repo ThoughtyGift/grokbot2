@@ -326,8 +326,38 @@ begin
 end;
 `;
 
-/** Launcher của bản chở app: exe nằm NGAY CẠNH nó, không phải ở thư mục của hãng. */
-export const START_BUNDLED = `@echo off
+/**
+ * Bản app sắp chở đi đã có bản vá `update-feed` chưa?
+ *
+ * Nó quyết định một dòng duy nhất trong launcher, và dòng đó quyết định người dùng có bao giờ thấy
+ * banner "New update available" hay không:
+ *
+ *   CÓ vá   → hằng số feed trong client đã trỏ về backend của MÌNH ⇒ bỏ `SAND_DISABLE_UPDATES`,
+ *             app hỏi mình, mình trả lời, banner hiện đúng lúc mình phát hành.
+ *   CHƯA vá → hằng số feed vẫn là `api2.cursor.sh` ⇒ PHẢI giữ `SAND_DISABLE_UPDATES`, không thì app
+ *             tự tải bản của hãng, cài đè và xoá sạch bộ vá.
+ *
+ * Mặc định (không đọc được file) là CHƯA vá — hướng hỏng an toàn: mất banner còn hơn mất bộ vá.
+ *
+ * Đo 03/09: máy thứ tư của người dùng chạy 0.20.0 với đúng dòng `Updates are disabled by
+ * SAND_DISABLE_UPDATES` trên màn hình Settings, và đó là MỘT trong bốn lý do banner không bao giờ
+ * tới được họ (xem docs/state/bang-theo-doi.md §7).
+ *
+ * @param {string} appSrc thư mục cài của app sắp đóng gói
+ */
+export function coVaUpdateFeed(appSrc) {
+  try {
+    return readFileSync(join(appSrc, "resources", "app", "dist", "electron-main", "main.cjs"), "utf8")
+      .includes("/*grokbot2:update-feed*/");
+  } catch { return false; }
+}
+
+/**
+ * Launcher của bản chở app: exe nằm NGAY CẠNH nó, không phải ở thư mục của hãng.
+ *
+ * @param {boolean} khoaCapNhat giữ `SAND_DISABLE_UPDATES=1` hay không — xem `coVaUpdateFeed`
+ */
+export const startBundled = (khoaCapNhat = true) => `@echo off
 REM Mo Bot Noi Bo. App nam ngay canh file nay — day la ban tu chua, khong can client cua hang.
 REM
 REM Bon bien duoi day la toan bo hop dong voi client, thieu cai nao cung hong theo kieu rieng:
@@ -353,7 +383,11 @@ REM   {CURSOR_WEBSITE_URL}/loginDeepControl?challenge=...&uuid=...
 REM trong trinh duyet. De cursor.com o day thi may nay mo trang cua HANG: dang nhap khong bao gio
 REM xong, va uuid + challenge cua phien tren may nay bi giao cho ho.
 set "CURSOR_WEBSITE_URL=%BE%"
-set "SAND_DISABLE_UPDATES=1"
+${khoaCapNhat
+    ? `REM Ban app nay CHUA co va update-feed: hang so feed van tro ve api2.cursor.sh, nen phai khoa.
+set "SAND_DISABLE_UPDATES=1"`
+    : `REM KHONG khoa cap nhat: ban app nay DA co va update-feed, hang so feed tro ve backend cua minh,
+REM nen app hoi minh chu khong hoi nha phat hanh. Do la ca duong banner "New update available".`}
 
 if not exist "%~dp0Grok Bot.exe" (
   echo Thieu "%~dp0Grok Bot.exe" — cai dat khong tron. Chay lai bo cai.
@@ -378,7 +412,7 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
 
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
-  writeFileSync(join(stagingDir, "start-bot.cmd"), START_BUNDLED.replace(/\r?\n/g, "\r\n"), "utf8");
+  writeFileSync(join(stagingDir, "start-bot.cmd"), startBundled(!coVaUpdateFeed(appSrc)).replace(/\r?\n/g, "\r\n"), "utf8");
   // Icon của chính ứng dụng được cài; lấy không được thì rơi về dấu "B" — một cái icon không được
   // phép chặn cả bản dựng.
   const iconPath = appIcon(join(appSrc, "Grok Bot.exe"), stagingDir) ?? makeIcon(stagingDir);
@@ -432,7 +466,7 @@ export function buildZip({ distDir, stagingDir, appSrc, outName }) {
   }
   // Windows doc file .cmd/.txt bang CRLF; ghi LF thi Notepad hien mot dong dai dinh lien.
   const crlf = (t) => t.split(String.fromCharCode(10)).join(String.fromCharCode(13,10));
-  writeFileSync(join(root, "start-bot.cmd"), crlf(START_BUNDLED), "utf8");
+  writeFileSync(join(root, "start-bot.cmd"), crlf(startBundled(!coVaUpdateFeed(appSrc))), "utf8");
   writeFileSync(join(root, "backend.txt"), "http://localhost:8788" + String.fromCharCode(13,10), "utf8");
   writeFileSync(join(root, "DOC-DAY-TRUOC.txt"), crlf(README_ZIP), "utf8");
 
