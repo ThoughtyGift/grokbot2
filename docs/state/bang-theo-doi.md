@@ -401,6 +401,7 @@ Bảng này để **không chép lại nội dung** — mỗi thứ có đúng m
 | [protocol-reference.md](../protocol-reference.md) | hợp đồng với client — **đọc trước khi đổi shape** |
 | [nang-quyen-tren-may-nguoi-dung.md](../extracted/nang-quyen-tren-may-nguoi-dung.md) | nâng quyền: app gốc cho tới đâu |
 | [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) | 75 tool bên mình · vì sao không đếm được tool hãng · 4 cái thiếu trên máy người dùng |
+| [loi-nhac-va-tool-app-goc.md](../extracted/loi-nhac-va-tool-app-goc.md) | system prompt hãng ở ĐÂU · số lái agent (model, trần ngữ cảnh, trần tool) · lời nhắc agent thoại nguyên văn |
 | [ship-to-users.md](../plan/ship-to-users.md) | website → tải → cài · billing |
 | [per-user-on-one-box.md](../plan/per-user-on-one-box.md) | tách OS user · thu hồi khi nghỉ |
 | [one-display-per-bot.md](../plan/one-display-per-bot.md) | một màn hình mỗi bot · sức chứa box |
