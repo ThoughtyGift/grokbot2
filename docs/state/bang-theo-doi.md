@@ -333,6 +333,22 @@ không gắn vào tiến trình sẵn có). Căn cứ về app gốc chỉ còn 
 **"Thiếu" phải kèm "có ai gọi không".** Đếm 17 lệnh thiếu đọc như một đống việc; "17, trong đó 15
 cái client tự tắt" mới quyết định được.
 
+**Một ranh giới pháp lý không được dựa vào ngày tháng của file.** Gói chở-cả-app (118 MB) chứa client
+ĐÃ VÁ của nhà phát hành, và `docs/legal.md` viết thẳng *"Do not redistribute a modified client"*. Nó
+đứng ĐẦU `SETUP_KINDS.windows`, nên trước 03/09 nút Tải công khai phát nó bất cứ khi nào nó có mặt;
+sau khi đổi sang "độ mới thắng" thì nó chỉ thua **vì tình cờ cũ hơn**. Bài test mới nói ra điều đó:
+hai file cùng `mtime` ⇒ loại đứng trước thắng ⇒ nút công khai phát 118 MB, không ai cố ý và không lỗi
+nào nổi lên. Nay có cờ `chiRieng` — `newestSetup` bỏ qua nó **vô điều kiện**, chỉ cửa `?k=<token>`
+đọc thẳng bằng `newestMatching`. Đo được: chưa bao giờ có file ấy trên VPS (`find` rỗng, cả `dist`
+2.2 MB), nên trang công khai chưa từng phát nó — nhưng đó là **may**, không phải thiết kế.
+
+**Trang hứa một cửa mà máy chủ không có cửa đó.** Trang tải nói *"hỏi chủ trang để lấy đường tải
+riêng"*, và JS của nó đổi chữ thành *"bản chở cả ứng dụng (118 MB)"* khi thấy `?k=`. Nhưng `site.ts`
+**không đọc `k` một dòng nào** — ai có token vẫn nhận gói 50 KB trong khi trang nói 118 MB. Một lời
+hứa ở tầng giao diện mà tầng dưới không biết là loại sai không test nào bắt được, vì cả hai tầng đều
+"đúng" theo tiêu chuẩn của riêng chúng. Nay cửa ấy có thật, và **token sai thì rơi về gói công khai
+chứ không trả 403**: một câu 403 xác nhận "có bản khác ở đây" cho bất kỳ ai thử đoán.
+
 **Mở một đường làm đường kia tự mở theo.** Phát hành kênh `stable` cho LAUNCHER khiến cửa updater
 GỐC bắt đầu trả 200, vì hai cửa đọc chung một khoá manifest — tức vừa dựng xong đường chạy được thì
 đồng thời dựng lại cái bẫy "banner hiện, Install thất bại". Nay `traLoi` (cửa gốc) **im lặng theo mặc

@@ -22,7 +22,12 @@ const svcRoot = join(here, "..");
 const repoRoot = join(svcRoot, "..", "..");
 
 const LANDING = join(repoRoot, "apps", "grokbot-site", "index.html");
-const DIST = join(svcRoot, ".data", "dist");
+/**
+ * Thư mục chứa gói cài. HÀM chứ không hằng số: đọc lúc GỌI nên bài test trỏ được nó sang thư mục
+ * tạm, và máy chủ đổi được chỗ mà không phải dựng lại. Cùng nếp với `manifestPath()` và biến
+ * `GROKBOT2_WEB_DIST` của `web-app.ts`.
+ */
+const distDir = (): string => process.env.GROKBOT2_DIST_DIR ?? join(svcRoot, ".data", "dist");
 
 /**
  * Tên gói phải khớp với scripts/build-setup.mjs — một hằng, không phải hai chỗ đoán nhau.
@@ -34,9 +39,21 @@ export const SETUP_KINDS = {
   // Thứ tự có nghĩa: `.exe` trước vì đó là thứ trông giống một bộ cài thật (icon riêng, gỡ được từ
   // Apps & features). Máy dựng không có Inno Setup thì rơi xuống `.cmd` — vẫn cài được y hệt.
   windows: [
-    // Bản CHỞ CẢ APP trước: người tải không cần cài client trước, cũng không cần Node — đúng hình
-    // dạng bộ cài của hãng. Dựng bằng `build-setup.mjs --with-app`, không dựng mặc định.
-    { prefix: "Bot-Noi-Bo-Setup", ext: ".exe" },
+    /*
+     * Bản CHỞ CẢ APP — **CHỈ đường riêng `?k=<token>`, không bao giờ công khai.**
+     *
+     * Nó tiện nhất: không cần client cài trước, không cần Node. Và chính vì thế nó là bản dễ bị phát
+     * nhầm nhất. `docs/legal.md` viết thẳng: **"Do not redistribute a modified client"** — gói này
+     * chở client đã vá của nhà phát hành, nên nó dành cho MÁY CỦA CHỦ TRANG, không cho nút Tải.
+     *
+     * Vì sao phải là một CỜ chứ không phải "nó cũ hơn nên không thắng": ranh giới pháp lý không được
+     * dựa vào ngày tháng của file. Bài test 03/09 nói ra đúng điều đó — hai file cùng mtime thì loại
+     * đứng trước thắng, và loại đứng trước là gói này. Tức chỉ cần một lần dựng lại là nút công khai
+     * phát 118 MB, không ai cố ý và không lỗi nào nổi lên.
+     *
+     * `newestSetup` bỏ qua nó vô điều kiện; cửa `?k=` đọc trực tiếp bằng `newestMatching`.
+     */
+    { prefix: "Bot-Noi-Bo-Setup", ext: ".exe", chiRieng: true },
     { prefix: "Cai-dat-Bot-Noi-Bo-win", ext: ".cmd" },
     /*
      * Bản 2 MB `.exe` — **KHÔNG phát công khai**, và đây là lý do đo được.
@@ -85,7 +102,7 @@ function landingHtml(): string | null {
   try {
     const { mtimeMs } = statSync(LANDING);
     const co = (hang: SetupKind): string => {
-      const g = newestSetup(DIST, hang);
+      const g = newestSetup(distDir(), hang);
       return g ? coChu(g.size) : "—";
     };
     // Cache theo mtime của HTML **và** của gói: phát hành bản mới mà trang giữ con số cũ thì đúng
@@ -98,7 +115,7 @@ function landingHtml(): string | null {
      * sau khi sửa hai chỗ kia, đường `?k=` vẫn hiện một con số cố định. Bài test bắt được nó, tôi
      * thì không: đọc HTML bằng mắt bỏ sót đúng chỗ JS chạy sau.
      */
-    const full = newestMatching(DIST, "Bot-Noi-Bo-Setup", ".exe");
+    const full = newestMatching(distDir(), "Bot-Noi-Bo-Setup", ".exe");
     const dau = `${mtimeMs}:${co("windows")}:${co("mac")}:${full?.size ?? 0}`;
     if (!cached || cached.dau !== dau) {
       const raw = readFileSync(LANDING, "utf8");
@@ -128,13 +145,15 @@ function landingHtml(): string | null {
  * Đổi lại: một gói cũ hơn không bao giờ được phát chỉ vì nó tiện hơn. Tiện mà cũ thì vẫn là sai
  * phiên bản, và sai phiên bản là thứ người dùng không tự phát hiện được.
  */
-export function newestSetup(dir = DIST, kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
+export function newestSetup(dir = distDir(), kind: SetupKind = "windows"): { name: string; path: string; size: number } | null {
   const uu = SETUP_KINDS[kind];
   // Loại bị antivirus xoá thì KHÔNG phát, dù nó mới hơn — xem chú thích `avXoa` trong SETUP_KINDS.
   const choExe = process.env.GROKBOT2_PHAT_EXE_CHUA_KY === "1";
   let best: { name: string; path: string; size: number; mtimeMs: number; hang: number } | null = null;
   for (const [hang, muc] of uu.entries()) {
     const { prefix, ext } = muc;
+    // Bản chỉ-đường-riêng KHÔNG bao giờ ra cửa công khai — không cờ nào mở, xem `chiRieng`.
+    if ("chiRieng" in muc && muc.chiRieng) continue;
     if ("avXoa" in muc && muc.avXoa && !choExe) continue;
     const hit = newestMatching(dir, prefix, ext);
     if (!hit) continue;
@@ -194,7 +213,39 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
   const kind: SetupKind | null =
     path === "/download/windows" ? "windows" : path === "/download/mac" ? "mac" : null;
   if (kind) {
-    const pkg = newestSetup(DIST, kind);
+    /*
+     * ── `?k=<token>` — đường tải BẢN CHỞ CẢ APP ────────────────────────────────────────────────
+     *
+     * Trang đã hứa đường này từ lâu ("hỏi chủ trang để lấy đường tải riêng"), JS của trang còn đổi
+     * chữ thành "bản chở cả ứng dụng (118 MB)" khi thấy `?k=`. Nhưng **máy chủ chưa bao giờ đọc
+     * `k`** — nên ai có token vẫn nhận gói 50 KB trong khi trang nói là 118 MB. Đo 03/09: `site.ts`
+     * không có một dòng nào chạm tới tham số đó.
+     *
+     * Vì sao phải có token chứ không mở công khai: gói ấy chở client ĐÃ VÁ của nhà phát hành, và
+     * `docs/legal.md` viết thẳng "Do not redistribute a modified client". Cửa này là để chủ trang
+     * cài lên MÁY CỦA CHÍNH MÌNH — đúng phạm vi cá nhân/nghiên cứu mà tài liệu ấy đặt ra.
+     *
+     * Token sai hay thiếu ⇒ **rơi về gói công khai**, không phải 403: đường này là bí mật, và một
+     * câu 403 xác nhận "có tồn tại một bản khác ở đây" cho bất kỳ ai thử đoán.
+     */
+    const k = new URL(url, "http://x").searchParams.get("k") ?? "";
+    const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
+    if (kind === "windows" && tokenDay !== "" && k === tokenDay) {
+      const full = newestMatching(distDir(), "Bot-Noi-Bo-Setup", ".exe");
+      if (full) {
+        res.writeHead(200, {
+          "content-type": "application/octet-stream",
+          "content-length": String(full.size),
+          "content-disposition": `attachment; filename="${full.name}"`,
+        });
+        if (req.method === "HEAD") { res.end(); return true; }
+        createReadStream(full.path).pipe(res);
+        return true;
+      }
+      console.warn("[grokbot2] site: token tải-đầy-đủ đúng nhưng KHÔNG có gói Bot-Noi-Bo-Setup*.exe trong dist");
+    }
+
+    const pkg = newestSetup(distDir(), kind);
     if (!pkg) {
       res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
       res.end(

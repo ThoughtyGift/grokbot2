@@ -107,11 +107,18 @@ test("KHÔNG phát .exe chưa ký số, dù nó mới hơn — Defender xoá nó
   utimesSync(exe, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
   assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/, "một bộ cài bị xoá trước khi chạy thì không phải bộ cài");
 
-  // Bản chở-cả-app vẫn phát được: nó đi đường riêng `?k=` và không nằm trong lượt đo Wacatac.
+  /*
+   * Bản chở-cả-app dù MỚI NHẤT vẫn KHÔNG được ra cửa công khai.
+   *
+   * Đây là ranh giới của `docs/legal.md` ("Do not redistribute a modified client"), nên nó không được
+   * dựa vào ngày tháng. Bản trước chỉ dựa vào "gói kia mới hơn" — và bài test này, khi hai file cùng
+   * tuổi, đã cho thấy nút công khai phát 118 MB mà không ai cố ý.
+   */
   const full = join(dir, `${CHO_APP.prefix}-20260903${CHO_APP.ext}`);
   writeFileSync(full, "ban cho app");
   utimesSync(full, new Date(2_100_000_000_000), new Date(2_100_000_000_000));
-  assert.match(newestSetup(dir, "windows")?.name ?? "", /^Bot-Noi-Bo-Setup/);
+  assert.match(newestSetup(dir, "windows")?.name ?? "", /\.cmd$/,
+    "gói chở client của nhà phát hành KHÔNG được ra nút Tải, kể cả khi nó mới nhất");
 });
 
 test("cờ GROKBOT2_PHAT_EXE_CHUA_KY=1 mở lại .exe — để thử, không phải mặc định", () => {
@@ -198,16 +205,27 @@ test("trang tải phát gói MỚI NHẤT, kể cả khi nó thuộc loại xế
 });
 
 test("bằng tuổi thì loại đứng trước trong danh sách thắng", () => {
+  /*
+   * Phá hoà chỉ xét giữa các loại ĐƯỢC PHÁT CÔNG KHAI. Bản trước dùng gói chở-cả-app làm một vế —
+   * nay nó bị loại khỏi cửa công khai bằng cờ `chiRieng`, nên hai vế phải là `.cmd` và `.exe` 2 MB
+   * (mở tạm bằng cờ). `.cmd` đứng trước trong danh sách, nên hoà thì nó thắng.
+   */
   const dir = mkdtempSync(join(tmpdir(), "gb2-site-"));
-  const a = join(dir, "Bot-Noi-Bo-Setup-20260902.exe");
-  const b = join(dir, "Cai-dat-Bot-Noi-Bo-20260902.exe");
+  const a = join(dir, `${CMD.prefix}-20260902${CMD.ext}`);
+  const b = join(dir, `${EXE_CHUA_KY.prefix}0260902${EXE_CHUA_KY.ext}`);
   writeFileSync(a, "a");
   writeFileSync(b, "b");
   const t = new Date(1_900_000_000_000);
   utimesSync(a, t, t);
   utimesSync(b, t, t);
 
-  assert.equal(newestSetup(dir, "windows")?.name, "Bot-Noi-Bo-Setup-20260902.exe");
+  const cu = process.env.GROKBOT2_PHAT_EXE_CHUA_KY;
+  process.env.GROKBOT2_PHAT_EXE_CHUA_KY = "1";
+  try {
+    assert.equal(newestSetup(dir, "windows")?.name, `${CMD.prefix}-20260902${CMD.ext}`);
+  } finally {
+    if (cu != null) process.env.GROKBOT2_PHAT_EXE_CHUA_KY = cu; else delete process.env.GROKBOT2_PHAT_EXE_CHUA_KY;
+  }
 });
 
 /*
@@ -228,4 +246,51 @@ test("trang tải không ghi cứng kích cỡ bộ cài — phải là placehol
   assert.ok(html.includes("{{CO_MAC}}"), "thiếu {{CO_MAC}} — kích cỡ Mac đang bị gõ tay?");
   // "bộ cài <số> KB/MB" là dạng câu đã sai một lần. Không cho nó quay lại dưới bất kỳ con số nào.
   assert.doesNotMatch(html, /bộ cài\s+\d+([.,]\d+)?\s*(KB|MB)/i, "có người gõ lại một con số kích cỡ");
+});
+
+/*
+ * ── Đường tải riêng `?k=` cho bản chở-cả-app ────────────────────────────────────────────────────
+ *
+ * Trang hứa đường này từ lâu và JS của nó còn đổi chữ thành "bản chở cả ứng dụng (118 MB)" khi thấy
+ * `?k=`. Máy chủ thì **chưa bao giờ đọc `k`** — nên ai có token vẫn nhận gói 50 KB trong khi trang
+ * nói là 118 MB. Phát hiện 03/09 bằng cách grep `site.ts`: không một dòng nào chạm tham số đó.
+ *
+ * Hai luật, và luật thứ hai quan trọng hơn: token sai thì **rơi về gói công khai**, KHÔNG phải 403.
+ * Một câu 403 xác nhận "có một bản khác ở đây" cho bất kỳ ai thử đoán.
+ */
+const dungCuaTai = async (dir: string, url: string, token?: string): Promise<{ code: number; ten?: string }> => {
+  const cu = process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN;
+  const cuDist = process.env.GROKBOT2_DIST_DIR;
+  if (token != null) process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN = token; else delete process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN;
+  process.env.GROKBOT2_DIST_DIR = dir;
+  try {
+    let code = 0; let ten: string | undefined;
+    const res = {
+      writeHead(c: number, h?: Record<string, string>) { code = c; ten = /filename="([^"]+)"/.exec(h?.["content-disposition"] ?? "")?.[1]; },
+      end() {}, on() {}, once() {}, emit() {},
+    } as unknown as ServerResponse;
+    await handleSite(url, { method: "HEAD" } as IncomingMessage, res);
+    return { code, ten };
+  } finally {
+    if (cu != null) process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN = cu; else delete process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN;
+    if (cuDist != null) process.env.GROKBOT2_DIST_DIR = cuDist; else delete process.env.GROKBOT2_DIST_DIR;
+  }
+};
+
+test("token ĐÚNG → phát bản chở-cả-app; token SAI → rơi về gói công khai, không lộ là có bản khác", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-k-"));
+  writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260903.exe"), "day la ban cho ca app");
+  writeFileSync(join(dir, `${CMD.prefix}-20260903${CMD.ext}`), "day la ban 50KB");
+
+  assert.equal((await dungCuaTai(dir, "/download/windows?k=bi-mat", "bi-mat")).ten, "Bot-Noi-Bo-Setup-20260903.exe");
+  assert.equal((await dungCuaTai(dir, "/download/windows?k=doan-bua", "bi-mat")).ten, `${CMD.prefix}-20260903${CMD.ext}`);
+  assert.equal((await dungCuaTai(dir, "/download/windows", "bi-mat")).ten, `${CMD.prefix}-20260903${CMD.ext}`);
+});
+
+test("chưa đặt token thì `?k=` bất kỳ cũng KHÔNG mở được bản chở-cả-app", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-k2-"));
+  writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260903.exe"), "x");
+  writeFileSync(join(dir, `${CMD.prefix}-20260903${CMD.ext}`), "y");
+  // Token rỗng phải là "đóng", không phải "ai gửi chuỗi rỗng cũng vào được".
+  assert.equal((await dungCuaTai(dir, "/download/windows?k=", undefined)).ten, `${CMD.prefix}-20260903${CMD.ext}`);
 });
