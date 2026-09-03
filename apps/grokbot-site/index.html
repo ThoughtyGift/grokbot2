@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-full="{{CONG_KHAI_FULL}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -348,7 +348,14 @@
    */
   (function () {
     const k = new URLSearchParams(location.search).get("k");
-    if (!k) return;
+    /*
+     * Hai đường vào cùng một nhánh chữ: `?k=<token>` (đường riêng) HOẶC máy chủ đã bật
+     * GROKBOT2_PUBLIC_FULL (nút công khai phát bản chở-app, `data-full="1"` trên <html>). Quyết định
+     * 03/09: một đường tải, người bấm nút nhận app chạy ngay. Chỉ gắn `?k=` vào link khi thật sự có
+     * token — đường công khai không cần và không được lộ.
+     */
+    const full = !!k || document.documentElement.getAttribute("data-full") === "1";
+    if (!full) return;
     /*
      * Khớp theo THUỘC TÍNH, mà thuộc tính nay là `download/windows` — không còn gạch chéo đầu.
      *
@@ -357,8 +364,10 @@
      * nên sau khi đổi link, nó không khớp cái nào và **token lặng lẽ không được gắn**: nút vẫn bấm
      * được, chỉ là phát nhầm bản 2 MB.
      */
-    for (const a of document.querySelectorAll('a[href^="download/"]')) {
-      a.href += (a.href.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(k);
+    if (k) {
+      for (const a of document.querySelectorAll('a[href^="download/"]')) {
+        a.href += (a.href.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(k);
+      }
     }
     const note = document.getElementById("chon-ban");
     if (note) {

@@ -131,17 +131,26 @@ function landingHtml(): string | null {
     const phienBan = ban?.version ?? "chưa phát hành";
     const ngay = /\.(\d{4})(\d{2})(\d{2})$/.exec(phienBan);
     const ngayBan = ngay ? `${ngay[3]}/${ngay[2]}/${ngay[1]}` : "—";
-    const dau = `${mtimeMs}:${co("windows")}:${co("mac")}:${full?.size ?? 0}:${phienBan}`;
+    /*
+     * `GROKBOT2_PUBLIC_FULL=1` ⇒ nút công khai phát bản chở-app, nên con số "bộ cài … MB" ở hero phải
+     * là của gói ẤY, và trang phải bật nhánh chữ "không cần chuẩn bị gì trước" ngay cả khi không có
+     * `?k=`. Cờ đi xuống HTML qua `data-full` để đúng một đoạn JS quyết định cho cả hai đường vào —
+     * không nhân đôi câu chữ ở hai nơi rồi lệch nhau (đã trả giá với "28 KB").
+     */
+    const congKhaiFull = process.env.GROKBOT2_PUBLIC_FULL === "1" && full != null;
+    const coWin = congKhaiFull && full ? coChu(full.size) : co("windows");
+    const dau = `${mtimeMs}:${coWin}:${co("mac")}:${full?.size ?? 0}:${phienBan}:${congKhaiFull ? 1 : 0}`;
     if (!cached || cached.dau !== dau) {
       const raw = readFileSync(LANDING, "utf8");
       cached = {
         dau,
         html: raw
-          .replaceAll("{{CO_WIN}}", co("windows"))
+          .replaceAll("{{CO_WIN}}", coWin)
           .replaceAll("{{CO_MAC}}", co("mac"))
           .replaceAll("{{CO_FULL}}", full ? coChu(full.size) : "bản đầy đủ")
           .replaceAll("{{PHIEN_BAN}}", phienBan)
-          .replaceAll("{{NGAY_BAN}}", ngayBan),
+          .replaceAll("{{NGAY_BAN}}", ngayBan)
+          .replaceAll("{{CONG_KHAI_FULL}}", congKhaiFull ? "1" : "0"),
       };
     }
     return cached.html;
@@ -227,6 +236,27 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
     return true;
   }
 
+  /*
+   * ── `/download/windows-cfg` — bộ CẤU HÌNH 50 KB, luôn luôn ───────────────────────────────────
+   *
+   * Cửa có nghĩa CỐ ĐỊNH, vì `/download/windows` thì không: nó phát gì tuỳ `GROKBOT2_PUBLIC_FULL`.
+   * Manifest của launcher công khai (`stable.url`) phải trỏ vào đây — trỏ vào `/download/windows`
+   * rồi ngày mai bật cờ là hash trong manifest không khớp file tải về, và launcher bản 50 KB lặng lẽ
+   * bỏ qua cập nhật mãi mãi (đúng bẫy hash Mac, lần thứ ba).
+   */
+  if (path === "/download/windows-cfg") {
+    const cfg = newestMatching(distDir(), "Cai-dat-Bot-Noi-Bo-win", ".cmd");
+    if (!cfg) { res.writeHead(503, { "content-type": "text/plain; charset=utf-8" }); res.end("Chưa có gói cấu hình.\n"); return true; }
+    res.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-length": String(cfg.size),
+      "content-disposition": `attachment; filename="${cfg.name}"`,
+    });
+    if (req.method === "HEAD") { res.end(); return true; }
+    createReadStream(cfg.path).pipe(res);
+    return true;
+  }
+
   const kind: SetupKind | null =
     path === "/download/windows" ? "windows" : path === "/download/mac" ? "mac" : null;
   if (kind) {
@@ -247,7 +277,19 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
      */
     const k = new URL(url, "http://x").searchParams.get("k") ?? "";
     const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
-    if (kind === "windows" && tokenDay !== "" && k === tokenDay) {
+    /*
+     * ── `GROKBOT2_PUBLIC_FULL=1` — nút CÔNG KHAI phát bản chở-cả-app ────────────────────────────
+     *
+     * Quyết định của chủ dự án, 03/09, sau hai lần tôi nêu ranh giới của `docs/legal.md`: mục tiêu
+     * là dev lại FE, trong lúc đó dùng FE của client, và **một đường tải** — người bấm nút ở
+     * `cinai.app/agent/` phải nhận được app chạy ngay, không phải một bộ cấu hình 52 KB đòi máy đã
+     * có client + Node. Ghi trong `legal.md` cùng ngày. Là CỜ chứ không phải mặc định của mã: máy dev
+     * và mọi bản cài khác giữ hành vi cũ; chỉ máy chủ nào chủ dự án đặt cờ mới phát bản ấy công khai.
+     *
+     * Không cờ + không token ⇒ vẫn gói 50 KB (`newestSetup`, vốn bỏ gói này bằng `chiRieng`).
+     */
+    const congKhaiFull = process.env.GROKBOT2_PUBLIC_FULL === "1";
+    if (kind === "windows" && ((tokenDay !== "" && k === tokenDay) || congKhaiFull)) {
       const full = newestMatching(distDir(), "Bot-Noi-Bo-Setup", ".exe");
       if (full) {
         res.writeHead(200, {

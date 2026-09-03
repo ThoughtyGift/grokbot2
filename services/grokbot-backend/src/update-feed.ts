@@ -60,7 +60,16 @@ export interface BanPhatHanh {
    * người hỏi vừa trình — để manifest trên đĩa không chứa token, và để đổi token không phải phát
    * hành lại.
    */
-  full?: { sha256hash?: string; ten?: string };
+  full?: {
+    /**
+     * Đường tải gói chở-app KHÔNG kèm token (token ghép lúc trả lời). Có mặt vì `url` ở mức trên nay
+     * trỏ `/download/windows-cfg` (bộ cấu hình, nghĩa cố định) — còn `/download/windows` thì phát gì
+     * tuỳ `GROKBOT2_PUBLIC_FULL`. Hai đường phải được ghi riêng, nếu không đổi cờ là hash lệch file.
+     */
+    url?: string;
+    sha256hash?: string;
+    ten?: string;
+  };
 }
 
 /** Đường tới manifest. Env cho phép trỏ chỗ khác khi chạy test hoặc khi VPS để nơi riêng. */
@@ -144,7 +153,7 @@ export function traLoiLauncher(ver: string, nen = "windows", k = ""): KetQua {
       status: 200,
       body: {
         version: ban.version,
-        url: `${ban.url}?k=${encodeURIComponent(k)}`,
+        url: `${ban.full.url ?? ban.url}?k=${encodeURIComponent(k)}`,
         ...(ban.full.sha256hash ? { sha256hash: ban.full.sha256hash } : {}),
         ten: ban.full.ten,
       },

@@ -268,6 +268,41 @@ test("trang tải có ĐÚNG MỘT nút tải (hero) ngoài nav — khối CTA c
 });
 
 /*
+ * ── Nút công khai phát bản chở-app: một CỜ, không phải mặc định ─────────────────────────────────
+ *
+ * Quyết định của chủ dự án 03/09 (ghi trong docs/legal.md). Mã giữ nó là `GROKBOT2_PUBLIC_FULL=1`:
+ * tắt ⇒ hành vi cũ (gói 50 KB, gói chở-app chỉ sau `?k=`); bật ⇒ `/download/windows` phát gói chở-app
+ * cho mọi người. Và vì nghĩa của `/download/windows` nay đổi theo cờ, cửa `/download/windows-cfg` ra
+ * đời với nghĩa CỐ ĐỊNH — manifest của launcher công khai trỏ vào đó, không thì bật cờ là hash lệch.
+ */
+const voiCongKhaiFull = async <T>(bat: boolean, f: () => Promise<T>): Promise<T> => {
+  const cu = process.env.GROKBOT2_PUBLIC_FULL;
+  if (bat) process.env.GROKBOT2_PUBLIC_FULL = "1"; else delete process.env.GROKBOT2_PUBLIC_FULL;
+  try { return await f(); } finally {
+    if (cu != null) process.env.GROKBOT2_PUBLIC_FULL = cu; else delete process.env.GROKBOT2_PUBLIC_FULL;
+  }
+};
+
+test("GROKBOT2_PUBLIC_FULL=1 → nút công khai phát bản chở-app; tắt → vẫn gói 50 KB", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-full-"));
+  writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260903.exe"), "cho ca app");
+  writeFileSync(join(dir, `${CMD.prefix}-20260903${CMD.ext}`), "50KB");
+
+  assert.equal((await voiCongKhaiFull(true, () => dungCuaTai(dir, "/download/windows", undefined))).ten, "Bot-Noi-Bo-Setup-20260903.exe");
+  assert.equal((await voiCongKhaiFull(false, () => dungCuaTai(dir, "/download/windows", undefined))).ten, `${CMD.prefix}-20260903${CMD.ext}`,
+    "mặc định phải là hành vi cũ — cờ này chỉ máy chủ của chủ dự án đặt");
+});
+
+test("/download/windows-cfg LUÔN là bộ cấu hình, kể cả khi cờ bật", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb2-cfg-"));
+  writeFileSync(join(dir, "Bot-Noi-Bo-Setup-20260903.exe"), "cho ca app");
+  writeFileSync(join(dir, `${CMD.prefix}-20260903${CMD.ext}`), "50KB");
+  // Đây là cửa manifest của launcher công khai trỏ vào: đổi cờ không được làm nó đổi file.
+  assert.equal((await voiCongKhaiFull(true, () => dungCuaTai(dir, "/download/windows-cfg", undefined))).ten, `${CMD.prefix}-20260903${CMD.ext}`);
+  assert.equal((await voiCongKhaiFull(false, () => dungCuaTai(dir, "/download/windows-cfg", undefined))).ten, `${CMD.prefix}-20260903${CMD.ext}`);
+});
+
+/*
  * ── Đường tải riêng `?k=` cho bản chở-cả-app ────────────────────────────────────────────────────
  *
  * Trang hứa đường này từ lâu và JS của nó còn đổi chữ thành "bản chở cả ứng dụng (118 MB)" khi thấy

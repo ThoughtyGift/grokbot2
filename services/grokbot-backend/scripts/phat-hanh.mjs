@@ -169,11 +169,16 @@ const goiFull = (() => {
   } catch { return null; }
 })();
 const fullPhan = goiFull
-  ? { full: { sha256hash: createHash("sha256").update(readFileSync(goiFull.path)).digest("hex"), ten: goiFull.name } }
+  ? { full: { url: `${base}/download/windows`, sha256hash: createHash("sha256").update(readFileSync(goiFull.path)).digest("hex"), ten: goiFull.name } }
   : {};
 if (goiFull) console.log(`  goi cho-app: ${goiFull.name} (${(statSync(goiFull.path).size / 1024 / 1024).toFixed(1)} MB) — chi tra qua ?k=`);
 else console.log("  (khong co goi cho-app — launcher ban 105 MB se thay 204)");
-const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows`, sha256hash, ten: goi.name, ...macPhan, ...fullPhan } };
+/*
+ * `url` cua muc stable tro `/download/windows-cfg` — cua co NGHIA CO DINH (luon la bo cau hinh .cmd).
+ * `/download/windows` thi phat gi tuy `GROKBOT2_PUBLIC_FULL`; tro manifest vao do roi bat co la hash
+ * trong manifest khong khop file tai ve, va launcher ban 50 KB lang le bo qua cap nhat mai mai.
+ */
+const moi = { ...cu, [KENH]: { version, url: `${base}/download/windows-cfg`, sha256hash, ten: goi.name, ...macPhan, ...fullPhan } };
 writeFileSync(MANIFEST, `${JSON.stringify(moi, null, 2)}\n`);
 
 console.log(`  ✓ ${MANIFEST}`);

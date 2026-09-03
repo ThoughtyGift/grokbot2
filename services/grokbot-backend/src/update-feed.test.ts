@@ -261,3 +261,20 @@ test("launcher chở-app đã ở bản mới → 204, dù trình đúng token",
   datManifest(MANIFEST_FULL);
   assert.equal(voiToken("bi-mat", () => traLoiLauncher("0.29.20260904", "windows", "bi-mat")).status, 204);
 });
+
+test("`full.url` được dùng khi có — vì `stable.url` nay trỏ cửa cấu hình, không phải cửa chở-app", () => {
+  /*
+   * Từ 03/09 `stable.url` = `/download/windows-cfg` (nghĩa cố định: bộ cấu hình). Nếu nhánh token
+   * ghép `?k=` vào ĐÓ, launcher bản chở-app tải về bộ 50 KB, so với hash của gói 105 MB, lệch, rồi
+   * lặng lẽ bỏ qua cập nhật mãi mãi — bẫy hash Mac, lần thứ ba nếu không có bài này.
+   */
+  datManifest({
+    stable: {
+      version: "0.29.20260904", url: "https://x/download/windows-cfg", sha256hash: "hash-cmd", ten: "Cai-dat.cmd",
+      full: { url: "https://x/download/windows", sha256hash: "hash-full", ten: "Bot-Noi-Bo-Setup-20260904.exe" },
+    },
+  });
+  const b = voiToken("bi-mat", () => traLoiLauncher("0.29.0", "windows", "bi-mat")).body;
+  assert.equal(b?.url, "https://x/download/windows?k=bi-mat");
+  assert.equal(b?.sha256hash, "hash-full");
+});
