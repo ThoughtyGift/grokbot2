@@ -143,8 +143,8 @@ theo thứ tự:
 | # | việc | thay đổi | trạng thái |
 |---|---|---|---|
 | ~~1~~ | ~~Launcher gói 118 MB **tự cập nhật**~~ **XONG 03/09** | bộ cài nướng `token.txt`; launcher hỏi `/updates/ban-moi?k=` → khoá `full` của manifest; nhịp 1 lần/ngày; **hai pha** (bộ cài ghi đè chính `start-bot.cmd`); đo qua Internet + cài thử: `token.txt` đúng, launcher đủ dấu | xong |
-| 2 | Nút công khai phát gói 118 MB | bỏ cờ `chiRieng` ở `Bot-Noi-Bo-Setup` trong `site.ts`; `phat-hanh.mjs` dựng `--with-app` và `scp` gói ấy; manifest trỏ `Bot-Noi-Bo-Setup-*.exe` | chưa — **chờ gật**, xem ranh giới dưới |
-| 3 | Gói 50 KB | giữ làm đường phụ cho máy đã có client, hoặc bỏ | tuỳ |
+| ~~2~~ | ~~Nút công khai phát gói 118 MB~~ **XONG 04/09** | KHÔNG bỏ `chiRieng` — thêm cờ **`GROKBOT2_PUBLIC_FULL=1`**, chỉ máy chủ của chủ dự án đặt; mặc định tắt ⇒ hành vi cũ. `phat-hanh.mjs --with-app` dựng + `scp` gói chở-app; manifest tách `url` (cửa cấu hình) / `full.url` (cửa chở-app). `legal.md` ghi quyết định cùng ngày. E2E trọn luồng: bảng theo dõi §6 mục 18 | xong |
+| ~~3~~ | ~~Gói 50 KB~~ **giữ, ở cửa riêng** | `/download/windows-cfg` — nghĩa CỐ ĐỊNH, không đổi theo cờ; là `url` mà manifest của launcher công khai trỏ vào, và là đường cho máy đã có client hãng | xong |
 
 **Ranh giới cần nói thẳng:** `docs/legal.md` viết *"Do not redistribute a modified client"*. Gói 118 MB
 *là* client đã vá của Anysphere. Phát công khai là quyết định của chủ dự án, không phải của mã — nên nếu
