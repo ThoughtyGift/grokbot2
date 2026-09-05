@@ -18,9 +18,14 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 process.env.GROKBOT2_ALLOW_WRITE = "1";
-if (!process.env.GROKBOT2_DATA_DIR) process.env.GROKBOT2_DATA_DIR = mkdtempSync(join(tmpdir(), "gb2-site-bot-"));
-if (!process.env.GROKBOT2_STATE_FILE) process.env.GROKBOT2_STATE_FILE = join(process.env.GROKBOT2_DATA_DIR, "state.json");
-if (!process.env.GROKBOT2_WORKFLOWS_FILE) process.env.GROKBOT2_WORKFLOWS_FILE = join(process.env.GROKBOT2_DATA_DIR, "workflows.json");
+/*
+ * Thư mục RIÊNG, vô điều kiện — không dùng chung `GROKBOT2_DATA_DIR` mà runner đặt. `node --test` chạy các file song song bằng
+ * nhiều tiến trình cùng một env, và `bot-templates.test.ts` có `sach()` = xoá cả kho mẫu: đo 06/09, chạy hai file cùng lúc thì
+ * mẫu vừa publish ở đây biến mất giữa bài → 404 giả (4 đỏ), chạy riêng thì xanh hết.
+ */
+process.env.GROKBOT2_DATA_DIR = mkdtempSync(join(tmpdir(), "gb2-site-bot-"));
+process.env.GROKBOT2_STATE_FILE = join(process.env.GROKBOT2_DATA_DIR, "state.json");
+process.env.GROKBOT2_WORKFLOWS_FILE = join(process.env.GROKBOT2_DATA_DIR, "workflows.json");
 
 const { runWithOwner: as } = await import("./request-context.js");
 const { createAgent } = await import("./directory/index.js");

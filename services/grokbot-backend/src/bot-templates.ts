@@ -62,6 +62,7 @@ import { fileURLToPath } from "node:url";
 import { currentOwner } from "./request-context.js";
 import { agents, introduceRef } from "./chat/state.js";
 import { createAgent, createGroup } from "./directory/index.js";
+import { avatarCuaBot } from "./avatar-mac-dinh.js";
 
 /**
  * Nơi kho này ghi.
@@ -242,14 +243,18 @@ async function snapshotOf(agentId: string, owner: string): Promise<TemplateSnaps
     .map((id) => agents.get(id))
     .filter((m): m is NonNullable<typeof m> => m != null)
     .map((m) => ({ name: m.name, description: m.description ?? "" }));
-  const shape = (a as { avatarShape?: unknown }).avatarShape;
-  const color = (a as { avatarColor?: unknown }).avatarColor;
+  /*
+   * Icon của mẫu = icon client ĐANG VẼ cho bot này. Bản ghi không lưu hình/màu thì client suy từ id (`Sp`/`Af` của renderer
+   * 0.43) — ta suy y hệt (`avatar-mac-dinh.ts`) thay vì để trống rồi rơi về "blob"/"blue": đo 06/09, New Bot cam viên thuốc ở
+   * sidebar mà thẻ mẫu tròn xanh, trong khi app gốc hai chỗ cùng một icon.
+   */
+  const av = avatarCuaBot(a as { id: string; avatarShape?: unknown; avatarColor?: unknown });
   const recipe: TemplateRecipe = {
     profile: {
       name: a.name,
       description: a.description ?? "",
-      ...(typeof color === "string" ? { avatarColor: color } : {}),
-      ...(typeof shape === "string" ? { avatarShape: shape } : {}),
+      avatarColor: av.color,
+      avatarShape: av.shape,
     },
     memory: await nguon.memory(agentId),
     skills: nguon.skills(agentId),
@@ -304,8 +309,9 @@ export async function createTemplateForAgent(sourceAgentId: string, owner: strin
     sourceAgentId,
     name: snap.name,
     description: snap.description,
-    avatarShape: snap.recipe.profile.avatarShape ?? "blob",
-    avatarColor: snap.recipe.profile.avatarColor ?? "blue",
+    // Snapshot cũ có thể thiếu hình/màu → suy từ id bot nguồn như client, không rơi về hằng.
+    avatarShape: avatarCuaBot({ id: sourceAgentId, avatarShape: snap.recipe.profile.avatarShape }).shape,
+    avatarColor: avatarCuaBot({ id: sourceAgentId, avatarColor: snap.recipe.profile.avatarColor }).color,
     version: 1,
     activeVersion: null,
     published: false,
@@ -353,8 +359,8 @@ export async function stageTemplateForAgent(
     version,
     name: snap.name,
     description: moTa,
-    avatarShape: hinhHopLe(snap.recipe.profile.avatarShape),
-    avatarColor: mauHopLe(snap.recipe.profile.avatarColor),
+    avatarShape: avatarCuaBot({ id: sourceAgentId, avatarShape: snap.recipe.profile.avatarShape }).shape,
+    avatarColor: avatarCuaBot({ id: sourceAgentId, avatarColor: snap.recipe.profile.avatarColor }).color,
     snapshot: snap,
     stagedAtMs: now,
   });

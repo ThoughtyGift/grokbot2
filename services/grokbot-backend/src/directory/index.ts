@@ -5,6 +5,7 @@
 import { closeAgentTab } from "../browser.js";
 import { dropAgentProfile } from "../displays.js";
 import { publish } from "../events.js";
+import { avatarCuaBot } from "../avatar-mac-dinh.js";
 import { AUTH_ID } from "../identity/index.js";
 import { currentOwner } from "../request-context.js";
 import {
@@ -399,9 +400,10 @@ export function getAgentNotificationAvatar(a: { id?: string; agentId?: string })
     avatarByteCount: url ? byteCountOfDataUrl(url) : null,
     avatarContentType: m ? m[1] : null,
     avatarVersion: rec?.avatarVersion ?? null,
-    color: (rec as { avatarColor?: string } | undefined)?.avatarColor ?? "blue",
+    // Cùng icon client đang vẽ: có lưu thì dùng, không thì suy từ id như renderer (avatar-mac-dinh.ts) — không rơi về "blue"/"blob".
+    color: avatarCuaBot({ id: a.id ?? a.agentId ?? "", ...(rec as { avatarColor?: unknown } | undefined) }).color,
     name: rec?.name ?? null,
-    shape: (rec as { avatarShape?: string } | undefined)?.avatarShape ?? "blob",
+    shape: avatarCuaBot({ id: a.id ?? a.agentId ?? "", ...(rec as { avatarShape?: unknown } | undefined) }).shape,
   };
 }
 

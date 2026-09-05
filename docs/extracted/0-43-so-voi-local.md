@@ -266,3 +266,18 @@ sai dạng → **cùng một** trang 404; mọi chuỗi qua `thoat()`, CSP nonce
 chạy trên VPS đi trọn: bot thử → `sendPrompt` câu share (đúng shape client) → stage 9 s → 404 → publish → 200 (title · og:url · deep link ·
 CSP) → xoá → 404. Dạng chuẩn là `/bot/<id>` KHÔNG gạch chéo cuối; có gạch chéo → 301 `Location: ../<id>` (tương đối, vì `proxy_redirect`
 của nginx chỉ viết lại URL tuyệt đối).
+
+**Icon của bot khi bản ghi không lưu hình/màu (06/09).** Renderer 0.43 không dùng hằng — nó SUY từ `agent.id`:
+
+```
+Sp(t) = qIe.find(n => n === t.avatarShape) ?? mR(t.id)        Af(t) = S2.find(n => n.id === t.avatarColor)?.id ?? x2(t.id)
+$ee(id)  = FNV-1a 32 bit                                        (0x811C9DC5, nhân 0x01000193)
+mR(id)   = w2[ZRe(id) % 8]      ZRe = fmix murmur3 của $ee     w2 = blob pebble squircle tablet wedge hex cloud teardrop
+x2(id)   = zee[XRe(WRe(id))]    WRe = $ee ^ 0x9E3779B9 · KRe = mulberry32 · XRe = floor(rút() · 10)
+                                 zee = S2 bỏ "black" = brown red orange yellow green cyan blue violet magenta gray
+```
+
+Cùng hàm cho sidebar, header, thẻ mẫu, hộp Import — nên app gốc không bao giờ lệch icon giữa các chỗ. Bên ta từng điền
+"blob"/"blue" ở mọi chỗ server tự quyết (snapshot mẫu, `getAgentNotificationAvatar`, listing) ⇒ New Bot sidebar viên thuốc cam,
+thẻ mẫu tròn xanh. Nay `avatar-mac-dinh.ts` chép hai hàm (ghim 5 id so với mã gốc chạy trong Node: `agent-984 → tablet/orange`),
+và mọi chỗ ấy đi qua `avatarCuaBot(rec)`.

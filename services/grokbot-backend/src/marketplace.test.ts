@@ -67,7 +67,10 @@ test("đăng xong: tầm nhìn tự sang public, listing hiện trong danh sách
   const view = M.publicListings().listings.find((x) => x.shareId === tpl.shareId)!;
   assert.equal(view.name, "Kế toán A");
   assert.equal(view.description, "GMV không phải tiền về.");
-  assert.deepEqual(view.avatar, { kind: "default", shape: "blob", color: "blue" });
+  // Bot không chọn icon ⇒ icon SUY từ id như client vẽ (avatar-mac-dinh.ts), không phải hằng blob/blue — đo 06/09 trên UI.
+  const { avatarCuaBot } = await import("./avatar-mac-dinh.js");
+  const mong = avatarCuaBot({ id: tpl.sourceAgentId });
+  assert.deepEqual(view.avatar, { kind: "default", shape: mong.shape, color: mong.color });
   assert.equal(view.creator.name, "nguoi-a", "chưa có hồ sơ ⇒ tên suy từ tài khoản");
   assert.equal(view.slug, l.slug);
   assert.ok(M.publicListings("productivity").listings.some((x) => x.shareId === tpl.shareId), "lọc theo nhóm phụ");
