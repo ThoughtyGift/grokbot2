@@ -189,6 +189,8 @@ export type AgentActivity = { kind: "thinking" } | { kind: "tool"; tool: string;
 export interface AgentRecord {
   id: string; name: string; agentOwnerAuthId: string; createdAtMs: number; unread: boolean; hidden: boolean;
   avatarDataUrl?: string; avatarVersion?: string; notificationsEnabled?: boolean; notifyOnUpdates?: boolean;
+  /** Avatar vẽ bằng hình + màu (0.43: `SandAgentSummary.avatarShape/avatarColor`, bảng 18 hình / 11 màu của renderer). */
+  avatarShape?: string; avatarColor?: string;
   description?: string;
   /**
    * Ô "Label" trong Settings của bot — app gốc gọi trường này là `title`.

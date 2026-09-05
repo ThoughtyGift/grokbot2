@@ -5,7 +5,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +24,13 @@ import { fileURLToPath } from "node:url";
  * Mười bài đỏ chỉ là triệu chứng; cái mất là dữ liệu. Vá một nửa một cái bẫy thì cái bẫy vẫn còn,
  * chỉ khác là nó không còn báo động nữa.
  */
+/*
+ * KHÔNG có biến cách ly ⇒ TỰ dựng thư mục tạm. Bản trước chỉ đọc env rồi rơi về `.data` thật khi env
+ * vắng — tức chạy `npx tsx --test` trần (đúng cách bảng theo dõi §7 từng dặn) là `sach()` xoá kho THẬT
+ * của người dùng. Đo 05/09: `.data/bot-templates`, `.data/box-secrets`, `.data/mcp-prefs` đều biến mất
+ * sau một lượt chạy bộ test đầy đủ. Một bài test không được có đường nào dẫn tới dữ liệu thật.
+ */
+if (!process.env.GROKBOT2_DATA_DIR) process.env.GROKBOT2_DATA_DIR = mkdtempSync(join(tmpdir(), "gb2-secrets-"));
 const DATA_DIR = process.env.GROKBOT2_DATA_DIR
   ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 const DIR = join(DATA_DIR, "box-secrets");

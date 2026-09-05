@@ -144,6 +144,31 @@ export function forAgent(args: unknown): Workflow[] {
 /** Toàn bộ skill của cài đặt này — `skillsCatalog` không hỏi theo bot. */
 export const listAll = (): Workflow[] => [...kho.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 
+/**
+ * Hình dạng DÂY của một skill — `SandSkill` trong hợp đồng 0.43 (coordinator kiểm reply của
+ * `getAgentWorkflows` / `createAgentWorkflow` / `updateAgentWorkflow`). Bản ghi nội bộ giữ `instructions`
+ * (runtime đọc); dây gọi nó là `body`, và đòi thêm 10 khoá mà kho không có lý do để lưu: `filePath`
+ * (box host ghi skill ra `skills/<id>.md`), `helperScripts`, `runs`, `lastRunAt`/`nextRunAt` (skill không
+ * có lịch), `pluginId`/`sourceRef` (không đến từ plugin), `scheduleDescription`, `trigger` (null = chạy tay),
+ * `publishedByCurrentUser` (kho theo người — luôn là của người gọi). Giữ nguyên khoá cũ cho client 0.29.
+ */
+export function wireSkill(w: Workflow): Workflow & Record<string, unknown> {
+  return {
+    ...w,
+    body: w.instructions,
+    filePath: `skills/${w.id}.md`,
+    helperScripts: [],
+    runs: [],
+    lastRunAt: null,
+    nextRunAt: null,
+    pluginId: null,
+    sourceRef: null,
+    scheduleDescription: null,
+    trigger: null,
+    publishedByCurrentUser: true,
+  };
+}
+
 let dem = 0;
 const idMoi = (): string => `wf-${Date.now().toString(36)}-${(dem += 1).toString(36)}`;
 

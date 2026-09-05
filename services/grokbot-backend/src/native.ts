@@ -49,7 +49,8 @@ import { installedIds, installPlugin, uninstallPlugin } from "./plugins.js";
 const STARTED_AT = Date.now();
 let lastBusyAtMs = 0;
 
-const AGENT_ID = /^agent-\d+$/;
+// `agent-<n>` của bộ đếm, hoặc id client 0.43 tự đúc (UUID) khi import từ mẫu — xem `CLIENT_AGENT_ID` ở directory.
+const AGENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 /*
  * Nguồn được phép gọi có kèm giấy tờ. localhost cho lúc dev; thêm tên miền thật qua
  * `GROKBOT2_ALLOW_ORIGIN` (phẩy để nhiều cái) khi đưa BFF ra ngoài ở chặng 4.

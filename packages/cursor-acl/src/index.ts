@@ -16,9 +16,11 @@ import type { AclPorts } from "./ports.js";
 
 export * from "./ports.js";
 /** `buildCommands` is exported for the contract tests: enumerating the table beats grepping it. */
-export { SHARED_ROOM_COMMANDS, buildCommands } from "./commands.js";
+export { SHARED_ROOM_COMMANDS, REPLY_NULL, buildCommands } from "./commands.js";
 export { WIRE_CHANNELS, PUSHED_CHANNELS, NO_DATA_CHANNELS, PENDING_CHANNELS, type WireChannel } from "./sse.js";
 export { RPC_PATH, type RpcReply } from "./bootstrap.js";
+/** Kiểu DÂY của cổng Marketplace RPC — dịch vụ nhận qua đây để không import thẳng @grokbot2/proto (boundaries.test). */
+export type { MarketplacePort as MarketplaceRpcPort, WireListing, WireTemplateImportDetails } from "@grokbot2/proto";
 
 export interface CursorAcl {
   /** `/gw/*`. Returns true if it handled the request. */

@@ -60,7 +60,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentOwner } from "./request-context.js";
-import { agents } from "./chat/state.js";
+import { agents, introduceRef } from "./chat/state.js";
 import { createAgent, createGroup } from "./directory/index.js";
 
 /**
@@ -127,6 +127,8 @@ export interface BotTemplate {
   visibility: "public" | "team";
   createdAtMs: number;
   updatedAtMs: number;
+  /** `SandBotTemplateWireView` 0.43 BẮT BUỘC (coordinator kiểm reply) — suy từ shareId, lấp lúc đọc cho bản cũ. */
+  shareUrl: string;
   /** Ba trường 0.43 đọc ở trang chi tiết / listing. `ownerAuthId` để đọc xuyên chủ tìm lại đúng kho. */
   ownerAuthId: string;
   ownerType: "user";
@@ -169,7 +171,7 @@ function lapChoBanCu(t: BotTemplate, owner: string): BotTemplate {
   const recipe: TemplateRecipe = t.snapshot?.recipe ?? {
     profile: { name: t.name, description: t.description }, memory: [], skills: [], routines: [], plugins: [],
   };
-  return { ...t, ownerAuthId: t.ownerAuthId ?? owner, ownerType: "user", imageUrl: t.imageUrl ?? null,
+  return { ...t, shareUrl: t.shareUrl ?? shareUrlOf(t.shareId), ownerAuthId: t.ownerAuthId ?? owner, ownerType: "user", imageUrl: t.imageUrl ?? null,
     snapshot: { ...t.snapshot, recipe } };
 }
 
@@ -262,8 +264,10 @@ export async function createTemplateForAgent(sourceAgentId: string, owner: strin
   const snap = await snapshotOf(sourceAgentId, owner);
   if (!snap) return null;
   const now = Date.now();
+  const shareId = newShareId();
   const draft: BotTemplate = {
-    shareId: newShareId(),
+    shareId,
+    shareUrl: shareUrlOf(shareId),
     sourceAgentId,
     name: snap.name,
     description: snap.description,
@@ -355,6 +359,21 @@ export function getPublicBotTemplate(shareId: string): { template: BotTemplate; 
   return t ? { template: t, ownerDisplayName: ownerDisplayNameOf(t.ownerAuthId) } : null;
 }
 
+/** Mọi mẫu công khai đã xuất bản, của mọi chủ — nguồn của Marketplace (`marketplace.ts`). */
+export const listPublicBotTemplates = (): BotTemplate[] => readEveryone().filter(laCongKhai);
+
+/**
+ * Mẫu theo shareId bất kể chủ và tầm nhìn — CHỈ để phân biệt "không có" với "có mà không public",
+ * vì client 0.43 đọc hai mã lỗi khác nhau (NotFound ⇒ null · PermissionDenied ⇒ access denied).
+ * Không trả nội dung ra ngoài: người gọi chỉ được biết nó tồn tại.
+ */
+export const botTemplateExistsAnyOwner = (shareId: string): boolean =>
+  SHARE_ID_RE.test(shareId) && readEveryone().some((x) => x.shareId === shareId);
+
+/** Mẫu của CHÍNH người gọi theo shareId — cửa cho listing: chỉ chủ mới đăng mẫu của mình lên cộng đồng. */
+export const templateOwnedBy = (shareId: string, owner: string): BotTemplate | null =>
+  readAll(owner).find((t) => t.shareId === shareId) ?? null;
+
 // ── Hình dạng host 0.43 trả cho renderer: `BotTemplateImport` (hàm `xfe` = botTemplateImportFromPackedVersion) ──
 
 /** `EB` / `SB` của 0.43 — validator `isGrokBotColor` / `isGrokBotShape` từ chối mọi giá trị ngoài hai bảng này. */
@@ -362,8 +381,8 @@ export const AVATAR_COLORS = ["black", "brown", "red", "orange", "yellow", "gree
 export const AVATAR_SHAPES = ["blob", "pebble", "bean", "egg", "squircle", "tablet", "capsule", "cylinder", "hex", "gem", "crystal", "wedge", "shield", "dome", "arch", "cloud", "teardrop", "leaf"] as const;
 const DEFAULT_COLOR = "blue";
 const DEFAULT_SHAPE = "blob";
-const mauHopLe = (c: unknown): string => (AVATAR_COLORS as readonly string[]).includes(String(c)) ? String(c) : DEFAULT_COLOR;
-const hinhHopLe = (s: unknown): string => (AVATAR_SHAPES as readonly string[]).includes(String(s)) ? String(s) : DEFAULT_SHAPE;
+export const mauHopLe = (c: unknown): string => (AVATAR_COLORS as readonly string[]).includes(String(c)) ? String(c) : DEFAULT_COLOR;
+export const hinhHopLe = (s: unknown): string => (AVATAR_SHAPES as readonly string[]).includes(String(s)) ? String(s) : DEFAULT_SHAPE;
 
 export const shareUrlOf = (shareId: string): string => `https://x.ai/bot/${shareId}`;
 
@@ -420,6 +439,34 @@ export function toBotTemplateImport(t: BotTemplate, creatorName?: string): BotTe
   };
 }
 
+/**
+ * Recipe ra BLOB cho main 0.43 tải về — zod `Dct` của MAIN nghiêm hơn của renderer: skill đòi
+ * `name+description+content` đều min(1), routine đòi cả `name+slug+description+content`, plugin đòi
+ * `name` (description thì hoặc vắng hoặc min(1)), memory `content` min(1), và `gettingStarted.skill`
+ * phải trùng tên một skill. Một chuỗi rỗng là main ném "recipe refused" và Import chết im.
+ */
+export function recipeForBlob(t: BotTemplate): TemplateRecipe {
+  const r = t.snapshot.recipe;
+  const skills = r.skills.map((s) => ({ name: coChu(s.name, "skill"), description: coChu(s.description, KHONG_MO_TA), content: coChu(s.content, KHONG_NOI_DUNG) }));
+  const gs = r.gettingStarted?.skill;
+  return {
+    profile: {
+      name: coChu(r.profile.name, t.name),
+      description: coChu(r.profile.description, coChu(t.description, KHONG_MO_TA)),
+      avatarColor: mauHopLe(r.profile.avatarColor ?? t.avatarColor),
+      avatarShape: hinhHopLe(r.profile.avatarShape ?? t.avatarShape),
+    },
+    memory: r.memory.filter((m) => (m.content ?? "").trim()).map((m) => ({ content: m.content, ...(m.kind ? { kind: m.kind } : {}), ...(m.createdAt ? { createdAt: m.createdAt } : {}) })),
+    skills,
+    routines: r.routines.map((x) => ({
+      slug: coChu(x.slug, "routine"), name: coChu(x.name, x.slug), description: coChu(x.description, KHONG_MO_TA), content: coChu(x.content, KHONG_NOI_DUNG),
+      ...(x.trigger ? { trigger: x.trigger } : {}),
+    })),
+    plugins: r.plugins.map((p) => ({ pluginId: p.pluginId, name: coChu(p.name, p.pluginId), ...(p.description?.trim() ? { description: p.description } : {}) })),
+    ...(gs && skills.some((s) => s.name === gs) ? { gettingStarted: { skill: gs } } : {}),
+  };
+}
+
 /** Cửa gateway `getPublicBotTemplate{shareId}`: đúng thứ renderer nhận từ host 0.43, hoặc `null`. */
 export function publicTemplateImport(shareId: string): BotTemplateImport | null {
   const pub = getPublicBotTemplate(shareId);
@@ -439,6 +486,8 @@ async function dungLaiTuRecipe(agentId: string, r: TemplateRecipe): Promise<void
 
 export interface CreateFromTemplateArgs {
   shareId?: string;
+  /** 0.43 tự đúc id (UUID) cho bot sắp tạo và vẽ hàng roster TRƯỚC khi gọi — bot phải mang đúng id này. */
+  agentId?: string;
   name?: string;
   avatarShape?: string;
   avatarColor?: string;
@@ -459,20 +508,67 @@ export interface CreateFromTemplateArgs {
  *
  * `name` trong đối số đè tên của mẫu: người nhận đặt tên riêng ngay trên thẻ trước khi tạo.
  */
+/**
+ * `setup` trong reply `createAgentFromTemplate` (`SandCreateAgentFromTemplateResult` 0.43): renderer vẽ
+ * "bot này mang gì theo" — skill / routine / memory / plugin. Mọi chuỗi ở đây là `string` bắt buộc
+ * (`required: content, description, name`), nên chỗ trống lấp `""`, không để `undefined` (khoá vắng
+ * trượt `required`).
+ */
+export interface TemplateSetupRecipe {
+  kind: "recipe";
+  /**
+   * `true` = client KHÔNG gửi lời nhắc setup ("Hi X. Please create your skills… <bot_template_setup_context>").
+   * Ở host hãng, bot tự áp recipe bằng tool `update_state` khi nhận lời nhắc đó. Bên ta `dungLaiTuRecipe` đã
+   * dựng skill / routine / memory ngay lúc import, nên gửi lời nhắc là bảo bot làm lại việc đã xong bằng một
+   * tool nó không có — đo 05/09: client 0.43 gửi thật, bot nhận nguyên khối JSON. Recipe vẫn trả để client vẽ.
+   */
+  isSetupSendSuppressed?: boolean;
+  skills: { name: string; description: string; content: string }[];
+  automations: { name: string; slug: string; description: string; content: string }[];
+  memories: { content: string; createdAt?: string; kind?: "log" | "profile" }[];
+  plugins: { pluginId: string; name: string; description?: string }[];
+}
+export type TemplateSetup = TemplateSetupRecipe | { kind: "unavailable" };
+
+export function setupOf(r: TemplateRecipe): TemplateSetupRecipe {
+  return {
+    kind: "recipe",
+    skills: r.skills.map((s) => ({ name: s.name, description: s.description ?? "", content: s.content ?? "" })),
+    automations: r.routines.map((x) => ({ name: x.name ?? x.slug, slug: x.slug, description: x.description ?? "", content: x.content ?? "" })),
+    memories: r.memory.map((m) => ({ content: m.content, ...(m.createdAt ? { createdAt: m.createdAt } : {}), ...(m.kind ? { kind: m.kind } : {}) })),
+    plugins: r.plugins.map((p) => ({ pluginId: p.pluginId, name: p.name ?? "", ...(p.description ? { description: p.description } : {}) })),
+  };
+}
+
 export async function createAgentFromTemplate(
   a: CreateFromTemplateArgs,
   owner: string = currentOwner(),
-): Promise<{ agent: unknown } | null> {
+): Promise<{ agent: unknown; setup: TemplateSetup; transcript: never[] } | null> {
   const tpl = templateReachable(a.shareId ?? "", owner);
   if (!tpl) return null;
   if (a.expectedActiveVersion != null && tpl.activeVersion !== a.expectedActiveVersion) return null;
   const snap = tpl.snapshot;
   const wanted = (a.name ?? "").trim() || snap.name || tpl.name;
+  // Avatar: client gửi cái người nhận chọn trên thẻ; không gửi thì lấy của mẫu (renderer vẽ hình+màu, không ảnh).
+  const vo = {
+    ...(typeof a.agentId === "string" ? { id: a.agentId } : {}),
+    avatarShape: a.avatarShape ?? tpl.avatarShape,
+    avatarColor: a.avatarColor ?? tpl.avatarColor,
+  };
   if (!snap.isGroup) {
-    const agent = createAgent({ name: wanted, description: snap.description });
+    const agent = createAgent({ ...vo, name: wanted, description: snap.description });
     await dungLaiTuRecipe(agent.id, snap.recipe);
-    return { agent };
+    /*
+     * Client 0.43 vẽ hàng roster "Creating…" (`beginCreation{expectsContent:true}`) và chỉ gỡ khi bot có NỘI DUNG
+     * đầu tiên. Ở hãng nội dung ấy là câu trả lời cho lời nhắc setup; ta chặn lời nhắc đó (xem
+     * `isSetupSendSuppressed`) nên phải tự kích lời giới thiệu — đúng vai `isKickstartRequested` của `createAgent`.
+     * Đo 05/09: không kích ⇒ "Creating…" treo vô hạn; `kickstartAgent` tay ⇒ bot chào, hàng chuyển sang tin đầu.
+     * `introduceRef` là ref (như `directory.kickstartAgent`) để module này không kéo `runtime/turn`.
+     */
+    introduceRef?.(agent.id);
+    return { agent, setup: { ...setupOf(snap.recipe), isSetupSendSuppressed: true }, transcript: [] };
   }
   const memberIds = snap.members.map((m) => createAgent({ name: m.name, description: m.description }).id);
-  return { agent: createGroup({ name: wanted, memberAgentIds: memberIds }) };
+  // Nhóm: recipe là của PHÒNG, skill thành viên chưa đi theo — nói "unavailable" thật hơn là vẽ một bảng rỗng.
+  return { agent: createGroup({ ...vo, name: wanted, memberAgentIds: memberIds }), setup: { kind: "unavailable" }, transcript: [] };
 }

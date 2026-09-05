@@ -60,6 +60,18 @@ export function connectStreamEnd(dataFrame?: Buffer): Buffer {
 }
 
 /**
+ * Một khung end-of-stream MANG LỖI — cách Connect báo lỗi trên đường `connect+proto`/`connect+json`
+ * (unary thì dùng HTTP status + JSON `{code,message}`, xem ACL). `code` là chuỗi Connect: `not_found`…
+ */
+export function connectStreamError(code: string, msg: string): Buffer {
+  const end = Buffer.from(JSON.stringify({ error: { code, message: msg } }));
+  const eh = Buffer.alloc(5);
+  eh[0] = 2;
+  eh.writeUInt32BE(end.length, 1);
+  return Buffer.concat([eh, end]);
+}
+
+/**
  * Read one top-level varint field out of a protobuf message. Returns null when absent.
  *
  * The bootstrap gates have been write-only until now — every builder produced bytes and nothing

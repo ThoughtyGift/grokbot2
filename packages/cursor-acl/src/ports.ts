@@ -47,7 +47,7 @@ export interface DirectoryPort {
   countAgents(): number;
   updateAgent: Call;
   deleteAgents: Call;
-  duplicateAgent(args: any): { id: string } | null;
+  duplicateAgent(args: any): { id: string } | null;   // eslint-disable-line @typescript-eslint/no-explicit-any
   setAgentUnread: Call;
   setAgentHiddenFromSidebar: Call;
   setAgentNotificationsEnabled: Call;
@@ -178,6 +178,20 @@ export interface MediaPort {
  * dùng biết ngay thay vì bấm vào hư không. Hình dạng đối số trích từ bundle 0.29, xem
  * `services/grokbot-backend/src/bot-templates.ts`.
  */
+/**
+ * Marketplace bot — lệnh của TA trên `/gw/api` (client 0.43 đọc listing qua RPC main-side, nhưng đường
+ * ĐĂNG, hồ sơ người tạo, và bài đo đi cửa này). Hình dạng listing = thứ renderer nhận từ host
+ * (`marketplaceListingFromWire`): `{slug,name,description,avatar,category,categories,shareId,creator}`.
+ */
+export interface MarketplaceGwPort {
+  listPublic(category?: string): { featuredListings: unknown[]; listings: unknown[]; nextPageToken: string };
+  publish(a: { shareId: string; category: string; categories?: unknown; featured?: unknown }): unknown;
+  unpublish(shareId: string): boolean;
+  mine(): unknown[];
+  getCreatorProfile(): unknown;
+  setCreatorProfile(patch: { name?: unknown; profilePhotoUrl?: unknown; handles?: unknown }): unknown;
+}
+
 export interface BotTemplatesPort {
   list(): unknown[];
   forSourceAgent(sourceAgentId: string): unknown | null;
@@ -191,9 +205,9 @@ export interface BotTemplatesPort {
    * import bản cũ dưới tên bản mới. `creatorContext` là thứ 0.43 gửi kèm khi import từ Marketplace.
    */
   createAgent(a: {
-    shareId?: string; name?: string; avatarShape?: string; avatarColor?: string;
+    shareId?: string; agentId?: string; name?: string; avatarShape?: string; avatarColor?: string;
     expectedActiveVersion?: number; creatorContext?: unknown;
-  }): Promise<{ agent: unknown } | null>;
+  }): Promise<{ agent: unknown; setup: unknown; transcript: unknown[] } | null>;
   /**
    * Cửa `getPublicBotTemplate{shareId}` của 0.43 — đọc XUYÊN chủ, chỉ mẫu đã xuất bản + public. Trả
    * đúng `BotTemplateImport` (`{expectedActiveVersion, instructions, view}`) mà renderer kiểm, hoặc `null`.
@@ -392,6 +406,8 @@ export interface AclPorts {
   memory: MemoryPort;
   /** Mẫu bot. Tuỳ chọn — thiếu thì bảy lệnh mẫu bot trả lời "chưa bật". */
   botTemplates?: BotTemplatesPort;
+  /** Marketplace bot (listing + hồ sơ người tạo). Tuỳ chọn — thiếu thì danh sách rỗng, đăng bị từ chối có chữ. */
+  marketplace?: MarketplaceGwPort;
   automations: AutomationsPort;
   /** Skill của bot. Thiếu thì menu `/` trống — xem `WorkflowsPort`. */
   workflows?: WorkflowsPort;

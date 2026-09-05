@@ -13,7 +13,9 @@
  */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +34,13 @@ process.env.GROKBOT2_ALLOW_WRITE = "1";
  * Mười bài đỏ chỉ là triệu chứng; cái mất là dữ liệu. Vá một nửa một cái bẫy thì cái bẫy vẫn còn,
  * chỉ khác là nó không còn báo động nữa.
  */
+/*
+ * KHÔNG có biến cách ly ⇒ TỰ dựng thư mục tạm. Bản trước chỉ đọc env rồi rơi về `.data` thật khi env
+ * vắng — tức chạy `npx tsx --test` trần (đúng cách bảng theo dõi §7 từng dặn) là `sach()` xoá kho THẬT
+ * của người dùng. Đo 05/09: `.data/bot-templates`, `.data/box-secrets`, `.data/mcp-prefs` đều biến mất
+ * sau một lượt chạy bộ test đầy đủ. Một bài test không được có đường nào dẫn tới dữ liệu thật.
+ */
+if (!process.env.GROKBOT2_DATA_DIR) process.env.GROKBOT2_DATA_DIR = mkdtempSync(join(tmpdir(), "gb2-templates-"));
 const DATA_DIR = process.env.GROKBOT2_DATA_DIR
   ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".data");
 const DIR = join(DATA_DIR, "bot-templates");
@@ -294,6 +303,28 @@ test("sau khi chia sẻ thì đọc mới thấy", async () => {
   const bot = as(A, () => createAgent({ name: "Da chia se" }));
   const made = (await as(A, () => T.createTemplateForAgent(bot.id)))!;
   assert.equal(as(A, () => T.getBotTemplateForSourceAgent(bot.id))?.shareId, made.shareId);
+});
+
+test("0.43 import: bot mang ĐÚNG agentId client tự đúc + avatar chọn trên thẻ; setup trả recipe nhưng không bảo client gửi lời nhắc setup", async () => {
+  const bot = as(A, () => createAgent({ name: "Kho", description: "Đếm tồn mỗi tối." }));
+  const tpl = (await as(A, () => T.createTemplateForAgent(bot.id)))!;
+  const UUID = randomUUID();   // kho test dùng CHUNG giữa các lần chạy (tmpdir/grokbot2-test-store) — id cố định thì lần hai đã "có rồi"
+  const made = (await as(A, () => T.createAgentFromTemplate({ shareId: tpl.shareId, agentId: UUID, avatarShape: "gem", avatarColor: "green" })))!;
+  const rec = made.agent as { id: string; avatarShape?: string; avatarColor?: string };
+  assert.equal(rec.id, UUID, "client vẽ hàng roster mang id này TRƯỚC khi gọi — lệch là hàng ma");
+  assert.equal(rec.avatarShape, "gem");
+  assert.equal(rec.avatarColor, "green");
+  assert.equal(made.setup.kind, "recipe");
+  assert.equal((made.setup as { isSetupSendSuppressed?: boolean }).isSetupSendSuppressed, true, "skill đã dựng server-side — không bảo bot dựng lại");
+  assert.deepEqual(made.transcript, []);
+  const macDinh = (await as(A, () => T.createAgentFromTemplate({ shareId: tpl.shareId })))!;
+  const r2 = macDinh.agent as { id: string; avatarShape?: string; avatarColor?: string };
+  assert.equal(r2.avatarShape, tpl.avatarShape, "không gửi avatar ⇒ lấy của mẫu");
+  assert.equal(r2.avatarColor, tpl.avatarColor);
+  const trung = (await as(A, () => T.createAgentFromTemplate({ shareId: tpl.shareId, agentId: UUID })))!;
+  assert.notEqual((trung.agent as { id: string }).id, UUID, "id đã có ⇒ đúc id mới, không ghi đè");
+  const daNha = (await as(A, () => T.createAgentFromTemplate({ shareId: tpl.shareId, agentId: "agent-999999" })))!;
+  assert.notEqual((daNha.agent as { id: string }).id, "agent-999999", "dạng agent-<n> là của bộ đếm bên ta");
 });
 
 test("dọn", () => { sach(); });

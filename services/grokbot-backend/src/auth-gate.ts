@@ -187,6 +187,9 @@ export function checkAuth(url: string, headers: Record<string, unknown>): AuthVe
   // went dark, and locking them behind the credential that just broke is how a bad rollout
   // becomes an unrecoverable one.
   if (url.startsWith("/gw/__coverage") || url.startsWith("/gw/health")) return { allow: true, saw };
+  // Recipe của mẫu bot CÔNG KHAI: main 0.43 `fetch` trần từ `blob_get_url`, không header nào. Chỉ mẫu
+  // đã public + đúng bản active mới có nội dung (marketplace.ts), nên cửa mở này không lộ gì thêm.
+  if (url.startsWith("/gw/bot-template-blob/")) return { allow: true, saw };
   // Slack's Events API posts from Slack's servers, which do not carry our gateway ticket — they
   // authenticate with their own X-Slack-Signature instead (verified in slack-events.ts once the
   // signing secret is set). Gating this on our bearer would reject every real Slack event.

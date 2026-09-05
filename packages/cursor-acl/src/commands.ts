@@ -79,8 +79,24 @@ const idOf = (a: any): string =>
  * `broadcast` is optional so tests and `parity-report` can enumerate the table without a hub.
  * Only commands that are themselves the sole writer of a value use it — see `createGatewayRouter`.
  */
+/**
+ * Lệnh mà hợp đồng 0.43 khai reply `{"type":"null"}` — 26 lệnh, đọc từ schema `RA` trong
+ * `node-agent-coordinator` (`docs/extracted/gateway-schema-0.43.json`). Client không đọc gì ở reply
+ * (0.30 khai `"void"`), nhưng coordinator 0.43 KIỂM: `{}` là "object", không phải null, và cả cú bấm
+ * (đánh dấu chưa đọc, ẩn bot, chạy routine, gửi form…) ném `SandGatewayMalformedReplyError` dù việc
+ * đã làm xong. Ép về `null` ở CỬA DÂY (`http.ts`), một chỗ, thay vì sửa 26 handler rải trên 8 module
+ * — handler vẫn trả thứ nó muốn cho ai gọi thẳng (test, tool của bot).
+ */
+export const REPLY_NULL: ReadonlySet<string> = new Set([
+  "cancelCookieOriginApproval", "clearTrays", "completeMcpOAuth", "deleteBotTemplate", "dismissTray", "dismissUserForm",
+  "handBackForeverBox", "reactToMessage", "recordVoiceCall", "refreshMcp", "resolveAutoReviewApproval",
+  "resolveLocalToolPermission", "resolveVirtualCardApproval", "runAgentAutomationNow", "runAgentWorkflowNow",
+  "setAgentHiddenFromSidebar", "setAgentNotificationsEnabled", "setAgentNotifyOnUpdates", "setAgentUnread", "setAgentVoice",
+  "setVoiceCallPresence", "setWindowFocused", "stopCloudAgent", "submitSecret", "submitUserForm", "voteFeedback",
+]);
+
 export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel, payload: unknown) => void): Record<string, Call> {
-  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates, workflows } = ports;
+  const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates, workflows, marketplace } = ports;
   const push = (channel: WireChannel, payload: unknown) => { broadcast?.(channel, payload); };
 
   /**
@@ -287,7 +303,8 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     countAgents: () => directory.countAgents(),
     // The client reads `result.agent.id`, so createAgent/duplicateAgent/openAgent must wrap the
     // record as `{agent, transcript}` (matches the box host: `return { agent: u, transcript: Gn() }`).
-    createAgent: (a) => ({ agent: directory.createAgent(a), transcript: { entries: [], hasMore: false } }),
+    // `transcript` là MẢNG entry (`SandCreateAgentResult` 0.43), không phải trang `{entries,hasMore}`.
+    createAgent: (a) => ({ agent: directory.createAgent(a), transcript: [] }),
     updateAgent: (a) => directory.updateAgent(a),
     deleteAgents: (a) => directory.deleteAgents(a),
     // We only had `deleteAgents`. The client can send either; the singular one reuses the plural
@@ -295,7 +312,9 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     deleteAgent: (a) => directory.deleteAgents({ ids: [a?.id ?? a?.agentId].filter(Boolean) }),
     duplicateAgent: (a) => {
       const rec = directory.duplicateAgent(a);
-      return rec ? { agent: rec, transcript: conversation.transcriptTail({ id: rec.id }) } : null;
+      if (!rec) return null;
+      const tail = conversation.transcriptTail({ id: rec.id }) as { entries?: unknown[] };
+      return { agent: rec, transcript: tail.entries ?? [] };
     },
     setAgentUnread: (a) => directory.setAgentUnread(a),
     setAgentHiddenFromSidebar: (a) => directory.setAgentHiddenFromSidebar(a),
@@ -748,17 +767,45 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     },
     deleteBotTemplate: (a) => {
       botTemplates?.remove(String((a as { shareId?: unknown })?.shareId ?? ""));
-      return {};   // reply:"void"
+      return null;   // hợp đồng 0.43: reply `{"type":"null"}` — `{}` là "type null" sai ở coordinator
+    },
+
+    /*
+     * ── Marketplace bot (bước D) ────────────────────────────────────────────────────────────────
+     *
+     * Client 0.43 KHÔNG gọi `listPublicBotMarketplace` qua gateway — nó đi RPC main-side
+     * (`ListPublicGrokBotMarketplaceListings`); lệnh này cùng hình dạng để bài đo và FE riêng dùng.
+     * Bốn lệnh sau là của TA: đăng/rút listing của mẫu MÌNH sở hữu, và hồ sơ người tạo.
+     */
+    listPublicBotMarketplace: (a) => marketplace?.listPublic(String((a as { category?: unknown })?.category ?? "") || undefined)
+      ?? { featuredListings: [], listings: [], nextPageToken: "" },
+    listMyBotListings: () => marketplace?.mine() ?? [],
+    publishBotListing: (a) => {
+      if (!marketplace) return { ok: false, reason: "Chưa bật Marketplace bot trên máy chủ này." };
+      const arg = (a ?? {}) as { shareId?: unknown; category?: unknown; categories?: unknown; featured?: unknown };
+      try {
+        return marketplace.publish({ shareId: String(arg.shareId ?? ""), category: String(arg.category ?? ""), categories: arg.categories, featured: arg.featured });
+      } catch (e) {
+        return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    unpublishBotListing: (a) => ({ ok: marketplace?.unpublish(String((a as { shareId?: unknown })?.shareId ?? "")) ?? false }),
+    getCreatorProfile: () => marketplace?.getCreatorProfile() ?? null,
+    setCreatorProfile: (a) => {
+      if (!marketplace) return { ok: false, reason: "Chưa bật Marketplace bot trên máy chủ này." };
+      const arg = (a ?? {}) as { name?: unknown; profilePhotoUrl?: unknown; handles?: unknown };
+      return marketplace.setCreatorProfile({ name: arg.name, profilePhotoUrl: arg.profilePhotoUrl, handles: arg.handles });
     },
     createAgentFromTemplate: async (a) => {
       if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
       const arg = (a ?? {}) as {
-        shareId?: unknown; name?: unknown; avatarShape?: unknown; avatarColor?: unknown;
+        shareId?: unknown; agentId?: unknown; name?: unknown; avatarShape?: unknown; avatarColor?: unknown;
         expectedActiveVersion?: unknown; creatorContext?: unknown;
       };
       const ver = Number(arg.expectedActiveVersion);
       return (await botTemplates.createAgent({
         shareId: String(arg.shareId ?? ""),
+        ...(typeof arg.agentId === "string" ? { agentId: arg.agentId } : {}),   // 0.43: id client đúc trước
         name: typeof arg.name === "string" ? arg.name : undefined,
         avatarShape: typeof arg.avatarShape === "string" ? arg.avatarShape : undefined,
         avatarColor: typeof arg.avatarColor === "string" ? arg.avatarColor : undefined,
@@ -865,10 +912,13 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      * mở ra. Hình dạng đọc từ bản dựng 0.20: `createGroup` reply `record`, `setGroupMembers` reply
      * `record-or-null`, và roster vẽ nhóm bằng `n.isGroup` + `rows.find(...).memberIds`.
      *
-     * `createGroup` bọc trong `{agent}` giống `createAgent` — cùng một renderer đọc cả hai.
+     * `createGroup` bọc trong `{agent, transcript}` giống `createAgent` — cùng một renderer đọc cả hai
+     * (`SandCreateAgentResult`). `setGroupMembers` thì KHÔNG bọc: hợp đồng 0.43 khai
+     * `SandAgentSummary | null`, và renderer 0.43 đọc thẳng `Ne?.harness` trên kết quả. Bản trước bọc
+     * `{agent}` "cho giống" — một phỏng đoán, không phải số đo.
      */
-    createGroup: (a) => ({ agent: directory.createGroup(a) }),
-    setGroupMembers: (a) => { const r = directory.setGroupMembers(a); return r ? { agent: r } : null; },
+    createGroup: (a) => ({ agent: directory.createGroup(a), transcript: [] }),
+    setGroupMembers: (a) => directory.setGroupMembers(a),
 
     // ── teach a task ────────────────────────────────────────────────────────────
     //

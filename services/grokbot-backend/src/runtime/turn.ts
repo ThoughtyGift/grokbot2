@@ -135,6 +135,7 @@ const ACTIVITY_TOOL: Record<string, string> = {
   create_skill: "Shell",
   create_diagram: "Screenshot",
   share_bot_template: "CreateAgent",
+  publish_bot_listing: "CreateAgent",
   rename_agent: "UpdateAgent",
   attach_file: "Screenshot",
   attach_image: "Screenshot",

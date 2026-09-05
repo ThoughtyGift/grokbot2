@@ -20,6 +20,7 @@ import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser } fr
 // `off` thì không đụng vào sổ: một cài đặt không dùng billing không nên tự mọc thêm bảng.
 if (billingMode() !== "off") seedPlans();
 import { pluginsPortFor } from "./plugins.js";
+import { marketplacePortFor, recipeBlob } from "./marketplace.js";
 import { oauthPortFor, oauthAccessToken } from "./mcp-oauth.js";
 import { authUrlFor, completeAuthorization } from "./oauth-client.js";
 import { mintTicket } from "./gateway-ticket.js";
@@ -406,6 +407,19 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   // ── box gateway (JSON + SSE + chat) ──
   // Multi-tenant Phase 2: scope every /gw command to the caller's owner (from the token, default
   // identity when absent). Domain code reads currentOwner(); this is the one place it is set.
+  /*
+   * Blob recipe của một mẫu công khai — thứ main 0.43 `fetch` trần từ `blob_get_url` mà
+   * `GetGrokBotTemplateImportDetails` trả. Không vé cổng (main không gửi header nào); shareId 21 ký tự
+   * ngẫu nhiên + chỉ mẫu ĐÃ public + chỉ bản đang active. Cùng lối với `/gw/health` trong auth-gate.
+   */
+  const blob = /^\/gw\/bot-template-blob\/([A-Za-z0-9_-]{21})\/(\d{1,6})\.json$/.exec(url.split("?")[0]);
+  if (blob && (req.method ?? "GET") === "GET") {
+    const recipe = recipeBlob(blob[1], Number(blob[2]));
+    if (!recipe) { res.writeHead(404, { "content-type": "application/json" }); return res.end('{"error":"no such public bot template version"}'); }
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify(recipe));
+  }
+
   const gwOwner = ownerFromAuth(req.headers.authorization);
   if (runWithOwner(gwOwner, () => handleGateway(url, body, res, req.headers as Record<string, unknown>, req.method ?? "?"))) return;
 
@@ -450,6 +464,12 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     plan: billingMode() === "off" ? undefined : getUser(rpcUser.authId)?.plan,
     body,
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
+    // Marketplace bot: `blob_get_url` phải là địa chỉ máy chủ NHƯ CLIENT THẤY — sau reverse proxy thì
+    // là `GROKBOT2_PUBLIC_BACKEND`; không có thì dựng từ chính request (Host + x-forwarded-proto).
+    marketplace: marketplacePortFor(
+      process.env.GROKBOT2_PUBLIC_BACKEND?.trim()
+        || `${String(req.headers["x-forwarded-proto"] ?? "http").split(",")[0].trim() || "http"}://${String(req.headers.host ?? "localhost:8788")}`,
+    ),
     // Where a sign-in is kept, so the app's own OAuth flow has somewhere to write. Without this the
     // ten MCP OAuth RPCs answer empty and a completed sign-in stores nothing.
     oauth: (() => {

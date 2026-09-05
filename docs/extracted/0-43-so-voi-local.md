@@ -167,3 +167,37 @@ schema (chỉ đòi `channel` là chuỗi); renderer có validator riêng cho t�
 `required` đều có người đọc** — máy đọc, trước cả UI. Một reply 200 "trông đúng" mà thiếu một khoá là cả tính năng
 biến thành banner mất kết nối, và không lỗi nào nổi lên ở phía backend. Bài đo phải chạy lại mỗi khi đổi shape:
 `node services/grokbot-backend/scripts/kiem-reply-0-43.mjs`.
+
+## 7b · Đợt hai (05/09 chiều): đường GHI, và ba điều schema không nói
+
+Bài đo đợt một chỉ quét 29 lệnh ĐỌC. Đợt hai gọi các lệnh ghi bằng id thật (`kiem-reply-0-43.mjs createAgent:{…} updateAgent:{…}`,
+13 lệnh) và bấm thật trên UI 0.43. Sửa thêm:
+
+| lệnh | thiếu / sai | sửa |
+|---|---|---|
+| `createAgent` · `createGroup` · `duplicateAgent` | `agent` là bản ghi THÔ (`createdAtMs`, `unread`, `currentActivity:null`) — schema đòi `SandAgentSummary`; `transcript` là trang `{entries,hasMore}` — schema đòi MẢNG | `directory.createAgent/createGroup/duplicateAgent` trả hàng đã `summarise`; `transcript: []` |
+| `updateAgent` · `setGroupMembers` | bản ghi thô; `setGroupMembers` còn bọc `{agent}` "cho giống" — renderer 0.43 đọc thẳng `Ne?.harness` | trả `SandAgentSummary \| null`, không bọc |
+| `deleteAgents` | `{deleted}` — schema đòi `{transcript: []}` | thêm `transcript: []`, giữ `deleted` |
+| **26 lệnh reply `{"type":"null"}`** (`setAgentUnread`, `setAgentHiddenFromSidebar`, `dismissTray`, `runAgentWorkflowNow`, `submitUserForm`, `deleteBotTemplate`…) | ta trả `{}` — "object" ≠ null ⇒ cả cú bấm bị coi là thất bại dù việc đã làm | `REPLY_NULL` trong `cursor-acl/commands.ts`, ép về `null` ở cửa dây (`http.ts`) — một chỗ thay vì 26 handler |
+| `listBotTemplates` · `getBotTemplateForSourceAgent` · `getBotTemplateVersion` · `setBotTemplateVisibility` | thiếu `shareUrl` | `shareUrl = shareUrlOf(shareId)`, lấp lúc đọc cho bản cũ |
+| `getAgentWorkflows` · `createAgentWorkflow` · `updateAgentWorkflow` | `SandSkill` đòi `body` + 10 khoá (`filePath, helperScripts, runs, lastRunAt, nextRunAt, pluginId, sourceRef, scheduleDescription, trigger, publishedByCurrentUser`) | `wireSkill()` ở cửa dây; kho vẫn giữ `instructions` |
+| `createAgentFromTemplate` | trả `{agent}`; schema đòi `{agent, setup, transcript}` | `setup: {kind:"recipe", skills, automations, memories, plugins, isSetupSendSuppressed:true}`, nhóm ⇒ `{kind:"unavailable"}` |
+
+**Ba điều schema KHÔNG nói, chỉ UI nói:**
+
+1. **Client tự đúc `agentId` khi import.** `createAgentFromTemplate{agentId: <UUID>}` — renderer `mintAgentId()` rồi vẽ NGAY một
+   hàng roster mang id đó. Ta tạo bot `agent-1002` ⇒ sidebar có HAI hàng cùng tên, hàng UUID là ma và không bao giờ mất cho tới khi
+   mở lại app. Nay `directory.createAgent` nhận `id` từ client (regex `^(?!agent-\d+$)[A-Za-z0-9_-]{1,64}$`, không trùng), và bot
+   import mang đúng UUID ấy — đo lần hai: một hàng, đúng avatar `blob/blue` chọn trên thẻ.
+2. **Client tự gửi lời nhắc setup.** Với `setup.kind:"recipe"`, renderer đăng một tin người dùng *"Hi X. Please create your skills.
+   <bot_template_setup_context>{…recipe…}</bot_template_setup_context> <bot_template_setup_instructions> 3. For every skill, persist …
+   with update_state target "skill" action "create" …"* — ở hãng, bot tự áp recipe bằng tool `update_state`. Bên ta
+   `dungLaiTuRecipe` đã dựng skill/routine/memory lúc import, và ta không có `update_state`; nên `isSetupSendSuppressed: true`.
+3. **Chặn lời nhắc thì "Creating…" treo.** Hàng roster của bot mới là placeholder `beginCreation{expectsContent:true}`, chỉ gỡ khi
+   bot có NỘI DUNG đầu tiên. Ở hãng nội dung ấy là câu trả lời cho lời nhắc setup. Đo: `kickstartAgent{id}` tay ⇒ bot chào bằng
+   tiếng Việt theo mô tả của mẫu, hàng chuyển sang tin đầu. Nay `createAgentFromTemplate` tự gọi `introduceRef` — đúng vai
+   `isKickstartRequested` mà `createAgent` 0.43 gửi.
+
+Cùng lượt: **`.data/bot-templates`, `.data/box-secrets`, `.data/mcp-prefs` THẬT bị xoá** bởi chính bộ test khi chạy
+`npx tsx --test` trần — ba bài có `sach()` đọc `GROKBOT2_DATA_DIR ?? <src>/../.data`, và biến ấy chỉ do
+`scripts/run-tests.mjs` đặt. Nay ba bài tự `mkdtemp` khi biến vắng. Chi tiết ở bảng theo dõi §7.

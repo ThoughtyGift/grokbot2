@@ -14,6 +14,7 @@ import {
   type PluginEntry,
 } from "./bootstrap-plugins.js";
 import { bootstrapStatsigJson } from "./feature-gates.js";
+import { listMarketplaceResponse, templateImportDetailsResponse, publicListingResponse, type MarketplacePort } from "./marketplace-rpc.js";
 export { statsigBootstrapConfig, bootstrapStatsigJson } from "./feature-gates.js";
 // Giữ nguyên bề mặt công khai: nơi khác vẫn `import { listMarketplaces } from "@grokbot2/proto"`.
 export {
@@ -173,6 +174,11 @@ export interface RpcCtx {
    * the log rather than pretending.
    */
   transcribe?(audio: Buffer, mimeType: string, language?: string): Promise<{ text: string; ms: number }>;
+  /**
+   * Marketplace bot + mẫu công khai (0.43 gọi từ main: `listPublicBotMarketplace`, `getPublicBotTemplate`).
+   * Vắng ⇒ Marketplace trống và mọi shareId là NotFound — app vẽ danh sách rỗng, không vỡ.
+   */
+  marketplace?: MarketplacePort;
   /**
    * The caller's MCP config as the client wants to read it back.
    *
@@ -342,6 +348,12 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
    * into the composer, and an empty box the person can retype is a better outcome than an error
    * dialog over a dictation attempt.
    */
+  // GrokBotService — Marketplace bot + template công khai (xem marketplace-rpc.ts). Lỗi ném ra là
+  // `ConnectRpcError`; ACL đổi thành HTTP/JSON đúng giao thức, không phải reply rỗng 200.
+  ListPublicGrokBotMarketplaceListings: (ctx) => listMarketplaceResponse(ctx.marketplace, ctx.body),
+  GetGrokBotTemplateImportDetails: (ctx) => templateImportDetailsResponse(ctx.marketplace, ctx.body),
+  GetPublicGrokBotMarketplaceListing: (ctx) => publicListingResponse(ctx.marketplace, ctx.body),
+
   TranscribeAudio: async (ctx) => {
     const body = ctx.body ? unframe(ctx.body) : null;
     const audio = body ? readBytes(body, 1) : Buffer.alloc(0);

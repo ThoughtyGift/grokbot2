@@ -96,7 +96,8 @@ const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map(
   return "";
 }).filter(Boolean).join("\n");
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
-import { createTemplateForAgent, publishBotTemplate, shareUrlOf } from "../bot-templates.js";
+import { createTemplateForAgent, publishBotTemplate, shareUrlOf, getBotTemplateForSourceAgent } from "../bot-templates.js";
+import { publishListing, CATEGORIES } from "../marketplace.js";
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
@@ -491,6 +492,37 @@ TOOLS.share_bot_template = async (arg, ctx) => {
   ].filter(Boolean).join(", ");
   return `đã đóng gói "${target.name}" thành mẫu ${tpl.shareId}` + (kem ? ` (kèm ${kem})` : "")
     + `. Mẫu đang ở chế độ "team"; muốn người ngoài import qua link ${shareUrlOf(tpl.shareId)} thì đổi tầm nhìn sang public.`;
+};
+
+/**
+ * `publish_bot_listing` — đưa một bot lên Marketplace cộng đồng (tab Marketplace → Bots của client 0.43).
+ *
+ * Gộp ba bước người dùng không cần biết: chưa có mẫu thì đóng gói (như `share_bot_template`), chưa
+ * xuất bản thì xuất bản, rồi tạo listing với nhóm đã chọn — tầm nhìn mẫu tự sang `public`. Nhóm
+ * phải là một trong 9 khoá client biết; câu trả lời nói rõ danh sách khi sai, để model tự sửa.
+ */
+TOOLS.publish_bot_listing = async (arg, ctx) => {
+  let spec: any;
+  try { spec = JSON.parse(arg); } catch { spec = { agent: unquote(arg) }; }
+  const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+  const wanted = String(spec?.agent ?? spec?.name ?? spec?.agentId ?? "").trim();
+  const mine = [...agents.values()].filter((a) => ownerOf(a.id) === owner);
+  const target = wanted
+    ? mine.find((a) => a.id === wanted) ?? mine.find((a) => a.name.toLowerCase() === wanted.toLowerCase())
+    : agents.get(ctx.agentId);
+  if (!target) return `(không thấy bot "${wanted}")`;
+  const category = String(spec?.category ?? "").trim().toLowerCase();
+  if (!(CATEGORIES as readonly string[]).includes(category)) return `publish_bot_listing cần "category" là một trong: ${CATEGORIES.join(", ")}`;
+  const tpl = await runWithOwner(owner, async () => (getBotTemplateForSourceAgent(target.id) ?? await createTemplateForAgent(target.id)));
+  if (!tpl) return "(không tạo được mẫu cho bot này)";
+  const pub = tpl.published && tpl.activeVersion != null ? tpl : await runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
+  if (!pub) return "(không xuất bản được mẫu)";
+  try {
+    const l = runWithOwner(owner, () => publishListing({ shareId: pub.shareId, category, categories: spec?.categories }, owner, DEFAULT_USER.authId));
+    return `đã đăng "${target.name}" lên Marketplace cộng đồng, nhóm ${l.category} (slug ${l.slug}). Người khác import qua tab Marketplace → Bots hoặc link ${shareUrlOf(pub.shareId)}.`;
+  } catch (e) {
+    return `(không đăng được: ${e instanceof Error ? e.message : String(e)})`;
+  }
 };
 
 TOOLS.create_group = (arg, ctx) => {
@@ -1811,6 +1843,8 @@ const PEER_PROTOCOL =
   // room for the team. The description is the bot's standing role (it rides the system prompt);
   // a briefing message is just one line in its transcript.
   'TOOL_CALL: create_agent({"agents":[{"name":"Kho","description":"vai trò + luật làm việc, viết kỹ như một bản SOP"}]}) — one entry per bot. ' +
+  'TOOL_CALL: share_bot_template({"agent":"Kế toán"}) — package a bot (or a whole team) as a template others can import from a link. ' +
+  'TOOL_CALL: publish_bot_listing({"agent":"Kế toán","category":"ops-finance"}) — list that bot on the community Marketplace (tab Marketplace → Bots); category is one of engineering, design, marketing, customer-support, product, ops-finance, recruiting-people, sales, productivity. Ask which category if the user did not say. ' +
   'TOOL_CALL: create_group({"name":"Ops","members":["Kho","Ads"]}) — a shared room; every member answers in turn when the user speaks there. ' +
   "A room is NOT a bot: never create_agent for something meant to hold members — create the member bots first, then create_group with their names. " +
   /*

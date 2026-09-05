@@ -59,6 +59,19 @@ const DEFAULT_GATES: Readonly<Record<string, boolean>> = {
    * `local_read` đọc được tệp, và cả hai đi qua thẻ xin quyền không có đường tắt.
    */
   sand_multi_machine_local_exec: true,
+  /*
+   * Marketplace → tab **Bots** và nút **Share as template** (client 0.43).
+   *
+   * Renderer 0.43 chỉ tải danh sách bot cộng đồng khi `sand_marketplace_bots_v2` bật (`cyt()`:
+   * `featureGates?.sand_marketplace_bots_v2!==!0 ? Promise.resolve() : botMarketplace.preload()`), và
+   * nút chia sẻ mẫu đọc `sand_share_bot` (+ menu ở header `sand_header_template_share_menu`). Mặc định
+   * hãng là TẮT — trên máy chủ này bật được vì phía sau có thật (05/09): kho listing + hồ sơ người tạo
+   * (`marketplace.ts`), RPC `ListPublicGrokBotMarketplaceListings` / `GetGrokBotTemplateImportDetails`,
+   * blob recipe, và `getHostStatus.capabilities` mang `botTemplateJsonShareV1`. Đo: `scripts/e2e-marketplace.mjs`.
+   */
+  sand_marketplace_bots_v2: true,
+  sand_share_bot: true,
+  sand_header_template_share_menu: true,
 };
 
 /**

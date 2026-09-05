@@ -130,6 +130,21 @@ bot mới có đủ skill + routine của bản gốc (đếm `getAgentWorkflows
 
 ## D · Cộng đồng bot (Marketplace) — phục vụ từ backend
 
+> **KẾT QUẢ 05/09 — XONG, đo trên client 0.43 thật.** Kho listing + hồ sơ người tạo (`services/grokbot-backend/src/marketplace.ts`,
+> file `GROKBOT2_MARKETPLACE_FILE ?? .data/marketplace.json`), 3 RPC main-side (`ListPublicGrokBotMarketplaceListings` ·
+> `GetGrokBotTemplateImportDetails` · `GetPublicGrokBotMarketplaceListing`, `packages/grokbot-proto/src/marketplace-rpc.ts`), blob
+> recipe `GET /gw/bot-template-blob/<shareId>/<version>.json` (không cần ticket — main của client `fetch` trần), lỗi Connect có
+> MÃ (404 `not_found` / 403 `permission_denied`; đường `connect+proto` ra khung end-stream), 6 lệnh gateway
+> (`listPublicBotMarketplace` · `listMyBotListings` · `publishBotListing` · `unpublishBotListing` · `getCreatorProfile` ·
+> `setCreatorProfile`), tool bot `publish_bot_listing`, ba cờ client bật (`sand_marketplace_bots_v2` · `sand_share_bot` ·
+> `sand_header_template_share_menu`). **Trên UI 0.43:** Marketplace → Bots hiện thẻ Featured + nhóm Ops Finance/Productivity với tên
+> người tạo từ hồ sơ; mở thẻ → trang chi tiết (qua RPC + blob, qua zod `Dct` của main); **Import Bot** → bot mới mang ĐÚNG
+> `agentId` client tự đúc (UUID) + avatar chọn trên thẻ, skill đã dựng, không lời nhắc setup, bot tự chào (kickstart).
+> Đo: `scripts/e2e-marketplace.mjs` 26/26 · `scripts/e2e-mau-bot.mjs` 20/20 · `kiem-reply-0-43.mjs` 29 đọc + 13 ghi = 0 sai · 18 unit.
+> **Chưa:** mục 4 (tab Plugins nối MCP — hiện tab Plugins vẫn danh mục cũ), tài khoản thứ hai qua web login, phân trang thật
+> (`nextPageToken` luôn rỗng), ảnh người tạo là URL ngoài (chưa host). Ba điều bất ngờ ghi ở
+> [0-43-so-voi-local.md §7b](../extracted/0-43-so-voi-local.md).
+
 Hình dạng (proto 0.43):
 
 ```

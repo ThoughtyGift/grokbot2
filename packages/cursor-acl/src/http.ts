@@ -5,7 +5,7 @@
  * dispatch into the command table all live here. Domain code never sees an `IncomingMessage`.
  */
 import type { ServerResponse } from "node:http";
-import { buildCommands } from "./commands.js";
+import { buildCommands, REPLY_NULL } from "./commands.js";
 import { createSseHub } from "./sse.js";
 import type { AclPorts, Call, ChannelName } from "./ports.js";
 
@@ -259,6 +259,8 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
       if (process.env.GROKBOT2_LOG) console.log(`  gw ${name} ${JSON.stringify(args).slice(0, 220)}`);
       const fn = methods[name];
       if (!fn) console.warn(`[gateway] UNMAPPED ${name} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);
+      // Hợp đồng 0.43 khai reply `null` cho 26 lệnh (xem `REPLY_NULL`) — ép ở đây, không rải ra handler.
+      const raDay = (v: unknown): unknown => (REPLY_NULL.has(name) ? null : v);
       let val: unknown = {};
       try {
         val = fn ? fn(args) : {};
@@ -271,12 +273,12 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
       // readers (which have to reach the box) return anything at all.
       if (val != null && typeof (val as { then?: unknown }).then === "function") {
         void (val as Promise<unknown>).then(
-          (v) => json(res, v),
+          (v) => json(res, raDay(v)),
           (e) => { console.error(`[gateway] ${name} rejected:`, e); json(res, null); },
         );
         return true;
       }
-      return json(res, val);
+      return json(res, raDay(val));
     }
 
     // A `/gw/...` request that matched nothing above.

@@ -163,17 +163,39 @@ export const countAgents = (): number => listAgents().length;
 
 export const listAllAgents = (): RosterRow[] => [...agents.values()].filter(ownedByCaller).map(summarise);
 
-export function createAgent(args: { name?: string; profile?: { name?: string }; displayName?: string; description?: string } = {}): AgentRecord {
+/**
+ * Trả HÀNG đã `summarise` chứ không phải bản ghi thô: hợp đồng 0.43 kiểm reply của `createAgent`
+ * (`SandCreateAgentResult.agent: SandAgentSummary`) đòi `createdAt`, `hasUnread`, `path`… — bản ghi có
+ * `createdAtMs`, `unread` và `currentActivity: null` thì trượt, và nút "New bot" của client 0.43 ném
+ * `SandGatewayMalformedReplyError` dù bot đã được tạo. Ai cần bản ghi để sửa tại chỗ thì đọc lại
+ * `agents.get(row.id)` (xem `createGroup`).
+ */
+/**
+ * Id client tự đúc — 0.43 `createAgentFromTemplate{agentId}` gửi một UUID và vẽ NGAY một hàng roster mang id
+ * đó; host phải tạo bot ĐÚNG id ấy, không thì hàng ma đứng cạnh bot thật (đo 05/09 trên client 0.43:
+ * `53e50616-…` bên `agent-1002`, cùng tên, cùng giờ). Dạng `agent-<n>` là của bộ đếm bên ta — không nhận
+ * từ client, kẻo `nextAgentId()` sau này đúc trùng và `agents.set` ghi đè bot thật.
+ */
+const CLIENT_AGENT_ID = /^(?!agent-\d+$)[A-Za-z0-9_-]{1,64}$/;
+
+export interface CreateAgentArgs {
+  id?: string; name?: string; profile?: { name?: string }; displayName?: string; description?: string;
+  avatarShape?: string; avatarColor?: string;
+}
+
+export function createAgent(args: CreateAgentArgs = {}): RosterRow {
   const wanted = args.name ?? args.profile?.name ?? args.displayName;
-  const id = nextAgentId();
+  const id = typeof args.id === "string" && CLIENT_AGENT_ID.test(args.id) && !agents.has(args.id) ? args.id : nextAgentId();
   const rec: AgentRecord = {
     id, name: wanted?.trim() || "Claude", agentOwnerAuthId: currentOwner(), createdAtMs: Date.now(), unread: false, hidden: false,
     isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null,
     ...(typeof args.description === "string" ? { description: args.description } : {}),
+    ...(typeof args.avatarShape === "string" ? { avatarShape: args.avatarShape } : {}),
+    ...(typeof args.avatarColor === "string" ? { avatarColor: args.avatarColor } : {}),
   };
   agents.set(id, rec); transcripts.set(id, []); persist();
   rosterChanged(id);
-  return rec;
+  return summarise(rec);
 }
 
 /**
@@ -190,14 +212,16 @@ export function createAgent(args: { name?: string; profile?: { name?: string }; 
  * khác lọt vào đây là kéo bot của họ vào phòng của mình.
  */
 export function createGroup(
-  a: { name?: string; description?: string; memberAgentIds?: string[]; memberIds?: string[] } = {},
-): AgentRecord {
+  a: { id?: string; name?: string; description?: string; memberAgentIds?: string[]; memberIds?: string[]; avatarShape?: string; avatarColor?: string } = {},
+): RosterRow {
   const wanted = (a.memberAgentIds ?? a.memberIds ?? []).filter((id) => ownedRec(id) != null);
-  const rec = createAgent({ name: a.name || "Nhóm mới", ...(a.description ? { description: a.description } : {}) });
+  const { memberAgentIds: _m, memberIds: _n, ...rest } = a;
+  const row = createAgent({ ...rest, name: a.name || "Nhóm mới", ...(a.description ? { description: a.description } : {}) });
+  const rec = agents.get(row.id)!;
   rec.isGroup = true;
   rec.memberIds = [...new Set(wanted)];
   persist(); rosterChanged(rec.id);
-  return rec;
+  return summarise(rec);
 }
 
 /**
@@ -206,19 +230,19 @@ export function createGroup(
  */
 export function setGroupMembers(
   a: { id?: string; agentId?: string; memberAgentIds?: string[]; memberIds?: string[] } = {},
-): AgentRecord | null {
+): RosterRow | null {
   const rec = ownedRec(a.id ?? a.agentId ?? "");
   if (!rec) return null;
   const wanted = (a.memberAgentIds ?? a.memberIds ?? []).filter((id) => ownedRec(id) != null && id !== rec.id);
   rec.isGroup = true;
   rec.memberIds = [...new Set(wanted)];
   persist(); rosterChanged(rec.id);
-  return rec;
+  return summarise(rec);
 }
 
 export function updateAgent(
   a: { id?: string; agentId?: string; name?: string; description?: string; title?: string; profile?: { name?: string; description?: string; title?: string } },
-): AgentRecord | null {
+): RosterRow | null {
   const rec = ownedRec(a.id ?? a.agentId ?? ""); if (!rec) return null;
   const name = a.profile?.name ?? a.name;
   const description = a.profile?.description ?? a.description;
@@ -229,10 +253,11 @@ export function updateAgent(
     pushTranscriptEvent(rec.id, { type: "name-changed", from: rec.name, to: name });
     rec.name = name;
   }
-  persist(); rosterChanged(rec.id); return rec;
+  persist(); rosterChanged(rec.id); return summarise(rec);
 }
 
-export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[] } {
+/** `transcript: []` là khoá BẮT BUỘC của `SandDeleteAgentResult` 0.43; `deleted` là của ta, client bỏ qua. */
+export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: string }): { deleted: string[]; transcript: never[] } {
   // Multi-tenant Phase 2: only delete agents the caller owns; silently skip the rest.
   const ids = (a.ids ?? a.agentIds ?? (a.id ? [a.id] : [])).filter((id) => ownedRec(id) != null);
   for (const id of ids) {
@@ -243,18 +268,18 @@ export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: stri
     void dropAgentProfile(id);
     automationCleanupRef?.(id);
   }
-  persist(); rosterChanged(); return { deleted: ids };
+  persist(); rosterChanged(); return { deleted: ids, transcript: [] };
 }
 
-export function duplicateAgent(a: { id?: string; agentId?: string }): AgentRecord | null {
+export function duplicateAgent(a: { id?: string; agentId?: string }): RosterRow | null {
   const src = ownedRec(a.id ?? a.agentId ?? ""); if (!src) return null;
-  const rec = createAgent({ name: `${src.name} (copy)` });
-  transcripts.set(rec.id, structuredClone(transcripts.get(src.id) ?? []));
-  persist(); return rec;
+  const row = createAgent({ name: `${src.name} (copy)` });
+  transcripts.set(row.id, structuredClone(transcripts.get(src.id) ?? []));
+  persist(); return summarise(agents.get(row.id)!);   // tóm tắt LẠI: lastEntry/updatedAt đổi sau khi chép bản ghi
 }
 
-export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): Record<string, never> {
-  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); rosterChanged(a.id ?? a.agentId); return {};
+export function setAgentUnread(a: { id?: string; agentId?: string; unread?: boolean; isUnread?: boolean }): null {
+  const rec = ownedRec(a.id ?? a.agentId ?? ""); if (rec) rec.unread = a.isUnread ?? a.unread ?? false; persist(); rosterChanged(a.id ?? a.agentId); return null;
 }
 /**
  * Ba setter dưới đây từng mặc định `?? true`, tức **gọi thiếu cờ là BẬT**.
@@ -273,24 +298,25 @@ const boolArg = (...vals: unknown[]): boolean | null => {
   return null;
 };
 
-export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): Record<string, never> {
+// Ba setter dưới trả `null`: hợp đồng 0.43 khai reply {"type":"null"}, và `{}` là "object" → malformed.
+export function setAgentHiddenFromSidebar(a: { id?: string; agentId?: string; hidden?: boolean; isHidden?: boolean }): null {
   const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isHidden, a.hidden);
   if (rec && next != null) { rec.hidden = next; persist(); rosterChanged(a.id ?? a.agentId); }
   else if (rec) console.warn(`[directory] setAgentHiddenFromSidebar(${rec.id}) không có cờ boolean — không đổi gì`);
-  return {};
+  return null;
 }
-export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
+export function setAgentNotificationsEnabled(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): null {
   const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isEnabled, a.enabled);
   if (rec && next != null) { rec.notificationsEnabled = next; persist(); rosterChanged(a.id ?? a.agentId); }
-  return {};
+  return null;
 }
-export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): Record<string, never> {
+export function setAgentNotifyOnUpdates(a: { id?: string; agentId?: string; enabled?: boolean; isEnabled?: boolean }): null {
   const rec = ownedRec(a.id ?? a.agentId ?? "");
   const next = boolArg(a.isEnabled, a.enabled);
   if (rec && next != null) { rec.notifyOnUpdates = next; persist(); rosterChanged(a.id ?? a.agentId); }
-  return {};
+  return null;
 }
 /** Kiểu ảnh nhận được. Không nhận SVG: SVG là tài liệu, chạy được script khi nhúng. */
 const AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);

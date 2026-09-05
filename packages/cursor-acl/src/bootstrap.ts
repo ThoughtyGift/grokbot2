@@ -5,7 +5,7 @@
  * speaks grokbot2 terms. The dialect stays on the wire forever (ADR-F0-1); keeping protobuf
  * out of the domain is so tests do not need Electron, not so this package can be deleted.
  */
-import { bootstrapResponses, bootstrapJsonResponses, connectStreamEnd, type RpcCtx } from "@grokbot2/proto";
+import { bootstrapResponses, bootstrapJsonResponses, connectStreamEnd, connectStreamError, ConnectRpcError, CONNECT_HTTP_STATUS, type RpcCtx } from "@grokbot2/proto";
 import type { ObservePort } from "./ports.js";
 
 /** `/<package>.v1.<Service>/<Method>` — how the client addresses a bootstrap RPC. */
@@ -42,7 +42,20 @@ export async function handleBootstrapRpc(
   const build = Object.hasOwn(bootstrapResponses, method) ? bootstrapResponses[method] : undefined;
   // One builder answers asynchronously (transcription waits for a model). Awaiting an ordinary
   // Buffer costs a microtask and keeps every other builder synchronous.
-  const payload = build ? await build(ctx) : undefined;
+  let payload: Buffer | undefined;
+  try {
+    payload = build ? await build(ctx) : undefined;
+  } catch (e) {
+    /*
+     * Lỗi có MÃ của Connect (`not_found`, `permission_denied`…) — client 0.43 phân biệt hai mã này ở
+     * `getPublicTemplate`: NotFound ⇒ trả `null` (Marketplace nói "không có mẫu"), PermissionDenied ⇒
+     * lỗi "access denied". Trả 200 rỗng thay cho chúng là biến cả hai thành "recipe hỏng".
+     * Unary: HTTP status tương ứng + JSON `{code,message}`; đường khung: khung end-stream mang `error`.
+     */
+    if (!(e instanceof ConnectRpcError)) throw e;
+    if (framed) return { status: 200, contentType, body: connectStreamError(e.code, e.message) };
+    return { status: CONNECT_HTTP_STATUS[e.code], contentType: "application/json", body: JSON.stringify({ code: e.code, message: e.message }) };
+  }
   if (framed) {
     return { status: 200, contentType, body: connectStreamEnd(payload) };
   }
