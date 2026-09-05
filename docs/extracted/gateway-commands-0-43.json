@@ -1,0 +1,611 @@
+{
+  "source": "dist/electron-main/main-app.cjs",
+  "appVersion": "0.43.20260905",
+  "note": "Bảng `dl(\"gateway\",{methods:{…}})` trong electron-main — thứ client thật sự gọi.",
+  "counts": {
+    "commands": 150,
+    "withBody": 128
+  },
+  "commands": [
+    {
+      "name": "authenticateMcpServer",
+      "takesBody": true
+    },
+    {
+      "name": "awaitCookieOriginApproval",
+      "takesBody": true
+    },
+    {
+      "name": "broadcastToAgents",
+      "takesBody": true
+    },
+    {
+      "name": "cancelCookieOriginApproval",
+      "takesBody": true
+    },
+    {
+      "name": "clearAgentMemories",
+      "takesBody": true
+    },
+    {
+      "name": "clearTrays",
+      "takesBody": false
+    },
+    {
+      "name": "completeGithubConnect",
+      "takesBody": true
+    },
+    {
+      "name": "completeMcpOAuth",
+      "takesBody": true
+    },
+    {
+      "name": "connectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "countAgents",
+      "takesBody": false
+    },
+    {
+      "name": "createAgent",
+      "takesBody": true
+    },
+    {
+      "name": "createAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "createAgentFromTemplate",
+      "takesBody": true
+    },
+    {
+      "name": "createAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "createGroup",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentMemory",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgents",
+      "takesBody": true
+    },
+    {
+      "name": "deleteAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "deleteBotTemplate",
+      "takesBody": true
+    },
+    {
+      "name": "deleteUserFormVaultEntry",
+      "takesBody": true
+    },
+    {
+      "name": "discardDraft",
+      "takesBody": true
+    },
+    {
+      "name": "disconnectChannel",
+      "takesBody": true
+    },
+    {
+      "name": "dismissTray",
+      "takesBody": true
+    },
+    {
+      "name": "dismissUserForm",
+      "takesBody": true
+    },
+    {
+      "name": "dismissWidget",
+      "takesBody": true
+    },
+    {
+      "name": "duplicateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "ensureForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "generateAgentAvatarImage",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAutomations",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentAvatar",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentChannels",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentMemories",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentNotificationAvatar",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentThread",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscript",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptPage",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptTail",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentTranscriptWindow",
+      "takesBody": true
+    },
+    {
+      "name": "getAgentWorkflows",
+      "takesBody": true
+    },
+    {
+      "name": "getAsyncTasks",
+      "takesBody": true
+    },
+    {
+      "name": "getAutomationWebhookCredential",
+      "takesBody": true
+    },
+    {
+      "name": "getBotTemplateExportPolicy",
+      "takesBody": false
+    },
+    {
+      "name": "getBotTemplateForSourceAgent",
+      "takesBody": true
+    },
+    {
+      "name": "getBotTemplateVersion",
+      "takesBody": true
+    },
+    {
+      "name": "getBoxSecretsStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getCloudAgentInfo",
+      "takesBody": true
+    },
+    {
+      "name": "getConversationOutline",
+      "takesBody": true
+    },
+    {
+      "name": "getEffectiveMcpPlugins",
+      "takesBody": false
+    },
+    {
+      "name": "getForeverBoxStatus",
+      "takesBody": true
+    },
+    {
+      "name": "getHostSettings",
+      "takesBody": false
+    },
+    {
+      "name": "getHostStatus",
+      "takesBody": true
+    },
+    {
+      "name": "getListenerConnectUrl",
+      "takesBody": true
+    },
+    {
+      "name": "getListenerIntegrations",
+      "takesBody": false
+    },
+    {
+      "name": "getMcpCatalog",
+      "takesBody": false
+    },
+    {
+      "name": "getMcpPluginLogo",
+      "takesBody": true
+    },
+    {
+      "name": "getMcpState",
+      "takesBody": false
+    },
+    {
+      "name": "getPluginSyncStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getSkillPublishTargets",
+      "takesBody": false
+    },
+    {
+      "name": "getSubagents",
+      "takesBody": true
+    },
+    {
+      "name": "getTeachRecordingStatus",
+      "takesBody": false
+    },
+    {
+      "name": "getTranscript",
+      "takesBody": false
+    },
+    {
+      "name": "getTrays",
+      "takesBody": false
+    },
+    {
+      "name": "getUserFormPrefill",
+      "takesBody": true
+    },
+    {
+      "name": "getVoiceCall",
+      "takesBody": true
+    },
+    {
+      "name": "handBackForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "importAgentWorkflowText",
+      "takesBody": true
+    },
+    {
+      "name": "importAgentWorkflowUrl",
+      "takesBody": true
+    },
+    {
+      "name": "injectChromeCookies",
+      "takesBody": true
+    },
+    {
+      "name": "installMcpEntry",
+      "takesBody": true
+    },
+    {
+      "name": "interruptAgentRun",
+      "takesBody": true
+    },
+    {
+      "name": "isEgressTunnelAvailable",
+      "takesBody": false
+    },
+    {
+      "name": "isGlobalSearchEnabled",
+      "takesBody": false
+    },
+    {
+      "name": "kickstartAgent",
+      "takesBody": true
+    },
+    {
+      "name": "listAgents",
+      "takesBody": false
+    },
+    {
+      "name": "listAllAutomations",
+      "takesBody": false
+    },
+    {
+      "name": "listBotTemplates",
+      "takesBody": false
+    },
+    {
+      "name": "listBoxMcpServers",
+      "takesBody": true
+    },
+    {
+      "name": "listMcpServerTools",
+      "takesBody": true
+    },
+    {
+      "name": "listUserFormVaultEntries",
+      "takesBody": false
+    },
+    {
+      "name": "nudgeVoiceCall",
+      "takesBody": true
+    },
+    {
+      "name": "openAgent",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentTail",
+      "takesBody": true
+    },
+    {
+      "name": "openAgentWindowed",
+      "takesBody": true
+    },
+    {
+      "name": "portAgentLocalSkills",
+      "takesBody": true
+    },
+    {
+      "name": "previewVoice",
+      "takesBody": true
+    },
+    {
+      "name": "promptAcceptanceStatus",
+      "takesBody": true
+    },
+    {
+      "name": "publishBotTemplate",
+      "takesBody": true
+    },
+    {
+      "name": "publishSkill",
+      "takesBody": true
+    },
+    {
+      "name": "reactToMessage",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentChunk",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentImage",
+      "takesBody": true
+    },
+    {
+      "name": "readAttachmentText",
+      "takesBody": true
+    },
+    {
+      "name": "readVoiceCallAgentContext",
+      "takesBody": true
+    },
+    {
+      "name": "readVoiceCallSentMessages",
+      "takesBody": true
+    },
+    {
+      "name": "recordVoiceCall",
+      "takesBody": true
+    },
+    {
+      "name": "refreshChannel",
+      "takesBody": true
+    },
+    {
+      "name": "refreshMcp",
+      "takesBody": true
+    },
+    {
+      "name": "removeMcpAccount",
+      "takesBody": true
+    },
+    {
+      "name": "removeMcpServer",
+      "takesBody": true
+    },
+    {
+      "name": "renameMcpAccount",
+      "takesBody": true
+    },
+    {
+      "name": "requestCookieOriginApproval",
+      "takesBody": true
+    },
+    {
+      "name": "requestDiskSaverAudit",
+      "takesBody": true
+    },
+    {
+      "name": "requestWebAuthnCeremony",
+      "takesBody": true
+    },
+    {
+      "name": "resolveAutoReviewApproval",
+      "takesBody": true
+    },
+    {
+      "name": "resolveLocalToolPermission",
+      "takesBody": true
+    },
+    {
+      "name": "resolveVirtualCardApproval",
+      "takesBody": true
+    },
+    {
+      "name": "respondToWidget",
+      "takesBody": true
+    },
+    {
+      "name": "resyncPublishedSkill",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentAutomationNow",
+      "takesBody": true
+    },
+    {
+      "name": "runAgentWorkflowNow",
+      "takesBody": true
+    },
+    {
+      "name": "searchAgents",
+      "takesBody": true
+    },
+    {
+      "name": "searchMedia",
+      "takesBody": true
+    },
+    {
+      "name": "sendDraft",
+      "takesBody": true
+    },
+    {
+      "name": "sendPrompt",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAutomationEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentAvatarBytes",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentHiddenFromSidebar",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotificationsEnabled",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentNotifyOnUpdates",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentUnread",
+      "takesBody": true
+    },
+    {
+      "name": "setAgentVoice",
+      "takesBody": true
+    },
+    {
+      "name": "setBotTemplateVisibility",
+      "takesBody": true
+    },
+    {
+      "name": "setBoxSecrets",
+      "takesBody": true
+    },
+    {
+      "name": "setGroupMembers",
+      "takesBody": true
+    },
+    {
+      "name": "setHostSettings",
+      "takesBody": true
+    },
+    {
+      "name": "setMcpCustomInstructions",
+      "takesBody": true
+    },
+    {
+      "name": "setVoiceCallPresence",
+      "takesBody": true
+    },
+    {
+      "name": "setWindowFocused",
+      "takesBody": true
+    },
+    {
+      "name": "skillsCatalog",
+      "takesBody": false
+    },
+    {
+      "name": "startTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "stopCloudAgent",
+      "takesBody": true
+    },
+    {
+      "name": "stopTeachRecording",
+      "takesBody": true
+    },
+    {
+      "name": "submitSecret",
+      "takesBody": true
+    },
+    {
+      "name": "submitUserForm",
+      "takesBody": true
+    },
+    {
+      "name": "syncPluginSkills",
+      "takesBody": false
+    },
+    {
+      "name": "toggleMcpToolDisabled",
+      "takesBody": true
+    },
+    {
+      "name": "transcribeAudio",
+      "takesBody": true
+    },
+    {
+      "name": "uninstallMcpPlugin",
+      "takesBody": true
+    },
+    {
+      "name": "unpublishSkill",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgent",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentAutomation",
+      "takesBody": true
+    },
+    {
+      "name": "updateAgentWorkflow",
+      "takesBody": true
+    },
+    {
+      "name": "updateForeverBox",
+      "takesBody": true
+    },
+    {
+      "name": "updateHostNow",
+      "takesBody": true
+    },
+    {
+      "name": "updateMcpPluginInstall",
+      "takesBody": true
+    },
+    {
+      "name": "updateUserFormVaultEntry",
+      "takesBody": true
+    },
+    {
+      "name": "uploadAttachment",
+      "takesBody": true
+    },
+    {
+      "name": "uploadAttachmentChunk",
+      "takesBody": true
+    },
+    {
+      "name": "voteFeedback",
+      "takesBody": true
+    }
+  ]
+}

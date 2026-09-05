@@ -329,3 +329,28 @@ Template* của client mới reset (đánh dấu `user-deleted`). Bài đo phả
 lần trong ~8 lượt hôm nay, thẻ + câu chốt không lên màn dù SSE và tail backend đủ (thí nghiệm ghi song song chứng minh), tải lại
 là thấy — client coi khung `transcript` không `ordered` là tiếng gõ để tự tải đuôi, và một lượt tải treo là mọi tiếng gõ sau chỉ
 ghi cờ. Ghi §5 mục 19, chưa sửa.
+
+## 9 · Hợp đồng gateway 0.43 trích ra FILE RIÊNG và diff (06/09)
+
+`node services/grokbot-backend/scripts/extract-gateway.mjs C:/cai043/resources/app docs/extracted/gateway-commands-0-43.json`
+— script nay nhận đường dẫn `.json` làm đối số 3, tự chọn `main.cjs`/`main-app.cjs` theo mỏ neo `("gateway",{methods:{`
+(0.43: bảng nằm trong `main-app.cjs`, `main.cjs` chỉ là vỏ 12 KB). File 0.30 (`gateway-commands.json`, 147) giữ nguyên.
+
+| | 0.30 | 0.43.20260905 |
+|---|---|---|
+| lệnh trong bảng `gateway.methods` | 147 | **150** (128 có body) |
+| chỉ 0.43 có | — | 13: `awaitCookieOriginApproval` `cancelCookieOriginApproval` `requestCookieOriginApproval` · `deleteUserFormVaultEntry` `getUserFormPrefill` `listUserFormVaultEntries` `updateUserFormVaultEntry` · `previewVoice` `setAgentVoice` `setVoiceCallPresence` · `completeGithubConnect` · `stopCloudAgent` · `uploadAttachmentChunk` |
+| 0.30 có, 0.43 bỏ | — | 10 — toàn bộ phòng chung (`createSharedRoom` `joinSharedRoom` … `setSharedRoomTyping`) |
+| chưa có handler bên ta | 16 | **19** = 6 cũ (5 voice-call + `resolveVirtualCardApproval`) + 13 mới ở trên |
+| trong 19 cái, client 0.43 **đã từng gọi** (coverage `everCalled` sau một ngày dùng Marketplace/Plugins/Share/Teach) | — | **0** |
+
+Ba điều rút ra:
+
+1. **13 lệnh mới của bảng gateway là tập con của 32 lệnh host DSL ở §2** — 19 cái còn lại (`getBoxHostPhase`,
+   `isServerRoomsEnabled`, `report*`…) là lệnh host nội bộ, không đi qua `/gw`. Đếm theo bảng gateway mới là đếm
+   "thứ backend phải trả lời".
+2. **Schema nhúng của coordinator (`gateway-schema-0.43.json`, §7) có đúng 150 khoá = 150 lệnh của bảng, 0 lệch hai
+   chiều** — nên `kiem-reply-0-43.mjs` đã đọc trọn hợp đồng 0.43 từ trước; không cần sửa gì để nó "biết" danh sách mới.
+3. 19 lệnh chưa handler: gateway trả `200 {}` và ghi vào `coverage.unknownPaths` (`GROKBOT2_STRICT_404` chưa bật);
+   `unknownPaths` = 0 sau một ngày ⇒ **không cần viết handler nào lúc này**. Làm khi coverage báo có người gọi —
+   ứng viên đầu là `uploadAttachmentChunk` (đính kèm lớn) và nhóm form vault (tự điền form, sau cờ).

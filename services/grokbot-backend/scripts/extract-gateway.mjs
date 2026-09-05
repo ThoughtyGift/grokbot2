@@ -26,11 +26,19 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.argv[2];
-const outDir = process.argv[3] ?? ".";
+// Đối số 3: thư mục ra (file `gateway-commands.json`), HOẶC đường dẫn file `.json` — để trích bản 0.43 ra
+// FILE RIÊNG (`gateway-commands-0-43.json`) mà không ghi đè bảng 0.30 đang là hợp đồng gốc.
+const ra = process.argv[3] ?? ".";
+const outFile = ra.endsWith(".json") ? ra : join(ra, "gateway-commands.json");
 if (!root || !existsSync(root)) { console.error("cần <thư-mục-asar-đã-giải-nén>"); process.exit(1); }
 
-const main = join(root, "dist", "electron-main", "main.cjs");
-if (!existsSync(main)) { console.error(`không thấy ${main}`); process.exit(1); }
+/*
+ * 0.43 tách `main.cjs` thành vỏ 12 KB → `main-app.cjs` / `main-core.cjs`; bảng lệnh nằm trong `main-app.cjs`.
+ * Chọn file theo NỘI DUNG (có mỏ neo) chứ không theo tên — 0.29/0.30 vẫn là `main.cjs`.
+ */
+const ungVien = ["main.cjs", "main-app.cjs"].map((f) => join(root, "dist", "electron-main", f)).filter(existsSync);
+if (!ungVien.length) { console.error(`không thấy dist/electron-main/main*.cjs dưới ${root}`); process.exit(1); }
+const main = ungVien.find((f) => readFileSync(f, "utf8").includes('("gateway",{methods:{')) ?? ungVien[0];
 const src = readFileSync(main, "utf8");
 
 /*
@@ -88,8 +96,9 @@ if (thieu.length) {
 }
 
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
-writeFileSync(join(outDir, "gateway-commands.json"), `${JSON.stringify({
-  source: main,
+writeFileSync(outFile, `${JSON.stringify({
+  // Đường dẫn TƯƠNG ĐỐI trong cây app — bản 0.30 từng ghi đường tuyệt đối vào scratchpad của một phiên đã mất.
+  source: main.slice(root.length).replace(/^[\\/]+/, "").replace(/\\/g, "/"),
   appVersion: version,
   note: 'Bảng `dl("gateway",{methods:{…}})` trong electron-main — thứ client thật sự gọi.',
   counts: { commands: commands.length, withBody: commands.filter((c) => c.takesBody).length },
