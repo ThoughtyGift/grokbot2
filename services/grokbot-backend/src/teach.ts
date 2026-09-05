@@ -22,7 +22,7 @@
  */
 import { cdpForAgent, onCdpEvent } from "./browser.js";
 import { automationCreateRef, automationRefineRef, teachHandoffRef } from "./chat/state.js";
-import { batDauQuayDemo, dungQuayDemo, banGiaoBaiHoc } from "./teach-demo.js";
+import { batDauQuayDemo, dungQuayDemo, banGiaoBaiHoc, xepHangBaiHoc } from "./teach-demo.js";
 import { create as taoSkill, forAgent as skillCuaBot, update as suaSkill } from "./workflows.js";
 import { publish } from "./events.js";
 import { callPool } from "@grokbot2/pool-client";
@@ -572,11 +572,13 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
 
   if (!save) return IDLE;
   if (clip && duongVideo(run, video)) {
-    // Đường của hãng: BOT học. Bản ghi CDP đi kèm làm nhật ký; không tạo routine thô ở đây nữa —
-    // tạo sẽ ra hai skill cho một buổi dạy, và skill của bot mới là cái có `{input}`.
-    const h = banGiaoBaiHoc(id, clip.videoPath, clip.giay, stepsForModel(steps));
+    // Đường của hãng: BOT học. Host xếp phiên vào hàng đợi của bot (phiếu `pending/<sessionId>.json` + nhật ký CDP
+    // `actions.md` trong thư mục phiên) RỒI mới bàn giao — tin chỉ tiêm queue scope, bot tự nhận phiếu. Không tạo
+    // routine thô ở đây nữa — tạo sẽ ra hai skill cho một buổi dạy, và skill của bot mới là cái có `{input}`.
+    await xepHangBaiHoc(clip, stepsForModel(steps));
+    const h = banGiaoBaiHoc(clip);
     teachHandoffRef!(id, h);
-    console.log(`[grokbot2] [teach] bàn giao cho bot: ${clip.videoPath}, ${steps.length} bước CDP kèm theo`);
+    console.log(`[grokbot2] [teach] bàn giao cho bot: phiếu ${clip.sessionId}, ${steps.length} bước CDP kèm theo`);
     return { ...IDLE, steps: steps.length, handoff: true };
   }
   const prompt = stepsToPrompt(steps);

@@ -76,28 +76,39 @@ test("không có box thì không quay, và nói ra vì sao", async () => {
 
 test("mời chạy thử với giá trị trong demo, và KHÔNG tự chạy", () => {
   // App gốc kết ca học-từ-demo bằng đúng một câu: "Muốn chạy thử với nến thơm không?"
-  assert.match(NOI_DUNG_SKILL, /MỜI chạy thử/);
+  assert.match(NOI_DUNG_SKILL, /[Mm]ời chạy thử/);
   assert.match(NOI_DUNG_SKILL, /một câu, không widget/);
   // Bài học vừa viết chưa ai kiểm; chạy ngay là hỏng việc trước khi người dùng kịp đọc nó.
-  assert.match(NOI_DUNG_SKILL, /đừng tự chạy/);
+  assert.match(NOI_DUNG_SKILL, /KHÔNG BAO GIỜ tự chạy skill vừa học/);
 });
 
-test("bàn giao: content ĐÚNG câu hằng, nonce mang tiền tố teach-recording, phần model có video + nhật ký", async () => {
-  const { banGiaoBaiHoc } = await import("./teach-demo.js");
-  const h = banGiaoBaiHoc("agent-td-hand", "teach/teach-abc/demo.mp4", 16, "1. [bấm] #login — chữ trên đó: \"Đăng nhập\"");
+test("bàn giao: content ĐÚNG câu hằng, nonce = teach-recording:<scope>:<phiếu>.json, phần model chỉ tiêm queue scope + bài học", async () => {
+  const { banGiaoBaiHoc, scopeCua } = await import("./teach-demo.js");
+  const phien = {
+    agentId: "agent-td-hand",
+    sessionId: "teach-20260906T041200Z-5b1a0c3e-1111-4222-8333-944455556666",
+    sessionDir: "/home/gb2u003/workspace/teach-sessions/teach-20260906T041200Z-5b1a0c3e-1111-4222-8333-944455556666",
+    videoPath: "/home/gb2u003/workspace/teach-sessions/teach-20260906T041200Z-5b1a0c3e-1111-4222-8333-944455556666/demo.mp4",
+    giay: 16,
+  };
+  const h = banGiaoBaiHoc(phien);
   // Renderer 0.43 (`Snn`) và `turn.ts` (`luotHocTuBanGhi`) đều so BẰNG — thêm một chữ vào content là mất cả hai.
   assert.equal(h.content, CAU_GHI_XONG);
   assert.match(h.clientNonce, /^teach-recording:[0-9a-f]{64}:teach-\d{8}T\d{6}Z-[0-9a-f-]{36}\.json$/);
-  assert.match(h.modelNote, /teach\/teach-abc\/demo\.mp4/);
-  assert.match(h.modelNote, /16 giây/);
-  assert.match(h.modelNote, /Nhật ký thao tác trình duyệt/);
-  assert.match(h.modelNote, /#login/);
+  // Phần cuối của nonce là ĐÚNG tên phiếu trong hàng đợi — hãng dùng tên ấy để nhận bản ghi.
+  assert.equal(h.clientNonce, `teach-recording:${scopeCua("agent-td-hand")}:${phien.sessionId}.json`);
+  // Như hãng: tin CHỈ tiêm queue scope, không đưa đường dẫn video hay PID — bot tự nhận phiếu rồi đọc session.json.
+  assert.match(h.modelNote, new RegExp(`Teach recording queue scope: ${scopeCua("agent-td-hand")}`));
+  assert.ok(!h.modelNote.includes(phien.videoPath) && !h.modelNote.includes(phien.sessionDir), "không đưa đường dẫn phiên vào tin");
+  assert.doesNotMatch(h.modelNote, /16 giây/);
   // Bài học nằm NGAY trong phần model đọc — không dựa vào việc dò `@tên` trong content.
   assert.match(h.modelNote, /create_workflow/);
-  assert.match(h.modelNote, /sand-workflow:<id>/);
-  // Skill học-từ-demo đã được dựng cho đúng bot.
+  assert.match(h.modelNote, /sand-workflow:<skill-id>/);
+  assert.match(h.modelNote, /actions\.md/, "nhật ký CDP đọc từ thư mục phiên, không từ tin nhắn");
+  // Skill học-từ-demo đã được dựng cho đúng bot, và là skill HỆ THỐNG như hãng (renderer 0.43: source==="managed" → Managed by Cursor).
   const sk = forAgent({ agentId: "agent-td-hand" }).find((w) => w.name === TEN_SKILL);
   assert.ok(sk);
+  assert.equal(sk!.source, "managed");
   // Chip skill dưới câu — đúng hình doc của hãng, id trỏ vào skill THẬT của ta để bấm mở được.
   const doc = JSON.parse(h.richText);
   assert.equal(doc.type, "doc");
@@ -106,11 +117,50 @@ test("bàn giao: content ĐÚNG câu hằng, nonce mang tiền tố teach-record
   assert.equal(node.attrs.id, sk!.id);
   assert.equal(node.attrs.label, "Learn from demonstration");
   assert.equal(node.attrs.teachQueueScope, h.clientNonce.split(":")[1]);
-  // Hai bot khác nhau → hai scope khác nhau; cùng bot cùng video → cùng scope.
-  const h2 = banGiaoBaiHoc("agent-td-khac", "teach/teach-abc/demo.mp4", 16);
+  // Scope là của BOT (hàng đợi theo bot): hai bot → hai scope; cùng bot, buổi dạy khác → cùng scope, khác phiếu.
+  const h2 = banGiaoBaiHoc({ ...phien, agentId: "agent-td-khac" });
   assert.notEqual(h.clientNonce.split(":")[1], h2.clientNonce.split(":")[1]);
-  assert.equal(h.clientNonce.split(":")[1], banGiaoBaiHoc("agent-td-hand", "teach/teach-abc/demo.mp4", 16).clientNonce.split(":")[1]);
-  assert.doesNotMatch(h2.modelNote, /Nhật ký thao tác/, "không có nhật ký thì không có mục nhật ký");
+  const h3 = banGiaoBaiHoc({ ...phien, sessionId: "teach-20260906T041900Z-5b1a0c3e-1111-4222-8333-944455557777" });
+  assert.equal(h.clientNonce.split(":")[1], h3.clientNonce.split(":")[1]);
+  assert.notEqual(h.clientNonce, h3.clientNonce);
+});
+
+test("skill cũ lưu source workflow hay bài học cũ thì được NÂNG tại chỗ, không đẻ bản thứ hai", async () => {
+  _xoaHet();
+  const { create, update } = await import("./workflows.js");
+  const a = "agent-td-nang";
+  const cu = create({ agentId: a, name: TEN_SKILL, description: "bản cũ", instructions: "# Học từ một buổi demo (bản cũ)" })[0];
+  assert.equal(cu.source, "workflow");
+  const moi = dungSkillHocTuDemo(a);
+  assert.equal(moi.id, cu.id, "cùng một skill — chip trong bản ghi cũ vẫn trỏ đúng");
+  assert.equal(moi.source, "managed");
+  assert.equal(moi.instructions, NOI_DUNG_SKILL);
+  assert.equal(forAgent({ agentId: a }).filter((w) => w.name === TEN_SKILL).length, 1);
+  // Kho không nhận giá trị source lạ.
+  const la = update({ workflowId: cu.id, agentId: a, source: "plugin" }).find((w) => w.id === cu.id);
+  assert.equal(la!.source, "managed");
+});
+
+test("bài học chép đủ quy trình của hãng: hàng đợi flock + lease, chờ ffmpeg đóng file, ffprobe, dọn video, chỉ đọc trình duyệt", () => {
+  assert.match(NOI_DUNG_SKILL, /Teach recording queue scope/);
+  assert.match(NOI_DUNG_SKILL, /teach-sessions\/queues\/\$scope/);
+  assert.match(NOI_DUNG_SKILL, /flock 9/);
+  assert.match(NOI_DUNG_SKILL, /lease_minutes=720/);
+  assert.match(NOI_DUNG_SKILL, /jq -er .*\.sessionDir/);
+  assert.match(NOI_DUNG_SKILL, /\.ffmpegPid/);
+  assert.match(NOI_DUNG_SKILL, /\/proc\/"\$pid"\/cmdline/);
+  assert.match(NOI_DUNG_SKILL, /ffprobe -v error -show_entries format=duration/);
+  assert.match(NOI_DUNG_SKILL, /rm -f "\$video"/);
+  assert.match(NOI_DUNG_SKILL, /rm -f "\$claim" "\$claim_lease"/);
+  assert.match(NOI_DUNG_SKILL, /Không lấy đường dẫn hay PID từ tin nhắn/);
+  assert.match(NOI_DUNG_SKILL, /actions\.md/);
+  assert.match(NOI_DUNG_SKILL, /KHÔNG lái Chrome/);
+  assert.match(NOI_DUNG_SKILL, /Thông tin nhạy cảm/);
+  // Tool của TA, không phải của hãng — bê nguyên `Shell`/`Task`/`update_state` là dạy model gọi thứ không tồn tại.
+  assert.match(NOI_DUNG_SKILL, /run_terminal_command_v2/);
+  assert.match(NOI_DUNG_SKILL, /view_image/);
+  assert.match(NOI_DUNG_SKILL, /watch_video/);
+  assert.doesNotMatch(NOI_DUNG_SKILL, /update_state|subagent_type|block_until_ms/);
 });
 
 test("create_workflow trả id và cú pháp link để bot dẫn skill thành thẻ bấm", async () => {

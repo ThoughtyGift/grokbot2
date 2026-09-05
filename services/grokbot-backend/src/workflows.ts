@@ -51,8 +51,13 @@ export interface Workflow {
   instructions: string;
   /** Bot sở hữu. Menu `/` hỏi theo từng bot. */
   agentId: string;
-  /** `"workflow"` = do người dùng/bot tạo tại chỗ. Renderer lọc đúng chuỗi này. */
-  source: "workflow";
+  /**
+   * `"workflow"` = do người dùng/bot tạo tại chỗ — renderer xếp vào nhóm "Yours → Private" và menu `/`.
+   * `"managed"` = skill hệ thống cấp (renderer 0.43: `s.source==="managed"` → nhãn *Managed by Cursor*, không
+   * vào menu `/`) — dùng cho `learn-from-demonstration`, đúng cách app gốc đánh dấu skill ấy (06/09).
+   * Enum đầy đủ của client là `SandSkillSource`: automation · managed · plugin · workflow.
+   */
+  source: "workflow" | "managed";
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -111,7 +116,7 @@ export function napWorkflows(): number {
           description: String(w.description ?? ""),
           instructions: String(w.instructions ?? ""),
           agentId: w.agentId,
-          source: "workflow",
+          source: nguonCua(w.source),
           enabled: w.enabled !== false,
           createdAt: Number(w.createdAt) || Date.now(),
           updatedAt: Number(w.updatedAt) || Date.now(),
@@ -172,6 +177,9 @@ export function wireSkill(w: Workflow): Workflow & Record<string, unknown> {
 let dem = 0;
 const idMoi = (): string => `wf-${Date.now().toString(36)}-${(dem += 1).toString(36)}`;
 
+/** Chỉ hai giá trị kho này phát; mọi thứ khác (kể cả vắng) là `"workflow"` — bản ghi cũ không có trường này. */
+const nguonCua = (v: unknown): Workflow["source"] => (v === "managed" ? "managed" : "workflow");
+
 /**
  * Tạo một skill.
  *
@@ -188,7 +196,7 @@ export function create(args: unknown): Workflow[] {
     description: String(a.description ?? "").trim(),
     instructions: String(a.instructions ?? "").trim(),
     agentId,
-    source: "workflow",
+    source: nguonCua(a.source),
     enabled: a.enabled !== false,
     createdAt: now,
     updatedAt: now,
@@ -211,6 +219,7 @@ export function update(args: unknown): Workflow[] {
     ...(typeof a.description === "string" ? { description: a.description } : {}),
     ...(typeof a.instructions === "string" ? { instructions: a.instructions } : {}),
     ...(typeof a.enabled === "boolean" ? { enabled: a.enabled } : {}),
+    ...(a.source === "managed" || a.source === "workflow" ? { source: a.source } : {}),
     updatedAt: Date.now(),
   };
   kho.set(id, moi);
