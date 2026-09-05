@@ -178,7 +178,7 @@ nay 0 ca lệch ổn định.*
 | 10 · OBS trên box | AppImage 32.2.2 chạy không cần root, quay ra h264 720p + aac |
 | 11 · Trả lời tin (reply) | E2E trọn vòng 01/09: bấm Reply trong app → pill hiện đúng nội dung → gửi → tin mới mang khối trích dẫn, `(deleted)` hết. Dây 4/4, kể cả câu trả lời của bot cũng mang tham chiếu. Bài đo: `scripts/e2e-reply.mjs` + `scripts/do-reply-day.mjs`. Ba điều kiện của client: [0-30-transcript-watch.md](../extracted/0-30-transcript-watch.md) §6 |
 | 12 · Video phát được | `sand-media` thiếu `mime` + dùng nhầm trần 128 KB của bản xem trước văn bản → **mọi** video hỏng; nay `readyState=4`, khung 1920×1080 giải được thật trong app |
-| 13 · Teach a task qua giao diện | `e2e-teach.mjs` **11/11** (chạy lại 05/09, GREEN): nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật. **Mapping với hãng: khớp từng chữ ở tầng dây** — hợp đồng 0.30 `startTeachRecording{agentId,entryPoint}` · `stopTeachRecording{agentId,save}` · `getTeachRecordingStatus` **noArgs**, và `lastArgs` từ client THẬT trùng khít (`{"agentId":"agent-984","entryPoint":"composer_menu"}` · `{"agentId":"agent-984","save":true}` · `{}`); cờ `sand_teach_by_demonstration` cùng tên hai bên. Hai chỗ lệch, cả hai vô hại: ta **nhận nhưng không dùng** `entryPoint`, và `startDesktopTeachRecording`/`stopDesktopTeachRecording` là **của riêng ta** (0 lần trong bundle hãng, không có trong 147 lệnh) — nên `n=25` của cặp đó là lượt của chính bài đo, không phải client . **Đọc trọn chuỗi BE của hãng (05/09)** từ cache client, hai lượt thật: client tự đăng tin `role:user` = hằng `"The recording is finished. Learn the task from it."` + `richText` chip `workflowReference{id:"learn-from-demonstration", teachQueueScope:<sha256>}` + `clientNonce` `teach-recording:<scope>:teach-<ISO>-<uuid>.json`; bot trả lời sau **7,9 s** (không cần bấm gì — chip chỉ là link mở skill, `onClick → l7e()(id)`); 4–5 câu tiến độ (*cắt khung kiểm tra → xem hết video → đối chiếu LỊCH SỬ CHROME → tách skill*); **`requestId` đổi giữa chừng** sau khoảng trống 31 s / 183 s = lượt cha uỷ thác subagent xem video chạy nền rồi một lượt MỚI tiếp; kết bằng `[Tên](sand-workflow:<slug>)` + 5 bước có `{input}` + câu/widget mời chạy thử. Cache **không** có entry tool-call nào và **không** có slice workflows — thân skill nằm trên box hãng, chỉ đọc được qua UI. Chi tiết: [teach-hang-0-30.md](../extracted/teach-hang-0-30.md) |
+| 13 · Teach a task qua giao diện | `e2e-teach.mjs` **11/11** (chạy lại 05/09, GREEN): nút `+` → lớp phủ → recorder đúng tab → skill mới có instructions thật. **Mapping với hãng: khớp từng chữ ở tầng dây** — hợp đồng 0.30 `startTeachRecording{agentId,entryPoint}` · `stopTeachRecording{agentId,save}` · `getTeachRecordingStatus` **noArgs**, và `lastArgs` từ client THẬT trùng khít (`{"agentId":"agent-984","entryPoint":"composer_menu"}` · `{"agentId":"agent-984","save":true}` · `{}`); cờ `sand_teach_by_demonstration` cùng tên hai bên. Hai chỗ lệch, cả hai vô hại: ta **nhận nhưng không dùng** `entryPoint`, và `startDesktopTeachRecording`/`stopDesktopTeachRecording` là **của riêng ta** (0 lần trong bundle hãng, không có trong 147 lệnh) — nên `n=25` của cặp đó là lượt của chính bài đo, không phải client . **Đọc trọn chuỗi BE của hãng (05/09)** từ cache client, hai lượt thật: client tự đăng tin `role:user` = hằng `"The recording is finished. Learn the task from it."` + `richText` chip `workflowReference{id:"learn-from-demonstration", teachQueueScope:<sha256>}` + `clientNonce` `teach-recording:<scope>:teach-<ISO>-<uuid>.json`; bot trả lời sau **7,9 s** (không cần bấm gì — chip chỉ là link mở skill, `onClick → l7e()(id)`); 4–5 câu tiến độ (*cắt khung kiểm tra → xem hết video → đối chiếu LỊCH SỬ CHROME → tách skill*); **`requestId` đổi giữa chừng** sau khoảng trống 31 s / 183 s = lượt cha uỷ thác subagent xem video chạy nền rồi một lượt MỚI tiếp; kết bằng `[Tên](sand-workflow:<slug>)` + 5 bước có `{input}` + câu/widget mời chạy thử. Cache **không** có entry tool-call nào và **không** có slice workflows — thân skill nằm trên box hãng, chỉ đọc được qua UI. Chi tiết: [teach-hang-0-30.md](../extracted/teach-hang-0-30.md). **E2E chạy lại 05/09 12:00 trên bản cài MỚI** (vừa cài lại từ bộ cài chở-app): GREEN 11/11, `hocNen` đổi tên skill thành *"Mở trang giải thích về tên miền ví dụ của IANA"* trong ~10 s (pool sống); hai skill thử đã xoá qua `deleteAgentWorkflow{workflowId}`, kho `New Bot` rỗng |
 | 14 · Lớp tự soát 3 mặt | `computer` · `automation_write` · `subagent`, đo **7/7**; một ca không đo được là bỏ cả lượt (`khongDoDuoc`) |
 | 8 · Tự cập nhật | **Đường của mình xong 03/09**: launcher hỏi `/updates/ban-moi`, kiểm sha256, chạy bộ cài, fail-open; updater gốc tắt hẳn vì nó dò chữ ký người ký của HÃNG (`["Anysphere, Inc.","Anysphere"]`) — banner hiện được nhưng Install không bao giờ chạy, nên không mời nó thử. Mỗi nền một bộ ba `url+sha+tên` trong manifest |
 | 18 · Một nút tải, và E2E trọn luồng | **XONG 04/09** — `GROKBOT2_PUBLIC_FULL=1` trên VPS: nút công khai ở `cinai.app/agent/` phát **bản chở-app** (quyết định chủ dự án, ghi `legal.md`); cửa `/download/windows-cfg` giữ nghĩa cố định cho bộ 50 KB, manifest tách `url` (cfg) / `full.url` (chở-app). E2E đo bằng trình duyệt thật + curl + cài thử: bấm nút → `Bot-Noi-Bo-Setup-20260903.exe` 110.554.294 B, sha `1902d7bf…` = manifest = file trên VPS; cfg `e3b23901…`, mac `296ef303…` đều khớp; Defender sạch cả bundle lẫn cmd; cài thử **khớp từng byte** bản đang chạy (375/375 file, 288 chunk); `token.txt` + `backend.txt` đúng; **cập nhật thật**: hạ version xuống 0.29.0 → launcher đã cài hỏi backend thật → tải 105 MB (45 s) → hash khớp → pha 2 ghi ra → chạy pha 2 → bộ cài ghi đè tại chỗ → version về `0.29.20260903`, token còn, launcher vẫn hai pha. `/tai/` 301, updater gốc 204 |
@@ -511,6 +511,23 @@ bảng" trông y hệt "không tồn tại" — bảng tool phải lấy LÚC CH
 (`scripts/tool-hien-co.mts`). Và `boxHealth()` không bao giờ ném, nó *trả về* chuỗi lỗi: bản đầu
 của script ấy bọc `try/catch` rồi in `SỐNG` đè lên đúng câu `KHÔNG tới được`.
 
+**Bản cài local biến mất, và bằng chứng về giờ biến mất bị chính tay mình xoá.** 05/09 mở lại app local: bản chở-app
+(`%LOCALAPPDATA%ProgramsBot Noi Bo`, cài 04/09, E2E khớp từng byte) **không còn trên đĩa** — quét trọn `C:Usersadmin`
+chỉ ra ba bản chép cũ 08/14 và 08/27. Nghi phạm: NSIS của hãng chạy `--updated /S` lúc app gốc thoát ~11:15 (cùng họ
+với "thư mục biến mất hoàn toàn" ngày 27/08 mà `run.ps1` đã chép). Nhưng **không kết luận được**: cách rẻ nhất để biết
+giờ xoá là `LastWriteTime` của thư mục `Programs`, và tôi đã cài lại vào đúng chỗ đó TRƯỚC khi nghĩ tới việc đọc nó —
+mốc giờ bị ghi đè thành 11:45:20, giờ cài của mình. Luật: **đọc mốc của thư mục cha trước khi tạo lại thứ vừa mất**.
+Cài lại từ `Bot-Noi-Bo-Setup-20260903.exe` (`/VERYSILENT`, 13 s): patched, `token.txt` + `backend.txt` đúng,
+E2E teach GREEN 11/11 ngay sau đó.
+
+**`run.ps1` chết theo ba cách khác nhau khi không có ai gõ.** Cùng lượt đó: (1) danh sách ứng viên đường dẫn app
+không có `ProgramsBot Noi Bo` — đúng `DefaultDirName` của bộ cài chở-app — nên launcher tìm bản ở
+`ProgramsGrok Bot` (đã mất) và `--verify` đỏ; (2) `cmd /c start "grokbot2-backend" cmd /k …` chạy dưới
+`Start-Process` có chuyển hướng output thì mất dấu nháy tiêu đề → `start` tưởng `grokbot2-backend` là file, backend
+không lên, launcher chờ 40 s rồi thoát; (3) kiểm pool-key bằng "dòng đầu có `PASTE_`" báo NOT SET trong khi file mang
+khoá `hal_` ở dòng dưới và `config.ts scan()` lấy đúng khoá ấy — backend chat bình thường suốt. Sửa (1) và (3); (2)
+chỉ xảy ra khi launcher bị gọi từ script không console — bấm đúp `start-app.cmd` không mắc.
+
 ## 8 · Chưa chắc chắn
 
 - ~~**App GỐC không mở lên được nữa (từ 02/09).**~~ **ĐÃ SỬA 03/09** — chạy chính trình cài
@@ -534,6 +551,15 @@ của script ấy bọc `try/catch` rồi in `SỐNG` đè lên đúng câu `KH�
   xa**: `~/.grokbot` và `%APPDATA%\Grok Bot` đều có mốc ghi đúng lúc thử mở — nên không phải bail ở
   dòng đầu. Việc rẻ nhất chưa thử: **khởi động lại máy**. Việc tìm được nguyên nhân: trace Process
   Monitor đúng cửa sổ 3 giây đó.
+
+  **TÁI PHÁT 05/09 ~11:45**, và lần này có bằng chứng hơn: `%APPDATA%Grok Botsand-update-apply-marker.json`
+  = `{"phase":"staged","mechanism":"nsis","targetVersion":"0.43.0","fromVersion":"0.30.0"}` ghi lúc **07:42**, bộ cài
+  `Tempsand-update-SiHCSDsand-update-0.43.0.exe` (115.666.848 B, chữ ký **Valid**, CN `Anysphere, Inc.`) tải cùng
+  phút; app vẫn chạy bình thường 11:05–11:15 (buổi teach của người dùng), rồi sau khi thoát thì **mọi lần mở đều 0 tiến
+  trình ngay giây đầu** (đo từng giây 12 s), không Crashpad, không Event Log. `Grok Bot.exe` vẫn 08/28 ⇒ 0.43 **chưa**
+  được cài. Khớp lần 03/09 (khi ấy cũng có bộ cài 0.30 nằm sẵn trong Temp và cài đè là hết): giả thuyết mạnh nhất nay là
+  **marker `staged` + bộ cài chưa áp ⇒ app tự thoát ở khởi động**. Cách chữa cùng kiểu: chạy bộ cài 0.43 — nhưng đó là
+  đổi bản tham chiếu 0.30 → 0.43, **chờ chủ dự án quyết**.
 
   **Mất nó tốn gì:** app gốc là nguồn đối chiếu hành vi. Nhưng bộ ca parity ĐÃ chứa transcript của nó
   và SQLite của nó vẫn đọc được, nên phần lớn việc đối chiếu không cần app chạy — đúng như case 5 vs

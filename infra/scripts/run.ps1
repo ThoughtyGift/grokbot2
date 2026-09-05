@@ -16,6 +16,7 @@ $appExe = $env:GROKBOT2_APP_EXE
 if (-not $appExe) {
   foreach ($c in @(
     "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe",
+    "$env:LOCALAPPDATA\Programs\Bot Noi Bo\Grok Bot.exe",
     'C:\cai\Grok Bot.exe',
     "$env:LOCALAPPDATA\Bot Noi Bo\Grok Bot.exe"
   )) { if (Test-Path $c) { $appExe = $c; break } }
@@ -78,7 +79,9 @@ if ($killed.Count) {
 
 # -- stack ---------------------------------------------------------------------
 $keyFile = Join-Path $backend 'pool-key.txt'
-if ((Test-Path $keyFile) -and -not ((Get-Content $keyFile -Raw).Trim().StartsWith('PASTE_'))) {
+# Kiem theo NOI DUNG, khong theo dong dau: file co the giu dong placeholder PASTE_ roi khoa hal_ o duoi,
+# va config.ts scan() lay dung khoa do — 05/09 launcher bao NOT SET trong khi backend chat binh thuong.
+if ((Test-Path $keyFile) -and ((Get-Content $keyFile -Raw) -match 'hal_[A-Za-z0-9_-]{8,}')) {
   Write-Host 'Pool key: FOUND.' -ForegroundColor Green
 } else {
   Write-Host "Pool key: NOT SET. Put a hal_xxx key in $keyFile" -ForegroundColor Yellow
