@@ -68,6 +68,8 @@ Thiếu 16, và **cả 16 đều là thứ client không gọi được**:
 | `getBotTemplateExportPolicy`, `resolveVirtualCardApproval` | 2 | **0 lần** trong bundle 0.29 — chỉ có ở hợp đồng 0.30 |
 | ~~`injectChromeCookies`~~ | ~~1~~ | **XONG 31/08** — chở phiên đăng nhập từ máy người dùng sang box |
 
+*05/09: client **0.43** đã **bỏ hẳn** 9 lệnh phòng chung (và cả `isMultiMachineLocalExecEnabled`) khỏi bundle — chuyển sang đường server (`isServerRoomsEnabled`, RPC `CreateGrokBotRoom`). Với client 0.43 thì 9 dòng đầu bảng này là chuyện đã đóng, không phải việc còn lại. Xem [0-43-so-voi-local.md](../extracted/0-43-so-voi-local.md).*
+
 Cờ đọc từ `main.cjs` bản đang cài: `grok_bot_multiplayer` TẮT · `sand_voice_call` TẮT ·
 `sand_share_bot` TẮT · `sand_channels` TẮT · `agent_prompted_cookie_sync` TẮT ·
 `sand_multi_machine_local_exec` TẮT *(mặc định của hãng — bản vá `computer-tab` bật nó tại chỗ
@@ -156,6 +158,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | **11** | **4 tool máy-người-dùng còn thiếu so app gốc** — `write-file`, `send-input` (stdin), chạy nền vượt lượt, (`send-imessage`/`read-messages` là macOS, bỏ qua) | không bị chặn — daemon hãng khai đủ 7, ta làm 3 | [tool-doi-chieu.md](../extracted/tool-doi-chieu.md) §2b |
 | ~~13~~ | ~~Gộp `/tai/` vào `/agent/`~~ **XONG 03/09** — bốn bước, đo qua Internet: `/tai/?k=…` → **301** `/agent/?k=…` · `/agent/download/windows?k=…` → `Bot-Noi-Bo-Setup-20260903.exe` (110.552.768 B, sha `66702e2c…` khớp cục bộ, Defender sạch) · không token → gói 50 KB · token sai → 50 KB, **200 không 403** · unit `botnoibo-site` disabled, `:8099` không còn nghe | lùi: khôi phục `cinai-app.bak-*` + `systemctl enable --now botnoibo-site` | — |
 | **14** | **Teach: nút `+` vẫn đi đường CŨ (CDP steps → routine+skill)**, trong khi hãng 0.30 đi đường video → tin `teach-recording` → bot tự học → skill. Đường video bên mình ĐÃ có (`teach-demo.ts`, `demo_start`/`demo_stop`) nhưng chỉ là tool bot gọi, **chưa nối vào `stopTeachRecording`**; và bot không phát link `sand-workflow:<slug>` nên câu "tách xong" không mọc chip skill | không bị chặn — cần quyết định: giữ CDP (chính xác selector) hay đổi sang video (hiểu ý định) cho nút `+` | đọc chuỗi hãng: [teach-hang-0-30.md](../extracted/teach-hang-0-30.md) |
+| **15** | **App gốc đã lên 0.43.0 (05/09)** — hợp đồng đã trích vẫn là 0.30, local vẫn 0.29. Đọc trực tiếp bundle 0.43: +84 RPC, +32 lệnh host (14 vào bảng nhóm renderer, **0 có handler**), −11 (phòng chung bỏ hẳn), cờ `sand_teach_by_demonstration` biến mất, Plugins → **Marketplace** (Plugins + Bots) kéo từ server, cache không giữ catalog | không chặn — việc kế: `extract-contract.mjs --asar <0.43>` ra FILE RIÊNG rồi diff; chỉ cần handler mới khi nâng client local | [0-43-so-voi-local.md](../extracted/0-43-so-voi-local.md) |
 | **12** | **Dải tài khoản box chỉ 5, đã cấp hết 5** | người thứ 6 mất TOÀN BỘ tool box cùng lúc, lỗi viết cho quản trị viên | `GROKBOT2_USER_POOL` trong `infra/vps/exec-router.mjs` |
 
 *Bỏ khỏi bảng vì đã xong (02/09): "mở lớp tự soát sang `subagent`" — đã gắn đủ ba mặt trong

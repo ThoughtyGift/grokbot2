@@ -66,9 +66,11 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 
 ## Reverse-engineering context
 
-The Grok Bot client is Cursor's `sand` build. **Bản đang cài là 0.29** (`C:\cai029`), còn hợp đồng
-lệnh đã trích thì của **0.30** (`docs/extracted/gateway-commands.json`, 147 lệnh) — hai số khác nhau
-và cả hai đều đúng, đừng hợp nhất. Dòng này từng ghi *v0.20.0* cho tới 31/08/2026, tức nó nói sai
+The Grok Bot client is Cursor's `sand` build. **Ba số phiên bản, đừng hợp nhất** (05/09/2026): client LOCAL
+là **0.29** (`0.29.20260903`, cài ở `%LOCALAPPDATA%\Programs\Bot Noi Bo`; bản dev `C:\cai029`); hợp đồng lệnh
+đã trích là của **0.30** (`docs/extracted/gateway-commands.json`, 147 lệnh); app GỐC của hãng đang cài là
+**0.43.0** (`C:\Program Files\Grok Bot`, tự cập nhật 05/09) — so 0.43 với local:
+[docs/extracted/0-43-so-voi-local.md](docs/extracted/0-43-so-voi-local.md). Dòng này từng ghi *v0.20.0* cho tới 31/08/2026, tức nó nói sai
 suốt nhiều ngày trong khi chính file này dặn phải đối chiếu hợp đồng trước khi đổi shape.
 
 Findings + protocol: [docs/reverse/spike-findings.md](docs/reverse/spike-findings.md) và
