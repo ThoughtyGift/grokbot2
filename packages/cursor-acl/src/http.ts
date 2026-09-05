@@ -6,6 +6,7 @@
  */
 import type { ServerResponse } from "node:http";
 import { buildCommands, REPLY_NULL } from "./commands.js";
+import { taoDongHoLenh } from "./lenh-cham.js";
 import { createSseHub } from "./sse.js";
 import type { AclPorts, Call, ChannelName } from "./ports.js";
 
@@ -63,6 +64,12 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
   const called = new Set<string>();
   /** Last payload seen per method, so wrong-key bugs are visible instead of inferred. */
   const lastArgs = new Map<string, unknown>();
+  /**
+   * Thời gian mỗi lệnh — kêu khi chậm (>5 s) hoặc chưa về (>30 s). Có từ 06/09 vì bản ghi sống trên
+   * client 0.43 đứng một lần mà backend không có con số nào nói lượt `getAgentTranscriptTail` ấy đã về
+   * hay chưa (bảng theo dõi §5 mục 19). Đọc bảng ở `GET /gw/__coverage` khoá `cham`.
+   */
+  const cham = taoDongHoLenh();
   /**
    * How many times each method has been called, and when it was last seen.
    *
@@ -230,6 +237,9 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
         lastArgs: args,
         sse: sse.stats(),
         calls: Object.fromEntries([...callCounts].sort((a, b) => b[1].n - a[1].n)),
+        // Lệnh nào chậm, lệnh nào đang treo — `treo > 0` ở `getAgentTranscriptTail` là lời giải cho
+        // "bản ghi trên client đứng" (lenh-cham.ts).
+        cham: cham.snapshot(),
         implemented: Object.keys(methods).sort(),
         // What each request/response channel has actually seen. The app posts frames we do not
         // yet consume, and reading their real shape here beats guessing it.
@@ -261,6 +271,9 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
       if (!fn) console.warn(`[gateway] UNMAPPED ${name} ${body.length ? body.toString("utf8").slice(0, 120) : ""}`);
       // Hợp đồng 0.43 khai reply `null` cho 26 lệnh (xem `REPLY_NULL`) — ép ở đây, không rải ra handler.
       const raDay = (v: unknown): unknown => (REPLY_NULL.has(name) ? null : v);
+      // Đồng hồ chạy từ lúc điều phối tới lúc reply đi — cả nhánh đồng bộ lẫn bất đồng bộ, vì câu
+      // hỏi là "reply có đi không", không phải "handler có async không".
+      const xong = cham.batDau(name);
       let val: unknown = {};
       try {
         val = fn ? fn(args) : {};
@@ -273,11 +286,12 @@ export function createGatewayRouter(ports: AclPorts): GatewayRouter {
       // readers (which have to reach the box) return anything at all.
       if (val != null && typeof (val as { then?: unknown }).then === "function") {
         void (val as Promise<unknown>).then(
-          (v) => json(res, raDay(v)),
-          (e) => { console.error(`[gateway] ${name} rejected:`, e); json(res, null); },
+          (v) => { xong(); json(res, raDay(v)); },
+          (e) => { xong(); console.error(`[gateway] ${name} rejected:`, e); json(res, null); },
         );
         return true;
       }
+      xong();
       return json(res, raDay(val));
     }
 
