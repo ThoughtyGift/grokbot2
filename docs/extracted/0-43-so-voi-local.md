@@ -298,3 +298,34 @@ theo thao tác của chính nó) — hành vi, không phải lỗi.
 Phân trang `ListPublicGrokBotMarketplaceListings` (`proto.cjs`: `no:1 category opt · no:2 page_size int32 · no:3 page_token`):
 main lặp tới khi `next_page_token` rỗng rồi nối các trang, nên `featured_listings` chỉ đi ở trang đầu, `page_size` 0 ⇒ 24, trần 100,
 token = offset dạng chuỗi, token lạ ⇒ trang đầu (không ném — tab Bots không được trống vì một token hỏng).
+
+## 8 · Đối chiếu OUTPUT: app gốc 0.43 ↔ client local 0.43.20260906 + backend (E2E chạy lại 06/09 ~04:00)
+
+Cột "app gốc" là hành vi **quan sát được** từ cache client/transcript thật của hãng (§7c–7e, [teach-hang-0-30.md](teach-hang-0-30.md) §2);
+cột "local" là số **đo được** hôm nay trên client 0.43 local (CDP :9225) + backend dev, bằng đúng các bài E2E trong CLAUDE.md.
+Không so số giây tuyệt đối giữa hai cột — hai model, hai box khác nhau; so **hình dạng và thứ tự** của thứ người dùng thấy.
+
+| tính năng | app gốc (quan sát) | local 0.43 (đo 06/09) | khớp? | bài đo |
+|---|---|---|---|---|
+| **Teach a task** — bấm Stop | client tự đăng tin `role:user` câu hằng + chip *Learn from demonstration* ngay lúc Stop | tin cùng câu hằng + cùng nonce `teach-recording:…` + cùng chip (id = skill thật) mọc **1 s** sau Stop (backend dừng ffmpeg trước rồi mới đăng) | ✅ hình · ~1–2 s trễ | `e2e-teach` 15/15 |
+| Teach — bot học | +7,9 s câu đầu; 4–5 câu tiến độ; `requestId` ĐỔI (uỷ thác subagent xem video); kết `[Tên](sand-workflow:<slug>)` + 5 bước có `{input}` + widget/câu mời chạy thử; 145 s cho video 16 s | 6 câu tiến độ cùng nhịp (*khung kiểm tra → xem hết video → khớp nhật ký → lưu skill*); **một** `requestId`; kết `[Mở trang example domains của IANA](sand-workflow:wf-mtovdsbc-7)`, pill mở đúng skill; **61 s** (đêm trước 72–114 s); không hỏi lại | ✅ hình · ➖ không tách subagent · ➖ chưa mời chạy thử bằng widget | `e2e-teach` |
+| Teach — dữ liệu học | video mp4 + đối chiếu lịch sử Chrome trên box | video mp4 (x11grab display của đúng bot) + nhật ký CDP (selector · URL) | ✅ (của ta thêm nhật ký) | — |
+| **Share as template** — bấm | client TỰ gửi `Create a template of yourself…`; bot 4–5 câu tiến độ; thẻ Unpublished · Publish · View Details | menu có *Share as template* → client gửi đúng câu → bot 5 câu tiến độ (*memories · skills · routines · plugins · giữ N*) → thẻ `bot-template-share` v1 `published:false` | ✅ | `e2e-chia-se-mau` mốc 1–2 |
+| Share — Publish · Update · Details · Delete | Publish → Published · Copy link, menu đổi; Update gửi `Update the shared template of yourself.` → thẻ 2; Details đọc `getBotTemplateVersion`; Delete → *This template was deleted* | Publish → thẻ *Published · Copy link*, menu *View template details · Update template · Delete Template*; Update → client gửi đúng câu → thẻ 2 *Unpublished* (`version:2`, `activeVersion:1`); Publish 2 → thẻ 2 Published, thẻ 1 tự về Unpublished; View Details → hộp *"New Bot · By grokbot2-user"* có Instructions · Routines · Integrations; Delete → hai thẻ *deleted*, menu về *Share as template* | ✅ **7/7** | `e2e-chia-se-mau` 7/7 (lượt 3 hôm nay; lượt 1 đỏ vì store client cũ, lượt 2 đỏ mốc 4 vì bản ghi sống đứng — xem cuối mục) |
+| **Copy link** — trang đích | `x.ai/bot/<id>`: title *"<tên> by <người tạo>"*, `og:*` + **og:image PNG**, Add to Grok Bot = `grokbot://app/v1/bot-template?id=`, tự mở, Download | `/bot/<id>`: title cùng dạng, `og:title/og:url`, cùng deep link, CSP nonce + nosniff + `X-Frame-Options DENY`, 404 trước publish và sau xoá, gạch chéo cuối → 301 tương đối; **không có `og:image`** | ✅ · ➖ thiếu og:image | `e2e-trang-chia-se` 17/17 (sau khi sửa mặc định SITE của bài đo — 2 đỏ đầu là bài đo, không phải trang) |
+| **Bảng Routine** | hàng sự kiện `automation-changed` 5 action; bot MỘT câu, không tin người dùng; bật+sửa liền → một câu; tên routine trong dấu \` + nói lại lịch | 4 nhịp → 4 hàng sự kiện đúng action + 4 câu (*"Đã tạm dừng \`kiem-ke-sang\` rồi nhé…"*, *"\`kiem-ke-sang\` bật lại rồi và giờ chạy 0:15 mỗi ngày nhé."*), **6,1–8,3 s**, 0 tin người dùng, bật+sửa → đúng 1 câu | ✅ | `e2e-routine-nhac` XANH |
+| **Marketplace** (tab Bots) | thẻ Featured + nhóm; trang chi tiết; Import → bot mang UUID client đúc, tự chào | featured của người vận hành, hàng proto đúng field number, `next_page_token` rỗng một trang, `GetGrokBotTemplateImportDetails` 200, import ra bot đúng id | ✅ | `e2e-marketplace` 26/26 · `e2e-mau-bot` 20/20 |
+| Marketplace — tài khoản thứ hai | listing công khai xuyên chủ; mẫu riêng không đọc/xoá được chéo | B thấy listing của A, import ra bot của B, không đọc/xoá được mẫu của A | ✅ | `e2e-hai-tai-khoan` 20/20 |
+| **Plugins** (tab) | Add → chip *Added* + đếm installed | đo 06/09 sáng bấm thật: Context7 → *Added*, "9 installed"; hôm nay không chạy lại, chỉ `kiem-reply` | ✅ (đo trước) | §7e |
+| **Reply schema** | coordinator kiểm mọi reply | 29 lệnh đọc 0 sai | ✅ | `kiem-reply-0-43` 29/29 |
+
+Ba chỗ còn lệch với hãng, đều KHÔNG chặn người dùng: (1) bot ta xem video trong **một** lượt, hãng tách subagent (`requestId` đổi) —
+người dùng chỉ thấy khác ở chỗ hãng có khoảng lặng dài hơn; (2) hãng kết lượt teach bằng **widget mời chạy thử** (*Dry run · Để sau*),
+ta kết bằng câu; (3) trang `/bot/<id>` không dựng `og:image` PNG.
+
+Hai điều về CLIENT lộ ra khi chạy lại (chi tiết §7 bảng theo dõi): (a) client 0.43 suy "bot này có mẫu đã phát" từ chính các thẻ
+`bot-template-share` trong bản ghi — xoá mẫu qua gateway rồi tải lại renderer vẫn thấy menu *Update/Delete*; chỉ nút *Delete
+Template* của client mới reset (đánh dấu `user-deleted`). Bài đo phải dọn bằng nút ấy. (b) Bản ghi sống **đứng ngắt quãng**: một
+lần trong ~8 lượt hôm nay, thẻ + câu chốt không lên màn dù SSE và tail backend đủ (thí nghiệm ghi song song chứng minh), tải lại
+là thấy — client coi khung `transcript` không `ordered` là tiếng gõ để tự tải đuôi, và một lượt tải treo là mọi tiếng gõ sau chỉ
+ghi cờ. Ghi §5 mục 19, chưa sửa.
