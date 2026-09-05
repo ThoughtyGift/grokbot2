@@ -84,7 +84,9 @@ const theoDoiSo = process.argv.slice(2).map((s) => { const i = s.indexOf(":"); r
 const calls = theoDoiSo.length ? theoDoiSo : lenhDoc();
 let sai = 0;
 for (const [m, a] of calls) {
-  let r; try { r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(a) }); }
+  // `GW_TOKEN` (vé cổng) để chạy trên máy chủ có `GROKBOT2_AUTH=enforce` — máy dev không cần. Thiếu nó ở VPS là 401, không phải reply sai.
+  const headers = { "content-type": "application/json", ...(process.env.GW_TOKEN ? { authorization: `Bearer ${process.env.GW_TOKEN}` } : {}) };
+  let r; try { r = await fetch(`${GW}/${m}`, { method: "POST", headers, body: JSON.stringify(a) }); }
   catch (e) { console.log(`  ĐỨT  ${m} — ${e.message}`); sai++; continue; }
   const txt = await r.text(); let val; try { val = JSON.parse(txt); } catch { val = txt; }
   const sch = S.methods[m]?.reply;
