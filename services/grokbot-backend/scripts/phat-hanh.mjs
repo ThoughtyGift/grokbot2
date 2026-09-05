@@ -124,13 +124,25 @@ const stamp = ngay[1];
  * Nền `major.minor` đọc từ `client-patch-state.json` (bản client của hãng mà bộ vá đang bám), chứ
  * không ghim hằng số ở đây: lên 0.30 thì nền tự đổi theo, không phải nhớ sửa hai chỗ.
  */
+/*
+ * Nền đọc từ CÂY APP đem đóng gói khi có `GROKBOT2_CLIENT_DIR` (`resources/app/package.json` — chính số client
+ * sẽ khai sau khi cài), rồi mới rơi về `client-patch-state.json` của repo. File repo ấy ghi 0.29.0 và đứng yên
+ * từ khi trạng thái vá chuyển sang nằm CẠNH bản cài (05/09, `resources/grokbot2-patch-state.json`); đóng gói
+ * `C:\cai043` mà đọc nó là phát hành 0.43 dưới số 0.29 — launcher 0.43 sẽ thấy "bản mới" mãi mãi.
+ */
 const STATE = join(REPO, "docs", "state", "client-patch-state.json");
-if (!existsSync(STATE)) {
-  console.error(`✘ chưa có ${STATE} — chạy patch-client --apply một lần trước đã.`);
-  console.error("  Không có nó thì không biết bộ vá đang bám nền client nào, và số phiên bản sẽ sai.");
-  process.exit(1);
+const pkgApp = process.env.GROKBOT2_CLIENT_DIR ? join(process.env.GROKBOT2_CLIENT_DIR, "resources", "app", "package.json") : null;
+let nen, nguonNen;
+if (pkgApp && existsSync(pkgApp)) {
+  nen = JSON.parse(readFileSync(pkgApp, "utf8")).version ?? "0.0.0"; nguonNen = pkgApp;
+} else {
+  if (!existsSync(STATE)) {
+    console.error(`✘ chưa có ${STATE} và không có GROKBOT2_CLIENT_DIR — không biết bộ vá đang bám nền client nào, số phiên bản sẽ sai.`);
+    process.exit(1);
+  }
+  nen = JSON.parse(readFileSync(STATE, "utf8")).clientVersion ?? "0.0.0"; nguonNen = STATE;
 }
-const nen = JSON.parse(readFileSync(STATE, "utf8")).clientVersion ?? "0.0.0";
+console.log(`  nền client đọc từ: ${nguonNen}`);
 const [maj, min] = String(nen).split(".");
 const version = `${maj}.${min}.${stamp}`;
 console.log(`  nền client: ${nen} → phiên bản phát hành: ${version}`);

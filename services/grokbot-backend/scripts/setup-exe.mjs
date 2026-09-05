@@ -268,14 +268,25 @@ exit 1
   }
 }
 
-const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc }) => String.raw`; Sinh bởi scripts/setup-exe.mjs — đừng sửa tay.
+/**
+ * `bienThe` (vd `"043"`) — bản cài SONG SONG với bản chính, để một máy giữ cả 0.29 lẫn 0.43: AppId, AppName,
+ * thư mục cài, nhóm Start menu, tên shortcut và kho hồ sơ đều mang hậu tố. Không có hậu tố = gói phát hành,
+ * y như trước. Inno dùng AppId để nhận "đã cài" và tái dùng thư mục cũ, nên cùng AppId là KHÔNG song song được.
+ */
+const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc, bienThe = null }) => {
+  const ten = bienThe ? `Bot Noi Bo ${bienThe}` : "Bot Noi Bo";
+  const appId = bienThe ? `{{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBO${bienThe}}` : "{{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBOFULL}";
+  // Trong String.raw, "\${x}" giữ backslash VÀ tắt nội suy — ISCC nhận nguyên chữ "${ten}" (đo 05/09: "Unknown
+  // constant ten"). Nên backslash đi CÙNG tên trong một biến, không đứng ngay trước dấu nội suy.
+  const duongTen = "\\" + ten;
+  return String.raw`; Sinh bởi scripts/setup-exe.mjs — đừng sửa tay.
 [Setup]
-AppId={{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBOFULL}
-AppName=Bot Noi Bo
+AppId=${appId}
+AppName=${ten}
 AppVersion=${version}
 AppPublisher=Bot Noi Bo (ban tu van hanh)
-DefaultDirName={localappdata}\Programs\Bot Noi Bo
-DefaultGroupName=Bot Noi Bo
+DefaultDirName={localappdata}\Programs${duongTen}
+DefaultGroupName=${ten}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=${outDir}
@@ -284,7 +295,7 @@ SetupIconFile=${iconPath}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayName=Bot Noi Bo
+UninstallDisplayName=${ten}
 UninstallDisplayIcon={app}\Grok Bot.exe
 
 [Languages]
@@ -309,13 +320,13 @@ Source: "{#SourceDir}\token.txt";     DestDir: "{app}"; Flags: ignoreversion`
 
 [Icons]
 ; Tro vao start-bot.cmd, KHONG tro thang vao exe: bon bien moi truong nam trong do.
-Name: "{userdesktop}\Bot Noi Bo"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
+Name: "{userdesktop}${duongTen}"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
   IconFilename: "{app}\Grok Bot.exe"; IconIndex: 0
-Name: "{group}\Bot Noi Bo"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
+Name: "{group}${duongTen}"; Filename: "{app}\start-bot.cmd"; WorkingDir: "{app}"; \
   IconFilename: "{app}\Grok Bot.exe"; IconIndex: 0
 
 [Run]
-Filename: "{app}\start-bot.cmd"; Description: "Mo Bot Noi Bo ngay"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\start-bot.cmd"; Description: "Mo ${ten} ngay"; Flags: postinstall nowait skipifsilent
 
 [Code]
 var BackendPage: TInputQueryWizardPage;
@@ -335,6 +346,7 @@ begin
     SaveStringToFile(ExpandConstant('{app}\backend.txt'), BackendPage.Values[0] + #13#10, False);
 end;
 `;
+};
 
 /**
  * Bản app sắp chở đi đã có bản vá `update-feed` chưa?
@@ -367,7 +379,7 @@ export function coVaUpdateFeed(appSrc) {
  *
  * @param {boolean} khoaCapNhat giữ `SAND_DISABLE_UPDATES=1` hay không — xem `coVaUpdateFeed`
  */
-export const startBundled = () => `@echo off
+export const startBundled = ({ tenKho = "Bot Noi Bo" } = {}) => `@echo off
 REM Mo Bot Noi Bo. App nam ngay canh file nay — day la ban tu chua, khong can client cua hang.
 REM
 REM Bon bien duoi day la toan bo hop dong voi client, thieu cai nao cung hong theo kieu rieng:
@@ -384,7 +396,11 @@ if exist "%~dp0backend.txt" set /p BE=<"%~dp0backend.txt"
 REM Kho du lieu RIENG, de ban nay dung canh app cua nha phat hanh duoc.
 REM Khoa mot-ban cua Electron nam TRONG userData va client doi userData truoc khi lay khoa; chung
 REM userData thi ban thu hai tu thoat (trong nhu bam khong len), va hai ban dung chung token.
-if not defined SAND_USER_DATA_DIR set "SAND_USER_DATA_DIR=%APPDATA%\Bot Noi Bo"
+REM Trong template literal cua JS, "\B" MAT backslash: ban truoc ghi "%APPDATA%Bot Noi Bo", nen ho so
+REM nam o "AppData/RoamingBot Noi Bo" (do 05/09, thu muc ay ton tai that). Dong duoi di doi ho so cu sang
+REM cho dung MOT lan, de nguoi dung khong phai dang nhap lai.
+if not exist "%APPDATA%\\${tenKho}" if exist "%APPDATA%${tenKho}" move "%APPDATA%${tenKho}" "%APPDATA%\\${tenKho}" >nul 2>&1
+if not defined SAND_USER_DATA_DIR set "SAND_USER_DATA_DIR=%APPDATA%\\${tenKho}"
 
 set "CURSOR_API_BASE_URL=%BE%"
 set "SAND_BACKEND_URL=%BE%"
@@ -463,7 +479,7 @@ start "" "%~dp0Grok Bot.exe" %*
  *
  * @param {{ distDir: string, stagingDir: string, appSrc: string, version: string, outName: string }} opts
  */
-export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) {
+export function buildFullExe({ distDir, stagingDir, appSrc, version, outName, bienThe = null }) {
   const iscc = isccPath();
   if (!iscc) return null;
   if (!existsSync(join(appSrc, "Grok Bot.exe"))) {
@@ -473,7 +489,9 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
 
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
-  writeFileSync(join(stagingDir, "start-bot.cmd"), startBundled().replace(/\r?\n/g, "\r\n"), "utf8");
+  mkdirSync(distDir, { recursive: true });   // biến thể ghi vào thư mục con riêng — có thể chưa tồn tại
+  const tenKho = bienThe ? `Bot Noi Bo ${bienThe}` : "Bot Noi Bo";
+  writeFileSync(join(stagingDir, "start-bot.cmd"), startBundled({ tenKho }).replace(/\r?\n/g, "\r\n"), "utf8");
   // token.txt — launcher dùng nó để hỏi ĐÚNG gói của mình (bản chở-app) qua /updates/ban-moi?k=.
   // Chỉ ghi khi có token; ISS_FULL cũng chỉ liệt kê file này khi cùng biến ấy được đặt.
   const tokenDay = (process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN ?? "").trim();
@@ -484,7 +502,7 @@ export function buildFullExe({ distDir, stagingDir, appSrc, version, outName }) 
   console.log(`  icon bộ cài: ${iconPath.endsWith("app-icon.ico") ? "lấy từ Grok Bot.exe" : 'dấu "B" của mình'}`);
 
   const iss = join(stagingDir, "setup-full.iss");
-  writeFileSync(iss, ISS_FULL({ version, iconPath, outDir: distDir, outName, appSrc }), "utf8");
+  writeFileSync(iss, ISS_FULL({ version, iconPath, outDir: distDir, outName, appSrc, bienThe }), "utf8");
   // Nén 490 MB bằng lzma2/max mất vài phút — đó là phần lâu nhất của cả bản dựng.
   execFileSync(iscc, [`/DSourceDir=${stagingDir}`, iss], { stdio: "pipe", maxBuffer: 64 << 20 });
 

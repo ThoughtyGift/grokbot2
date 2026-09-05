@@ -23,6 +23,8 @@ if (-not $appExe) {
 }
 if (-not $appExe) { $appExe = "$env:LOCALAPPDATA\Programs\Grok Bot\Grok Bot.exe" }
 $bff = 8788
+# CDP port: 9222 cho ban chinh; start-app-043.cmd dat GROKBOT2_CDP_PORT=9225 de ban 0.43 mo song song.
+$cdp = if ($env:GROKBOT2_CDP_PORT) { [int]$env:GROKBOT2_CDP_PORT } else { 9222 }
 
 Write-Host '=== grokbot2  pnpm dev:app ===' -ForegroundColor Cyan
 
@@ -128,8 +130,8 @@ if (-not (Test-Path $appExe)) {
   exit 1
 }
 
-if (Test-HttpOk 'http://127.0.0.1:9222/json/version') {
-  Write-Host 'Grok Bot already on CDP :9222 - leaving it. Close it and re-run to relaunch with a fresh env.' -ForegroundColor Green
+if (Test-HttpOk "http://127.0.0.1:$cdp/json/version") {
+  Write-Host "Grok Bot already on CDP :$cdp - leaving it. Close it and re-run to relaunch with a fresh env." -ForegroundColor Green
   exit 0
 }
 
@@ -196,8 +198,8 @@ if (Test-Path $tokenFile) { $env:GROKBOT2_GATEWAY_TOKEN = (Get-Content $tokenFil
 # ta doi cho. Gia: lan dau sau thay doi nay phai dang nhap lai mot lan, vi token nam trong userData.
 if (-not $env:SAND_USER_DATA_DIR) { $env:SAND_USER_DATA_DIR = Join-Path $env:APPDATA 'Grok Bot (local)' }
 Write-Host "User data: $env:SAND_USER_DATA_DIR" -ForegroundColor DarkGray
-Write-Host 'Launching patched Grok Bot.exe  (CDP :9222, API :8788)' -ForegroundColor Cyan
-$app = Start-Process -FilePath $appExe -ArgumentList '--remote-debugging-port=9222' -PassThru
+Write-Host "Launching patched Grok Bot.exe  (CDP :$cdp, API :$bff) from $appExe" -ForegroundColor Cyan
+$app = Start-Process -FilePath $appExe -ArgumentList "--remote-debugging-port=$cdp" -PassThru
 if (-not $app) {
   Write-Host 'Start-Process returned no process. Retry from a console that is not running as Node.' -ForegroundColor Red
   exit 1
@@ -205,10 +207,10 @@ if (-not $app) {
 $cdpUp = $false
 for ($i = 0; $i -lt 20; $i++) {
   Start-Sleep -Seconds 1
-  if (Test-HttpOk 'http://127.0.0.1:9222/json/version') { $cdpUp = $true; break }
+  if (Test-HttpOk "http://127.0.0.1:$cdp/json/version") { $cdpUp = $true; break }
 }
 if (-not $cdpUp) {
-  Write-Host "Grok Bot pid $($app.Id) started but CDP :9222 did not answer. Unset ELECTRON_RUN_AS_NODE and retry." -ForegroundColor Red
+  Write-Host "Grok Bot pid $($app.Id) started but CDP :$cdp did not answer. Unset ELECTRON_RUN_AS_NODE and retry." -ForegroundColor Red
   exit 1
 }
-Write-Host "Grok Bot pid $($app.Id) - CDP :9222 up. Chat in the app window." -ForegroundColor Green
+Write-Host "Grok Bot pid $($app.Id) - CDP :$cdp up. Chat in the app window." -ForegroundColor Green

@@ -166,7 +166,10 @@ REM
 REM Khoa mot-ban cua Electron nam TRONG userData, va client doi userData TRUOC khi lay khoa. Chung
 REM userData thi ban thu hai tu thoat va chi focus ban dau — trong nhu bam khong len. Chung userData
 REM con nghia la chung token va chung phien.
-if not defined SAND_USER_DATA_DIR set "SAND_USER_DATA_DIR=%APPDATA%\Bot Noi Bo"
+REM "\B" trong template literal JS mat backslash — ban truoc ra "%APPDATA%Bot Noi Bo" (ho so o AppData/RoamingBot Noi Bo).
+REM Di doi mot lan roi dung cho dung.
+if not exist "%APPDATA%\\Bot Noi Bo" if exist "%APPDATA%Bot Noi Bo" move "%APPDATA%Bot Noi Bo" "%APPDATA%\\Bot Noi Bo" >nul 2>&1
+if not defined SAND_USER_DATA_DIR set "SAND_USER_DATA_DIR=%APPDATA%\\Bot Noi Bo"
 
 set "CURSOR_API_BASE_URL=%BE%"
 set "SAND_BACKEND_URL=%BE%"

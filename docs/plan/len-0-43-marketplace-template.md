@@ -59,8 +59,21 @@ Kiểm: `patch-client.mjs --verify` xanh trên 0.43; `check-app.cmd` thấy RPC 
   *"Showing saved messages…"* dù `transport:"connected"`. Coordinator 0.43 kiểm **mọi** reply gateway theo schema nhúng
   (mode "structural") và ném `gateway <lệnh> reply is malformed`; 12 lệnh của ta trượt. Toàn bộ chuyện này ở
   [0-43-so-voi-local.md §7](../extracted/0-43-so-voi-local.md) và bài đo `scripts/kiem-reply-0-43.mjs` (29 lệnh đọc: 0 sai, 2 lệch cố ý).
-- **Chưa làm** (đóng gói, không chặn việc dùng): mục 3 (`build-setup.mjs --with-app` từ `C:\cai043`) và mục 5 (`clientVersion`
-  bootstrap vẫn 0.29). Mục 4 chỉ còn thiếu launcher (`run.ps1`) cho bản 043 — hiện mở bằng script trong phiên.
+- **Đóng gói XONG 05/09 tối** (mục 3 · 4 · 5):
+  - Mục 3: `GROKBOT2_CLIENT_DIR=C:\cai043 GROKBOT2_SETUP_VARIANT=043 node scripts/build-setup.mjs --with-app` →
+    `dist/043/Bot-Noi-Bo-Setup-20260905-0.43.exe` (111.213.560 B). Biến thể = AppId · AppName · `Programs\Bot Noi Bo 043` ·
+    shortcut · kho hồ sơ `%APPDATA%\Bot Noi Bo 043` đều riêng, ghi vào thư mục CON `dist/043/` để `newestSetup`/`phat-hanh` không
+    bao giờ nhặt nó làm gói phát hành. Cài im lặng thử: exit 0, 578 file (573 của cây nguồn + launcher, `backend.txt`, icon, 2 file
+    gỡ cài), `package.json` 0.43.20260905, `--verify` xanh trên bản cài, bản 0.29 ở `Programs\Bot Noi Bo` không đổi một byte.
+  - Mục 4: `infra\scripts\start-app-043.cmd` — đặt `GROKBOT2_APP_EXE` (ưu tiên bản cài 043, rồi `C:\cai043`), `GROKBOT2_CDP_PORT=9225`
+    (`run.ps1` nay đọc cổng từ biến), `SAND_USER_DATA_DIR=Grok Bot (local 043)`. Đo: mở bản cài → 9 tiến trình đúng đường dẫn, CDP
+    :9225, roster hiện từ backend; 18 tiến trình của hãng + 0.29 không bị đụng.
+  - Mục 5: "clientVersion bootstrap" hoá ra không phải trường proto nào — là NỀN phiên bản `phat-hanh.mjs` đọc từ
+    `docs/state/client-patch-state.json` (đứng ở 0.29.0 từ khi trạng thái vá chuyển sang nằm cạnh bản cài). Nay đọc từ
+    `GROKBOT2_CLIENT_DIR/resources/app/package.json` trước, file repo là dự phòng. **Chưa phát hành 0.43 lên feed** — quyết định
+    đổi bản cho mọi máy là của chủ dự án (xem rủi ro: gói 0.43 trên feed sẽ được launcher 0.29 tải và cài).
+  - Bắt được kèm: launcher của MỌI gói đã phát ghi `%APPDATA%Bot Noi Bo` (mất backslash trong template literal) — hồ sơ người dùng
+    nằm ở `AppData\RoamingBot Noi Bo`; sửa + di dời một lần. Xem bảng theo dõi §7.
 
 ## B · Lệnh client 0.43 gọi mà backend chưa có
 

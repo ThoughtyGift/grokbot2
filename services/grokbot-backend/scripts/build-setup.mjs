@@ -143,13 +143,25 @@ if (exe) {
 if (process.argv.includes("--with-app")) {
   const appSrc = process.env.GROKBOT2_CLIENT_DIR
     ?? join(process.env.LOCALAPPDATA ?? "", "Programs", "Grok Bot");
-  console.log(`  đang nén cây app từ ${appSrc} — mất vài phút…`);
+  /*
+   * GROKBOT2_SETUP_VARIANT=043 → bản cài SONG SONG (`Programs\Bot Noi Bo 043`, AppId/shortcut/kho hồ sơ riêng), tên
+   * file mang dòng client (`Bot-Noi-Bo-Setup-<ngày>-0.43.exe`), và ghi vào `dist/<biến thể>/` — thư mục CON, để
+   * `newestSetup`/`phat-hanh.mjs` không bao giờ nhặt nó làm gói phát hành: feed đưa gói 0.43 cho launcher 0.29 là
+   * cài một bản khác vào một thư mục khác mà launcher cũ không biết. Bản này là cho máy của người phát triển.
+   */
+  const bienThe = (process.env.GROKBOT2_SETUP_VARIANT ?? "").trim().replace(/[^A-Za-z0-9]/g, "") || null;
+  const dongApp = (() => {
+    try { return String(JSON.parse(readFileSync(join(appSrc, "resources", "app", "package.json"), "utf8")).version).split(".").slice(0, 2).join("."); }
+    catch { return null; }
+  })();
+  console.log(`  đang nén cây app từ ${appSrc} (client ${dongApp ?? "?"}${bienThe ? `, biến thể song song "${bienThe}"` : ""}) — mất vài phút…`);
   const full = buildFullExe({
-    distDir: DIST,
+    distDir: bienThe ? join(DIST, bienThe) : DIST,
     stagingDir: join(DIST, "staging-full"),
     appSrc,
     version: stamp.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1.$2.$3"),
-    outName: `Bot-Noi-Bo-Setup-${stamp}`,
+    outName: `Bot-Noi-Bo-Setup-${stamp}${bienThe ? `-${dongApp ?? bienThe}` : ""}`,
+    bienThe,
   });
   if (full) {
     console.log(`✓ ${full}  (${(statSync(full).size / 1048576).toFixed(0)} MB)  ← chở cả app`);
