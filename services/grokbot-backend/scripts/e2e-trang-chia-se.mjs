@@ -16,7 +16,9 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 const GW = process.env.GW ?? "http://127.0.0.1:8788/gw/api";
-const SITE = (process.env.SITE ?? GW.replace(/\/gw\/api$/, "")).replace(/\/+$/, "");
+// Mặc định cục bộ là `localhost`, không phải `127.0.0.1`: `shareUrlOf` khi thiếu `GROKBOT2_PUBLIC_SITE` rơi về
+// `http://localhost:8788`, còn GW của bài này gõ `127.0.0.1` — 06/09 lệch chuỗi ấy làm 2/17 đỏ trên một sản phẩm đúng.
+const SITE = (process.env.SITE ?? GW.replace(/\/gw\/api$/, "").replace("127.0.0.1", "localhost")).replace(/\/+$/, "");
 const TOKEN = process.env.GW_TOKEN_FILE ? readFileSync(process.env.GW_TOKEN_FILE, "utf8").trim() : (process.env.GW_TOKEN ?? "");
 const gw = async (m, body = {}) => {
   const headers = { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) };
