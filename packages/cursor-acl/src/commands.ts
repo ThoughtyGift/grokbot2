@@ -587,25 +587,35 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      *
      * Thiếu cổng `mcpWrite` thì trả `{ok:false}` — nói KHÔNG, chứ không giả vờ thành công.
      */
+    /*
+     * Hình dạng reply theo schema 0.43 (`gateway-schema-0.43.json`): `installMcpEntry` và `updateMcpPluginInstall`
+     * trả `SandMcpState {servers}`, `uninstallMcpPlugin` trả `SandMcpRemoveResult {removed, state, reason?}`.
+     * Tới 06/09 ba lệnh này trả `{ok}` — coordinator 0.43 coi là lệnh thất bại (không log, HTTP vẫn 200), nên
+     * trên tab Plugins của 0.43 bấm Cài/Gỡ "không ra gì" dù MCP ĐÃ ghi. Giữ thêm `ok` cho bản 0.29 đọc; mode
+     * structural bỏ qua khoá thừa. `servers` lấy từ cùng `mcpServerRows` với `listBoxMcpServers`/`getMcpState`.
+     */
     installMcpEntry: (a) => {
       const w = extensions.mcpWrite;
       const id = Number((a as { entryId?: unknown })?.entryId);
-      if (!w || !Number.isFinite(id)) return { ok: false };
+      if (!w || !Number.isFinite(id)) return { ok: false, servers: mcpServerRows([]) };
       const values = ((a as { values?: unknown })?.values ?? {}) as Record<string, string>;
-      return { ok: w.install(id, values) };
+      const ok = w.install(id, values);
+      return { ok, servers: mcpServerRows([]) };
     },
     updateMcpPluginInstall: (a) => {
       const w = extensions.mcpWrite;
       const id = Number((a as { pluginId?: unknown })?.pluginId);
-      if (!w || !Number.isFinite(id)) return { ok: false };
+      if (!w || !Number.isFinite(id)) return { ok: false, servers: mcpServerRows([]) };
       const values = ((a as { values?: unknown })?.values ?? {}) as Record<string, string>;
-      return { ok: w.update(id, values) };
+      const ok = w.update(id, values);
+      return { ok, servers: mcpServerRows([]) };
     },
     uninstallMcpPlugin: (a) => {
       const w = extensions.mcpWrite;
       const id = Number((a as { pluginId?: unknown })?.pluginId);
-      if (!w || !Number.isFinite(id)) return { ok: false };
-      return { ok: w.uninstall(id) };
+      if (!w || !Number.isFinite(id)) return { ok: false, removed: false, reason: "still-present", state: { servers: mcpServerRows([]) } };
+      const removed = w.uninstall(id);
+      return { ok: removed, removed, ...(removed ? {} : { reason: "still-present" }), state: { servers: mcpServerRows([]) } };
     },
     listMcpServerTools: (a) => {
       const w = extensions.mcpWrite;

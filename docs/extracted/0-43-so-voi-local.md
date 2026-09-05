@@ -281,3 +281,20 @@ Cùng hàm cho sidebar, header, thẻ mẫu, hộp Import — nên app gốc kh�
 "blob"/"blue" ở mọi chỗ server tự quyết (snapshot mẫu, `getAgentNotificationAvatar`, listing) ⇒ New Bot sidebar viên thuốc cam,
 thẻ mẫu tròn xanh. Nay `avatar-mac-dinh.ts` chép hai hàm (ghim 5 id so với mã gốc chạy trong Node: `agent-984 → tablet/orange`),
 và mọi chỗ ấy đi qua `avatarCuaBot(rec)`.
+
+## 7e · Tab Plugins của Marketplace 0.43 — bảy lệnh, và hai lệnh từng trả sai hình (06/09)
+
+Tab Plugins gọi đúng bảy lệnh host: `getEffectiveMcpPlugins` (52 lượt trong `coverage`) · `getPluginSyncStatus` (526) ·
+`syncPluginSkills` (164) · `getMcpPluginLogo{url}` · `installMcpEntry{entryId, values?, hasTeamConfiguredVariables?}` ·
+`updateMcpPluginInstall{pluginId, values}` · `uninstallMcpPlugin{pluginId}`. Danh mục vẽ từ MCP của MÌNH (`plugin-catalog.ts` →
+`SandEffectivePlugin` phẳng `{pluginId, name, displayName, installMode, isEnabled}`) — đã đúng từ 05/09. Chỗ sai: ba lệnh ghi trả
+`{ok}` (hình 0.29) trong khi schema 0.43 đòi `installMcpEntry`/`updateMcpPluginInstall` → `SandMcpState {servers: SandMcpServerSummary[]}`
+và `uninstallMcpPlugin` → `SandMcpRemoveResult {removed, state, reason?: "still-present"|"team-server"}` — coordinator coi reply sai là
+lệnh thất bại (không log, HTTP 200), nên bấm Add "không ra gì" dù MCP đã ghi. Nay trả đúng hình, giữ `ok` cho 0.29 đọc, `servers`
+lấy từ cùng `mcpServerRows` với `listBoxMcpServers`. Đo: bấm THẬT Add Context7 trên UI 0.43 → chip "Added", "9 installed",
+`getEffectiveMcpPlugins` có id 18; gỡ qua gateway → `removed:true`; UI KHÔNG tự vẽ lại khi gỡ từ ngoài client (nó chỉ đọc lại
+theo thao tác của chính nó) — hành vi, không phải lỗi.
+
+Phân trang `ListPublicGrokBotMarketplaceListings` (`proto.cjs`: `no:1 category opt · no:2 page_size int32 · no:3 page_token`):
+main lặp tới khi `next_page_token` rỗng rồi nối các trang, nên `featured_listings` chỉ đi ở trang đầu, `page_size` 0 ⇒ 24, trần 100,
+token = offset dạng chuỗi, token lạ ⇒ trang đầu (không ném — tab Bots không được trống vì một token hỏng).

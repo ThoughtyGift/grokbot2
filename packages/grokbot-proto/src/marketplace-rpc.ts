@@ -24,7 +24,7 @@
  * không vỡ.
  */
 import { message, pbStr, pbVar, pbBool, pbMsg, unframe } from "./encode.js";
-import { readString } from "./decode.js";
+import { readString, readVarint } from "./decode.js";
 
 export interface WireCreator {
   name: string;
@@ -130,15 +130,31 @@ export const templateMsg = (t: WireTemplate): Buffer =>
 
 const unframed = (body?: Buffer): Buffer | null => (body && body.length ? unframe(body) : null);
 
-/** `ListPublicGrokBotMarketplaceListings` — một trang, `next_page_token` rỗng (main lặp tới khi rỗng). */
+/** Trang mặc định khi client gửi `page_size` 0 (proto3: "để server quyết"), và trần để một request không kéo cả kho. */
+export const MARKETPLACE_PAGE_DEFAULT = 24;
+export const MARKETPLACE_PAGE_MAX = 100;
+
+/**
+ * `ListPublicGrokBotMarketplaceListings {category?:1, page_size:2, page_token:3}` — trích `proto.cjs` 0.43
+ * (`no:1 category opt · no:2 page_size T:5 · no:3 page_token T:9`). Main của client lặp tới khi `next_page_token` rỗng và
+ * nối các trang lại, nên: `featured_listings` chỉ đi ở trang ĐẦU (lặp lại là main vẽ trùng thẻ Featured), `listings` cắt theo
+ * `page_size`, `page_token` = offset dạng chuỗi (token lạ ⇒ coi như trang đầu, không ném — một token hỏng không được làm
+ * tab Bots trống). Tới 06/09 hàm này trả cả kho trong một trang và token luôn rỗng ("phân trang thật" là mục còn thiếu của §D).
+ */
 export function listMarketplaceResponse(port: MarketplacePort | undefined, body?: Buffer): Buffer {
   const req = unframed(body);
   const category = req ? readString(req, 1) : "";
+  const pageSizeRaw = req ? readVarint(req, 2) ?? 0 : 0;
+  const pageSize = Math.min(MARKETPLACE_PAGE_MAX, pageSizeRaw > 0 ? pageSizeRaw : MARKETPLACE_PAGE_DEFAULT);
+  const tokenRaw = req ? readString(req, 3) : "";
+  const offset = /^\d{1,9}$/.test(tokenRaw) ? Number(tokenRaw) : 0;
   const all = port?.listListings(category || undefined) ?? { featured: [], listings: [] };
+  const trang = all.listings.slice(offset, offset + pageSize);
+  const conNua = offset + pageSize < all.listings.length;
   return message(
-    ...all.featured.map((l) => pbMsg(1, listingMsg(l))),
-    ...all.listings.map((l) => pbMsg(2, listingMsg(l))),
-    pbStr(3, ""),
+    ...(offset === 0 ? all.featured.map((l) => pbMsg(1, listingMsg(l))) : []),
+    ...trang.map((l) => pbMsg(2, listingMsg(l))),
+    pbStr(3, conNua ? String(offset + pageSize) : ""),
   );
 }
 

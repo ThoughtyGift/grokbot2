@@ -65,6 +65,37 @@ test("không có cổng ⇒ danh sách rỗng, không ném", () => {
   assert.equal(readMessages(b, 1).length + readMessages(b, 2).length, 0);
 });
 
+test("phân trang THẬT: page_size (2) cắt listings, page_token (3) = offset, featured chỉ ở trang đầu, token rỗng khi hết", () => {
+  const nhieu: MarketplacePort = {
+    ...port,
+    listListings: () => ({
+      featured: [{ ...listing, slug: "noi-bat" }],
+      listings: Array.from({ length: 7 }, (_, i) => ({ ...listing, slug: `bot-${i}`, shareId: `${String(i).padStart(21, "0")}` })),
+    }),
+  };
+  const slugs = (b: Buffer) => readMessages(b, 2).map((l) => readString(l, 1));
+  const t1 = listMarketplaceResponse(nhieu, message(pbVar(2, 3)));
+  assert.deepEqual(slugs(t1), ["bot-0", "bot-1", "bot-2"]);
+  assert.equal(readMessages(t1, 1).length, 1, "featured đi ở trang đầu");
+  assert.equal(readString(t1, 3), "3", "còn nữa ⇒ token = offset kế");
+  const t2 = listMarketplaceResponse(nhieu, message(pbVar(2, 3), pbStr(3, readString(t1, 3))));
+  assert.deepEqual(slugs(t2), ["bot-3", "bot-4", "bot-5"]);
+  assert.equal(readMessages(t2, 1).length, 0, "trang sau KHÔNG lặp featured — main nối các trang, lặp là trùng thẻ");
+  assert.equal(readString(t2, 3), "6");
+  const t3 = listMarketplaceResponse(nhieu, message(pbVar(2, 3), pbStr(3, "6")));
+  assert.deepEqual(slugs(t3), ["bot-6"]);
+  assert.equal(readString(t3, 3), "", "hết ⇒ token rỗng, main dừng lặp");
+  assert.deepEqual([...slugs(t1), ...slugs(t2), ...slugs(t3)].length, 7, "ba trang nối lại = cả kho, không thiếu không trùng");
+
+  const macDinh = listMarketplaceResponse(nhieu, undefined);
+  assert.equal(slugs(macDinh).length, 7, "page_size 0 ⇒ trang mặc định 24, đủ 7");
+  assert.equal(readString(macDinh, 3), "");
+  const tokenHong = listMarketplaceResponse(nhieu, message(pbVar(2, 3), pbStr(3, "abc")));
+  assert.deepEqual(slugs(tokenHong), ["bot-0", "bot-1", "bot-2"], "token lạ ⇒ trang đầu, không ném, tab không trống");
+  const tran = listMarketplaceResponse(nhieu, message(pbVar(2, 100_000)));
+  assert.equal(slugs(tran).length, 7, "page_size khổng lồ bị trần 100, vẫn trả đủ khi kho nhỏ");
+});
+
 test("GetGrokBotTemplateImportDetails: template (1) · blob_get_url (2) · expected_active_version (3) · creator (4)", () => {
   const b = templateImportDetailsResponse(port, message(pbStr(1, listing.shareId)));
   const t = readMessages(b, 1)[0];

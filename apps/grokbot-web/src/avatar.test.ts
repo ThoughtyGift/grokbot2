@@ -31,7 +31,16 @@ test("cùng id ⇒ cùng lựa chọn, khác id ⇒ (gần như luôn) khác", (
 
 test("SVG có thân, có hai mắt, và không rỗng", () => {
   const svg = botAvatarSvg("agent-1");
-  assert.match(svg, /^<svg viewBox="-158 -158 316 316"/);
+  /*
+   * viewBox không còn là hằng `-158 -158 316 316`: từ 3e60bdf nó ôm sát hộp bao của thân (đo pixel qua CDP để icon lấp
+   * đủ ô, ui-diff 163/165). Điều cần khoá là hình dạng của khung — VUÔNG và CÂN quanh gốc — chứ không phải con số.
+   */
+  const vb = /^<svg viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/.exec(svg);
+  assert.ok(vb, `thiếu viewBox: ${svg.slice(0, 80)}`);
+  const [x, y, w, h] = vb!.slice(1).map(Number);
+  assert.equal(w, h, "khung phải vuông");
+  assert.ok(Math.abs(x + w / 2) < 2 && Math.abs(y + h / 2) < 2, `khung phải cân quanh gốc, đang ${x} ${y} ${w} ${h}`);
+  assert.ok(w > 150 && w < 400, `cỡ khung lạ: ${w}`);
   const paths = svg.match(/<path /g) ?? [];
   // 1 thân + 2 mắt. Ít hơn nghĩa là engine trả khung rỗng.
   assert.equal(paths.length, 3, svg.slice(0, 200));

@@ -180,9 +180,10 @@ bot mới có đủ skill + routine của bản gốc (đếm `getAgentWorkflows
 > người tạo từ hồ sơ; mở thẻ → trang chi tiết (qua RPC + blob, qua zod `Dct` của main); **Import Bot** → bot mới mang ĐÚNG
 > `agentId` client tự đúc (UUID) + avatar chọn trên thẻ, skill đã dựng, không lời nhắc setup, bot tự chào (kickstart).
 > Đo: `scripts/e2e-marketplace.mjs` 26/26 · `scripts/e2e-mau-bot.mjs` 20/20 · `kiem-reply-0-43.mjs` 29 đọc + 13 ghi = 0 sai · 18 unit.
-> **Chưa:** mục 4 (tab Plugins nối MCP — hiện tab Plugins vẫn danh mục cũ), tài khoản thứ hai qua web login, phân trang thật
-> (`nextPageToken` luôn rỗng), ảnh người tạo là URL ngoài (chưa host). Ba điều bất ngờ ghi ở
-> [0-43-so-voi-local.md §7b](../extracted/0-43-so-voi-local.md).
+> **Ba mục còn thiếu XONG 06/09** (bảng theo dõi §6 mục 21): tab Plugins ↔ MCP trên 0.43 (reply Cài/Cập nhật/Gỡ đúng
+> `SandMcpState`/`SandMcpRemoveResult`, bấm thật Add trên UI), tài khoản thứ hai qua web login (`e2e-hai-tai-khoan.mjs` 20/20),
+> phân trang thật ở RPC (`page_size`/`page_token`, unit 7/7). **Còn:** ảnh người tạo là URL ngoài (chưa host). Ba điều bất ngờ
+> ghi ở [0-43-so-voi-local.md §7b](../extracted/0-43-so-voi-local.md).
 
 Hình dạng (proto 0.43):
 
