@@ -150,3 +150,61 @@ chạy được một lượt. Tài khoản thứ hai (web login) thấy cùng l
 | E | ½ ngày | — |
 
 Không làm: kéo catalog/plugin/template của hãng về (ngoài ranh legal); đụng `C:\Program Files\Grok Bot`.
+
+## D′ · Plugin hai tầng — hãng làm thế nào, và đường của ta (bổ sung 05/09, 13:40)
+
+**Plugin của hãng = định dạng plugin của Claude Code, lấy từ git.** Không đoán — đọc `proto.cjs` 0.43:
+
+```
+Plugin        { id, name, display_name, description, status, repository_url, tags, logo_url, primary_color,
+                is_published, publisher{…}, marketplace_id, marketplace{…},
+                git_url, git_ref, git_path, full_ref,
+                skills[], subagents[], hooks[], rules[], mcp_servers[], commands[], variables[],
+                release_repo, release_asset, release_tag, curated_category_keys[],
+                team_marketplace_install_mode, lifecycle_state, min_client_versions, published_by_user }
+Marketplace   { id, name, display_name, description, git_url, git_ref, user_id, team_id, logo_url,
+                last_indexed_at, last_indexed_commit_sha, team_config, required_plugin_installs[],
+                auto_reindex, distribution_git_url, is_default, allow_user_publish }
+AddMarketplaceRequest { name, git_url, git_ref, display_name, description, team_id, auto_reindex }   ← nút "Add repositories"
+EffectivePlugin { plugin, is_team_required, is_enabled, pinned_git_ref, configured_variables, inline_content_json,
+                  install_mode: USER | TEAM_DEFAULT | TEAM_REQUIRED, configured_variable_keys[] }
+FirstPartyPluginConfiguration → FirstPartyPluginMode: ENABLE_ALL | ALLOWLIST
+```
+
+Chuỗi UI khớp: *"Add repositories"* · *"Plugin content needs GitHub authentication"* · *"Set up git credentials on Grok
+Bot's computer so installed plugins can be fetched"* · *"Complete GitHub auth to sync installed plugins"* · *"Copy link to
+this plugin"* · *"Team plugins"* · *"Your plugins"* · *"Plugin Setup"* (điền `variables`). Và bằng chứng sống: repo `ecc`
+của chính người dùng hiện trong tab Plugins là **"Team plugins · ecc — Battle-tested Claude Code plugin"** — hãng đã
+index một marketplace Claude Code (`.claude-plugin/marketplace.json` + `plugin.json` + `skills/ commands/ agents/ hooks/
+.mcp.json`) rồi cài lên box bằng `git clone` (do đó cần git credentials trên box).
+
+Hai tầng của hãng, và ta có gì:
+
+| tầng | hãng | ta hôm nay | thiếu |
+|---|---|---|---|
+| **Plugin hãng** (Gmail, Drive, Notion, Slack, Granola…) | MCP do Cursor host; `FirstPartyPluginConfiguration` ENABLE_ALL/ALLOWLIST; tab Plugins → *Featured* | `plugin-catalog.ts` (registry JSON: `GROKBOT2_PLUGIN_REGISTRY` path/URL) + `plugins.ts` (Add = ghi MCP server vào config theo owner) + `bootstrap-plugins.ts` (dựng hình cho client) — **đã chạy trên 0.29** | map sang `EffectivePlugin` cho 0.43 (`getEffectivePlugins`/`getEffectiveMcpPlugins`), `variables` → *Plugin Setup* |
+| **Plugin cộng đồng** (user tự build, `ecc`, `pstack` 45 skill) | marketplace = **git repo**; plugin = thư mục theo định dạng Claude Code; index → `skills/subagents/hooks/rules/commands/mcp_servers`; cài = clone lên box; `allow_user_publish`; `install_mode` user/team | **chưa có** | toàn bộ tầng này |
+
+**Đường của ta cho tầng cộng đồng — không clone plugin của ai, dựng ĐƯỜNG để ai cũng đăng được:**
+
+1. `marketplaces.ts` — kho marketplace theo owner: `{name, gitUrl, gitRef, displayName, description, autoReindex}`; lệnh
+   `addMarketplace` (0.43 gọi qua RPC `AddMarketplace` — trích tên lệnh host tương ứng khi làm B). Marketplace mặc định
+   của ta = một repo git của dự án (`is_default`), `allow_user_publish: true`.
+2. **Indexer** (chạy trên box, nơi đã có git): clone/fetch repo → đọc `.claude-plugin/marketplace.json` → mỗi plugin đọc
+   `plugin.json` + đếm `skills/*/SKILL.md`, `commands/*.md`, `agents/*.md`, `hooks/hooks.json`, `.mcp.json` → ghi
+   `Plugin` vào kho (`.data/plugins-index.json`, đường dẫn qua env). `last_indexed_commit_sha` để biết cũ/mới.
+3. **Cài** = `installEntry{entryId}` (0.43) → clone `git_url@git_ref/git_path` vào `~/workspace/plugins/<name>` trên box →
+   (a) mỗi `skills/*/SKILL.md` thành một skill trong `workflows.ts` cho bot (menu `/`), (b) `.mcp.json` → `mcp.ts`
+   (đi qua `plugins.ts` sẵn có, `variables` → secrets.ts placeholder như registry hiện tại), (c) `rules/` ghép vào lời
+   nhắc, (d) `hooks/` **bỏ qua ở bản đầu** (hooks chạy lệnh tuỳ ý — trên box dùng chung là rủi ro; ghi rõ "chưa hỗ trợ").
+   `pinned_git_ref` để `updatePluginInstall{pluginId}` biết có bản mới.
+4. **Đăng** (user tự build): skill trong menu `/` *"Tạo plugin"* — bot scaffold `plugin.json` + `skills/` từ chính skill/routine
+   của bot (đường ngược của C: template → plugin), commit vào repo của người dùng (hoặc PR vào marketplace mặc định), rồi
+   `addMarketplace`/reindex. Tool: `scaffold_plugin{name, skills[], mcp?}` + `publish_plugin{gitUrl}`.
+5. Quyền: `GROKBOT2_ALLOW_PLUGIN_INSTALL` đã có — giữ; thêm `install_mode` team-required cho chủ VPS ép plugin nền.
+
+Kiểm: `ecc` của chính người dùng (đã là marketplace Claude Code hợp lệ) → `addMarketplace` → index ra đúng số skill →
+cài lên `New Bot` → menu `/` mọc skill của `ecc` → gọi một skill chạy được. Đó là bài E2E rẻ nhất vì repo có sẵn.
+
+*Về câu "giống plugin của Hermes/DeepSeek không": không kiểm được từ đây; thứ kiểm được là hãng dùng **đúng định dạng plugin
++ marketplace của Claude Code** (cùng nhà Anthropic-format mà `ecc` của bạn viết theo), nên chuẩn mở để bám là chuẩn đó.*
