@@ -6,6 +6,7 @@ import { closeAgentTab } from "../browser.js";
 import { dropAgentProfile } from "../displays.js";
 import { publish } from "../events.js";
 import { avatarCuaBot } from "../avatar-mac-dinh.js";
+import { removeForAgent as removeWorkflowsForAgent } from "../workflows.js";
 import { AUTH_ID } from "../identity/index.js";
 import { currentOwner } from "../request-context.js";
 import {
@@ -268,6 +269,9 @@ export function deleteAgents(a: { ids?: string[]; agentIds?: string[]; id?: stri
     // xoá bot mà quên nó là để lại ~57 MB không ai nhìn thấy.
     void dropAgentProfile(id);
     automationCleanupRef?.(id);
+    // Skill (menu `/`) sống trong kho riêng `workflows.json`; không xoá theo thì bot chết để lại
+    // skill mồ côi (đo 05/09). Import thẳng được vì `workflows.ts` không import gì của app.
+    removeWorkflowsForAgent(id);
   }
   persist(); rosterChanged(); return { deleted: ids, transcript: [] };
 }

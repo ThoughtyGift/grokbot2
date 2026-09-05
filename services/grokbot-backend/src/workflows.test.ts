@@ -27,7 +27,7 @@ import { join } from "node:path";
  */
 process.env.GROKBOT2_WORKFLOWS_FILE = join(tmpdir(), `grokbot2-workflows-test-${process.pid}.json`);
 
-const { create, update, remove, setEnabled, forAgent, listAll, byId, skillDuocGoi, runNow, bindGuiPrompt, _xoaHet } = await import("./workflows.js");
+const { create, update, remove, removeForAgent, setEnabled, forAgent, listAll, byId, skillDuocGoi, runNow, bindGuiPrompt, _xoaHet } = await import("./workflows.js");
 
 const bot = (n: string) => `agent-wf-${n}`;
 
@@ -77,6 +77,18 @@ test("xoá trả về danh sách của ĐÚNG bot vừa mất một mục", () =
   const ds = remove({ id: w.id });
   assert.deepEqual(ds.map((x) => x.name), ["hai"]);
   assert.equal(byId(w.id), null);
+});
+
+test("xoá bot thì xoá HẾT skill của nó, không đụng bot khác", () => {
+  _xoaHet();
+  create({ agentId: bot("a"), name: "một" });
+  create({ agentId: bot("a"), name: "hai" });
+  create({ agentId: bot("b"), name: "của B" });
+  // Đo 05/09: deleteAgent để lại skill mồ côi trong kho — menu `/` không hiện nên không ai thấy.
+  assert.equal(removeForAgent(bot("a")), 2);
+  assert.deepEqual(forAgent({ agentId: bot("a") }), []);
+  assert.deepEqual(forAgent({ agentId: bot("b") }).map((x) => x.name), ["của B"]);
+  assert.equal(removeForAgent(bot("khong-co")), 0);
 });
 
 test("sửa một id không tồn tại thì không ném, không tạo mới", () => {

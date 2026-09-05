@@ -242,6 +242,18 @@ export function remove(args: unknown): Workflow[] {
   return forAgent({ agentId: cu?.agentId ?? idOf(a) });
 }
 
+/**
+ * Xoá MỌI skill của một bot — gọi từ `deleteAgents`. Đo 05/09: xoá bot xong `getAgentWorkflows{id}`
+ * vẫn trả đủ skill, kho lớn dần bằng skill của bot đã chết mà menu `/` không hiện nên không ai thấy
+ * (bảng theo dõi §5 mục 16). Trả số mục đã xoá; ghi đĩa một lần.
+ */
+export function removeForAgent(agentId: string): number {
+  const ids = [...kho.values()].filter((w) => w.agentId === agentId).map((w) => w.id);
+  for (const id of ids) kho.delete(id);
+  if (ids.length) luu();
+  return ids.length;
+}
+
 /** Tra một skill để chạy. `null` khi không có. */
 export function byId(id: string): Workflow | null {
   return kho.get(id) ?? null;
