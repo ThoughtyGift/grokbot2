@@ -103,6 +103,21 @@ export function bindAutomationRefine(fn: (agentId: string, name: string, patch: 
 }
 export { automationRefineRef };
 
+/**
+ * Bàn giao bản ghi dạy việc cho BOT — `teach.ts` gọi khi nút Stop tới mà có video.
+ *
+ * Đi qua ref thay vì import `sendPrompt`: `teach.ts` được `gateway.ts` nạp, còn `sendPrompt` sống
+ * trong `runtime/turn.ts` — cùng một họ vòng import mà `automationCreateRef` ở trên sinh ra để tránh.
+ * `content` là câu hằng của hãng, `clientNonce` mang tiền tố `teach-recording:` để client vẽ đúng
+ * kiểu, `modelNote` là phần chỉ model đọc (đường dẫn video, nhật ký thao tác) — không vào bản ghi.
+ */
+export interface TeachHandoff { content: string; clientNonce: string; modelNote: string; richText: string }
+let teachHandoffRef: ((agentId: string, h: TeachHandoff) => void) | null = null;
+export function bindTeachHandoff(fn: (agentId: string, h: TeachHandoff) => void): void {
+  teachHandoffRef = fn;
+}
+export { teachHandoffRef };
+
 let automationCleanupRef: ((agentId: string) => void) | null = null;
 export function bindAutomationCleanup(fn: (agentId: string) => void): void { automationCleanupRef = fn; }
 export { automationCleanupRef };

@@ -229,6 +229,8 @@ if (armed) {
  * chat** có chữ "dừng" — bấm vào đó chạy luôn một routine thật của người dùng. Khi đang ghi, lớp
  * phủ có đúng hai nhãn: `Stop and save recording` và `Discard recording`.
  */
+// Mốc TRƯỚC cú bấm Stop: tin bàn giao của lượt đo trước còn nằm trong bản ghi, nên chỉ nhận tin mọc SAU mốc này.
+const tDung = Date.now();
 const stopped = await page.evaluate((press) => {
   const btn = [...document.querySelectorAll("button,[role=button]")]
     .find((b) => b.offsetParent !== null && /stop and save recording/i.test(b.getAttribute("aria-label") ?? ""));
@@ -262,18 +264,80 @@ ok("lớp phủ đã tắt", await page.evaluate(() => !/watching and learning/i
  * ghi lúc nãy. Đây là khẳng định hẹp nhất mà vẫn đúng câu hỏi: "con bot vừa dạy có routine mới
  * chưa".
  */
-// Skill được ghi trong lượt `stopTeachRecording`, nhưng lượt đó cũng đi qua box (`finish()` gỡ
-// binding) — nên chờ vài nhịp thay vì đọc một lần, cùng lý do như chỗ vũ trang phía trên.
-let sau = truoc;
-for (let cho = 0; cho < 15 && sau <= truoc; cho += 1) {
-  sau = await demSkill();
-  if (sau <= truoc) await page.waitForTimeout(500);
+/*
+ * Hai đường ra từ nút Stop (06/09, §5 mục 14):
+ *
+ *   · có box → VIDEO (đường của hãng): backend đăng một tin đứng tên người dùng, đúng câu hằng, nonce
+ *     `teach-recording:…`; BOT học trong một lượt chat rồi tự tạo skill và dẫn nó bằng
+ *     `sand-workflow:<id>`. Skill mọc SAU một lượt model — chờ tới `TEACH_WAIT_MS` (mặc định 5 phút).
+ *   · không box → đường cũ: backend ghi routine + skill ngay trong lượt `stopTeachRecording`.
+ *
+ * Nhận ra đường nào bằng chính bản ghi: tin `teach-recording` có mặt là đường video. Chờ tới 45 s,
+ * KHÔNG phải 5 s: `stopTeachRecording` dừng ffmpeg trước khi bàn giao (SIGINT → chờ file đóng → ffprobe,
+ * ba lượt qua hầm ssh) — lần đo đầu 06/09 chờ 6 s, tin tới muộn hơn, bài đo rẽ nhầm sang đường cũ và
+ * báo đỏ một sản phẩm đang chạy đúng (skill của bot đã mọc ở giây ~45).
+ */
+const CAU = "The recording is finished. Learn the task from it.";
+const tail = async () => {
+  const r = await gw("getAgentTranscriptTail", { id: agentId, limit: 40 });
+  return Array.isArray(r?.entries) ? r.entries : [];
+};
+let tinBanGiao = null;
+const tBanGiao = Date.now();
+for (let cho = 0; cho < 60 && !tinBanGiao; cho += 1) {
+  tinBanGiao = (await tail()).find((e) => e?.kind === "message" && e?.role === "user" && e?.content === CAU
+    && String(e?.clientNonce ?? "").startsWith("teach-recording:") && Number(e?.timestampMs ?? 0) >= tDung - 2000) ?? null;
+  if (!tinBanGiao) await page.waitForTimeout(750);
 }
-ok("skill MỚI cho đúng bot vừa dạy", sau > truoc, `${agentId}: truoc ${truoc} → sau ${sau}`);
-if (sau > truoc) {
+if (tinBanGiao) console.log(`  ·    tin bàn giao tới sau ${Math.round((tinBanGiao.timestampMs - tDung) / 1000)}s kể từ lúc bấm Stop (bài đo thấy sau ${Math.round((Date.now() - tBanGiao) / 1000)}s)`);
+const demSkillThat = async () => {
   const ds = await gw("getAgentWorkflows", { id: agentId });
-  const moi = Array.isArray(ds) ? ds[ds.length - 1] : null;
-  console.log(`  ·    skill: "${moi?.name ?? "?"}" — ${String(moi?.instructions ?? "").replace(/\s+/g, " ").slice(0, 90)}`);
+  return Array.isArray(ds) ? ds.filter((w) => w?.name !== "learn-from-demonstration").length : 0;
+};
+// `truoc` đếm mọi skill; đường video dựng thêm `learn-from-demonstration` nên đếm lại KHÔNG tính nó.
+const truocThat = Math.min(truoc, await demSkillThat());
+
+if (tinBanGiao) {
+  console.log(`  ·    đường VIDEO — nonce ${String(tinBanGiao.clientNonce).slice(0, 40)}…`);
+  ok("tin bàn giao đúng hình hãng: câu hằng + nonce teach-recording", true);
+  const han = Number(process.env.TEACH_WAIT_MS ?? 300_000);
+  const t0 = Date.now();
+  let sau = truocThat; let linkSkill = null;
+  // Câu của bot là entry `send-message` với `message.content` (đúng shape app gốc), KHÔNG phải `kind:"message"` —
+  // lần đo 2 (06/09) bot đã phát link mà bài đo đọc nhầm khoá nên báo đỏ.
+  const chuBot = (e) => (e?.kind === "send-message" && e?.message?.type === "text" ? String(e.message.content ?? "")
+    : e?.kind === "message" && e?.role === "assistant" ? String(e?.content ?? "") : "");
+  while (Date.now() - t0 < han) {
+    sau = await demSkillThat();
+    const bot = (await tail()).filter((e) => Number(e?.timestampMs ?? 0) >= tDung && /sand-workflow:[a-z0-9-]+/.test(chuBot(e)));
+    if (bot.length) linkSkill = chuBot(bot[bot.length - 1]).match(/\[([^\]]+)\]\(sand-workflow:([a-z0-9-]+)\)/);
+    if (sau > truocThat && linkSkill) break;
+    await page.waitForTimeout(2000);
+  }
+  ok("bot tự tạo skill MỚI từ video", sau > truocThat, `${agentId}: truoc ${truocThat} → sau ${sau} sau ${Math.round((Date.now() - t0) / 1000)}s`);
+  ok("bot dẫn skill bằng [Tên](sand-workflow:<id>)", linkSkill != null, linkSkill ? `${linkSkill[1]} → ${linkSkill[2]}` : "(khong thay link)");
+  if (linkSkill) {
+    const ds = await gw("getAgentWorkflows", { id: agentId });
+    const khop = Array.isArray(ds) && ds.some((w) => w?.id === linkSkill[2]);
+    ok("id trong link là id skill thật (renderer so bằng)", khop, linkSkill[2]);
+  }
+  const hoi = (await tail()).some((e) => e?.kind === "ask-question" || e?.kind === "question");
+  ok("bot KHÔNG hỏi lại (ask_question bị khoá trong lượt học)", !hoi);
+} else {
+  console.log("  ·    đường CŨ (không có video) — backend ghi routine + skill ngay");
+  // Skill được ghi trong lượt `stopTeachRecording`, nhưng lượt đó cũng đi qua box (`finish()` gỡ
+  // binding) — nên chờ vài nhịp thay vì đọc một lần, cùng lý do như chỗ vũ trang phía trên.
+  let sau = truoc;
+  for (let cho = 0; cho < 15 && sau <= truoc; cho += 1) {
+    sau = await demSkill();
+    if (sau <= truoc) await page.waitForTimeout(500);
+  }
+  ok("skill MỚI cho đúng bot vừa dạy", sau > truoc, `${agentId}: truoc ${truoc} → sau ${sau}`);
+}
+{
+  const ds = await gw("getAgentWorkflows", { id: agentId });
+  const moi = Array.isArray(ds) ? ds.filter((w) => w?.name !== "learn-from-demonstration").at(-1) : null;
+  if (moi) console.log(`  ·    skill: "${moi?.name ?? "?"}" — ${String(moi?.instructions ?? "").replace(/\s+/g, " ").slice(0, 90)}`);
   console.log("  ·    skill thu de lai — xoa tay neu khong muon giu");
 }
 

@@ -81,3 +81,48 @@ test("mời chạy thử với giá trị trong demo, và KHÔNG tự chạy", (
   // Bài học vừa viết chưa ai kiểm; chạy ngay là hỏng việc trước khi người dùng kịp đọc nó.
   assert.match(NOI_DUNG_SKILL, /đừng tự chạy/);
 });
+
+test("bàn giao: content ĐÚNG câu hằng, nonce mang tiền tố teach-recording, phần model có video + nhật ký", async () => {
+  const { banGiaoBaiHoc } = await import("./teach-demo.js");
+  const h = banGiaoBaiHoc("agent-td-hand", "teach/teach-abc/demo.mp4", 16, "1. [bấm] #login — chữ trên đó: \"Đăng nhập\"");
+  // Renderer 0.43 (`Snn`) và `turn.ts` (`luotHocTuBanGhi`) đều so BẰNG — thêm một chữ vào content là mất cả hai.
+  assert.equal(h.content, CAU_GHI_XONG);
+  assert.match(h.clientNonce, /^teach-recording:[0-9a-f]{64}:teach-\d{8}T\d{6}Z-[0-9a-f-]{36}\.json$/);
+  assert.match(h.modelNote, /teach\/teach-abc\/demo\.mp4/);
+  assert.match(h.modelNote, /16 giây/);
+  assert.match(h.modelNote, /Nhật ký thao tác trình duyệt/);
+  assert.match(h.modelNote, /#login/);
+  // Bài học nằm NGAY trong phần model đọc — không dựa vào việc dò `@tên` trong content.
+  assert.match(h.modelNote, /create_workflow/);
+  assert.match(h.modelNote, /sand-workflow:<id>/);
+  // Skill học-từ-demo đã được dựng cho đúng bot.
+  const sk = forAgent({ agentId: "agent-td-hand" }).find((w) => w.name === TEN_SKILL);
+  assert.ok(sk);
+  // Chip skill dưới câu — đúng hình doc của hãng, id trỏ vào skill THẬT của ta để bấm mở được.
+  const doc = JSON.parse(h.richText);
+  assert.equal(doc.type, "doc");
+  const node = doc.content[0].content[0];
+  assert.equal(node.type, "workflowReference");
+  assert.equal(node.attrs.id, sk!.id);
+  assert.equal(node.attrs.label, "Learn from demonstration");
+  assert.equal(node.attrs.teachQueueScope, h.clientNonce.split(":")[1]);
+  // Hai bot khác nhau → hai scope khác nhau; cùng bot cùng video → cùng scope.
+  const h2 = banGiaoBaiHoc("agent-td-khac", "teach/teach-abc/demo.mp4", 16);
+  assert.notEqual(h.clientNonce.split(":")[1], h2.clientNonce.split(":")[1]);
+  assert.equal(h.clientNonce.split(":")[1], banGiaoBaiHoc("agent-td-hand", "teach/teach-abc/demo.mp4", 16).clientNonce.split(":")[1]);
+  assert.doesNotMatch(h2.modelNote, /Nhật ký thao tác/, "không có nhật ký thì không có mục nhật ký");
+});
+
+test("create_workflow trả id và cú pháp link để bot dẫn skill thành thẻ bấm", async () => {
+  const { taoWorkflowTuBot } = await import("./teach-demo.js");
+  const r = taoWorkflowTuBot({ name: "Tìm sỉ trên Alibaba", description: "khi cần nguồn hàng", instructions: "1. mở alibaba.com" }, "agent-td-link");
+  const w = forAgent({ agentId: "agent-td-link" }).find((x) => x.name === "Tìm sỉ trên Alibaba");
+  assert.ok(w, "skill phải được tạo");
+  assert.ok(r.includes(`[Tìm sỉ trên Alibaba](sand-workflow:${w!.id})`), r);
+  // Slug renderer 0.43 kiểm: /^[a-z0-9]+(?:-[a-z0-9]+)*$/ — id của ta phải qua được, nếu không link chỉ là chữ.
+  assert.match(w!.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+  // Trùng tên thì không đẻ bản hai và không trả link mới.
+  const r2 = taoWorkflowTuBot({ name: "Tìm sỉ trên Alibaba", instructions: "khác" }, "agent-td-link");
+  assert.match(r2, /Đã có skill/);
+  assert.equal(forAgent({ agentId: "agent-td-link" }).filter((x) => x.name === "Tìm sỉ trên Alibaba").length, 1);
+});

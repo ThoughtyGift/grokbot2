@@ -28,7 +28,9 @@
  * thì `teach.ts` cho bài học bền nhất (selector sống lâu hơn toạ độ); việc rải khắp desktop thì
  * `desktop-record.ts`; còn việc cần HIỂU chứ không chỉ lặp lại thì đường video này.
  */
+import { createHash, randomUUID } from "node:crypto";
 import { boxCall, boxConfigured } from "./box-exec.js";
+import { displayOf } from "./displays.js";
 import { create as taoSkill, forAgent as skillCuaBot, type Workflow } from "./workflows.js";
 
 /** Tên skill — trùng id app gốc dùng, để bản ghi của ta đọc được cạnh transcript của họ. */
@@ -43,6 +45,8 @@ interface PhienQuay {
   thuMuc: string;
   videoPath: string;
   batDauMs: number;
+  /** PID của ffmpeg trên box — để dừng ĐÚNG nó, không dò lại bằng tên. */
+  pid: number;
 }
 let phien: PhienQuay | null = null;
 
@@ -72,6 +76,15 @@ export async function batDauQuayDemo(agentId: string): Promise<{ ok: boolean; ly
   const thuMuc = `$HOME/workspace/teach/${id}`;
   const videoPath = `${thuMuc}/demo.mp4`;
   /*
+   * Quay ĐÚNG màn hình mà pane của client đang chiếu.
+   *
+   * Bật `GROKBOT2_PER_BOT_DISPLAY=on` (VPS) thì mỗi bot có một Xvfb riêng (`:521`…) và pane VNC chiếu
+   * display đó; bản đầu đóng cứng `:77` nên trên VPS video sẽ là màn hình CHUNG — người dùng demo ở
+   * một nơi, video quay một nơi khác, và bước "xem thử hai khung hình" sẽ báo bản ghi trắng. Máy dev
+   * không bật cờ ấy nên `displayOf` trả null và `:77` vẫn đúng.
+   */
+  const display = displayOf(agentId)?.display ?? process.env.GROKBOT2_BOX_DISPLAY ?? ":77";
+  /*
    * `-nostdin` là thứ đã cứu một lần: ffmpeg chạy nền mà còn đọc stdin sẽ nuốt phím của tiến trình
    * khác và tự dừng giữa chừng. `setsid` để nó sống qua lệnh exec này.
    */
@@ -86,16 +99,32 @@ export async function batDauQuayDemo(agentId: string): Promise<{ ok: boolean; ly
    * Đọc `xdpyinfo` mỗi lần thay vì đóng cứng 1920x1080: box khác có thể dựng Xvfb kích thước khác,
    * và một con số đóng cứng sai thì lại ra đúng loại video rỗng ruột này.
    */
+  /*
+   * `setsid -f ffmpeg … > ffmpeg.log 2>&1 < /dev/null` — KHÔNG `&`, không subshell.
+   *
+   * Bản trước: `A && B && setsid ffmpeg … > log 2>&1 &`. Lệnh "bật quay" trả về sau đúng `timeoutMs` (40 s) và ffmpeg
+   * bị hạ theo — nên bốn lượt đo đầu 06/09 video nào cũng dài đúng 40 s và tin bàn giao tới 38 s sau Stop; `demo_start`
+   * của bot (01/09) cũng đã chịu 40 s ấy mà không ai đo. Đo từng dạng qua router với `timeoutMs` 12 s: `A && ffmpeg &`
+   * 12,2 s · `( exec setsid ffmpeg x11grab ) > log 2>&1 &` 12,2 s · cùng dạng với `sleep` 12,2 s nhưng với ffmpeg
+   * lavfi 1,2 s (không lý giải được, và không cần) · **`setsid -f ffmpeg … > log 2>&1 < /dev/null` 1,2 s**. `execFile`
+   * của daemon chờ mọi kẻ giữ ống stdout thoát; `-f` để `setsid` tự fork rồi trả shell về ngay, và tiến trình con
+   * chỉ còn ba fd đã chuyển hướng. Một con số tròn trùng hằng `40_000` là dấu tay của timeout — đọc nó trước.
+   *
+   * `pgrep -u "$(id -un)" -n -f "[x]11grab"`: (1) `[x]` để không khớp chính dòng lệnh shell này (bẫy `pgrep -af` tự
+   * đếm mình, §7); (2) `-u` vì box dùng chung — một lượt đo bắt được x11grab của user KHÁC và `kill` trả EPERM;
+   * (3) `-n` lấy cái mới nhất, là cái vừa bật.
+   */
   const lenh = `mkdir -p ${thuMuc} && cd ${thuMuc} && `
-    + `SZ=$(DISPLAY=:77 xdpyinfo 2>/dev/null | awk '/dimensions:/{print $2}') && `
-    + `SZ=\${SZ:-1920x1080} && DISPLAY=:77 setsid ffmpeg -nostdin -y `
-    + `-f x11grab -framerate 10 -video_size $SZ -i :77 -c:v libx264 -preset ultrafast -pix_fmt yuv420p `
-    + `demo.mp4 > ffmpeg.log 2>&1 < /dev/null & sleep 2; pgrep -f "x11grab" | head -1`;
+    + `SZ=$(DISPLAY=${display} xdpyinfo 2>/dev/null | awk '/dimensions:/{print $2}'); SZ=\${SZ:-1920x1080}; `
+    + `DISPLAY=${display} setsid -f ffmpeg -nostdin -y -f x11grab -framerate 10 -video_size $SZ -i ${display} `
+    + `-c:v libx264 -preset ultrafast -pix_fmt yuv420p demo.mp4 > ffmpeg.log 2>&1 < /dev/null; `
+    + `sleep 2; pgrep -u "$(id -un)" -n -f "[x]11grab"`;
   const r = await sh(lenh, 40_000);
-  if (!r.stdout.trim()) return { ok: false, lyDo: "ffmpeg không lên — xem ffmpeg.log trong thư mục phiên" };
+  const pid = Number(r.stdout.trim());
+  if (!pid) return { ok: false, lyDo: "ffmpeg không lên — xem ffmpeg.log trong thư mục phiên" };
 
-  phien = { agentId, thuMuc, videoPath, batDauMs: Date.now() };
-  console.log(`[grokbot2] [teach-video] bắt đầu quay cho ${agentId} → ${videoPath}`);
+  phien = { agentId, thuMuc, videoPath, batDauMs: Date.now(), pid };
+  console.log(`[grokbot2] [teach-video] bắt đầu quay cho ${agentId} (${display}) → ${videoPath}`);
   return { ok: true };
 }
 
@@ -111,7 +140,8 @@ export async function dungQuayDemo(): Promise<{ videoPath: string; giay: number 
   const p = phien;
   phien = null;
 
-  await sh(`pkill -INT -f x11grab || true`, 20_000);
+  // Theo PID đã ghi lúc bật; dự phòng bằng regex có ngoặc vuông (xem chú thích ở `batDauQuayDemo`).
+  await sh(`kill -INT ${p.pid} 2>/dev/null || pkill -INT -u "$(id -un)" -f "[x]11grab" || true`, 20_000);
   // Chờ file đóng: kích thước ổn định hai lần liên tiếp, tối đa ~20 giây.
   await sh(
     `for i in $(seq 1 40); do a=$(stat -c%s "${p.videoPath}" 2>/dev/null || echo 0); sleep 0.5; `
@@ -193,6 +223,12 @@ export const NOI_DUNG_SKILL = [
   "Tóm tắt các bước đã học thành danh sách ngắn, nói rõ cái nào là INPUT, và nhắc người dùng gõ `/`",
   "để gọi lại.",
   "",
+  "Dẫn skill vừa tạo bằng ĐÚNG cú pháp `[Tên skill](sand-workflow:<id>)` — `create_workflow` trả về",
+  "`<id>` cho bạn. Ứng dụng biến link đó thành thẻ bấm mở skill; viết sai cú pháp thì chỉ là chữ.",
+  "",
+  "Nếu bài giao kèm 'nhật ký thao tác trình duyệt', dùng nó để khớp từng bước với video (nó ghi đúng",
+  "URL và nhãn nút đã bấm) — video cho biết Ý ĐỊNH, nhật ký cho biết CHÍNH XÁC đã bấm gì.",
+  "",
   "Rồi MỜI chạy thử, với chính giá trị họ vừa dùng trong demo — một câu, không widget:",
   '"Muốn chạy thử với `nến thơm` không?" App gốc kết đúng như vậy.',
   "",
@@ -245,7 +281,57 @@ export function taoWorkflowTuBot(arg: unknown, agentId: string): string {
     return `Đã có skill "${name}" — dùng update_workflow nếu muốn đổi nội dung, hoặc đặt tên khác.`;
   }
   const w = ds?.find((x) => x.name === name);
-  return `Đã lưu skill "${name}"${w ? "" : ""} — người dùng gõ \`/\` là gọi lại được.`;
+  /*
+   * Trả cả id lẫn cú pháp link. Renderer 0.43 đọc `sand-workflow:<slug>` → `{kind:"skill",
+   * workflowId:<slug>}` → `focusSkillId`, tức slug PHẢI là chính `id` của skill; id của ta
+   * (`wf-<base36>-<n>`) khớp regex `/^[a-z0-9]+(?:-[a-z0-9]+)*$/` của họ. Không đưa id ở đây thì bot
+   * không có cách nào dẫn skill thành thẻ bấm — hãng kết mọi buổi dạy bằng đúng một thẻ như thế.
+   */
+  return `Đã lưu skill "${name}" (id: ${w?.id ?? "?"}) — người dùng gõ \`/\` là gọi lại được.`
+    + (w ? ` Dẫn nó trong câu trả lời bằng: [${name}](sand-workflow:${w.id})` : "");
+}
+
+/**
+ * Bàn giao bản ghi cho bot theo ĐÚNG hình dạng tin của hãng, cộng phần chỉ model đọc.
+ *
+ * `content` là câu hằng — renderer 0.43 vẽ kiểu `teach-recording` khi
+ * `clientNonce.startsWith("teach-recording:") && content === CAU_GHI_XONG`, và `turn.ts` bật cờ
+ * `luotHocTuBanGhi` (khoá `ask_question`) cũng bằng đúng phép so ấy. Nên đường dẫn video và nhật ký
+ * thao tác đi qua `modelNote` — nối vào lượt model, không vào bản ghi.
+ *
+ * `teachQueueScope` của hãng là sha256 (0 lần trong bundle ⇒ host tự sinh); ta băm `agentId` +
+ * đường video — đủ để hai buổi dạy khác nhau không trùng nonce.
+ */
+export function banGiaoBaiHoc(agentId: string, videoPath: string, giay: number, nhatKyCdp?: string): {
+  content: string; clientNonce: string; modelNote: string; richText: string;
+} {
+  const skill = dungSkillHocTuDemo(agentId);
+  const scope = createHash("sha256").update(`${agentId}:${videoPath}`).digest("hex");
+  /*
+   * Chip skill dưới câu — chép hình của hãng: doc ProseMirror một paragraph, một node `workflowReference`
+   * (renderer: `case"workflowReference"` → pill icon `cube` + label; bấm → `focusSkillId: attrs.id`). Hãng đặt
+   * `id:"learn-from-demonstration"` vì skill của họ có id là slug; bên ta id là `wf-…` nên đặt ĐÚNG id của skill
+   * học-từ-demo để bấm chip mở đúng skill — label vẫn là chữ hãng dùng. Pill tự đổi label sang `name` của skill
+   * nếu tìm thấy id trong kho.
+   */
+  const richText = JSON.stringify({
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "workflowReference", attrs: { id: skill.id, label: "Learn from demonstration", teachQueueScope: scope } }] }],
+  });
+  // Dạng của hãng: `teach-20260905T040542Z-<uuid>.json` — ISO bỏ `-` `:` và phần lẻ giây.
+  const tep = `teach-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")}-${randomUUID()}.json`;
+  const ghiChu = [
+    // Nói rõ gốc của đường dẫn: lượt đo 06/09 bot `cd "$HOME"` rồi `ls teach/…` và trượt một vòng trước khi tự tìm ra.
+    `Video: \`${videoPath}\` (${giay} giây, trên máy tính của bạn — đường dẫn tương đối THƯ MỤC LÀM VIỆC, tức nơi run_terminal_command_v2 đứng sẵn; đừng cd đi đâu).`,
+    "",
+    `Làm theo skill "${TEN_SKILL}" dưới đây:`,
+    "",
+    skill.instructions,
+    ...(nhatKyCdp?.trim()
+      ? ["", "## Nhật ký thao tác trình duyệt (bộ ghi tự bắt, cùng buổi demo)", "", nhatKyCdp.trim()]
+      : []),
+  ].join(String.fromCharCode(10));
+  return { content: CAU_GHI_XONG, clientNonce: `teach-recording:${scope}:${tep}`, modelNote: ghiChu, richText };
 }
 
 /**

@@ -61,6 +61,7 @@ import {
 } from "./runtime/turn.js";
 import { subscribe } from "./events.js";
 import { taoNguoiNhac } from "./routine-nhac.js";
+import { bindTeachHandoff } from "./chat/state.js";
 import { hostSettings, patchHostSettings } from "./host-settings.js";
 import {
   getAgentAutomationsForClient,
@@ -143,6 +144,15 @@ bindTemplateSources({
       console.warn(`[grokbot2] mẫu bot: không ghi được memory cho ${agentId}:`, (e as Error).message);
     }
   },
+});
+
+/**
+ * Bàn giao dạy việc (nút Stop của Teach a task có video): một tin ĐỨNG TÊN người dùng đúng câu hằng
+ * + nonce `teach-recording:…` (client 0.43 vẽ kiểu teach-recording), phần video/nhật ký chỉ model đọc.
+ * Xem `teach.ts` → `duongVideo`.
+ */
+bindTeachHandoff((agentId, h) => {
+  sendPrompt({ agentId, content: h.content, clientNonce: h.clientNonce, richText: h.richText, modelNote: h.modelNote });
 });
 
 /** Người nhắc dùng chung cho cổng gateway: gom 1,5 s, chờ bot rảnh, gửi lời nhắc IM LẶNG (không có tin người dùng). */

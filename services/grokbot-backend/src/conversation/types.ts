@@ -165,7 +165,12 @@ export type TranscriptEvent =
   | { type: "automation-changed"; action: "created" | "updated" | "deleted" | "enabled" | "disabled"; automationId: string; automationName: string };
 
 export type Entry =
-  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })
+  | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string };
+      /**
+       * Doc ProseMirror (JSON string) của tin — schema 0.43 `richText: string`. Renderer vẽ bong bóng từ đây khi có:
+       * chip `workflowReference` (icon + tên skill) của tin bàn giao dạy việc là node trong doc này, không phải trong `content`.
+       */
+      richText?: string })
   | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg | SecretRequestMsg | UserFormMsg | BotTemplateShareMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean;
       /** Đã gửi bí mật chưa — renderer dùng để vẽ thẻ "đã lưu" thay cho ô nhập. Giá trị KHÔNG lưu. */
       secretProvided?: boolean;
@@ -291,10 +296,18 @@ export interface ToolCtx {
 }
 
 export interface SendArgs {
-  agentId?: string; content?: string; prompt?: string; text?: string; richText?: { text?: string };
+  /** `richText`: client 0.43 gửi CHUỖI JSON doc ProseMirror (lưu nguyên lên entry); dạng `{text}` là của FE cũ. */
+  agentId?: string; content?: string; prompt?: string; text?: string; richText?: string | { text?: string };
   clientNonce?: string; attachments?: { path?: string; name?: string }[];
   attachmentPaths?: string[]; attachmentNames?: string[];
   fromAgent?: { id: string; name: string };
+  /**
+   * Phần CHỈ MODEL đọc, nối vào sau tin người dùng trong lượt này — không vào bản ghi.
+   *
+   * Sinh ra cho bàn giao dạy việc: client 0.43 chỉ vẽ kiểu `teach-recording` khi `content` đúng
+   * bằng câu hằng, nên đường dẫn video và nhật ký thao tác không thể nằm trong `content`.
+   */
+  modelNote?: string;
   /** Native FE: write tools ask even if the stock app stored localToolPermission=always. */
   askWriteTools?: boolean;
   /**

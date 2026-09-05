@@ -65,26 +65,55 @@ const BASE_PORT = Number(process.env.GROKBOT2_CHILD_PORT_BASE ?? 13400);
  * hỏng cách ly mà không có dấu hiệu nào. Sổ thì trùng là nhìn thấy.
  */
 const MAP_FILE = process.env.GROKBOT2_USER_MAP ?? "/var/lib/grokbot2/users.json";
-const POOL = (process.env.GROKBOT2_USER_POOL ?? "gb2u001,gb2u002,gb2u003,gb2u004,gb2u005")
-  .split(",").map((s) => s.trim()).filter(Boolean);
 
-function osUserFor(owner) {
+/**
+ * Dải tài khoản: đọc từ `/etc/passwd` MỖI LẦN cấp, không đóng cứng.
+ *
+ * Bản đầu ghi cứng `gb2u001…005` làm mặc định, và cái mặc định ấy sống lâu hơn thực tế: tới 06/09 box
+ * đã có 10 tài khoản `gb2u*` (tạo tay đúng như kế hoạch), sổ ghép đã cấp hết 10, mà router vẫn tin
+ * dải là 5 — nên người tiếp theo nhận "pool exhausted" trong khi việc thêm tài khoản đã làm rồi.
+ * Một danh sách phải nhớ đồng bộ ở hai nơi (hệ điều hành và biến môi trường) thì sẽ lệch; nguồn
+ * sự thật là passwd, nên đọc thẳng ở đó. `GROKBOT2_USER_POOL` vẫn thắng nếu ai đặt — để khoá dải
+ * hẹp hơn có chủ ý.
+ */
+const POOL_ENV = (process.env.GROKBOT2_USER_POOL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const PASSWD = process.env.GROKBOT2_PASSWD_FILE ?? "/etc/passwd";
+export function poolAccounts() {
+  if (POOL_ENV.length) return POOL_ENV;
+  try {
+    return readFileSync(PASSWD, "utf8").split("\n")
+      .map((l) => l.split(":")[0])
+      .filter((u) => /^gb2u\d{3,}$/.test(u))
+      .sort();
+  } catch { return []; }
+}
+
+/** Lỗi có MÃ để đầu gọi (`box-exec.ts`) nói được câu cho người dùng thay vì câu cho quản trị viên. */
+export class PoolExhausted extends Error {
+  constructor(used, size) {
+    super(`per-user mode: pool exhausted (${used} in use, ${size} accounts) — create more gb2u* accounts`);
+    this.code = "pool-exhausted"; this.used = used; this.size = size;
+  }
+}
+
+export function osUserFor(owner, mapFile = MAP_FILE) {
   const key = String(owner ?? "").trim();
   if (!key) throw new Error("per-user mode: request carried no owner");
 
   let map = {};
-  try { map = JSON.parse(readFileSync(MAP_FILE, "utf8")); } catch { /* sổ chưa có */ }
+  try { map = JSON.parse(readFileSync(mapFile, "utf8")); } catch { /* sổ chưa có */ }
   if (map[key]) return map[key];
 
+  const pool = poolAccounts();
   const taken = new Set(Object.values(map));
-  const free = POOL.find((u) => !taken.has(u));
+  const free = pool.find((u) => !taken.has(u));
   // Hết dải thì ném lỗi. KHÔNG lùi về tài khoản dùng chung: lùi về nghĩa là im lặng bỏ cách ly đúng
   // vào lúc cần nó nhất.
-  if (!free) throw new Error(`per-user mode: pool exhausted (${taken.size} in use) — create more gb2u* accounts`);
+  if (!free) throw new PoolExhausted(taken.size, pool.length);
 
   map[key] = free;
-  writeFileSync(MAP_FILE, `${JSON.stringify(map, null, 2)}\n`);
-  console.log(`[router] ${key} -> ${free}`);
+  writeFileSync(mapFile, `${JSON.stringify(map, null, 2)}\n`);
+  console.log(`[router] ${key} -> ${free} (${taken.size + 1}/${pool.length})`);
   return free;
 }
 
@@ -166,7 +195,9 @@ async function daemonFor(user) {
     return live.port;
   }
 
-  const port = BASE_PORT + POOL.indexOf(user);
+  // Cổng theo SỐ trong tên (`gb2u011` → BASE+11), không theo vị trí trong danh sách: danh sách nay đọc
+  // từ passwd nên vị trí có thể đổi khi thêm tài khoản, còn số trong tên thì không.
+  const port = BASE_PORT + Number(user.replace(/^gb2u/, ""));
   const home = join("/home", user);
   const root = join(home, "workspace");
   const memory = join(home, "grok-memory");
@@ -240,8 +271,8 @@ const server = createServer(async (req, res) => {
       port = PER_USER ? await daemonFor(osUserFor(req.headers["x-grokbot2-owner"])) : await sharedDaemon();
     } catch (e) {
       // Trả 200 kèm `error` — đúng hình dạng daemon vẫn trả, để phía gọi không phải học thêm một
-      // kiểu lỗi thứ hai.
-      return fail(200, { error: String(e?.message ?? e) });
+      // kiểu lỗi thứ hai. `code` là phần THÊM: có nó thì `box-exec.ts` nói được câu cho người dùng.
+      return fail(200, { error: String(e?.message ?? e), ...(e?.code ? { code: e.code, used: e.used, size: e.size } : {}) });
     }
 
     const up = request(
@@ -253,13 +284,15 @@ const server = createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+// Chỉ nghe khi được CHẠY, không phải khi được IMPORT — bài test nạp `osUserFor`/`poolAccounts` mà không mở cổng.
+const LA_CHINH = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (LA_CHINH) server.listen(PORT, "127.0.0.1", () => {
   console.log(`[router] nghe 127.0.0.1:${PORT} · tách người dùng: ${PER_USER ? "BẬT" : "tắt"}`);
-  if (PER_USER) console.log(`[router] dải tài khoản: ${POOL.join(", ")} · sổ: ${MAP_FILE}`);
+  if (PER_USER) { const p = poolAccounts(); console.log(`[router] dải tài khoản: ${p.length} (${p[0] ?? "—"}…${p[p.length - 1] ?? "—"}) · sổ: ${MAP_FILE}`); }
 });
 
 // Tắt router thì tắt luôn daemon con, đừng để lại tiến trình mồ côi giữ cổng.
-for (const sig of ["SIGTERM", "SIGINT"]) {
+if (LA_CHINH) for (const sig of ["SIGTERM", "SIGINT"]) {
   process.on(sig, () => {
     for (const [user, c] of children) stopChild(user, c, "router tắt");
     process.exit(0);

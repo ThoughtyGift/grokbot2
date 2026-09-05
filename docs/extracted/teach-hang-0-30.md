@@ -52,22 +52,22 @@ Cache **không có entry tool-call nào** (khớp kết luận 24 transcript tr�
 sống trong `store.db` trên box hãng, client lấy qua `getAgentWorkflows`. Nên BE ở đây là **quan sát được**, không
 **trích được** — phần trích được trọn là FE + API (tin, nonce, richText, link).
 
-## 3 · Bên mình — đang lệch ở đâu
+## 3 · Bên mình — đã khớp tới đâu (06/09/2026)
 
-| | hãng 0.30 | grokbot2 (nút `+` → `stopTeachRecording`) |
-|---|---|---|
-| dữ liệu bài học | video màn hình (mp4) | sự kiện DOM qua CDP (`teach.ts`) |
-| ai học | **bot**, trong một lượt chat, có tiến độ từng câu | **backend**, đồng bộ, rồi `hocNen` sửa tên/prompt nền |
-| người dùng thấy | tin hệ thống + chip + 4–6 câu tiến độ + link skill + mời chạy thử | trạng thái `saved` qua kênh `teach-recording`; không tin trong chat |
-| sản phẩm | **1 skill** có `{input}` | routine `manual` **+** skill cùng tên "Việc đã dạy — MM-DD HH:mm" |
-| tự xác nhận | mời dry-run | không |
-| link skill trong câu | `sand-workflow:<slug>` → chip | 0 lần trong `src` — bot chưa bao giờ phát |
+Nút `+` đi đường VIDEO từ 06/09 (bảng theo dõi §6 mục 25). Bảng lệch cũ giữ lại bên trái để thấy đã đổi gì:
 
-Đường video **đã có** ở bên mình: `teach-demo.ts` quay x11grab, `tinGiaoBaiHoc()` trả đúng câu
-`CAU_GHI_XONG` + `@learn-from-demonstration`, và `turn.ts` khoá `ask_question` cho lượt ấy. Nhưng nó chỉ nối vào
-hai tool **bot** gọi (`demo_start`/`demo_stop`), chưa nối vào nút `+` của client (`gateway.ts:170-171` → `teach.ts`).
+| | hãng 0.30 | grokbot2 tới 05/09 | grokbot2 từ 06/09 |
+|---|---|---|---|
+| dữ liệu bài học | video màn hình (mp4) | sự kiện DOM qua CDP | **video** (x11grab display của đúng bot) **+** nhật ký CDP kèm — thay cho "lịch sử Chrome" hãng đối chiếu |
+| ai học | **bot**, trong một lượt chat | backend đồng bộ, `hocNen` nền | **bot**, một lượt chat, 6 câu tiến độ (đo: *"Khung ở giây thứ 8 là trang example.com, bản ghi ổn" → "khớp đúng với nhật ký thao tác"*) |
+| người dùng thấy | tin `teach-recording` + chip + tiến độ + link skill | trạng thái pane, không tin | tin `role:user` đúng câu hằng + `clientNonce` `teach-recording:<sha256>:teach-<ISO>-<uuid>.json` → renderer vẽ kiểu teach-recording; tiến độ; link |
+| sản phẩm | 1 skill có `{input}` | routine + skill "Việc đã dạy — …" | **1 skill** bot đặt tên (*"Mở trang example domains của IANA"*) |
+| link skill | `[Tên](sand-workflow:<slug>)` | 0 lần | `[Tên](sand-workflow:<id>)` — `create_workflow` trả id + cú pháp; renderer so `slug === workflow.id` (`dft()` → `{kind:"skill", workflowId}` → `focusSkillId`), id `wf-…` khớp regex slug |
+| không hỏi lại | — | cờ `luotHocTuBanGhi` chỉ bật qua `sendPrompt` | cờ bật vì `content` đúng bằng câu hằng; video/nhật ký đi `modelNote` (chỉ model đọc) |
+| không có box | — | đường CDP | **rơi về đường CDP cũ** nguyên vẹn |
 
-Việc còn lại (§5 mục 14 bảng theo dõi): quyết định nút `+` đi đường nào, rồi (a) đăng tin `role:user` với
-`clientNonce` `teach-recording:…` + `richText` chip để client vẽ đúng kiểu, (b) cho bot phát `sand-workflow:<slug>`
-sau khi `create_workflow`, (c) kết bằng lời mời chạy thử. Cờ `sand_teach_by_demonstration`, ba lệnh
-`start/stop/getTeachRecordingStatus` đã khớp từng chữ — không phải đụng tầng dây.
+| chip dưới câu | `richText` doc: `workflowReference{id:"learn-from-demonstration", label, teachQueueScope}` | — | **cùng doc**, `id` = id THẬT của skill học-từ-demo (`wf-…`) để bấm chip mở đúng skill (pill so `x.id`), label giữ chữ hãng; entry `message` nay lưu `richText` string — schema 0.43 có khoá này, và client cũng gửi `richText` string cho mọi tin thường (đo `coverage.lastArgs`) nên mention/chip người dùng gõ cũng vẽ lại đúng sau khi mở lại |
+
+Còn khác, cố ý hoặc chưa: hãng đổi `requestId` giữa chừng vì uỷ thác subagent xem video (ta xem trong một lượt); hãng
+mời dry-run bằng widget hoặc câu (ta dặn trong skill — đo 06/09 bot kết *"Muốn mình chạy thử một lượt với chính
+example.com không?"*). `demo_start`/`demo_stop` (bot tự quay khi được nhờ) vẫn còn, cùng hạ tầng.

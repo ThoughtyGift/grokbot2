@@ -1166,7 +1166,7 @@ export function sendPrompt(args: SendArgs) {
   if (!agentId) agentId = createAgent({}).id;
   if (args.askWriteTools) askWriteThisTurn.add(agentId);
   else askWriteThisTurn.delete(agentId);
-  const text = args.content ?? args.prompt ?? args.text ?? args.richText?.text ?? "";
+  const text = args.content ?? args.prompt ?? args.text ?? (typeof args.richText === "object" ? args.richText?.text : undefined) ?? "";
   const t = tail(agentId);
 
   /*
@@ -1208,7 +1208,9 @@ export function sendPrompt(args: SendArgs) {
   if (text.trim() === CAU_GHI_XONG) luotHocTuBanGhi.add(agentId); else luotHocTuBanGhi.delete(agentId);
   // Lượt "Share as template" / "Update template" — xem `luotChiaSeMau`.
   if (laLuotChiaSeMau(text)) luotChiaSeMau.add(agentId); else luotChiaSeMau.delete(agentId);
-  const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
+  // `richText` chuỗi = doc ProseMirror của client (chip skill, mention…) — giữ nguyên lên entry để renderer vẽ lại đúng bong bóng.
+  const richText = typeof args.richText === "string" && args.richText.length > 0 ? args.richText : undefined;
+  const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(richText ? { richText } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
   if (!args.silent) t.push(userEntry);
 
@@ -1313,6 +1315,12 @@ export function sendPrompt(args: SendArgs) {
     history.push({ role: "user", content: text.trim() || `[tin nhắn rỗng]` });
   } else if (history[history.length - 1]?.role !== "user") {
     history.push({ role: "user", content: text.trim() || `[tin nhắn rỗng]` });
+  }
+  // `modelNote`: phần chỉ model đọc (xem `SendArgs`). Nối vào tin người dùng CUỐI — đến đây tin cuối
+  // luôn là của người, hai nhánh trên bảo đảm điều đó.
+  if (args.modelNote?.trim()) {
+    const cuoi = history[history.length - 1];
+    history[history.length - 1] = { ...cuoi, content: `${cuoi.content}\n\n${args.modelNote.trim()}` };
   }
   const image = readImageAttachment(attachmentsOf(args));
   // Abort whatever was still running for this bot before replacing it. `inflight` is keyed by

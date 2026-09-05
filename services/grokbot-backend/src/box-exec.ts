@@ -20,6 +20,25 @@ export const boxConfigured = (): boolean => Boolean(computerBase() || daemonBase
 
 export class BoxUnavailable extends Error {}
 
+/**
+ * Lỗi router trả về (`{error, code?}`) → câu cho ĐÚNG người đọc.
+ *
+ * `pool exhausted … create more gb2u* accounts` là câu viết cho quản trị viên, và nó từng hiện ra
+ * trước mặt người dùng thứ 6 dưới dạng "mọi tool box hỏng cùng lúc" (§5 mục 12). Người dùng cần biết
+ * hai điều: không phải lỗi của họ, và ai sửa được. Số đếm giữ lại để quản trị viên đọc log biết dải
+ * còn bao nhiêu.
+ */
+export function loiBox(json: { error?: unknown; code?: string; used?: number; size?: number }): Error {
+  if (json.code === "pool-exhausted") {
+    return new BoxUnavailable(
+      `Máy tính của bot chưa có chỗ cho tài khoản của bạn: dải tài khoản trên máy đã cấp hết `
+      + `(${json.used ?? "?"}/${json.size ?? "?"}). Không phải lỗi của bạn — báo quản trị viên thêm tài khoản `
+      + `gb2u*; các tool máy tính (shell, file, trình duyệt) sẽ dùng được ngay sau đó.`,
+    );
+  }
+  return new Error(String(json.error));
+}
+
 async function viaComputer<T>(op: string, args: Record<string, unknown>): Promise<T> {
   const base = computerBase();
   const timeout = TIMEOUT_MS();
@@ -48,13 +67,13 @@ async function viaComputer<T>(op: string, args: Record<string, unknown>): Promis
       body: JSON.stringify({ op, args }),
       signal: AbortSignal.timeout(timeout),
     });
-    const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+    const json = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; used?: number; size?: number };
     if (!res.ok) {
       throw new BoxUnavailable(
         typeof json.error === "string" ? json.error : `computer ${op} -> HTTP ${res.status}`,
       );
     }
-    if (json && typeof json === "object" && "error" in json && json.error) throw new Error(String(json.error));
+    if (json && typeof json === "object" && "error" in json && json.error) throw loiBox(json);
     return json as T;
   } catch (e) {
     if (e instanceof BoxUnavailable) throw e;
@@ -95,8 +114,8 @@ async function viaDaemon<T>(op: string, args: Record<string, unknown>): Promise<
       signal: ctl.signal,
     });
     if (!res.ok) throw new BoxUnavailable(`box ${op} -> HTTP ${res.status}`);
-    const json = (await res.json()) as T & { error?: string };
-    if (json && typeof json === "object" && "error" in json && json.error) throw new Error(String(json.error));
+    const json = (await res.json()) as T & { error?: string; code?: string; used?: number; size?: number };
+    if (json && typeof json === "object" && "error" in json && json.error) throw loiBox(json);
     return json;
   } catch (e) {
     if (e instanceof BoxUnavailable) throw e;

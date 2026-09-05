@@ -21,7 +21,8 @@
  * browser reaches us as pixels over VNC and nothing more, so it cannot be taught this way.
  */
 import { cdpForAgent, onCdpEvent } from "./browser.js";
-import { automationCreateRef, automationRefineRef } from "./chat/state.js";
+import { automationCreateRef, automationRefineRef, teachHandoffRef } from "./chat/state.js";
+import { batDauQuayDemo, dungQuayDemo, banGiaoBaiHoc } from "./teach-demo.js";
 import { create as taoSkill, forAgent as skillCuaBot, update as suaSkill } from "./workflows.js";
 import { publish } from "./events.js";
 import { callPool } from "@grokbot2/pool-client";
@@ -57,7 +58,27 @@ export interface Step {
 let active: {
   agentId: string; startedAtMs: number; timer: NodeJS.Timeout;
   steps: Step[]; off: () => void;
+  /** Bản quay màn hình chạy SONG SONG — xem `startTeach`. Null khi không có box. */
+  quay: Promise<{ ok: boolean; lyDo?: string }> | null;
 } | null = null;
+
+/**
+ * Nút `+` đi đường nào — quyết định 06/09 (§5 mục 14 bảng theo dõi).
+ *
+ * Hãng 0.30/0.43: video màn hình → tin `teach-recording` → BOT tự học trong một lượt chat → skill có
+ * `{input}` → thẻ `sand-workflow:<slug>` → mời chạy thử. Bên mình tới 05/09: sự kiện DOM qua CDP →
+ * backend chép thành routine + skill, `hocNen` đặt tên nền — chính xác selector nhưng không hiểu ý
+ * định, và người dùng không thấy gì trong chat.
+ *
+ * Chọn đường VIDEO làm đường chính vì nó là thứ người dùng nhìn thấy khớp với app gốc, và vì bài
+ * học thành văn bản đọc được. Nhưng KHÔNG bỏ bộ ghi CDP: nó chạy cùng lúc, và nhật ký của nó đi kèm
+ * video làm "lịch sử Chrome" — hãng đối chiếu lịch sử trình duyệt để khớp từng bước, ta có thứ tốt
+ * hơn là chính selector và URL đã bấm. Không có box (không quay được) thì rơi về đường cũ nguyên
+ * vẹn, nên máy không có box vẫn dạy được.
+ */
+function duongVideo(run: NonNullable<typeof active>, video: { ok: boolean }): boolean {
+  return run.quay != null && video.ok && teachHandoffRef != null;
+}
 
 /**
  * The recorder, injected into the page.
@@ -276,7 +297,14 @@ export async function startTeach(agentId: string): Promise<TeachState> {
   // The client stops itself at ten minutes; this is the backend not being left recording for ever
   // if the app is closed mid-take.
   const timer = setTimeout(() => { void stopTeach(id, false); }, MAX_DURATION_MS + 30_000);
-  active = { agentId: id, startedAtMs: Date.now(), timer, steps, off };
+  /*
+   * Quay màn hình SONG SONG, không chờ: ffmpeg mất ~2 s để lên, và reply của lệnh này là trạng thái
+   * pane — giữ nó thêm 2 s là lớp phủ "watching" của client đứng trước backend lâu hơn nữa (bẫy §7).
+   * Kết quả đọc ở `stopTeach`. Không quay được (không box, ffmpeg hỏng) thì không phải lỗi: đường CDP
+   * vẫn ghi, và lúc dừng sẽ đi đường cũ.
+   */
+  const quay = batDauQuayDemo(id).catch((e: Error) => ({ ok: false, lyDo: e.message }));
+  active = { agentId: id, startedAtMs: Date.now(), timer, steps, off, quay };
   console.log(`[grokbot2] [teach] recording for ${id}`);
   pushState();
   return recordingState();
@@ -529,7 +557,7 @@ async function hocNen(agentId: string, tenTho: string, steps: Step[]): Promise<v
   }
 }
 
-export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number; refused?: string }> {
+export async function stopTeach(agentId: string, save: boolean): Promise<TeachState & { saved?: string; steps?: number; refused?: string; handoff?: boolean }> {
   const id = active?.agentId ?? agentId ?? "default";
   const run = active;
   if (run) { clearTimeout(run.timer); run.off(); active = null; pushState(); }
@@ -537,9 +565,20 @@ export async function stopTeach(agentId: string, save: boolean): Promise<TeachSt
 
   const steps = run.steps;
   await finish(id);
-  console.log(`[grokbot2] [teach] stopped for ${id}: ${steps.length} step(s), save=${save}`);
+  // Dừng ffmpeg dù lưu hay bỏ — một bản quay không ai dừng sẽ chạy tới hạn 10 phút và ăn CPU của bot.
+  const video = (await run.quay) ?? { ok: false };
+  const clip = video.ok ? await dungQuayDemo() : null;
+  console.log(`[grokbot2] [teach] stopped for ${id}: ${steps.length} step(s), save=${save}, video=${clip ? `${clip.giay}s` : "không"}`);
 
   if (!save) return IDLE;
+  if (clip && duongVideo(run, video)) {
+    // Đường của hãng: BOT học. Bản ghi CDP đi kèm làm nhật ký; không tạo routine thô ở đây nữa —
+    // tạo sẽ ra hai skill cho một buổi dạy, và skill của bot mới là cái có `{input}`.
+    const h = banGiaoBaiHoc(id, clip.videoPath, clip.giay, stepsForModel(steps));
+    teachHandoffRef!(id, h);
+    console.log(`[grokbot2] [teach] bàn giao cho bot: ${clip.videoPath}, ${steps.length} bước CDP kèm theo`);
+    return { ...IDLE, steps: steps.length, handoff: true };
+  }
   const prompt = stepsToPrompt(steps);
   if (!prompt) return { ...IDLE, steps: 0 };
   if (!automationCreateRef) return { ...IDLE, steps: steps.length };
