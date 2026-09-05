@@ -235,8 +235,18 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
    *   11 sand_trial_cancelable (bool)    · 15 grok_plan_label (string, opt)
    *
    * FE tự ẨN từng khối khi field vắng mặt: không `usage_percent` thì không có thanh %, không
-   * `on_demand_settings` (field 13 — cố ý KHÔNG phát: đơn vị của nó là CENTS, số của ta là TOKEN)
-   * thì cả khối On-Demand biến mất. Trả thiếu tốt hơn trả bịa.
+   * `on_demand_settings` (field 13) thì cả khối On-Demand biến mất. Trả thiếu tốt hơn trả bịa.
+   *
+   * SỬA 05/09 — chú thích cũ ở đây viết *"field 13 đơn vị là CENTS, số của ta là TOKEN"*. **Sai.**
+   * Trích lại `SandOnDemandSettings` trong `main.cjs` 0.30: `{1 visible, 2 eligible, 3 enabled,
+   * 4 dashboard_url}` — không một trường tiền nào. Cả `SandUpgradeRecommendation` cũng vậy:
+   * `{1 cta (ErrorButton), 2 disabled, 3 supporting_text, 4 kind}`. Nghĩa là **chính hãng cũng không
+   * gửi giá qua RPC này** — họ chỉ gửi một URL bảng điều khiển và một cái nút.
+   *
+   * Nên lý do THẬT ta chưa phát field 13 không phải "sai đơn vị", mà là **chưa có trang thanh toán
+   * để trỏ tới** (`GROKBOT2_CHECKOUT_URL` chưa đặt). Có trang rồi thì phát
+   * `{visible:true, eligible:true, enabled:false, dashboard_url:<trang của mình>}` là khối
+   * On-Demand hiện, đúng cách hãng làm.
    *
    * Ba nhánh, phân biệt bằng ctx:
    *   billing tắt  (không plan, không usage) → đúng stub lịch sử, byte không đổi — inert.
