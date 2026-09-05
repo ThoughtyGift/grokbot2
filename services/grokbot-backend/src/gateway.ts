@@ -81,8 +81,10 @@ import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, au
 import { transcribe } from "./stt.js";
 import {
   listBotTemplates, getBotTemplateForSourceAgent, createTemplateForAgent, getBotTemplateVersion, publishBotTemplate,
-  setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate,
+  setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate, publicTemplateImport, bindTemplateSources,
 } from "./bot-templates.js";
+import { getAgentAutomations } from "./automations.js";
+import { loadMemory, knowledgeBase } from "./memory.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
   recordUnknown, recordCall, recordRpc, recordSseOpen, recordSseClose,
@@ -101,6 +103,41 @@ import {
   update as workflowUpdate, remove as workflowRemove, setEnabled as workflowSetEnabled,
   runNow as workflowRunNow,
 } from "./workflows.js";
+
+/*
+ * Nguồn 5 mục của mẫu bot (Instructions · Memories · Skills · Routines · Integrations) — tiêm vào
+ * `bot-templates.ts` thay vì để nó import `automations.ts` (kéo theo `chat.js`) và `memory.ts` (box).
+ * Dựng lại là best-effort: memory nằm trên box, không có box thì bot mới vẫn phải mọc ra.
+ */
+bindTemplateSources({
+  skills: (agentId) => workflowsForAgent({ agentId }).map((w) => ({ name: w.name, description: w.description, content: w.instructions })),
+  routines: (agentId) => getAgentAutomations({ id: agentId }).map((r) => ({
+    slug: r.id, name: r.name, description: r.triggerDescription, content: r.prompt, trigger: r.trigger,
+  })),
+  memory: async (agentId) => (await loadMemory(agentId)).map((e) => ({
+    kind: "log" as const,
+    createdAt: new Date(e.createdAt).toISOString(),
+    content: e.title && e.title !== e.content ? `${e.title}: ${e.content}` : e.content,
+  })),
+  plugins: (owner) => {
+    const daCai = new Set(installedIds(owner));
+    return pluginCatalog().filter((p) => daCai.has(p.id))
+      .map((p) => ({ pluginId: String(p.id), name: p.displayName || p.name, description: p.description }));
+  },
+  restoreSkill: (agentId, s) => {
+    workflowCreate({ agentId, name: s.name, description: s.description ?? "", instructions: s.content ?? "" });
+  },
+  restoreRoutine: (agentId, r) => {
+    createAgentAutomation({ id: agentId, spec: { name: r.name ?? r.slug, prompt: r.content ?? "", trigger: r.trigger, isEnabled: true } });
+  },
+  restoreMemory: async (agentId, m) => {
+    try {
+      await knowledgeBase(agentId, { knowledge_to_store: m.content, action: "create" });
+    } catch (e) {
+      console.warn(`[grokbot2] mẫu bot: không ghi được memory cho ${agentId}:`, (e as Error).message);
+    }
+  },
+});
 
 const ports: AclPorts = {
   currentOwner,
@@ -211,6 +248,7 @@ const ports: AclPorts = {
     setVisibility: (shareId, visibility) => setBotTemplateVisibility(shareId, visibility, currentOwner()),
     remove: (shareId) => deleteBotTemplate(shareId, currentOwner()),
     createAgent: (a) => createAgentFromTemplate(a, currentOwner()),
+    getPublic: (shareId) => publicTemplateImport(shareId),
   },
   /*
    * Skill của bot — menu `/` của khung soạn.

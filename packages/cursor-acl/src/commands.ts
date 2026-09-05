@@ -680,10 +680,19 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       const arg = (a ?? {}) as { shareId?: unknown; version?: unknown };
       return botTemplates?.getVersion(String(arg.shareId ?? ""), Number(arg.version) || 1) ?? null;
     },
-    publishBotTemplate: (a) => {
+    publishBotTemplate: async (a) => {
       const arg = (a ?? {}) as { shareId?: unknown; version?: unknown };
       if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
-      return botTemplates.publish(String(arg.shareId ?? ""), Number(arg.version) || 1) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+      return (await botTemplates.publish(String(arg.shareId ?? ""), Number(arg.version) || 1)) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+    },
+    /*
+     * Cửa Import của Marketplace (0.43): `{shareId}` đã qua regex 21 ký tự ở host. Trả đúng
+     * `BotTemplateImport` renderer kiểm, hoặc `null` khi mẫu không public/chưa xuất bản — cùng nghĩa
+     * với host hãng trả `null` khi `GetGrokBotTemplateImportDetails` không có recipe.
+     */
+    getPublicBotTemplate: (a) => {
+      if (!botTemplates) return null;
+      return botTemplates.getPublic(String((a as { shareId?: unknown })?.shareId ?? ""));
     },
     setBotTemplateVisibility: (a) => {
       const arg = (a ?? {}) as { shareId?: unknown; visibility?: unknown };
@@ -694,15 +703,22 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       botTemplates?.remove(String((a as { shareId?: unknown })?.shareId ?? ""));
       return {};   // reply:"void"
     },
-    createAgentFromTemplate: (a) => {
+    createAgentFromTemplate: async (a) => {
       if (!botTemplates) return { ok: false, reason: NO_TEMPLATES };
-      const arg = (a ?? {}) as { shareId?: unknown; name?: unknown; avatarShape?: unknown; avatarColor?: unknown };
-      return botTemplates.createAgent({
+      const arg = (a ?? {}) as {
+        shareId?: unknown; name?: unknown; avatarShape?: unknown; avatarColor?: unknown;
+        expectedActiveVersion?: unknown; creatorContext?: unknown;
+      };
+      const ver = Number(arg.expectedActiveVersion);
+      return (await botTemplates.createAgent({
         shareId: String(arg.shareId ?? ""),
         name: typeof arg.name === "string" ? arg.name : undefined,
         avatarShape: typeof arg.avatarShape === "string" ? arg.avatarShape : undefined,
         avatarColor: typeof arg.avatarColor === "string" ? arg.avatarColor : undefined,
-      }) ?? { ok: false, reason: "không có mẫu nào mang shareId đó" };
+        // Client 0.29 không gửi → không kiểm; 0.43 gửi bản nó đang xem → lệch là từ chối.
+        ...(Number.isInteger(ver) && ver > 0 ? { expectedActiveVersion: ver } : {}),
+        ...(arg.creatorContext != null ? { creatorContext: arg.creatorContext } : {}),
+      })) ?? { ok: false, reason: "không có mẫu nào mang shareId đó, hoặc bản đang xem đã cũ" };
     },
 
     readAttachmentImage: (a) => media.readAttachmentImage(a),

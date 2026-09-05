@@ -180,10 +180,23 @@ export interface BotTemplatesPort {
   list(): unknown[];
   forSourceAgent(sourceAgentId: string): unknown | null;
   getVersion(shareId: string, version: number): unknown | null;
-  publish(shareId: string, version: number): unknown | null;
+  /** Async từ 05/09: xuất bản chụp lại bot nguồn, và memory của bot nằm trên box. */
+  publish(shareId: string, version: number): Promise<unknown | null>;
   setVisibility(shareId: string, visibility: string): unknown | null;
   remove(shareId: string): void;
-  createAgent(a: { shareId?: string; name?: string; avatarShape?: string; avatarColor?: string }): { agent: unknown } | null;
+  /**
+   * `expectedActiveVersion` là bản client đang xem — lệch bản active thì cổng trả `null`, không
+   * import bản cũ dưới tên bản mới. `creatorContext` là thứ 0.43 gửi kèm khi import từ Marketplace.
+   */
+  createAgent(a: {
+    shareId?: string; name?: string; avatarShape?: string; avatarColor?: string;
+    expectedActiveVersion?: number; creatorContext?: unknown;
+  }): Promise<{ agent: unknown } | null>;
+  /**
+   * Cửa `getPublicBotTemplate{shareId}` của 0.43 — đọc XUYÊN chủ, chỉ mẫu đã xuất bản + public. Trả
+   * đúng `BotTemplateImport` (`{expectedActiveVersion, instructions, view}`) mà renderer kiểm, hoặc `null`.
+   */
+  getPublic(shareId: string): unknown | null;
 }
 
 /** S9 memory. */

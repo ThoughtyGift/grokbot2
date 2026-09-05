@@ -96,7 +96,7 @@ const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map(
   return "";
 }).filter(Boolean).join("\n");
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
-import { createTemplateForAgent, publishBotTemplate } from "../bot-templates.js";
+import { createTemplateForAgent, publishBotTemplate, shareUrlOf } from "../bot-templates.js";
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { catalog } from "../plugin-catalog.js";
@@ -468,7 +468,7 @@ TOOLS.create_diagram = (arg, ctx) => {
  *
  * Mẫu của nhóm chở theo mô tả từng thành viên, nên máy nhận dựng lại được cả dàn.
  */
-TOOLS.share_bot_template = (arg, ctx) => {
+TOOLS.share_bot_template = async (arg, ctx) => {
   let spec: any;
   try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
   const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
@@ -478,11 +478,19 @@ TOOLS.share_bot_template = (arg, ctx) => {
     ? mine.find((a) => a.id === wanted) ?? mine.find((a) => a.name.toLowerCase() === wanted.toLowerCase())
     : agents.get(ctx.agentId);
   if (!target) return `(không thấy bot "${wanted}")`;
-  const tpl = runWithOwner(owner, () => createTemplateForAgent(target.id));
+  const tpl = await runWithOwner(owner, () => createTemplateForAgent(target.id));
   if (!tpl) return "(không tạo được mẫu cho bot này)";
-  const pub = runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
+  const pub = await runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
+  const r = pub?.snapshot.recipe;
   const n = pub?.snapshot.members.length ?? 0;
-  return `đã đóng gói "${target.name}" thành mẫu ${tpl.shareId}` + (n ? ` (kèm ${n} thành viên)` : "");
+  const kem = [
+    n ? `${n} thành viên` : "",
+    r?.skills.length ? `${r.skills.length} skill` : "",
+    r?.routines.length ? `${r.routines.length} routine` : "",
+    r?.memory.length ? `${r.memory.length} mục nhớ` : "",
+  ].filter(Boolean).join(", ");
+  return `đã đóng gói "${target.name}" thành mẫu ${tpl.shareId}` + (kem ? ` (kèm ${kem})` : "")
+    + `. Mẫu đang ở chế độ "team"; muốn người ngoài import qua link ${shareUrlOf(tpl.shareId)} thì đổi tầm nhìn sang public.`;
 };
 
 TOOLS.create_group = (arg, ctx) => {

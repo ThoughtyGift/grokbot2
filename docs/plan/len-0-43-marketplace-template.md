@@ -69,6 +69,20 @@ Luật cũ vẫn áp: **hợp đồng 147 là của 0.30 — trích hợp đồn
 
 ## C · Share as template — khớp 0.43
 
+> **XONG phần lõi 05/09 (18:40)** — commit cùng ngày. Làm được ngay trên 0.29, đo bằng
+> `scripts/e2e-mau-bot.mjs` qua `/gw/api` thật: **20/20 xanh**, dọn sạch. Cụ thể: (1) ✅ `expectedActiveVersion`
+> (lệch → `{ok:false, reason}`) + `creatorContext` nhận vào; (2) ✅ bản ghi thêm `ownerAuthId · ownerType · imageUrl`,
+> bản cũ trong kho được lấp lúc đọc; (3) ✅ `snapshot.recipe` đúng zod `CB`/`Dct` của 0.43 (`profile · memory[] ·
+> skills[] · routines[] · plugins[]`), nguồn tiêm qua `bindTemplateSources` (gateway nối workflows · automations ·
+> memory-trên-box · plugins đã cài), `createAgentFromTemplate` dựng lại skill + routine (+ memory best-effort) cho
+> bot MỚI; (4) ✅ regex trích được: `BOT_TEMPLATE_SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{21}$/`, `newShareId()` =
+> 16 byte → base64url → 21; (6) ✅ `getPublicBotTemplate{shareId}` xuyên chủ, trả đúng `BotTemplateImport
+> {expectedActiveVersion, instructions, view}` mà `isBotTemplateImport` của renderer kiểm — kể cả các điều kiện
+> ngầm: `view` KHÔNG có `sourceAgentId`, mọi chuỗi `min(1)` (skill thiếu mô tả thì lấp), avatar phải nằm trong bảng
+> `EB`/`SB` (11 màu · 18 hình, ghi trong `bot-templates.ts`). **Chưa**: (5) `getBotTemplateExportPolicy`; recipe của
+> NHÓM chưa chở skill từng thành viên; hồ sơ người tạo (tên suy từ tài khoản `nguoi-a@…` → `nguoi-a`); tầng proto
+> (`GetGrokBotTemplateImportDetails` + blob URL) — cần khi client 0.43 gọi qua Cursor RPC thay vì box-gateway.
+
 Đã có: `createTemplateForAgent` · `publishBotTemplate{shareId,version}` · `getBotTemplateForSourceAgent{sourceAgentId}` ·
 `getBotTemplateVersion{shareId,version}` · `setBotTemplateVisibility{shareId,visibility:"public"|"team"}` ·
 `deleteBotTemplate{shareId}` · `createAgentFromTemplate` · thẻ `bot-template-share` · tool `share_bot_template`.

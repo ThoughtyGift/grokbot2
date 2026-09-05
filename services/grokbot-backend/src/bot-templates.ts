@@ -15,11 +15,13 @@
  *     listBotTemplates            noArgs                                   → array
  *     publishBotTemplate          {shareId, version}                       → record
  *     createAgentFromTemplate     {shareId, agentId, name, avatarShape,
- *                                  avatarColor, expectedActiveVersion}     → record
+ *                                  avatarColor, expectedActiveVersion,
+ *                                  creatorContext?}                        → record
  *     getBotTemplateVersion       {shareId, version}                       → record
  *     getBotTemplateForSourceAgent{sourceAgentId}                          → record-or-null
  *     deleteBotTemplate           {shareId}                                → void
  *     setBotTemplateVisibility    {shareId, visibility: "public"|"team"}    → record
+ *     getPublicBotTemplate        {shareId}  (0.43, Marketplace → Import)  → {template, …}
  *
  * Các trường renderer đọc của một mẫu: `shareId` · `sourceAgentId` · `name` · `description` ·
  * `avatarShape` · `avatarColor` · `version` · `activeVersion` · `published` · `active` ·
@@ -35,13 +37,26 @@
  * Xem ghi chú tại chính hàm đó. Giờ tạo mẫu đi qua `createTemplateForAgent`, tức chỉ khi có người
  * thật sự muốn chia sẻ (tool `share_bot_template`).
  *
- * ── `snapshot` là của TA ────────────────────────────────────────────────────────────────────────
+ * ── `shareId` phải qua được regex của CLIENT ────────────────────────────────────────────────────
  *
- * Renderer không đọc trường này. Nó tồn tại vì mục đích thật của tính năng: chép cả một ĐỘI. Một
- * mẫu của nhóm mang theo mô tả từng thành viên, nên `createAgentFromTemplate` dựng lại được cả dàn
- * chứ không phải một con bot trống mang cái tên cũ.
+ * Host 0.29 lẫn 0.43 kiểm `BOT_TEMPLATE_SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{21}$/` TRƯỚC khi gọi
+ * `getPublicBotTemplate` — id không khớp thì cửa Import không bao giờ tới backend, và không lỗi nào
+ * nổi lên. Dạng cũ `tpl-<agentId>-<time36>` (dài 20–30, có dấu chấm) trượt regex ấy. Nay
+ * `newShareId()` = 16 byte ngẫu nhiên → base64url → cắt 21. URL chia sẻ của hãng là
+ * `https://x.ai/bot/${shareId}` (0.43 `main-app.cjs`).
+ *
+ * ── `snapshot` là của TA, `recipe` là hình dạng của HÃNG ────────────────────────────────────────
+ *
+ * Renderer 0.29 không đọc `snapshot`. Nó tồn tại vì mục đích thật của tính năng: chép cả một ĐỘI.
+ * Từ 05/09 `snapshot.recipe` mang đúng hình dạng blob mẫu của 0.43 (zod `Dct`): `profile` ·
+ * `memory[]` · `skills[]` · `routines[]` · `plugins[]` — là 5 mục trang chi tiết Marketplace vẽ
+ * (Instructions · Memories · Skills · Routines · Integrations). Nguồn của 4 mục sau nằm ở kho khác
+ * (`workflows.ts`, `automations.ts` — kéo theo `chat.js`, `memory.ts` — trên box) nên chúng được
+ * TIÊM qua `bindTemplateSources`, không import thẳng: file này không cần biết kho nào ở đâu, và bài
+ * test tiêm giả.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentOwner } from "./request-context.js";
@@ -61,12 +76,41 @@ const DIR = join(DATA_DIR, "bot-templates");
 const safe = (authId: string): string => authId.replace(/[^A-Za-z0-9_-]/g, "_");
 const fileFor = (owner: string): string => join(DIR, `${safe(owner)}.json`);
 
-/** Ảnh chụp một bot để dựng lại — trường của TA, renderer không đọc. */
+/** Regex của client — `BOT_TEMPLATE_SHARE_ID_PATTERN` trong host 0.29 và 0.43, nguyên văn. */
+export const SHARE_ID_RE = /^[A-Za-z0-9_-]{21}$/;
+const SHARE_ID_LEN = 21;
+/** 16 byte → 22 ký tự base64url (không đệm) → cắt 21. */
+const SHARE_ID_BYTES = 16;
+
+export function newShareId(): string {
+  return randomBytes(SHARE_ID_BYTES).toString("base64url").slice(0, SHARE_ID_LEN);
+}
+
+// ── Recipe: hình dạng blob mẫu của 0.43 ──────────────────────────────────────────────────────────
+
+export interface RecipeSkill { name: string; description?: string; content?: string }
+/** `trigger` là của TA (cron để dựng lại đúng nhịp) — zod của client bỏ qua khoá lạ, không từ chối. */
+export interface RecipeRoutine { slug: string; name?: string; description?: string; content?: string; trigger?: string }
+export interface RecipePlugin { pluginId: string; name?: string; description?: string }
+export interface RecipeMemory { kind?: "profile" | "log"; createdAt?: string; content: string }
+
+/** Zod `Dct` của 0.43 — cùng khoá, cùng tuỳ chọn. Import view (`Ner`) đòi `skills.content` và `routines.content+description`. */
+export interface TemplateRecipe {
+  profile: { name: string; description: string; avatarColor?: string; avatarShape?: string };
+  memory: RecipeMemory[];
+  skills: RecipeSkill[];
+  routines: RecipeRoutine[];
+  plugins: RecipePlugin[];
+  gettingStarted?: { skill: string };
+}
+
+/** Ảnh chụp một bot để dựng lại — `members` là của TA (đội), `recipe` là hình dạng của hãng. */
 export interface TemplateSnapshot {
   name: string;
   description: string;
   isGroup: boolean;
   members: { name: string; description: string }[];
+  recipe: TemplateRecipe;
 }
 
 export interface BotTemplate {
@@ -83,32 +127,101 @@ export interface BotTemplate {
   visibility: "public" | "team";
   createdAtMs: number;
   updatedAtMs: number;
+  /** Ba trường 0.43 đọc ở trang chi tiết / listing. `ownerAuthId` để đọc xuyên chủ tìm lại đúng kho. */
+  ownerAuthId: string;
+  ownerType: "user";
+  imageUrl: string | null;
   snapshot: TemplateSnapshot;
 }
 
-function readAll(owner: string): BotTemplate[] {
+// ── Nguồn của 4 mục ngoài profile — TIÊM, không import ───────────────────────────────────────────
+
+export interface TemplateSources {
+  skills: (agentId: string) => RecipeSkill[];
+  routines: (agentId: string) => RecipeRoutine[];
+  memory: (agentId: string) => Promise<RecipeMemory[]>;
+  plugins: (owner: string) => RecipePlugin[];
+  restoreSkill: (agentId: string, s: RecipeSkill) => void;
+  restoreRoutine: (agentId: string, r: RecipeRoutine) => void;
+  restoreMemory: (agentId: string, m: RecipeMemory) => Promise<void>;
+}
+
+/** Mặc định: không nguồn nào — recipe chỉ có profile. Gateway tiêm nguồn thật lúc khởi động. */
+const KHONG_NGUON: TemplateSources = {
+  skills: () => [],
+  routines: () => [],
+  memory: async () => [],
+  plugins: () => [],
+  restoreSkill: () => {},
+  restoreRoutine: () => {},
+  restoreMemory: async () => {},
+};
+let nguon: TemplateSources = KHONG_NGUON;
+
+export function bindTemplateSources(s: Partial<TemplateSources>): void {
+  nguon = { ...KHONG_NGUON, ...s };
+}
+
+// ── Kho ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Bản ghi trước 05/09 thiếu `ownerAuthId`/`recipe` — lấp lúc đọc, để mọi đường sau khỏi kiểm null. */
+function lapChoBanCu(t: BotTemplate, owner: string): BotTemplate {
+  const recipe: TemplateRecipe = t.snapshot?.recipe ?? {
+    profile: { name: t.name, description: t.description }, memory: [], skills: [], routines: [], plugins: [],
+  };
+  return { ...t, ownerAuthId: t.ownerAuthId ?? owner, ownerType: "user", imageUrl: t.imageUrl ?? null,
+    snapshot: { ...t.snapshot, recipe } };
+}
+
+function docFile(path: string, owner: string): BotTemplate[] {
   try {
-    const raw = JSON.parse(readFileSync(fileFor(owner), "utf8")) as unknown;
-    return Array.isArray(raw) ? (raw as BotTemplate[]) : [];
+    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    return Array.isArray(raw) ? (raw as BotTemplate[]).map((t) => lapChoBanCu(t, owner)) : [];
   } catch {
     return [];
   }
 }
+
+const readAll = (owner: string): BotTemplate[] => docFile(fileFor(owner), owner);
 
 function writeAll(owner: string, rows: BotTemplate[]): void {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(fileFor(owner), JSON.stringify(rows, null, 2), { mode: 0o600 });
 }
 
-/** Ảnh chụp hiện tại của một bot (hoặc nhóm) trong roster của người gọi. */
-function snapshotOf(agentId: string): TemplateSnapshot | null {
+/** Mọi mẫu của mọi chủ — chỉ dùng cho đường đọc CÔNG KHAI. */
+function readEveryone(): BotTemplate[] {
+  if (!existsSync(DIR)) return [];
+  return readdirSync(DIR)
+    .filter((f) => f.endsWith(".json"))
+    .flatMap((f) => docFile(join(DIR, f), f.slice(0, -".json".length)));
+}
+
+// ── Chụp ────────────────────────────────────────────────────────────────────────────────────────
+
+/** Ảnh chụp hiện tại của một bot (hoặc nhóm) trong roster của người gọi, kèm recipe 5 mục. */
+async function snapshotOf(agentId: string, owner: string): Promise<TemplateSnapshot | null> {
   const a = agents.get(agentId);
   if (!a) return null;
   const members = (a.memberIds ?? [])
     .map((id) => agents.get(id))
     .filter((m): m is NonNullable<typeof m> => m != null)
     .map((m) => ({ name: m.name, description: m.description ?? "" }));
-  return { name: a.name, description: a.description ?? "", isGroup: a.isGroup === true, members };
+  const shape = (a as { avatarShape?: unknown }).avatarShape;
+  const color = (a as { avatarColor?: unknown }).avatarColor;
+  const recipe: TemplateRecipe = {
+    profile: {
+      name: a.name,
+      description: a.description ?? "",
+      ...(typeof color === "string" ? { avatarColor: color } : {}),
+      ...(typeof shape === "string" ? { avatarShape: shape } : {}),
+    },
+    memory: await nguon.memory(agentId),
+    skills: nguon.skills(agentId),
+    routines: nguon.routines(agentId),
+    plugins: nguon.plugins(owner),
+  };
+  return { name: a.name, description: a.description ?? "", isGroup: a.isGroup === true, members, recipe };
 }
 
 export const listBotTemplates = (owner: string = currentOwner()): BotTemplate[] => readAll(owner);
@@ -141,22 +254,21 @@ export function getBotTemplateForSourceAgent(sourceAgentId: string, owner: strin
  * Tạo mẫu cho một bot (hoặc nhóm), nếu chưa có. Đã có thì trả cái đang có — bấm chia sẻ hai lần
  * không được đẻ ra hai mẫu.
  */
-export function createTemplateForAgent(sourceAgentId: string, owner: string = currentOwner()): BotTemplate | null {
+export async function createTemplateForAgent(sourceAgentId: string, owner: string = currentOwner()): Promise<BotTemplate | null> {
   if (!sourceAgentId) return null;
   const rows = readAll(owner);
   const found = rows.find((t) => t.sourceAgentId === sourceAgentId);
   if (found) return found;
-  const snap = snapshotOf(sourceAgentId);
+  const snap = await snapshotOf(sourceAgentId, owner);
   if (!snap) return null;
   const now = Date.now();
-  const a = agents.get(sourceAgentId)!;
   const draft: BotTemplate = {
-    shareId: `tpl-${safe(sourceAgentId)}-${now.toString(36)}`,
+    shareId: newShareId(),
     sourceAgentId,
     name: snap.name,
     description: snap.description,
-    avatarShape: String((a as { avatarShape?: unknown }).avatarShape ?? "blob"),
-    avatarColor: String((a as { avatarColor?: unknown }).avatarColor ?? "blue"),
+    avatarShape: snap.recipe.profile.avatarShape ?? "blob",
+    avatarColor: snap.recipe.profile.avatarColor ?? "blue",
     version: 1,
     activeVersion: null,
     published: false,
@@ -164,6 +276,9 @@ export function createTemplateForAgent(sourceAgentId: string, owner: string = cu
     visibility: "team",
     createdAtMs: now,
     updatedAtMs: now,
+    ownerAuthId: owner,
+    ownerType: "user",
+    imageUrl: null,
     snapshot: snap,
   };
   writeAll(owner, [...rows, draft]);
@@ -180,13 +295,13 @@ export const getBotTemplateVersion = (
  * Chụp LẠI bot nguồn ngay lúc bấm: mẫu phải là ảnh của bot **hôm nay**, không phải của lúc mở tab
  * — người dùng thường sửa mô tả rồi mới bấm Publish, và một mẫu chở bản cũ là loại sai âm thầm.
  */
-export function publishBotTemplate(
+export async function publishBotTemplate(
   shareId: string, version: number, owner: string = currentOwner(),
-): BotTemplate | null {
+): Promise<BotTemplate | null> {
   const rows = readAll(owner);
   const i = rows.findIndex((t) => t.shareId === shareId);
   if (i < 0) return null;
-  const fresh = snapshotOf(rows[i].sourceAgentId);
+  const fresh = await snapshotOf(rows[i].sourceAgentId, owner);
   const v = Number.isFinite(version) && version > 0 ? Math.floor(version) : rows[i].version;
   const next: BotTemplate = {
     ...rows[i],
@@ -218,24 +333,145 @@ export function deleteBotTemplate(shareId: string, owner: string = currentOwner(
   if (rows.some((t) => t.shareId === shareId)) writeAll(owner, rows.filter((t) => t.shareId !== shareId));
 }
 
+// ── Đường CÔNG KHAI (Marketplace → Import Bot) ──────────────────────────────────────────────────
+
+/** Tên hiển thị suy từ authId: `local|nguoi-a@vi-du.vn` → `nguoi-a`. Chưa có hồ sơ người tạo riêng. */
+export function ownerDisplayNameOf(authId: string): string {
+  const sauTienTo = authId.includes("|") ? authId.slice(authId.indexOf("|") + 1) : authId;
+  return sauTienTo.split("@")[0] || sauTienTo || "ẩn danh";
+}
+
+const laCongKhai = (t: BotTemplate): boolean => t.published && t.visibility === "public";
+
+/**
+ * Đọc một mẫu công khai XUYÊN chủ — cửa `getPublicBotTemplate{shareId}` của 0.43.
+ *
+ * Chỉ mẫu **đã xuất bản VÀ public** mới thấy được. Mẫu `team` là của một chủ, dù đã xuất bản.
+ * Chưa có hồ sơ người tạo (auth.ts không giữ displayName/avatar) nên tên suy từ tài khoản.
+ */
+export function getPublicBotTemplate(shareId: string): { template: BotTemplate; ownerDisplayName: string } | null {
+  if (!SHARE_ID_RE.test(shareId)) return null;
+  const t = readEveryone().find((x) => x.shareId === shareId && laCongKhai(x));
+  return t ? { template: t, ownerDisplayName: ownerDisplayNameOf(t.ownerAuthId) } : null;
+}
+
+// ── Hình dạng host 0.43 trả cho renderer: `BotTemplateImport` (hàm `xfe` = botTemplateImportFromPackedVersion) ──
+
+/** `EB` / `SB` của 0.43 — validator `isGrokBotColor` / `isGrokBotShape` từ chối mọi giá trị ngoài hai bảng này. */
+export const AVATAR_COLORS = ["black", "brown", "red", "orange", "yellow", "green", "cyan", "blue", "violet", "magenta", "gray"] as const;
+export const AVATAR_SHAPES = ["blob", "pebble", "bean", "egg", "squircle", "tablet", "capsule", "cylinder", "hex", "gem", "crystal", "wedge", "shield", "dome", "arch", "cloud", "teardrop", "leaf"] as const;
+const DEFAULT_COLOR = "blue";
+const DEFAULT_SHAPE = "blob";
+const mauHopLe = (c: unknown): string => (AVATAR_COLORS as readonly string[]).includes(String(c)) ? String(c) : DEFAULT_COLOR;
+const hinhHopLe = (s: unknown): string => (AVATAR_SHAPES as readonly string[]).includes(String(s)) ? String(s) : DEFAULT_SHAPE;
+
+export const shareUrlOf = (shareId: string): string => `https://x.ai/bot/${shareId}`;
+
+/** Schema `CB` của client đòi mọi chuỗi `min(1)` — chỗ trống thì lấp bằng câu có nghĩa, không để rỗng. */
+const KHONG_MO_TA = "(chưa có mô tả)";
+const KHONG_NOI_DUNG = "(chưa có nội dung)";
+const coChu = (s: string | undefined, thay: string): string => (s ?? "").trim() || thay;
+
+export interface BotTemplateImport {
+  expectedActiveVersion: number;
+  instructions: string;
+  view: {
+    shareId: string; name: string; avatarShape: string; avatarColor: string; description: string; shareUrl: string;
+    version: number; activeVersion: number; active: true; published: true; creatorName?: string;
+    memory: RecipeMemory[]; skills: RecipeSkill[]; routines: RecipeRoutine[]; plugins: RecipePlugin[];
+    createdAtMs?: number; updatedAtMs?: number;
+  };
+}
+
+/**
+ * Đổi một mẫu đã xuất bản sang đúng cái `BotTemplateImport` renderer 0.43 kiểm (`isBotTemplateImport`):
+ * `expectedActiveVersion` nguyên ≥1 · `view.shareId` khớp regex · avatar trong bảng · `description`
+ * không rỗng · KHÔNG có `sourceAgentId` · skills/routines đủ `name+description+content`.
+ */
+export function toBotTemplateImport(t: BotTemplate, creatorName?: string): BotTemplateImport | null {
+  if (!t.published || t.activeVersion == null || t.activeVersion < 1) return null;
+  const r = t.snapshot.recipe;
+  const ten = creatorName?.trim();
+  return {
+    expectedActiveVersion: t.activeVersion,
+    instructions: r.profile.description.trim(),
+    view: {
+      shareId: t.shareId,
+      name: coChu(r.profile.name, t.name),
+      avatarShape: hinhHopLe(r.profile.avatarShape ?? t.avatarShape),
+      avatarColor: mauHopLe(r.profile.avatarColor ?? t.avatarColor),
+      description: coChu(t.description, KHONG_MO_TA),
+      shareUrl: shareUrlOf(t.shareId),
+      version: t.activeVersion,
+      activeVersion: t.activeVersion,
+      active: true,
+      published: true,
+      ...(ten ? { creatorName: ten } : {}),
+      memory: r.memory.filter((m) => m.content.trim()),
+      skills: r.skills.map((s) => ({ name: s.name, description: coChu(s.description, KHONG_MO_TA), content: coChu(s.content, KHONG_NOI_DUNG) })),
+      routines: r.routines.map((x) => ({
+        slug: x.slug, name: coChu(x.name, x.slug), description: coChu(x.description, KHONG_MO_TA), content: coChu(x.content, KHONG_NOI_DUNG),
+        ...(x.trigger ? { trigger: x.trigger } : {}),
+      })),
+      plugins: r.plugins.map((p) => ({ pluginId: p.pluginId, name: coChu(p.name, p.pluginId), ...(p.description ? { description: p.description } : {}) })),
+      createdAtMs: t.createdAtMs,
+      updatedAtMs: t.updatedAtMs,
+    },
+  };
+}
+
+/** Cửa gateway `getPublicBotTemplate{shareId}`: đúng thứ renderer nhận từ host 0.43, hoặc `null`. */
+export function publicTemplateImport(shareId: string): BotTemplateImport | null {
+  const pub = getPublicBotTemplate(shareId);
+  return pub ? toBotTemplateImport(pub.template, pub.ownerDisplayName) : null;
+}
+
+/** Mẫu người gọi được dùng để DỰNG: kho của mình trước, rồi mẫu công khai của người khác. */
+function templateReachable(shareId: string, owner: string): BotTemplate | null {
+  return readAll(owner).find((t) => t.shareId === shareId) ?? getPublicBotTemplate(shareId)?.template ?? null;
+}
+
+async function dungLaiTuRecipe(agentId: string, r: TemplateRecipe): Promise<void> {
+  for (const s of r.skills) nguon.restoreSkill(agentId, s);
+  for (const x of r.routines) nguon.restoreRoutine(agentId, x);
+  for (const m of r.memory) await nguon.restoreMemory(agentId, m);
+}
+
+export interface CreateFromTemplateArgs {
+  shareId?: string;
+  name?: string;
+  avatarShape?: string;
+  avatarColor?: string;
+  /** Client gửi bản nó đang xem; lệch bản active thì từ chối — không import bản cũ dưới tên bản mới. */
+  expectedActiveVersion?: number;
+  /** 0.43 gửi kèm khi import từ Marketplace (người tạo, listing). Ghi nhận, chưa dùng. */
+  creatorContext?: unknown;
+}
+
 /**
  * Dựng bot (hoặc cả ĐỘI) từ một mẫu.
  *
  * Mẫu của nhóm dựng lại từng thành viên rồi mở phòng — đó mới là thứ "phát đội bot cho máy khác"
  * có nghĩa. Dựng mỗi cái vỏ nhóm rỗng thì người nhận có một cái phòng không ai ở trong.
  *
+ * Bot lẻ dựng lại thêm skill + routine + memory của recipe vào bot MỚI. Nhóm thì recipe là của
+ * phòng (thường rỗng) — skill của từng thành viên chưa đi theo, ghi rõ ở đây để không ai tưởng có.
+ *
  * `name` trong đối số đè tên của mẫu: người nhận đặt tên riêng ngay trên thẻ trước khi tạo.
  */
-export function createAgentFromTemplate(
-  a: { shareId?: string; name?: string; avatarShape?: string; avatarColor?: string },
+export async function createAgentFromTemplate(
+  a: CreateFromTemplateArgs,
   owner: string = currentOwner(),
-): { agent: unknown } | null {
-  const tpl = readAll(owner).find((t) => t.shareId === a.shareId);
+): Promise<{ agent: unknown } | null> {
+  const tpl = templateReachable(a.shareId ?? "", owner);
   if (!tpl) return null;
+  if (a.expectedActiveVersion != null && tpl.activeVersion !== a.expectedActiveVersion) return null;
   const snap = tpl.snapshot;
   const wanted = (a.name ?? "").trim() || snap.name || tpl.name;
   if (!snap.isGroup) {
-    return { agent: createAgent({ name: wanted, description: snap.description }) };
+    const agent = createAgent({ name: wanted, description: snap.description });
+    await dungLaiTuRecipe(agent.id, snap.recipe);
+    return { agent };
   }
   const memberIds = snap.members.map((m) => createAgent({ name: m.name, description: m.description }).id);
   return { agent: createGroup({ name: wanted, memberAgentIds: memberIds }) };

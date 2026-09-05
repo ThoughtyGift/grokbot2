@@ -85,9 +85,21 @@ URL ngoài duy nhất: `https://cursor.com/marketplace`.
   [legal.md](../legal.md) ("không phân phối lại"), nên **không làm nếu chưa có quyết định**.
 
 Bên mình đã có handler: `createAgentFromTemplate publishBotTemplate listBotTemplates getBotTemplateVersion
-getBotTemplateForSourceAgent uninstallPlugin installPlugin getSandMachines`; chưa có: `listPublicBotMarketplace
-getPublicBotTemplate getEffectivePlugins getEffectiveMcpPlugins getPluginSyncStatus getMcpPluginLogo uninstallMcpPlugin
-getBotTemplateExportPolicy updatePluginInstall installEntry`.
+getBotTemplateForSourceAgent uninstallPlugin installPlugin getSandMachines`, và từ **05/09 (bước C)** thêm
+`getPublicBotTemplate{shareId}` — trả đúng `BotTemplateImport {expectedActiveVersion, instructions, view}` mà host
+0.43 đưa cho renderer (`xfe` = botTemplateImportFromPackedVersion), `createAgentFromTemplate` nhận đủ
+`expectedActiveVersion` + `creatorContext`; chưa có: `listPublicBotMarketplace getEffectivePlugins
+getEffectiveMcpPlugins getPluginSyncStatus getMcpPluginLogo uninstallMcpPlugin getBotTemplateExportPolicy
+updatePluginInstall installEntry`.
+
+**Validator import của renderer (trích `main-app.cjs`, để khỏi đoán lần nữa):** `isBotTemplateImport` →
+`expectedActiveVersion` nguyên ≥ 1 · `instructions` string · `view.shareId` khớp `/^[A-Za-z0-9_-]{21}$/` · `name`,
+`description`, `shareUrl` không rỗng · `avatarShape ∈ SB` (blob pebble bean egg squircle tablet capsule cylinder hex gem
+crystal wedge shield dome arch cloud teardrop leaf) · `avatarColor ∈ EB` (black brown red orange yellow green cyan blue
+violet magenta gray) · `creatorName` nếu có thì không rỗng; `isPackedImportView` → `version === activeVersion ===
+expectedActiveVersion` · `active === published === true` · **`sourceAgentId == null`** · `memory/skills/routines/plugins`
+qua zod `CB`: skill `{name, description, content}` **cả ba `min(1)`**, routine `{name, slug, description, content}` cả bốn,
+plugin `{pluginId, name, description?}`, memory `{kind?, createdAt?, content}`. Share URL: `https://x.ai/bot/${shareId}`.
 
 ## 5 · Chuỗi UI tiếng Anh mới (khối en so theo id: 372 → 481, +131 / −29)
 
