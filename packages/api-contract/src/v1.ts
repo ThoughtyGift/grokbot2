@@ -109,7 +109,8 @@ export const TranscriptEvent = Type.Union([
   }),
   Type.Object({
     type: Type.Literal("automation-changed"),
-    action: Type.Union([Type.Literal("created"), Type.Literal("updated"), Type.Literal("deleted")]),
+    // Đủ 5 giá trị của `SandAutomationChangeAction` (renderer 0.43): bảng Routine bật/tắt cũng để lại hàng sự kiện.
+    action: Type.Union([Type.Literal("created"), Type.Literal("updated"), Type.Literal("deleted"), Type.Literal("enabled"), Type.Literal("disabled")]),
     automationId: Type.String(),
     automationName: Type.String(),
   }),

@@ -18,6 +18,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // Phiên bản in trên trang đọc từ manifest phát hành — cùng nguồn với feed và launcher.
 import { docManifest } from "./update-feed.js";
+// `/bot/<shareId>` — trang đích của link chia sẻ mẫu bot, cùng cửa công khai này (site-bot.ts).
+import { handleBotSite } from "./site-bot.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
@@ -221,6 +223,8 @@ function newestMatching(dir: string, prefix: string, ext: string): { name: strin
  */
 export async function handleSite(url: string, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const path = url.split("?")[0];
+
+  if (path.startsWith("/bot/") && handleBotSite(url, req, res)) return true;
 
   if (path === "/" || path === "/index.html") {
     const html = landingHtml();

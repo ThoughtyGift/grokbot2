@@ -160,6 +160,13 @@ Args 0.43 của các lệnh này **không đổi** (`nlt/olt/ilt/slt/alt` trong 
 Kiểm: trên 0.43 local, bấm Share as template → thẻ hiện → tài khoản thứ hai `getPublicBotTemplate` → Import Bot →
 bot mới có đủ skill + routine của bản gốc (đếm `getAgentWorkflows`/`getAgentAutomations`).
 
+7. **Trang đích của Copy link (XONG 05/09 đêm).** Hãng trỏ `x.ai/bot/<shareId>` — trang tĩnh với nút *Add to Grok Bot* =
+   deep link `grokbot://app/v1/bot-template?id=<shareId>`. Bên ta `shareUrlOf` → `<GROKBOT2_PUBLIC_SITE>/bot/<shareId>`,
+   `site-bot.ts` phục vụ trang (chỉ mẫu public đã publish; 404 chung cho nháp/xoá/riêng). Để chạy trên `cinai.app`: đặt
+   `GROKBOT2_PUBLIC_SITE=https://cinai.app/agent` trong `.env` VPS rồi deploy. Chi tiết [0-43 §7d](../extracted/0-43-so-voi-local.md).
+8. **Bảng Routine → bot lên tiếng (XONG 05/09 đêm)** — không thuộc mẫu bot nhưng lộ ra cùng lượt đọc transcript hãng:
+   `routine-nhac.ts`, sự kiện đủ 5 `action`, đo `e2e-routine-nhac.mjs`.
+
 ## D · Cộng đồng bot (Marketplace) — phục vụ từ backend
 
 > **KẾT QUẢ 05/09 — XONG, đo trên client 0.43 thật.** Kho listing + hồ sơ người tạo (`services/grokbot-backend/src/marketplace.ts`,
@@ -216,6 +223,8 @@ chạy được một lượt. Tài khoản thứ hai (web login) thấy cùng l
   Share as template → thẻ → `getPublicBotTemplate` qua GW. Xanh/đỏ từng mốc như `e2e-teach.mjs`.
 - `gateway-coverage.mjs` theo hợp đồng 0.43: 0 đường 404 sau một vòng đi hết UI.
 - Bẫy đã biết áp cho bài này: selector phải IN RA rồi đọc; đếm ở kho MỚI; `coverage.json` đếm cả lượt của bài đo.
+- `scripts/e2e-chia-se-mau.mjs` (CDP :9225, bấm thật) · `scripts/e2e-routine-nhac.mjs` (`/gw/api`, 4 lượt model, bot riêng tự
+  xoá) · `src/site-bot.test.ts` (trang `/bot/<shareId>`) — cả ba đã chạy xanh 05/09.
 
 ## Ước lượng và rủi ro
 

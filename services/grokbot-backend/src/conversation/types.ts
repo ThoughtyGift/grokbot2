@@ -161,7 +161,8 @@ export type WidgetMsg = {
 
 export type TranscriptEvent =
   | { type: "name-changed"; from: string; to: string }
-  | { type: "automation-changed"; action: "created" | "updated" | "deleted"; automationId: string; automationName: string };
+  /** `SandAutomationChangeAction` 0.43: đủ 5 giá trị — client vẽ "Created/Updated/Deleted/Enabled/Disabled routine · <tên>" (bấm mở routine). */
+  | { type: "automation-changed"; action: "created" | "updated" | "deleted" | "enabled" | "disabled"; automationId: string; automationName: string };
 
 export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })

@@ -57,11 +57,15 @@ import {
   broadcastToAgents,
   getSubagents,
   getAsyncTasks,
+  isAgentRunning,
 } from "./runtime/turn.js";
 import { subscribe } from "./events.js";
+import { taoNguoiNhac } from "./routine-nhac.js";
 import { hostSettings, patchHostSettings } from "./host-settings.js";
 import {
   getAgentAutomationsForClient,
+  getAgentAutomations,
+  describe as moTaTrigger,
   toClientAutomation,
   listAllAutomations,
   createAgentAutomation,
@@ -86,7 +90,6 @@ import {
 } from "./bot-templates.js";
 import { DEFAULT_USER } from "./auth.js";
 import { publicListings, publishListing, unpublishListing, listingsOf, creatorProfileOf, setCreatorProfile } from "./marketplace.js";
-import { getAgentAutomations } from "./automations.js";
 import { loadMemory, knowledgeBase } from "./memory.js";
 import { disabledToolsOf, toggleToolDisabled, setCustomInstructions } from "./mcp-prefs.js";
 import {
@@ -141,6 +144,21 @@ bindTemplateSources({
     }
   },
 });
+
+/** Người nhắc dùng chung cho cổng gateway: gom 1,5 s, chờ bot rảnh, gửi lời nhắc IM LẶNG (không có tin người dùng). */
+const nguoiNhac = taoNguoiNhac({
+  gui: (agentId, content) => { sendPrompt({ agentId, content, silent: true }); },
+  dangChay: (agentId) => isAgentRunning(agentId),
+});
+/** Sau create/update: tìm lại record vừa đụng để nói đúng tên và lịch. */
+function nhacRoutine(
+  a: { id?: string; agentId?: string; automationId?: string; spec?: { name?: string } } | undefined,
+  sau: ReturnType<typeof getAgentAutomations>,
+  action: "created" | "updated",
+): void {
+  const rec = a?.automationId ? sau.find((x) => x.id === a.automationId) : (sau.find((x) => x.name === a?.spec?.name) ?? sau[sau.length - 1]);
+  if (rec) nguoiNhac.ghi(rec.agentId, { action, name: rec.name, lich: moTaTrigger(rec.trigger) });
+}
 
 const ports: AclPorts = {
   currentOwner,
@@ -284,15 +302,19 @@ const ports: AclPorts = {
     setEnabled: (a) => workflowSetEnabled(a),
     runNow: (a) => workflowRunNow(a),
   },
+  /*
+   * Bảng Routine — thao tác của NGƯỜI DÙNG (cổng gateway) thì bot lên tiếng một câu, như app gốc (xem
+   * `routine-nhac.ts`). Bot tự sửa routine bằng tool đi thẳng vào `automations.ts`, không qua đây.
+   */
   automations: {
     forAgent: getAgentAutomationsForClient,
     forAgentClientShape: getAgentAutomationsForClient,
     listAll: listAllAutomations,
     toClientShape: toClientAutomation,
-    create: createAgentAutomation,
-    update: updateAgentAutomation,
-    remove: deleteAgentAutomation,
-    setEnabled: setAgentAutomationEnabled,
+    create: (a) => { const r = createAgentAutomation(a); nhacRoutine(a, r, "created"); return r; },
+    update: (a) => { const r = updateAgentAutomation(a); nhacRoutine(a, r, "updated"); return r; },
+    remove: (a) => { const truoc = getAgentAutomations(a).find((x) => x.id === a?.automationId); const r = deleteAgentAutomation(a); if (truoc) nguoiNhac.ghi(truoc.agentId, { action: "deleted", name: truoc.name }); return r; },
+    setEnabled: (a) => { const r = setAgentAutomationEnabled(a); const rec = r.find((x) => x.id === a?.automationId); if (rec) nguoiNhac.ghi(rec.agentId, { action: rec.isEnabled ? "enabled" : "disabled", name: rec.name, lich: moTaTrigger(rec.trigger) }); return r; },
     runNow: runAgentAutomationNow,
     webhookCredential: automationWebhookCredential,
   },

@@ -226,3 +226,38 @@ required `avatarColor avatarShape body name shareId shareUrl`; `activeVersion` l
 Bên ta sau đợt này: `stageTemplateForAgent` (bản chờ `staged`, đầu bảng giữ bản đã phát), `publishBotTemplate` nâng đúng bản chờ,
 `toWireView`, `postBotTemplateShareCard`, tool `share_bot_template` đăng tiến độ + thẻ, `laLuotChiaSeMau` khoá `ask_question` +
 hướng dẫn 3 nhịp. Đo bấm thật: `scripts/e2e-chia-se-mau.mjs` (share → publish → update → publish 2 → details → delete) 6/7, mốc 7 sửa cách kiểm sau; vòng trọn đã đo bằng tay. Bốn bẫy của bài đo ghi trong đầu file script: click tổng hợp, cuộn mượt, hàng ảo hoá đo sai chiều cao, DOM không theo thứ tự nhìn thấy.
+
+## 7d · Bảng Routine → bot lên tiếng · trang đích của "Copy link" (đo 05/09 đêm)
+
+**Bảng Routine.** Transcript thật của bot "dr eggbot" (cache client app gốc) quanh một lần người dùng bấm trên panel Routine:
+
+```
+⚙ Disabled routine · transcript-healthcheck
+⚙ Enabled routine  · transcript-healthcheck
+BOT  btw `transcript-healthcheck` vừa bị tắt (paused). muốn bật lại không?
+⚙ Updated routine  · transcript-healthcheck
+BOT  ok — `transcript-healthcheck` đã bật lại, giờ fire weekdays 8:44 và mỗi ngày 00:15 local.
+```
+
+Ba điều đọc ra: (1) hàng sự kiện là `SandTimelineEvent` `automation-changed`, `action` ∈ `SandAutomationChangeAction` =
+`created|deleted|disabled|enabled|updated` — renderer vẽ *"<Verb> routine · <tên>"* (hàm `C4`/`Qlt`), bấm vào mở routine; các
+type sự kiện khác cùng họ: `name-changed`, `channel-connected`, `channel-disconnected`. (2) Bot trả **một câu** ngay sau thao tác,
+**không có tin người dùng** nào — tức host tự đẩy một lời nhắc cho bot; bật + sửa cách nhau vài giây thì một câu cho cả hai.
+(3) Câu có tên routine trong dấu `` ` `` và nói lại lịch.
+
+Bên ta: `automations.ts` trước chỉ phát sự kiện cho tạo/sửa — nay thêm xoá/bật/tắt; `api-contract` mở enum 5 giá trị;
+`routine-nhac.ts` gom nhịp 1,5 s theo bot, chờ bot rảnh (`isAgentRunning`, tối đa 60 s rồi bỏ — câu "vừa tắt" sau 10 phút hết
+nghĩa), rồi `sendPrompt({silent:true})` một lời nhắc nói rõ *"thao tác trên giao diện, KHÔNG phải câu chat"* + gợi ý theo hành
+động cuối; chỉ gắn ở cổng gateway (`ports.automations.*`) — bot tự sửa routine bằng tool thì không tự nhắc mình. Đo sống
+`scripts/e2e-routine-nhac.mjs`: 4 nhịp → 4 câu, 6–11 s, 0 tin người dùng, bật+sửa → đúng 1 câu.
+
+**Copy link.** `W8e(t) = LQ(t) ? t.shareUrl : null` — client chỉ chép chuỗi backend trả. Của hãng là `https://x.ai/bot/<shareId>`:
+trang tĩnh `<title>dr eggbot by khanh</title>`, `og:title/og:description/og:url/og:image` (PNG 1200×630), avatar, tên, "by <người
+tạo>", mô tả, miễn trừ *"created by a third-party user, not by SpaceXAI. It may act on your behalf…"*, nút **Add to Grok Bot** là
+`<a href="grokbot://app/v1/bot-template?id=<shareId>">`, trang tự mở link ấy khi nạp (*"Opening Grok Bot…"*), dưới có *Download*.
+Deep link khớp `Si` của `main-core.cjs`: `schemes:["grokbot","sand"] · authority:"app" · path:"/v1/bot-template" · id
+/^[A-Za-z0-9_-]{21}$/`. Bên ta: `shareUrlOf(shareId)` = `<GROKBOT2_PUBLIC_SITE>/bot/<shareId>` (tính lúc đọc, không lưu),
+`site-bot.ts` phục vụ `/bot/<shareId>` công khai cùng cửa với trang tải: chỉ mẫu đã publish + public; nháp, đã xoá, để riêng hay id
+sai dạng → **cùng một** trang 404; mọi chuỗi qua `thoat()`, CSP nonce, chỉ số đếm skill/routine/plugin/memory (không lộ thân);
+`og:*`, `noindex`; không có `og:image` vì ta không dựng PNG. Scheme `grokbot://` trên máy có hai app thuộc về app **mở sau cùng**
+(Electron `setAsDefaultProtocolClient` ghi `HKCU\Software\Classes\grokbot` mỗi lần khởi động) — trang web không chọn được.

@@ -546,14 +546,26 @@ export function deleteAgentAutomation(a: { id?: string; agentId?: string; automa
   const agentId = agentIdOf(a);
   const l = listFor(agentId);
   const i = l.findIndex((x) => x.id === a?.automationId);
-  if (i >= 0) { l.splice(i, 1); persist(); automationsChanged(agentId); }
+  if (i >= 0) {
+    const [rec] = l.splice(i, 1);
+    persist();
+    automationsChanged(agentId);
+    // App gốc ghi cả 5 hành động vào bản ghi (đo cache client 05/09: created · updated · deleted · enabled · disabled);
+    // trước đây ta chỉ ghi hai — xoá và bật/tắt từ bảng Routine không để lại dấu vết nào trong hội thoại.
+    pushTranscriptEvent(agentId, { type: "automation-changed", action: "deleted", automationId: rec.id, automationName: rec.name });
+  }
   return l;
 }
 
 export function setAgentAutomationEnabled(a: { id?: string; agentId?: string; automationId?: string; isEnabled?: boolean; enabled?: boolean }): Automation[] {
   const agentId = agentIdOf(a);
   const rec = listFor(agentId).find((x) => x.id === a?.automationId);
-  if (rec) { rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled; persist(); automationsChanged(agentId); }
+  if (rec) {
+    rec.isEnabled = a?.isEnabled ?? a?.enabled ?? !rec.isEnabled;
+    persist();
+    automationsChanged(agentId);
+    pushTranscriptEvent(agentId, { type: "automation-changed", action: rec.isEnabled ? "enabled" : "disabled", automationId: rec.id, automationName: rec.name });
+  }
   return listFor(agentId);
 }
 

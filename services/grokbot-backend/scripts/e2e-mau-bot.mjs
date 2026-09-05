@@ -57,7 +57,7 @@ try {
   ok("view.skills = 2", imp?.view?.skills?.length === 2);
   ok("skill thiếu mô tả được lấp — schema client đòi min(1)", (imp?.view?.skills ?? []).every((s) => s.name && s.description && s.content), JSON.stringify(imp?.view?.skills?.map((s) => s.description)));
   ok("creatorName suy từ tài khoản", typeof imp?.view?.creatorName === "string" && imp.view.creatorName.length > 0, imp?.view?.creatorName);
-  ok("shareUrl dạng hãng", imp?.view?.shareUrl === `https://x.ai/bot/${shareId}`);
+  ok("shareUrl trỏ về trang /bot/<shareId> của mình", typeof imp?.view?.shareUrl === "string" && imp.view.shareUrl.endsWith(`/bot/${shareId}`));
   ok("shareId sai mẫu → null", (await gw("getPublicBotTemplate", { shareId: "khong-du-21" })) === null);
 
   const tuChoi = await gw("createAgentFromTemplate", { shareId, expectedActiveVersion: 2, name: "E2E mẫu (xoá)" });

@@ -219,7 +219,8 @@ test("hình dạng trả cho renderer 0.43 (`BotTemplateImport`) qua được va
   assert.ok(v.description.length > 0, "description rỗng là client từ chối cả mẫu");
   assert.ok((T.AVATAR_SHAPES as readonly string[]).includes(v.avatarShape));
   assert.ok((T.AVATAR_COLORS as readonly string[]).includes(v.avatarColor));
-  assert.equal(v.shareUrl, `https://x.ai/bot/${tpl.shareId}`);
+  assert.equal(v.shareUrl, T.shareUrlOf(tpl.shareId));
+  assert.match(v.shareUrl, /\/bot\/[A-Za-z0-9_-]{21}$/,"link chia sẻ trỏ về trang /bot/<shareId> của MÌNH, không phải x.ai");
   assert.deepEqual([v.version, v.activeVersion, v.active, v.published], [2, 2, true, true]);
   assert.equal("sourceAgentId" in v, false, "isPackedImportView đòi sourceAgentId == null");
   assert.equal(v.creatorName, "nguoi-a");
@@ -350,7 +351,7 @@ test("stage: chưa có mẫu → bản nháp v1 chưa xuất bản, public, thâ
   assert.equal(the.published, false);
   assert.equal(the.version, 1);
   assert.equal("activeVersion" in the, false, "chưa xuất bản thì KHÔNG có activeVersion (khai number, không nullable)");
-  assert.equal(the.shareUrl, `https://x.ai/bot/${tpl.shareId}`);
+  assert.equal(the.shareUrl, T.shareUrlOf(tpl.shareId));
   // Dây: getBotTemplateVersion{shareId, version:1} → hộp View Details thấy đủ 5 mục ở đầu bảng.
   const w = T.toWireView(tpl, 1);
   assert.equal(w.body, the.body);

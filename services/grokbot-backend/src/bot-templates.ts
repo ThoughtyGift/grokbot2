@@ -204,7 +204,7 @@ function lapChoBanCu(t: BotTemplate, owner: string): BotTemplate {
   const recipe: TemplateRecipe = t.snapshot?.recipe ?? {
     profile: { name: t.name, description: t.description }, memory: [], skills: [], routines: [], plugins: [],
   };
-  return { ...t, shareUrl: t.shareUrl ?? shareUrlOf(t.shareId), ownerAuthId: t.ownerAuthId ?? owner, ownerType: "user", imageUrl: t.imageUrl ?? null,
+  return { ...t, shareUrl: shareUrlOf(t.shareId), ownerAuthId: t.ownerAuthId ?? owner, ownerType: "user", imageUrl: t.imageUrl ?? null,
     snapshot: { ...t.snapshot, recipe } };
 }
 
@@ -520,7 +520,27 @@ const DEFAULT_SHAPE = "blob";
 export const mauHopLe = (c: unknown): string => (AVATAR_COLORS as readonly string[]).includes(String(c)) ? String(c) : DEFAULT_COLOR;
 export const hinhHopLe = (s: unknown): string => (AVATAR_SHAPES as readonly string[]).includes(String(s)) ? String(s) : DEFAULT_SHAPE;
 
-export const shareUrlOf = (shareId: string): string => `https://x.ai/bot/${shareId}`;
+/**
+ * Link chia sẻ — TRANG CỦA MÌNH, không phải x.ai.
+ *
+ * Nút "Copy link" của client chỉ chép `shareUrl` mà backend trả (đo 05/09: `W8e(t) = LQ(t) ? t.shareUrl : null`), nên
+ * đổi ở đây là đổi cái người dùng dán đi. Trang đích: `/bot/<shareId>` trong `site.ts` — cùng khung với trang tải,
+ * hiện tên · người tạo · mô tả · nút "Add to Grok Bot" mở deep link `grokbot://app/v1/bot-template?id=<shareId>`
+ * (scheme + đường trích từ `main-core.cjs` 0.43: `Si={schemes:["grokbot","sand"],authority:"app",path:"/v1/bot-template"}`;
+ * trang x.ai/bot/<id> của hãng dùng đúng link ấy trong nút "Add to Grok Bot").
+ *
+ * Gốc lấy từ `GROKBOT2_PUBLIC_SITE` (vd `https://cinai.app/agent` — địa chỉ trang tải công khai, ĐÃ gồm tiền tố nginx),
+ * không có thì `GROKBOT2_PUBLIC_BACKEND` + `GROKBOT2_PUBLIC_PATH`, cuối cùng là máy nhà. Tính LÚC ĐỌC, không lưu: bản
+ * ghi cũ từng lưu link x.ai.
+ */
+export const shareUrlOf = (shareId: string): string => {
+  const site = process.env.GROKBOT2_PUBLIC_SITE?.trim();
+  if (site) return `${site.replace(/\/+$/, "")}/bot/${shareId}`;
+  const be = process.env.GROKBOT2_PUBLIC_BACKEND?.trim();
+  const path = (process.env.GROKBOT2_PUBLIC_PATH ?? "").trim().replace(/^\/+|\/+$/g, "");
+  const goc = be ? be.replace(/\/+$/, "") : "http://localhost:8788";
+  return `${goc}${path ? "/" + path : ""}/bot/${shareId}`;
+};
 
 // ── Hình dạng DÂY cho client 0.43 ────────────────────────────────────────────────────────────────
 
@@ -584,7 +604,7 @@ export function toWireView(t: BotTemplate, version?: number): BotTemplateWireVie
     visibility: t.visibility,
     createdAtMs: t.createdAtMs,
     updatedAtMs: t.updatedAtMs,
-    shareUrl: t.shareUrl ?? shareUrlOf(t.shareId),
+    shareUrl: shareUrlOf(t.shareId),
     creatorName: ownerDisplayNameOf(t.ownerAuthId),
     memory: (r.memory ?? []).map((m) => bo({ content: m.content, createdAt: m.createdAt, kind: m.kind })),
     skills: (r.skills ?? []).map((k) => ({ name: k.name, description: coChu(k.description, "(chưa có mô tả)"), content: k.content ?? "" })),
@@ -608,7 +628,7 @@ export function shareCardOf(t: BotTemplate): {
     avatarShape: s?.avatarShape ?? t.avatarShape,
     avatarColor: s?.avatarColor ?? t.avatarColor,
     body: s?.description ?? t.description,
-    shareUrl: t.shareUrl ?? shareUrlOf(t.shareId),
+    shareUrl: shareUrlOf(t.shareId),
     version: s?.version ?? t.version,
     ...(t.activeVersion != null ? { activeVersion: t.activeVersion } : {}),
     published: t.published,
