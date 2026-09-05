@@ -120,3 +120,50 @@ plugin `{pluginId, name, description?}`, memory `{kind?, createdAt?, content}`. 
    (`GROKBOT2_STRICT_404`). Chưa cần vì local vẫn 0.29; cần khi nâng client.
 3. Cờ `sand_teach_by_demonstration` không còn ở 0.43 → không phải điều kiện của nút `+` nữa.
 4. 9/16 lệnh "thiếu" (phòng chung) nay là chuyện đã đóng ở phía client.
+
+## 7 · Coordinator 0.43 kiểm MỌI reply gateway theo schema nhúng (đo 05/09)
+
+Đây là điều 0.29 không có, và là lý do client 0.43 mở lên với backend mình lại hiện hai banner mất kết nối trong khi
+`transport:"connected"`, SSE sống, health `ok`.
+
+**Cơ chế.** `dist/node-agent-coordinator/main.cjs` có hằng `RA` = base64 của một JSON nén **deflate-raw**
+(`inflateGatewayProtocolSchema`): `{ methods: { <lệnh>: { args, reply } }, events, capabilities, hostOnlyMethods, $defs }`
+— 150 lệnh, sinh từ `sand/src/shared/rpc/gateway.ts` của hãng. Mỗi reply đi qua `parsedReply → ft(schema, reply, "structural")`;
+lỗi ⇒ `SandGatewayMalformedReplyError("gateway <lệnh> reply is malformed: <chi tiết>")`, và **chỗ gọi coi như lệnh thất bại**.
+Rút ra: `JSON.parse(zlib.inflateRawSync(Buffer.from(RA, "base64")))` → [gateway-schema-0.43.json](gateway-schema-0.43.json).
+
+**Mode "structural" bắt gì.** Kiểu (`string|number|boolean|null|array|object`), `required`, `null` ở nơi không nullable
+(`{"type":"number"}` không nhận `null` — khoá phải VẮNG), `anyOf`/`oneOf`. **Không** bắt `enum`/`const`, **không** bắt
+khoá thừa (`additionalProperties:false` chỉ có tác dụng ở mode "exact") — nên gửi **thêm** khoá cho client cũ là an toàn,
+gửi **thiếu**/`null` là hỏng cả lệnh.
+
+**Hai banner, hai lệnh.** *"Can't reach your computer"* = `getHostSettings` thiếu `notifications.allowedApps` →
+`readHostSettingsFromBox` ném → kho "sidebar sections" đọc hỏng (`client/sidebar-sections-read-failed`) → roster vẽ banner.
+*"Showing saved messages"* = một tin người dùng trong `openAgentTail` thiếu `isStreaming` → trang tail bị coi là hỏng →
+replica không "install", renderer giữ bản lưu (`isShowingRestoredTranscript`). Không dòng log nào ở phía ta, vì reply là 200.
+
+**12 chỗ đã sửa cho khớp** (`scripts/kiem-reply-0-43.mjs` quét 29 lệnh đọc: 0 sai):
+
+| lệnh | thiếu / sai | sửa |
+|---|---|---|
+| `getHostSettings` | `notifications` thiếu 4 khoá; `mcpCustomInstructions` chuỗi; `computerUseModel: null` | lấp mặc định hãng `{allowedApps:[], minIntervalMs:5000, maxPerWindow:10, windowMs:300000}`; record; model null ⇒ vắng; bỏ `uiByOwner`/`byOwner` khỏi dây |
+| `getHostStatus` | `{isBusy, capabilities:{}, version…}` | `{hostVersion:null, latestHostVersion:null, hostUpdateAvailable:false, isBusy, capabilities:["botTemplateJsonShareV1","botTemplateVisibilityV1"]}` — hai capability là cửa Share as template |
+| `listAgents` (+ SSE `agents`) | thiếu `avatarDataUrl`, `isActive`; `snapshotEpoch` số; `currentActivity:null` | thêm hai khoá; **epoch là CHUỖI** (`OrderedStamp.epoch`, `epochHint` đều string); activity null ⇒ vắng |
+| `openAgentTail` / `getAgentTranscriptTail` | tin người dùng thiếu `isStreaming`; `nextBeforeSeq:null` | `isStreaming:false` ở cửa ra; hết trang ⇒ vắng khoá |
+| `getAgentAutomations` / `listAllAutomations` | thiếu `filePath`, `nextRunAt`; run thiếu `finishedAt`; list là `{agentId, automation}` | thêm khoá; run status `ok|error|running`; hàng list mang cả phẳng lẫn `automation` |
+| `getForeverBoxStatus` | thiếu `vncUrl` khi off | `vncUrl:null` (cả `grokbot-computer/session.ts`) |
+| `skillsCatalog` | thiếu `install`, `publisher`, `source` | `install:{kind:"content",name,content}`, `source:"managed"` |
+| `getMcpState` | thiếu `customInstructions`; `statusDetail` chuỗi (schema: object `{kind}`) | thêm `""`; bỏ `statusDetail` (0.29 không đọc) |
+| `getEffectiveMcpPlugins` | 0.43 phẳng (`pluginId, name, displayName, installMode, isEnabled`) | gửi cả `{plugin,isEnabled}` cũ lẫn khoá phẳng |
+| `getAgentAvatar` / `getAgentNotificationAvatar` | `{dataUrl,version}` / 6 khoá (`avatarByteCount, avatarContentType, avatarVersion, color, name, shape`) | thêm; giữ cặp khoá cũ |
+| `getAgentMemories` | MẢNG `{id, kind:"log"|"profile", content, createdAt}` | mảng (renderer 0.29 cũng không đọc `.memories`) |
+| `getListenerIntegrations` · `getSkillPublishTargets` · `getBotTemplateExportPolicy` | `{}` · `{targets}` · không có handler | `{integrations:[]}` · `{teams:[], unavailableReason, unavailableReasonKind:"team_required"}` · `{exportPolicy:"all"}` |
+
+**Lệch cố ý còn lại:** `getAgentTranscript`/`getTranscript` — schema nói mảng entry, ta trả trang `{entries}` vì 12 bài đo
+đọc `.entries` và không client nào gọi (coverage chỉ có lượt script). Ngoài ra sự kiện SSE **không** bị coordinator kiểm
+schema (chỉ đòi `channel` là chuỗi); renderer có validator riêng cho từng loại.
+
+**Bài học.** Cùng họ với "trường có trong hợp đồng ≠ trường có người đọc", nhưng chiều ngược: từ 0.43, **mọi trường
+`required` đều có người đọc** — máy đọc, trước cả UI. Một reply 200 "trông đúng" mà thiếu một khoá là cả tính năng
+biến thành banner mất kết nối, và không lỗi nào nổi lên ở phía backend. Bài đo phải chạy lại mỗi khi đổi shape:
+`node services/grokbot-backend/scripts/kiem-reply-0-43.mjs`.

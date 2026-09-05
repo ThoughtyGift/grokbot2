@@ -395,9 +395,19 @@ export function toClientAutomation(rec: Automation): Record<string, unknown> {
     trigger,
     schedule: rec.trigger,
     scheduleDescription: rec.triggerDescription,
+    // `SandAutomation` 0.43 bắt buộc hai khoá này (hãng ghi file trên box; ta không có file — tên là danh
+    // nghĩa, không ai đọc, nhưng thiếu là cả danh sách routine bị coi là hỏng).
+    filePath: `automations/${rec.id}.md`,
+    nextRunAt: (rec as { nextRunAt?: number | null }).nextRunAt ?? null,
     // `body` alongside `prompt`: the editor's Instruction field has read both across builds, and
     // sending both costs nothing while a wrong single guess leaves the field blank.
     body: rec.prompt,
+    // `SandAutomationRun` 0.43: `finishedAt` bắt buộc (null khi chưa xong / không ghi), trạng thái là ok|error|running.
+    runs: (rec.runs ?? []).map((r) => ({
+      ...r,
+      status: r.status === "completed" ? "ok" : r.status === "failed" ? "error" : r.status,
+      finishedAt: (r as { finishedAt?: number | null }).finishedAt ?? null,
+    })),
   };
 }
 

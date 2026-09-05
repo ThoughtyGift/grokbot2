@@ -43,7 +43,7 @@ export type ForeverBoxStatus = {
   state: "running" | "off";
   windows: never[];
   handoff: BoxHandoff | null;
-  vncUrl?: string;
+  vncUrl?: string | null;   // null = chưa có màn (hợp đồng 0.43 bắt buộc khoá này)
   /** Có màn hình cấu hình hay không — xem chú thích ở nơi dựng status. */
   screenConfigured?: boolean;
 };
@@ -226,8 +226,9 @@ export async function foreverBoxStatus(args: { id?: unknown; agentId?: unknown }
   // Cùng lý do như services/grokbot-computer/src/session.ts: "off" vì chưa cấu hình và "off" vì
   // không ai đang dùng là hai chuyện khác nhau, và FE phải nói đúng cái nào.
   const screenConfigured = vncUrl != null;
-  if (vncUrl == null) return { agentId, state: "off", windows: [], handoff, screenConfigured };
-  if (!computerUsers.has(agentId) && handoff == null) return { agentId, state: "off", windows: [], handoff };
+  // `SandForeverBoxStatus` 0.43 bắt buộc `vncUrl` (null khi chưa có màn) — thiếu là cả trạng thái box bị coi là hỏng.
+  if (vncUrl == null) return { agentId, state: "off", vncUrl: null, windows: [], handoff, screenConfigured };
+  if (!computerUsers.has(agentId) && handoff == null) return { agentId, state: "off", vncUrl: null, windows: [], handoff, screenConfigured };
   return { agentId, state: "running", vncUrl, windows: [], handoff, screenConfigured };
 }
 

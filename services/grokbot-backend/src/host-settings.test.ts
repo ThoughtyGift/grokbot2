@@ -32,8 +32,26 @@ test("cài đặt máy (không thuộc PER_USER_KEYS) vẫn dùng chung", () => 
 test("notifications cũng theo người", () => {
   as("user-A", () => patchHostSettings({ notifications: { isEnabled: true } }));
   as("user-B", () => patchHostSettings({ notifications: { isEnabled: false } }));
-  assert.deepEqual(as("user-A", () => hostSettings().notifications), { isEnabled: true });
-  assert.deepEqual(as("user-B", () => hostSettings().notifications), { isEnabled: false });
+  // Từ 05/09 reply ra dây lấp đủ 5 khoá bắt buộc của `SandNotificationConfig` (hợp đồng 0.43) — so từng khoá.
+  const A = as("user-A", () => hostSettings().notifications) as Record<string, unknown>;
+  const B = as("user-B", () => hostSettings().notifications) as Record<string, unknown>;
+  assert.equal(A.isEnabled, true);
+  assert.equal(B.isEnabled, false);
+});
+
+test("notifications ra dây đủ 5 khoá bắt buộc của hợp đồng 0.43, kể cả khi người dùng chỉ ghi isEnabled", () => {
+  as("user-C", () => patchHostSettings({ notifications: { isEnabled: true } }));
+  const n = as("user-C", () => hostSettings().notifications) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(n).sort(), ["allowedApps", "isEnabled", "maxPerWindow", "minIntervalMs", "windowMs"]);
+  assert.deepEqual(n.allowedApps, []);
+});
+
+test("kho nội bộ theo người không ra dây; model null thì VẮNG khoá", () => {
+  patchHostSettings({ computerUseModel: null });
+  const h = hostSettings();
+  assert.equal("uiByOwner" in h, false);
+  assert.equal("byOwner" in h, false);
+  assert.equal("computerUseModel" in h, false);
 });
 
 /*

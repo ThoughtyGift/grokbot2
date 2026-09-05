@@ -146,6 +146,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         accountKey: "default",
         rowServerIdentifier: name,
         transport,
+        customInstructions: "",   // bắt buộc trong `SandMcpServerSummary` 0.43; lời dặn thật nằm trong host settings
         ...(command ? { command } : {}),
         ...(url ? { url } : {}),
         // Was a flat `disconnected` + "Runs on Grok Bot's computer" for every row: true about the
@@ -153,8 +154,10 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
         ...(() => {
           const st = extensions.mcpServerStatus?.(name);
           return st
-            ? { status: wireStatus(st.status, st.detail), statusDetail: st.detail, toolCount: st.toolCount }
-            : { status: "loading", statusDetail: "Runs on Grok Bot's computer", toolCount: 0 };
+            // `statusDetail` bỏ đi (05/09): hợp đồng 0.43 khai nó là object `{kind}`, còn chuỗi cũ thì
+            // renderer 0.29 không đọc chỗ nào — giữ chuỗi là trượt schema mà không ai được lợi.
+            ? { status: wireStatus(st.status, st.detail), toolCount: st.toolCount }
+            : { status: "loading", toolCount: 0 };
         })(),
         isTeamServer: false,
       }];
@@ -182,7 +185,23 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       push("host-settings", { fields });
       return next;
     },
-    getHostStatus: () => ({ isBusy: false, capabilities: {}, current: "applied", version: "0.20.0", state: "current" }),
+    /*
+     * Hình dạng `SandHostStatus` của 0.43 — bốn khoá bắt buộc, `capabilities` là MẢNG tên. Bản cũ
+     * (`capabilities:{}`, `version`, `state`) trượt schema reply của coordinator 0.43; 0.29 chỉ đọc
+     * `isBusy` (dò máy rảnh trước khi tự cập nhật) nên đổi shape không đụng nó.
+     *
+     * Hai capability đầu là cửa "Share as template" của renderer 0.43:
+     * `sEE(t) = exportPolicy !== "none" && isShareBotEnabled && hostCapabilities.includes("botTemplateJsonShareV1")`.
+     */
+    getHostStatus: () => ({
+      hostVersion: null,
+      latestHostVersion: null,
+      hostUpdateAvailable: false,
+      isBusy: false,
+      capabilities: ["botTemplateJsonShareV1", "botTemplateVisibilityV1"],
+    }),
+    /** `SandBotTemplateExportPolicyReply`: "all" | "none" | "team_only" | null. Chưa có đội, nên mở hết. */
+    getBotTemplateExportPolicy: () => ({ exportPolicy: "all" }),
 
     listAgents: () => directory.listAgents(),
 
@@ -316,7 +335,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       return computer.injectCookies(ds).catch(() => ({ injected: 0, sites: 0 }));
     },
 
-    getAgentNotificationAvatar: (a) => directory.getAgentAvatar(a),
+    getAgentNotificationAvatar: (a) => directory.getAgentNotificationAvatar(a),
 
     /**
      * Vẽ avatar từ một câu mô tả.
@@ -460,7 +479,19 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     dismissTray: (a) => { const i = trays.findIndex((t) => t.id === (a?.id ?? a?.trayId)); if (i >= 0) trays.splice(i, 1); return {}; },
     clearTrays: () => { trays.length = 0; return {}; },
 
-    skillsCatalog: () => workflows?.listAll() ?? [],
+    /*
+     * `SandSkillCatalogEntry` 0.43 bắt buộc `install` · `publisher` · `source`. Skill của mình cài bằng nội
+     * dung (`kind:"content"`), nguồn `managed` — "marketplace" là kho của hãng, ta không phân phối lại.
+     */
+    skillsCatalog: () => (workflows?.listAll() ?? []).map((w) => {
+      const r = w as Record<string, unknown>;
+      return {
+        ...r,
+        install: { kind: "content", name: String(r.name ?? r.id ?? ""), content: String(r.instructions ?? "") },
+        publisher: "grokbot2",
+        source: "managed",
+      };
+    }),
     syncPluginSkills: () => [],
     /**
      * The plugin-sync record. `{}` CRASHED the Plugins panel's "Yours" tab.
@@ -475,7 +506,7 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      * is a well-formed record with empty lists, not an empty object.
      */
     getPluginSyncStatus: () => ({ fetchedAt: Date.now(), skills: [], authBlocked: [] }),
-    getListenerIntegrations: () => ({}),
+    getListenerIntegrations: () => ({ integrations: [] }),   // `SandListenerIntegrationsView`: mảng bắt buộc, rỗng là chưa nối gì
     getTeachRecordingStatus: () => ports.teach?.status() ?? TEACH_IDLE,
     // Box-host summary rows. The overlay's Yours → Installed list is built from the *host's*
     // MCP settings, using this reply only to fill status/toolCount — so `.mcp.json` alone will
@@ -501,8 +532,24 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      *                            đã trả — nên nó dùng lại `mcpServerRows`, không dựng hình mới.
      */
     getMcpCatalog: () => pluginsArray(listMarketplacePluginsJson(catalogEntries())),
+    /*
+     * Hình dạng 0.43 `SandEffectivePlugin` là PHẲNG (`pluginId` · `name` · `displayName` · `installMode` ·
+     * `isEnabled`); bản 0.29 đọc `{plugin, isEnabled}`. Coordinator 0.43 kiểm theo cấu trúc (bỏ qua khoá
+     * thừa), nên gửi CẢ HAI trong một hàng — mỗi client đọc phần của mình.
+     */
     getEffectiveMcpPlugins: () =>
-      pluginsArray(getEffectiveUserPluginsJson(extensions.mcpInstalledIds?.(), catalogEntries())),
+      pluginsArray(getEffectiveUserPluginsJson(extensions.mcpInstalledIds?.(), catalogEntries())).map((row) => {
+        const r = row as { plugin?: Record<string, unknown>; isEnabled?: boolean };
+        const p = r.plugin ?? {};
+        return {
+          ...r,
+          pluginId: String(p.id ?? ""),
+          name: String(p.name ?? ""),
+          displayName: String(p.displayName ?? p.name ?? ""),
+          installMode: "user",
+          isEnabled: r.isEnabled === true,
+        };
+      }),
     getMcpState: () => ({ servers: mcpServerRows([]) }),
 
     /*
@@ -771,7 +818,13 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
     // Tra thang, KHONG boc qua toClientShape: day la ban ghi {url,key} chu khong phai mot routine.
     // `null` -> {} de client thay mot doi tuong khong co `url`, va nem dung cho no doi.
     getAutomationWebhookCredential: (a) => automations.webhookCredential?.(a) ?? {},
-    listAllAutomations: () => automations.listAll().map(automations.toClientShape),
+    // `SandScheduledAutomation` 0.43: `{agentId, automation}` — không phải hàng phẳng.
+    // Hàng phẳng giữ lại (bài đo `e2e-desktop`/`e2e-create-routine` đọc `name`/`id` trực tiếp); coordinator 0.43
+    // kiểm theo cấu trúc nên hai khoá bắt buộc thêm vào là đủ, khoá thừa không bị bắt.
+    listAllAutomations: () => automations.listAll().map((r) => {
+      const hang = automations.toClientShape(r) as Record<string, unknown>;
+      return { ...hang, agentId: (r as { agentId: string }).agentId, automation: hang };
+    }),
     setAgentAutomationEnabled: (a) => automations.setEnabled(a).map(automations.toClientShape),
     createAgentAutomation: (a) => automations.create(a).map(automations.toClientShape),
     updateAgentAutomation: (a) => automations.update(a).map(automations.toClientShape),
@@ -797,7 +850,8 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
      * lời từ chối phải nói ra lý do, nếu không giao diện chỉ thấy thao tác thất bại mà không biết
      * vì sao. (Skill trên ĐĨA là chuyện khác và đã chạy: xem skills.ts, chúng vào prompt.)
      */
-    getSkillPublishTargets: () => ({ targets: [] }),
+    // `SandSkillPublishTargets` 0.43: `teams` + `unavailableReason` bắt buộc. Chưa có đội nào để đăng lên.
+    getSkillPublishTargets: () => ({ teams: [], unavailableReason: "Chưa có đội để đăng skill lên.", unavailableReasonKind: "team_required" }),
     publishSkill: () => ({ ok: false, reason: "bản này không nối với registry skill nào — skill dùng được là skill nằm trên đĩa box" }),
     resyncPublishedSkill: () => ({ ok: false }),
     unpublishSkill: () => ({ ok: false }),

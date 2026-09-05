@@ -15,7 +15,7 @@ export type ForeverBoxStatus = {
   state: "running" | "off";
   windows: never[];
   handoff: BoxHandoff | null;
-  vncUrl?: string;
+  vncUrl?: string | null;
   /**
    * Có màn hình để xem hay không — khác hẳn với "đang có ai dùng".
    *
@@ -89,9 +89,10 @@ export function status(args: { id?: unknown; agentId?: unknown }): ForeverBoxSta
   const handoff = handoffs.get(agentId) ?? null;
   const vncUrl = boxVncUrl();
   const screenConfigured = vncUrl != null;
-  if (vncUrl == null) return { agentId, state: "off", windows: [], handoff, screenConfigured };
+  // `SandForeverBoxStatus` 0.43 bắt buộc `vncUrl` (null khi chưa có màn) — coordinator 0.43 kiểm reply theo schema.
+  if (vncUrl == null) return { agentId, state: "off", vncUrl: null, windows: [], handoff, screenConfigured };
   // Đã cấu hình nhưng không ai đang dùng: vẫn `off`, nhưng `screenConfigured` cho FE nói đúng.
-  if (!computerUsers.has(agentId) && handoff == null) return { agentId, state: "off", windows: [], handoff, screenConfigured };
+  if (!computerUsers.has(agentId) && handoff == null) return { agentId, state: "off", vncUrl: null, windows: [], handoff, screenConfigured };
   return { agentId, state: "running", vncUrl, windows: [], handoff, screenConfigured };
 }
 

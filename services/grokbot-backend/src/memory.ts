@@ -146,9 +146,14 @@ export const forgetCached = (agentId: string): void => { cache.delete(agentId); 
 
 const agentIdOf = (a: any): string => a?.id ?? a?.agentId ?? "";
 
-export async function getAgentMemories(a: any): Promise<{ memories: MemoryEntry[]; total: number }> {
+/**
+ * Hợp đồng 0.43 (`getAgentMemories.reply`): MẢNG `SandMemoryRecord {id, kind:"log"|"profile", content, createdAt}`.
+ * Bản cũ trả `{memories,total}` vì chưa có chỗ đọc để đối chiếu — nay schema reply nhúng trong coordinator
+ * 0.43 nói thẳng, và renderer 0.29 cũng không đọc khoá `memories` ở đâu.
+ */
+export async function getAgentMemories(a: any): Promise<Array<MemoryEntry & { kind: "log" }>> {
   const entries = await loadMemory(agentIdOf(a));
-  return { memories: entries, total: entries.length };
+  return entries.map((e) => ({ ...e, kind: "log" as const }));
 }
 
 export async function deleteAgentMemory(a: any): Promise<{ memories: MemoryEntry[]; success: boolean }> {

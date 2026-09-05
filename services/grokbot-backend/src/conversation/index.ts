@@ -109,7 +109,11 @@ const choClientGoc = (e: CoSeq): CoSeq => {
   const rt = (e as { replyTo?: { entryId: string } }).replyTo;
   // Cast qua `unknown`: shape ra dây KHÁC `Entry` đúng ở một trường, và nói thật điều đó bằng một
   // cast hẹp thì rõ hơn là dựng một kiểu song song chỉ để lệch một chỗ.
-  return rt ? ({ ...e, replyTo: rt.entryId, replyToId: rt.entryId } as unknown as CoSeq) : e;
+  const raDay = rt ? ({ ...e, replyTo: rt.entryId, replyToId: rt.entryId } as unknown as CoSeq) : e;
+  // `SandMessageEntry` 0.43 bắt buộc `isStreaming`; tin người dùng ghi vào tail không có nó, và một
+  // entry trượt là cả trang bị coordinator coi là hỏng → app chỉ còn "Showing saved messages".
+  return raDay.kind === "message" && (raDay as { isStreaming?: boolean }).isStreaming === undefined
+    ? ({ ...raDay, isStreaming: false } as CoSeq) : raDay;
 };
 
 export function latestEntry(agentId: string): (Entry & { seq: number }) | null {
@@ -142,7 +146,8 @@ export function transcriptTail(a?: { agentId?: string; id?: string; limit?: numb
     reachable: true,
     entries,
     beforeSeq: typeof args.beforeSeq === "number" ? args.beforeSeq : null,
-    nextBeforeSeq: start > 0 ? entries[0]?.seq ?? null : null,
+    // `SandTranscriptPage.nextBeforeSeq` là `number`, không nullable — hết trang thì VẮNG khoá.
+    ...(start > 0 && entries[0] ? { nextBeforeSeq: entries[0].seq } : {}),
     hasMore: start > 0,
     cursor: entries[0]?.id ?? null,
     total: withSeq.length,

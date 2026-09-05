@@ -53,7 +53,9 @@ export interface DirectoryPort {
   setAgentNotificationsEnabled: Call;
   setAgentNotifyOnUpdates: Call;
   setAgentAvatarBytes: Call;
-  getAgentAvatar(args: any): { avatarDataUrl?: string; avatarVersion?: string };
+  getAgentAvatar(args: any): { avatarDataUrl?: string; avatarVersion?: string; dataUrl?: string | null; version?: string | null };
+  /** `SandAgentNotificationAvatar` 0.43 — sáu khoá bắt buộc, xem `directory/index.ts`. */
+  getAgentNotificationAvatar(args: any): Record<string, unknown>;
   searchAgents: Call;
   kickstartAgent: Call;
   agentById(id: string): { id: string } | undefined;

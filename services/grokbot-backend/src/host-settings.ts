@@ -45,7 +45,7 @@ function withoutPerUserKeys(saved: Record<string, unknown>): Record<string, unkn
 
 const settings: Record<string, unknown> = {
   notifications: { isEnabled: false },
-  mcpCustomInstructions: "",
+  mcpCustomInstructions: {},   // record<string,string> theo hợp đồng 0.43 — xem `choClient`
   mcpCustomInstructionsByServerId: {},
   mcpDisabledToolsByServerId: {},
   mcpBoxServers: [],
@@ -85,7 +85,28 @@ function ownerSlice(ownerId: string): Record<string, unknown> {
  * Gọi không tham số (gateway dùng `getHostSettings: hostSettings`) vẫn đúng: `currentOwner()` ngoài
  * một request trả về danh tính mặc định.
  */
-export const hostSettings = (): Record<string, unknown> => ({ ...settings, ...ownerSlice(currentOwner()) });
+export const hostSettings = (): Record<string, unknown> => choClient({ ...settings, ...ownerSlice(currentOwner()) });
+
+/**
+ * Mặc định của HÃNG (main-core 0.43, hằng `SR`): năm khoá đều BẮT BUỘC trong schema reply
+ * `SandNotificationConfig` mà coordinator 0.43 kiểm. Thiếu `allowedApps` là cả `getHostSettings`
+ * bị coi là hỏng → đọc "sidebar sections" thất bại → banner "Can't reach your computer" dù kết nối
+ * đang xanh. Đo 05/09 trên client 0.43 chạy với backend này.
+ */
+const THONG_BAO_MAC_DINH = { isEnabled: false, allowedApps: [] as string[], minIntervalMs: 5_000, maxPerWindow: 10, windowMs: 300_000 };
+const laObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** Hình dạng ra dây: đủ khoá bắt buộc, đúng kiểu, và không mang kho nội bộ theo từng người. */
+function choClient(all: Record<string, unknown>): Record<string, unknown> {
+  const { uiByOwner: _ui, byOwner: _by, ...ra } = all;   // kho nội bộ — bố cục và khoá của NGƯỜI KHÁC không đi ra dây
+  ra.notifications = { ...THONG_BAO_MAC_DINH, ...(laObject(ra.notifications) ? ra.notifications : {}) };
+  // Hợp đồng 0.43: record<string,string>. Bản cũ từng lưu "" — chuỗi ở đây là "type object" ở phía client.
+  if (!laObject(ra.mcpCustomInstructions)) ra.mcpCustomInstructions = {};
+  if (!laObject(ra.mcpCustomInstructionsByServerId)) ra.mcpCustomInstructionsByServerId = {};
+  // `SandModelSelection` là object, không nullable — "chưa chọn" nghĩa là VẮNG khoá, không phải null.
+  for (const k of ["computerUseModel", "agentDefaultModel"]) if (ra[k] === null) delete ra[k];
+  return ra;
+}
 
 /** The FE sends partial patches ({notifications:{…}}, {userTimeZone:…}) — merge, don't discard. */
 export function patchHostSettings(patch: unknown): Record<string, unknown> {

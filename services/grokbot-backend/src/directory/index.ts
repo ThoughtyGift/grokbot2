@@ -94,8 +94,14 @@ function summarise(a: AgentRecord): RosterRow {
   const lastEntry = lastEntryOf(a.id);
   const t2 = transcripts.get(a.id);
   const last = t2?.length ? t2[t2.length - 1] : null;
+  // `currentActivity` trong hợp đồng 0.43 là object hoặc VẮNG — `null` trượt schema, kéo cả listAgents.
+  const { currentActivity, ...aKhongNull } = a;
   return {
-    ...a,
+    ...aKhongNull,
+    ...(currentActivity ? { currentActivity } : {}),
+    // Hai khoá bắt buộc của `SandAgentSummary` 0.43 mà bản ghi cũ không có.
+    ...({ avatarDataUrl: a.avatarDataUrl ?? null } as Record<string, unknown>),   // record khai string?, dây khai string|null
+    isActive: true,
     updatedAt,
     snapshotEpoch: EPOCH,
     snapshotSeq: rosterSeq,
@@ -338,9 +344,39 @@ export function clearAgentAvatar(a: { id?: string; agentId?: string }): AgentRec
   rosterChanged(rec.id);
   return rec;
 }
+/** `SandAgentAvatarResult` 0.43 là `{dataUrl, version}` (null khi chưa có); cặp khoá cũ giữ lại cho 0.29. */
 export function getAgentAvatar(a: { id?: string; agentId?: string }) {
   const rec = ownedRec(a.id ?? a.agentId ?? "");
-  return { avatarDataUrl: rec?.avatarDataUrl ?? "", avatarVersion: rec?.avatarVersion ?? "" };
+  return {
+    dataUrl: rec?.avatarDataUrl ?? null,
+    version: rec?.avatarVersion ?? null,
+    avatarDataUrl: rec?.avatarDataUrl ?? "",
+    avatarVersion: rec?.avatarVersion ?? "",
+  };
+}
+
+/** Ước lượng số byte của một data URL base64 — client dùng để quyết định có tải ảnh thông báo không. */
+const byteCountOfDataUrl = (u: string): number | null => {
+  const i = u.indexOf(",");
+  return i < 0 ? null : Math.floor(((u.length - i - 1) * 3) / 4);
+};
+
+/**
+ * `SandAgentNotificationAvatar` 0.43 — sáu khoá bắt buộc. Màu/hình mặc định trùng `DEFAULT_COLOR`/`DEFAULT_SHAPE`
+ * của mẫu bot (`bot-templates.ts`), không import để thư mục không kéo theo module mẫu.
+ */
+export function getAgentNotificationAvatar(a: { id?: string; agentId?: string }) {
+  const rec = ownedRec(a.id ?? a.agentId ?? "");
+  const url = rec?.avatarDataUrl ?? "";
+  const m = /^data:([^;,]+)/.exec(url);
+  return {
+    avatarByteCount: url ? byteCountOfDataUrl(url) : null,
+    avatarContentType: m ? m[1] : null,
+    avatarVersion: rec?.avatarVersion ?? null,
+    color: (rec as { avatarColor?: string } | undefined)?.avatarColor ?? "blue",
+    name: rec?.name ?? null,
+    shape: (rec as { avatarShape?: string } | undefined)?.avatarShape ?? "blob",
+  };
 }
 
 export function searchAgents(a: { query?: string; q?: string; text?: string; includeHidden?: boolean }): AgentRecord[] {

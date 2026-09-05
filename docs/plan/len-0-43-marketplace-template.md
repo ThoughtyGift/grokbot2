@@ -45,6 +45,23 @@ Việc:
 Kiểm: `patch-client.mjs --verify` xanh trên 0.43; `check-app.cmd` thấy RPC tới `:8788`; không tiến trình nào của
 `C:\Program Files\Grok Bot` bị đụng.
 
+**KẾT QUẢ 05/09 — A XONG phần chạy được, còn hai việc đóng gói.**
+
+- **10/10 mốc neo lại**, không tách thư mục vá theo bản: mỗi bản vá có `variants[]` theo `version`, `patch-client.mjs` chọn
+  biến thể mà `find` xuất hiện đúng `expected` lần. 7 áp lên 0.43 (`main-app.cjs` + renderer), **3 chứng minh thừa** bằng
+  `obsoleteIf` (chuỗi bằng chứng hãng đã tự sửa: `yct` kiểm ổ đĩa Windows trước `new URL`; cờ `sand_multi_machine_local_exec`
+  bỏ; host gộp vào main-app). `--verify` xanh trên **cả** `C:\cai043` và `C:\cai029`. Trạng thái vá nay ghi **cạnh bản cài**
+  (`resources/grokbot2-patch-state.json`), không còn một file chung cho hai bản.
+- **Client 0.43 chạy song song** với 0.29: `C:\cai043` (asar bung + vá), hồ sơ `%APPDATA%\Grok Bot (local 043)`, CDP `:9225`,
+  bốn biến trỏ `localhost:8788`. Boot, đăng nhập (chép hồ sơ), roster, transcript, routine, "New Bot's screen" đều vẽ đúng;
+  update-feed hỏi ta (204); một lượt chat gõ qua CDP đi hết vòng (tin lên tail có `clientNonce`, trả lời mọc sống sau 3 s).
+- **Bức tường thật không phải bản vá mà là SCHEMA REPLY.** Mở lần đầu, 0.43 hiện *"Can't reach your computer"* +
+  *"Showing saved messages…"* dù `transport:"connected"`. Coordinator 0.43 kiểm **mọi** reply gateway theo schema nhúng
+  (mode "structural") và ném `gateway <lệnh> reply is malformed`; 12 lệnh của ta trượt. Toàn bộ chuyện này ở
+  [0-43-so-voi-local.md §7](../extracted/0-43-so-voi-local.md) và bài đo `scripts/kiem-reply-0-43.mjs` (29 lệnh đọc: 0 sai, 2 lệch cố ý).
+- **Chưa làm** (đóng gói, không chặn việc dùng): mục 3 (`build-setup.mjs --with-app` từ `C:\cai043`) và mục 5 (`clientVersion`
+  bootstrap vẫn 0.29). Mục 4 chỉ còn thiếu launcher (`run.ps1`) cho bản 043 — hiện mở bằng script trong phiên.
+
 ## B · Lệnh client 0.43 gọi mà backend chưa có
 
 Bật `GROKBOT2_STRICT_404=1`, mở app 0.43 local, đi qua: sidebar → Marketplace (2 tab) → một bot → Share as template

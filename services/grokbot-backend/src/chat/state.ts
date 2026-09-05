@@ -211,8 +211,13 @@ function migrate(e: any, agentName: string): Entry | null {
   void doObsTrenBox();
 }
 
-export const EPOCH = Date.now();
-export const transcriptEpoch = (_agentId: string): number => EPOCH;
+/**
+ * Chuỗi, không phải số: hợp đồng 0.43 khai `OrderedStamp.epoch`, `snapshotEpoch` và `epochHint`
+ * đều là `string`, và coordinator 0.43 kiểm reply theo schema — số ở đây là "listAgents reply is
+ * malformed" ở phía client. Renderer 0.29 chỉ so bằng `!==`, không kiểm kiểu, nên đổi kiểu vô hại.
+ */
+export const EPOCH = String(Date.now());
+export const transcriptEpoch = (_agentId: string): string => EPOCH;
 
 /**
  * A transcript changed. Announced, then persisted — in that order, because the frame is what the
