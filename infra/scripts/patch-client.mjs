@@ -70,7 +70,16 @@ const bootSource = () => {
   return { source: "none — app cannot boot", patched: false };
 };
 
+/**
+ * Trạng thái vá ghi CẠNH bản cài (`resources/grokbot2-patch-state.json`), không ghi một file chung
+ * trong repo — từ 05/09 máy này có HAI bản đã vá (0.29 ở `Programs\Bot Noi Bo`, 0.43 ở `C:\cai043`),
+ * và một file chung thì lần `--apply` sau ghi đè bản ghi của bản trước, rồi `--verify` bản trước báo
+ * "client version drifted" cho một bản cài không đổi gì. File cũ trong `docs/state` chỉ còn là
+ * đường đọc dự phòng cho bản cài vá trước ngày đó.
+ */
+const STATE_LOCAL = RES ? join(RES, "grokbot2-patch-state.json") : "";
 const readState = () => {
+  try { return JSON.parse(readFileSync(STATE_LOCAL, "utf8")); } catch { /* chưa có — thử file cũ */ }
   try { return JSON.parse(readFileSync(STATE_FILE, "utf8")); } catch { return null; }
 };
 
@@ -218,12 +227,7 @@ if (mode === "--verify") {
      * toàn mà `--apply` vừa đưa ra. Hai bên phải đọc CÙNG một dữ kiện, nếu không chúng sẽ mâu thuẫn
      * nhau trên đúng những máy cũ nhất.
      */
-    const feedApDuoc = (() => {
-      try {
-        return readFileSync(join(APP_UNPACKED, "dist/electron-main/main.cjs"), "utf8")
-          .includes("/*grokbot2:update-feed*/");
-      } catch { return false; }
-    })();
+    const feedApDuoc = feedMarkerIn(APP_UNPACKED);
     if (!feedApDuoc) {
       pkg.sandLab === true
         ? ok("sandLab: con day (dung) — client nay khong va duoc update-feed, nen updater phai khoa")
@@ -255,7 +259,8 @@ if (mode === "--verify") {
       break;
     }
     if (!seen) {
-      if (p.obsoleteWhenMissing) ok(`${p.id}: khong con trong bundle nay — da thua (${p.obsoleteWhenMissing})`);
+      if (obsoleteProven(p, APP_UNPACKED)) ok(`${p.id}: hang tu sua — da thua (${p.obsoleteIf.why})`);
+      else if (p.obsoleteWhenMissing) ok(`${p.id}: khong con trong bundle nay — da thua (${p.obsoleteWhenMissing})`);
       else fail(`${p.id}: khong tim thay dau vet nao trong bundle`);
     }
   }
@@ -378,6 +383,32 @@ function pickVariant(p, src) {
   return null;
 }
 
+/**
+ * "Đã thừa" có BẰNG CHỨNG: bản vá khai `obsoleteIf:{file, find, expected, why}` — đúng câu sửa của
+ * hãng trong bundle mới. Khác `obsoleteWhenMissing` (chỉ cần neo cũ biến mất, và neo biến mất cũng có
+ * thể là hàm đổi hình dạng lần nữa trong khi lỗi còn), ở đây phải THẤY câu ấy, đúng số lần, thì mới
+ * được bỏ qua. `root` là thư mục bundle đang xét (staging khi --apply, resources/app khi --verify).
+ */
+function obsoleteProven(p, root) {
+  const o = p.obsoleteIf;
+  if (!o) return false;
+  const target = join(root, o.file);
+  if (!existsSync(target)) return false;
+  return readFileSync(target, "utf8").split(o.find).length - 1 === (o.expected ?? 1);
+}
+
+/**
+ * Dấu `update-feed` có trên đĩa không — nhìn vào MỌI file mà bản vá ấy có biến thể trỏ tới, không
+ * ghim `main.cjs`: 0.43 dời updater sang `main-app.cjs`, và bản đầu của chốt này đọc đúng file cũ
+ * nên báo "chưa áp" ngay sau dòng "1x replaced" — rồi GIỮ `sandLab`, khoá banner của chính mình.
+ */
+function feedMarkerIn(root) {
+  const feed = PATCHES.find((p) => p.id === "update-feed");
+  return targetsOf(feed).some((f) => {
+    try { return readFileSync(join(root, f), "utf8").includes("/*grokbot2:update-feed*/"); } catch { return false; }
+  });
+}
+
 /** Tên file trong bundle — biến thể được phép trỏ chỗ khác (renderer đổi tên theo băm nội dung). */
 function targetsOf(p) {
   const list = p.variants ?? [p];
@@ -403,6 +434,7 @@ ${chk.stderr}`); process.exit(1); }
     break;
   }
   if (!done) {
+    if (obsoleteProven(p, staging)) { ok(`${p.id}: hang tu sua — da thua (${p.obsoleteIf.why})`); continue; }
     if (p.obsoleteWhenMissing) { ok(`${p.id}: khong con trong bundle nay — da thua (${p.obsoleteWhenMissing})`); continue; }
     console.error(`FAIL ${p.id}: khong bien the nao khop bundle nay`);
     console.error(`  ${p.summary}`);
@@ -449,8 +481,7 @@ ${chk.stderr}`); process.exit(1); }
    * không còn đường nào tới máy chủ hãng. Gỡ khi feed CHƯA vá là mở lại đúng cái bẫy `sandLab` sinh
    * ra để đóng — nên kiểm bằng DẤU VẾT THẬT trên đĩa, không tin vào thứ tự chạy của vòng lặp trên.
    */
-  const feedDaVa = readFileSync(join(staging, "dist/electron-main/main.cjs"), "utf8")
-    .includes("/*grokbot2:update-feed*/");
+  const feedDaVa = feedMarkerIn(staging);
   let doiPkg = false;
   if (!feedDaVa) {
     /*
@@ -556,14 +587,15 @@ failed to swap resources/app into place: ${e}`);
   process.exit(4);
 }
 
-writeFileSync(STATE_FILE, `${JSON.stringify({
+writeFileSync(STATE_LOCAL, `${JSON.stringify({
   appliedAt: new Date().toISOString(),
+  appDir: APP_DIR,
   clientVersion: clientVersion(APP_UNPACKED),
   vendorAsarSha256: sha(existsSync(ASAR_ASIDE) ? ASAR_ASIDE : vendorAsar),
   patches: PATCHES.map((p) => ({ id: p.id, file: p.file, expected: p.expected })),
   note: "Written by infra/scripts/patch-client.mjs --apply. Personal install only — never redistribute a patched client (docs/legal.md).",
 }, null, 2)}\n`);
-ok(`recorded ${STATE_FILE.replace(REPO, ".")}`);
+ok(`recorded ${STATE_LOCAL}`);
 
 rmSync(work, { recursive: true, force: true });
 console.log("\napplied. Verify with: node infra/scripts/patch-client.mjs --verify");

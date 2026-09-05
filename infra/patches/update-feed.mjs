@@ -50,5 +50,14 @@ export default {
       replace: DOC.replace("$N", "t4n"),
       marker: "/*grokbot2:update-feed*/",
     },
+    // 0.43: `main.cjs` chỉ còn vỏ 12 KB; updater nằm ở `main-app.cjs`, cùng chuỗi, tên `IQe`.
+    {
+      version: "0.43.0",
+      file: "dist/electron-main/main-app.cjs",
+      find: 'var IQe="https://api2.cursor.sh/updates"',
+      expected: 1,
+      replace: DOC.replace("$N", "IQe"),
+      marker: "/*grokbot2:update-feed*/",
+    },
   ],
 };

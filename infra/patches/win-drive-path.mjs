@@ -19,6 +19,24 @@ export default {
   summary: "chuẩn hoá đường dẫn: ổ đĩa Windows là ĐƯỜNG DẪN, không phải URL (ảnh thu nhỏ trong ô soạn)",
 
   /**
+   * **0.43: hãng tự sửa đúng lỗi này.** `normalizeAttachmentSource` nay là
+   *
+   *     function yB(e){…if(yct.test(e))return e;try{return new URL(e).protocol!=="file:"?null:Od(e)}…}
+   *     var yct=/^[a-zA-Z]:[\\/]/
+   *
+   * — kiểm ổ đĩa Windows TRƯỚC `new URL`, tức chính cái vế bản vá này thêm vào. Không có gì để vá,
+   * nhưng cũng không dùng `obsoleteWhenMissing`: "không thấy neo" có thể chỉ là hàm đổi hình dạng
+   * lần nữa mà lỗi vẫn còn. `obsoleteIf` đòi **bằng chứng dương** — thấy đúng câu sửa của hãng thì
+   * mới được nói "đã thừa"; không thấy cả neo lẫn bằng chứng thì vẫn đỏ như cũ.
+   */
+  obsoleteIf: {
+    file: "dist/electron-main/main-app.cjs",
+    find: 'if(yct.test(e))return e;try{return new URL(e).protocol!=="file:"?null:Od(e)}catch{return e}}',
+    expected: 1,
+    why: "0.43 kiểm ổ đĩa Windows (yct) trước new URL — hãng tự sửa",
+  },
+
+  /**
    * Một bản vá, nhiều phiên bản client.
    *
    * Không dấu hiệu nào của 0.20 còn sống trong 0.29 — nhưng **lỗi thì còn**, chỉ là hàm đổi tên.

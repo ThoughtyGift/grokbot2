@@ -35,6 +35,8 @@
 
 const RENDERER = "dist/renderer/assets/index-DO1aF_xy.js";
 const MAIN = "dist/electron-main/main.cjs";
+/** 0.43: `main.cjs` chỉ còn vỏ; toàn bộ cursorAccount nằm ở đây. */
+const MAIN043 = "dist/electron-main/main-app.cjs";
 
 /**
  * Cờ bị đọc HAI lần: một lần lúc khởi tạo, một lần trong `subscribe` để tắt lại nếu hãng gỡ cờ.
@@ -50,6 +52,12 @@ const MAIN = "dist/electron-main/main.cjs";
 const co = {
   id: "computer-tab-flag",
   summary: "bật sand_multi_machine_local_exec tại chỗ renderer đọc nó (cả hai chỗ)",
+  /*
+   * 0.43 bỏ hẳn cờ này (0 lần trong 712 cờ của main, 0 lần trong renderer; `isMultiMachineLocalExecEnabled`
+   * cũng mất). Bảng Computer nay chỉ chờ trạng thái đăng nhập (`S8t.bindAuth` → `cd(s)`), không chờ cờ.
+   * Neo là chính TÊN cờ nên "không thấy" ở đây đúng nghĩa là "không còn", không phải đổi hình dạng.
+   */
+  obsoleteWhenMissing: "0.43 bỏ cờ sand_multi_machine_local_exec — bảng Computer không còn nằm sau cờ",
   variants: [
     {
       version: "0.29.0",
@@ -89,14 +97,20 @@ const co = {
  * `AbortSignal.timeout` chứ không để treo: lời gọi này đồng bộ với việc mở Settings, backend chết
  * thì bảng phải trống ngay chứ không được treo cả hộp thoại.
  */
-const THAN_MOI = 'getSandMachines:s(async()=>{try{'
+/**
+ * @param {string} wrap  tên hàm bọc handler của bundle: `s` (0.29) · `o` (0.43) — cùng một `__name`.
+ * @param {string} idFn  hàm module-level trả machine-id thật: `cn` (0.29) · `ot` (0.43); cùng thân
+ *                       `(n=<store>)=>readSecret(...)`, chỉ đổi tên rút gọn.
+ */
+const thanMoi = (wrap, idFn) => `getSandMachines:${wrap}(async()=>{try{`
   + 'const u=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
   + 'const k=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-  + 'let cur=null;try{cur=await cn()}catch{}'
+  + `let cur=null;try{cur=await ${idFn}()}catch{}`
   + 'const r=await fetch(u+"/gw/api/getSandMachines",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify(cur?{currentMachineId:cur}:{}),signal:AbortSignal.timeout(8000)});'
   + 'if(!r.ok)return null;const a=await r.json();'
   + 'return Array.isArray(a)&&a.length>0?a:null;'
   + '}catch{return null}},"getSandMachines")';
+const THAN_MOI = thanMoi("s", "cn");
 
 /**
  * Đổi TÊN máy — nút Save trong bảng.
@@ -132,6 +146,27 @@ const doiTen = {
         + 'return await r2.json();}/*grokbot2:label-cu*/,"updateMachineLabel"),unusedUpdateMachineLabel:s(async({machineId:p,label:A})=>{let y=A.trim();',
       marker: "/*grokbot2:computer-tab-label*/",
     },
+    /*
+     * 0.43: `updateMachineLabel:o(async({machineId:p,label:g})=>{let A=g.trim();(0,Fn.invariant)(p.length>0
+     * &&p.length<=127&&A.length>0&&[...A].length<=Qee,…)` — cùng luật kiểm, hằng trần đổi tên `s7t` → `Qee`
+     * (=100), bọc `s` → `o`, tham số `A` → `g`. Renderer đi `updateSandMachineLabel → e.updateMachineLabel(t)`
+     * nên thay thân này là đủ.
+     */
+    {
+      version: "0.43.0",
+      file: MAIN043,
+      find: 'updateMachineLabel:o(async({machineId:p,label:g})=>{let A=g.trim();',
+      expected: 1,
+      replace: 'updateMachineLabel:o(async({machineId:p,label:g})=>{/*grokbot2:computer-tab-label*/'
+        + 'const y2=String(g??"").trim();'
+        + 'if(!(p&&p.length>0&&p.length<=127&&y2.length>0&&[...y2].length<=Qee))throw new Error("Machine label update requires a bounded machine id and label.");'
+        + 'const u2=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
+        + 'const k2=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r2=await fetch(u2+"/gw/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
+        + 'if(!r2.ok)throw new Error("Machine label update failed: "+r2.status);'
+        + 'return await r2.json();}/*grokbot2:label-cu*/,"updateMachineLabel"),unusedUpdateMachineLabel:o(async({machineId:p,label:g})=>{let A=g.trim();',
+      marker: "/*grokbot2:computer-tab-label*/",
+    },
   ],
 };
 
@@ -161,6 +196,20 @@ const doiQuyen = {
         + 'return await r3.json();}/*grokbot2:quyen-cu*/,"updateMachineLocalToolPermission"),unusedUpdateMachinePermission:s(async({machineId:p,localToolPermission:A,expectedAccountScope:y})=>{let S=await e(),',
       marker: "/*grokbot2:computer-tab-permission*/",
     },
+    // 0.43: cùng chữ ký, đổi tên tham số (`A`→`g`, `y`→`A`) và câu mở đầu (`let S=await e()` → `let h=await t()`).
+    {
+      version: "0.43.0",
+      file: MAIN043,
+      find: 'updateMachineLocalToolPermission:o(async({machineId:p,localToolPermission:g,expectedAccountScope:A})=>{let h=await t(),',
+      expected: 1,
+      replace: 'updateMachineLocalToolPermission:o(async({machineId:p,localToolPermission:g})=>{/*grokbot2:computer-tab-permission*/'
+        + 'const u3=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
+        + 'const k3=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r3=await fetch(u3+"/gw/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:g}),signal:AbortSignal.timeout(8000)});'
+        + 'if(!r3.ok)throw new Error("Machine permission update failed: "+r3.status);'
+        + 'return await r3.json();}/*grokbot2:quyen-cu*/,"updateMachineLocalToolPermission"),unusedUpdateMachinePermission:o(async({machineId:p,localToolPermission:g,expectedAccountScope:A})=>{let h=await t(),',
+      marker: "/*grokbot2:computer-tab-permission*/",
+    },
   ],
 };
 
@@ -174,6 +223,19 @@ const cau = {
       find: 'getSandMachines:s(()=>n.cursorAccount.getMachines(),"getSandMachines")',
       expected: 1,
       replace: `/*grokbot2:computer-tab-ipc*/${THAN_MOI}`,
+      marker: "/*grokbot2:computer-tab-ipc*/",
+    },
+    /*
+     * 0.43 có BA `getSandMachines:` trong main-app: một là bảng DSL (`v().noArgs`), hai là
+     * `Ns.readMachines()` (phía box). Cái renderer gọi vẫn là `cursorAccount.getMachines()` — đòi tài
+     * khoản Cursor thật, y như 0.29 — nên neo đúng dòng đó và chỉ nó (expected 1).
+     */
+    {
+      version: "0.43.0",
+      file: MAIN043,
+      find: 'getSandMachines:o(()=>e.cursorAccount.getMachines(),"getSandMachines")',
+      expected: 1,
+      replace: `/*grokbot2:computer-tab-ipc*/${thanMoi("o", "ot")}`,
       marker: "/*grokbot2:computer-tab-ipc*/",
     },
   ],

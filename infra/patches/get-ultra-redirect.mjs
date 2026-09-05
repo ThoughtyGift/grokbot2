@@ -29,7 +29,7 @@
  */
 const CHECKOUT = process.env.GROKBOT2_CHECKOUT_URL ?? "https://checkout.example.com/upgrade";
 
-export default {
+const main = {
   id: "get-ultra-redirect",
   summary: 'nút Get Ultra mở GROKBOT2_CHECKOUT_URL thay vì cursor.com/bot/onboarding',
 
@@ -60,5 +60,43 @@ export default {
       replace: `jpr=/*grokbot2:get-ultra-redirect*/${JSON.stringify(CHECKOUT)}`,
       marker: "/*grokbot2:get-ultra-redirect*/",
     },
+    /*
+     * 0.43: `main.cjs` chỉ còn vỏ, hằng nằm ở `main-app.cjs` trong một khối khởi tạo trễ
+     * `f1=I(()=>{nst="…",C5t=\`${nst}?step=…\`…})` — nên không có `const`/`var` trước tên.
+     */
+    {
+      version: "0.43.0",
+      file: "dist/electron-main/main-app.cjs",
+      find: 'nst="https://cursor.com/bot/onboarding"',
+      expected: 1,
+      replace: `nst=/*grokbot2:get-ultra-redirect*/${JSON.stringify(CHECKOUT)}`,
+      marker: "/*grokbot2:get-ultra-redirect*/",
+    },
   ],
 };
+
+/**
+ * 0.43: renderer cũng giữ một bản riêng của URL và dùng nó trực tiếp — `href:OR` trên nút của
+ * paywall và `$$(t,e=OR)` khi dựng action. Không đọc được chắc chắn bên nào quyết định điều hướng
+ * (0.29 là main), nên vá cả hai; hai bản vá cùng một câu chuyện, cùng file này.
+ *
+ * Trên 0.29 file renderer này không tồn tại ⇒ `obsoleteWhenMissing` nói "không cần" thay vì đỏ.
+ * Tên file renderer mang băm nội dung — đổi sau mỗi lần hãng dựng lại, phải trỏ lại.
+ */
+const renderer = {
+  id: "get-ultra-redirect-renderer",
+  summary: "renderer 0.43: hằng URL Get Ultra cũng trỏ GROKBOT2_CHECKOUT_URL",
+  obsoleteWhenMissing: "0.29: điều hướng nằm ở main, renderer không cần vá",
+  variants: [
+    {
+      version: "0.43.0",
+      file: "dist/renderer/assets/index-Df98_wE4.js",
+      find: 'const OR="https://cursor.com/bot/onboarding"',
+      expected: 1,
+      replace: `const OR=/*grokbot2:get-ultra-redirect-renderer*/${JSON.stringify(CHECKOUT)}`,
+      marker: "/*grokbot2:get-ultra-redirect-renderer*/",
+    },
+  ],
+};
+
+export default [main, renderer];
