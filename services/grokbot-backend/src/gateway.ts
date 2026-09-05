@@ -82,7 +82,7 @@ import { closeMcp, mcpServers, mcpServerStatus, getMcpTools, removeMcpServer, au
 import { transcribe } from "./stt.js";
 import {
   listBotTemplates, getBotTemplateForSourceAgent, createTemplateForAgent, getBotTemplateVersion, publishBotTemplate,
-  setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate, publicTemplateImport, bindTemplateSources,
+  setBotTemplateVisibility, deleteBotTemplate, createAgentFromTemplate, publicTemplateImport, bindTemplateSources, toWireView,
 } from "./bot-templates.js";
 import { DEFAULT_USER } from "./auth.js";
 import { publicListings, publishListing, unpublishListing, listingsOf, creatorProfileOf, setCreatorProfile } from "./marketplace.js";
@@ -245,11 +245,12 @@ const ports: AclPorts = {
    * mô tả từng thành viên, nên dựng lại được cả đội chứ không phải một cái phòng rỗng.
    */
   botTemplates: {
-    list: () => listBotTemplates(currentOwner()),
-    forSourceAgent: (id) => getBotTemplateForSourceAgent(id, currentOwner()),
-    getVersion: (shareId, version) => getBotTemplateVersion(shareId, version, currentOwner()),
-    publish: (shareId, version) => publishBotTemplate(shareId, version, currentOwner()),
-    setVisibility: (shareId, visibility) => setBotTemplateVisibility(shareId, visibility, currentOwner()),
+    // Hình dạng dây 0.43 (`toWireView`): năm mục chi tiết ở đầu bảng, `activeVersion` vắng thay vì null.
+    list: () => listBotTemplates(currentOwner()).map((t) => toWireView(t)),
+    forSourceAgent: (id) => { const t = getBotTemplateForSourceAgent(id, currentOwner()); return t ? toWireView(t) : null; },
+    getVersion: (shareId, version) => { const t = getBotTemplateVersion(shareId, version, currentOwner()); return t ? toWireView(t, version) : null; },
+    publish: async (shareId, version) => { const t = await publishBotTemplate(shareId, version, currentOwner()); return t ? toWireView(t) : null; },
+    setVisibility: (shareId, visibility) => { const t = setBotTemplateVisibility(shareId, visibility, currentOwner()); return t ? toWireView(t) : null; },
     remove: (shareId) => deleteBotTemplate(shareId, currentOwner()),
     createAgent: (a) => createAgentFromTemplate(a, currentOwner()),
     getPublic: (shareId) => publicTemplateImport(shareId),

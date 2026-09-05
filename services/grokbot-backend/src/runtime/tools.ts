@@ -96,7 +96,7 @@ const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map(
   return "";
 }).filter(Boolean).join("\n");
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
-import { createTemplateForAgent, publishBotTemplate, shareUrlOf, getBotTemplateForSourceAgent } from "../bot-templates.js";
+import { createTemplateForAgent, publishBotTemplate, shareUrlOf, getBotTemplateForSourceAgent, stageTemplateForAgent, shareCardOf } from "../bot-templates.js";
 import { publishListing, CATEGORIES } from "../marketplace.js";
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
@@ -460,18 +460,29 @@ TOOLS.create_diagram = (arg, ctx) => {
  * thứ model biết; tên chỉ được so trong dàn bot của CHÍNH CHỦ — id người khác không có đường vào.
  */
 /**
- * `share_bot_template` — đóng gói một bot (hoặc cả ĐỘI) thành mẫu để phát cho máy khác.
+ * `share_bot_template` — đóng gói một bot (hoặc cả ĐỘI) thành bản CHỜ XÁC NHẬN, đúng luồng client 0.43.
  *
- * Đường TẠO mẫu của hãng không có trong client (không có `createBotTemplate`, và
- * `publishBotTemplate` chỉ mang `{shareId, version}`), nên đây là đường của TA — và cố ý là một
- * tool chứ không phải một lần đọc: bản đầu tạo mẫu ngay khi pane đọc, và app thật hiện "Delete
- * Template" trên mọi bot dù chưa ai chia sẻ gì.
+ * Đường TẠO mẫu của hãng không có trong client (không có `createBotTemplate`, và `publishBotTemplate`
+ * chỉ mang `{shareId, version}`), nên đây là đường của TA — và cố ý là một tool chứ không phải một lần
+ * đọc: bản đầu tạo mẫu ngay khi pane đọc, và app thật hiện "Delete Template" trên mọi bot dù chưa ai
+ * chia sẻ gì.
  *
- * Mẫu của nhóm chở theo mô tả từng thành viên, nên máy nhận dựng lại được cả dàn.
+ * Luồng đo từ cache client app gốc 05/09 (bot "dr eggbot", bấm "Share as template"): client tự gửi
+ * `CAU_CHIA_SE_MAU`; bot đăng 4–5 câu tiến độ (memories → skills → routines → plugins → "giữ N…"), rồi
+ * bản ghi mọc thẻ `bot-template-share` `{published:false, version:1, visibility:"public"}` với nút
+ * **Publish**; câu chốt: "đã stage template public … check card rồi confirm để publish". Người dùng bấm
+ * Publish → client gọi `publishBotTemplate{shareId,version}` → thẻ đổi sang Published · Copy link, menu
+ * header đổi sang View template details / Update template / Delete Template (đọc `published` từ
+ * `getBotTemplateForSourceAgent`). "Update template" gửi lại CÙNG câu → bản chờ = bản active + 1.
+ *
+ * Bản trước của tool này xuất bản NGAY và để tầm nhìn `team` — tức bỏ qua bước duyệt của người dùng
+ * và không có thẻ nào trong bản ghi. Các câu tiến độ ở đây do TOOL đăng (`ctx.note`) từ dữ liệu thật
+ * của snapshot — rẻ, không tốn lượt model, không bịa số. Thân thẻ (`description`) là của MODEL: kiểu
+ * Marketplace, 2–4 câu (xem `huongDanChiaSeMau` trong turn.ts).
  */
 TOOLS.share_bot_template = async (arg, ctx) => {
   let spec: any;
-  try { spec = JSON.parse(arg); } catch { spec = { name: unquote(arg) }; }
+  try { spec = JSON.parse(arg); } catch { spec = { description: unquote(arg) }; }
   const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
   const wanted = String(spec?.agent ?? spec?.name ?? spec?.agentId ?? "").trim();
   const mine = [...agents.values()].filter((a) => ownerOf(a.id) === owner);
@@ -479,19 +490,33 @@ TOOLS.share_bot_template = async (arg, ctx) => {
     ? mine.find((a) => a.id === wanted) ?? mine.find((a) => a.name.toLowerCase() === wanted.toLowerCase())
     : agents.get(ctx.agentId);
   if (!target) return `(không thấy bot "${wanted}")`;
-  const tpl = await runWithOwner(owner, () => createTemplateForAgent(target.id));
+  const description = String(spec?.description ?? spec?.body ?? "").trim();
+  const visibility = spec?.visibility === "team" ? "team" : "public";
+  const truoc = runWithOwner(owner, () => getBotTemplateForSourceAgent(target.id));
+  const tpl = await runWithOwner(owner, () => stageTemplateForAgent(target.id, { description, visibility }));
   if (!tpl) return "(không tạo được mẫu cho bot này)";
-  const pub = await runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
-  const r = pub?.snapshot.recipe;
-  const n = pub?.snapshot.members.length ?? 0;
-  const kem = [
-    n ? `${n} thành viên` : "",
-    r?.skills.length ? `${r.skills.length} skill` : "",
-    r?.routines.length ? `${r.routines.length} routine` : "",
-    r?.memory.length ? `${r.memory.length} mục nhớ` : "",
-  ].filter(Boolean).join(", ");
-  return `đã đóng gói "${target.name}" thành mẫu ${tpl.shareId}` + (kem ? ` (kèm ${kem})` : "")
-    + `. Mẫu đang ở chế độ "team"; muốn người ngoài import qua link ${shareUrlOf(tpl.shareId)} thì đổi tầm nhìn sang public.`;
+  const r = (tpl.staged ?? tpl).snapshot.recipe;
+  const ten = (xs: { name?: string; slug?: string }[]) => xs.map((x) => x.name ?? x.slug).filter(Boolean).join(", ");
+  // Tiến độ — đúng nhịp app gốc, chỉ nói về thứ có thật; bot trống thì một câu.
+  const dong = [
+    r.memory.length ? `memories: ${r.memory.length} mục.` : "",
+    r.skills.length ? `skills: ${ten(r.skills)}.` : "",
+    r.routines.length ? `routines: ${ten(r.routines)}.` : "",
+    r.plugins.length ? `plugins: ${ten(r.plugins)}.` : "",
+  ].filter(Boolean);
+  for (const d of dong) ctx.note(d);
+  ctx.note(dong.length
+    ? `giữ ${r.memory.length} memories, ${r.skills.length} skills, ${r.routines.length} routines, ${r.plugins.length} plugins.`
+    : "mẫu chỉ chở hồ sơ (tên + mô tả) — bot này chưa có memories, skills hay routines.");
+  ctx.draft({ type: "bot-template-share", ...shareCardOf(tpl) });
+  const v = tpl.staged?.version ?? tpl.version;
+  const capNhat = truoc?.published && truoc.activeVersion != null
+    ? ` (cập nhật mẫu đã xuất bản: bản chờ ${v}, bản đang phát vẫn là ${truoc.activeVersion} cho tới khi họ bấm Publish)` : "";
+  const doi = tpl.snapshot.members.length ? `, ${tpl.snapshot.members.length} thành viên` : "";
+  return `đã đóng gói "${target.name}" thành bản chờ ${v} của mẫu ${tpl.shareId}${capNhat}: `
+    + `${r.memory.length} memories, ${r.skills.length} skills, ${r.routines.length} routines, ${r.plugins.length} plugins${doi}. `
+    + `Thẻ mẫu (tầm nhìn ${visibility}) đã hiện trong hội thoại với nút Publish — người dùng bấm thì mẫu mới phát ra ngoài qua `
+    + `${shareUrlOf(tpl.shareId)}. Giờ trả lời MỘT câu ngắn: mời họ xem thẻ và bấm Publish, muốn sửa gì thì nói để bạn đóng gói lại.`;
 };
 
 /**
@@ -1843,7 +1868,7 @@ const PEER_PROTOCOL =
   // room for the team. The description is the bot's standing role (it rides the system prompt);
   // a briefing message is just one line in its transcript.
   'TOOL_CALL: create_agent({"agents":[{"name":"Kho","description":"vai trò + luật làm việc, viết kỹ như một bản SOP"}]}) — one entry per bot. ' +
-  'TOOL_CALL: share_bot_template({"agent":"Kế toán"}) — package a bot (or a whole team) as a template others can import from a link. ' +
+  'TOOL_CALL: share_bot_template({"agent":"Kế toán","description":"2–4 câu kiểu Marketplace: làm gì, cho ai, giọng thế nào, KHÔNG làm gì"}) — package a bot (or a whole team) as a template CARD the user confirms with its Publish button; omit "agent" for yourself. Always write "description" yourself from the profile and memories, never ask the user for it. ' +
   'TOOL_CALL: publish_bot_listing({"agent":"Kế toán","category":"ops-finance"}) — list that bot on the community Marketplace (tab Marketplace → Bots); category is one of engineering, design, marketing, customer-support, product, ops-finance, recruiting-people, sales, productivity. Ask which category if the user did not say. ' +
   'TOOL_CALL: create_group({"name":"Ops","members":["Kho","Ads"]}) — a shared room; every member answers in turn when the user speaks there. ' +
   "A room is NOT a bot: never create_agent for something meant to hold members — create the member bots first, then create_group with their names. " +

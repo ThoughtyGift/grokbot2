@@ -10,6 +10,7 @@ import { closeAgentTab } from "../browser.js";
 import { isAutoApproved, unquote } from "../tools.js";
 import { isDesktopLook, releaseDesktop } from "../desktop.js";
 import { CAU_GHI_XONG } from "../teach-demo.js";
+import { laLuotChiaSeMau } from "../bot-templates.js";
 import { cachedSkillsSection, warmSkills } from "../skills.js";
 import { parseToolCalls, planBatches, planShape, hasIncompleteToolCall } from "../tool-calls.js";
 import { boxConfigured } from "../box-exec.js";
@@ -251,6 +252,22 @@ const tinCuoiCuaNguoi = (history: { role: string; content: string }[]): string =
  * Đặt vào SYSTEM chứ không sửa tin người dùng: tin của họ là bản ghi, và một bản ghi bị viết lại
  * sau lưng là thứ không ai gỡ lỗi nổi về sau.
  */
+/**
+ * Lượt "Share as template" (`luotChiaSeMau`) — bảo model làm đúng ba nhịp app gốc làm, không hơn.
+ *
+ * Đặt vào SYSTEM vì cùng lý do với `huongDanSkill`: tin người dùng là bản ghi. Mô tả thân thẻ là
+ * việc của MODEL (nó biết mình là ai); tiến độ và thẻ là việc của TOOL (nó biết mình có gì).
+ */
+function huongDanChiaSeMau(agentId: string): string {
+  if (!luotChiaSeMau.has(agentId)) return "";
+  return "\n\n## Lượt này: người dùng vừa bấm \"Share as template\" (câu trên do client gửi, không phải họ gõ)\n\n"
+    + "Làm đúng ba bước, không hỏi gì: (1) MỘT câu ngắn nói bạn đang đóng gói mẫu của mình để họ chia sẻ; (2) gọi "
+    + 'TOOL_CALL: share_bot_template({"description":"..."}) — "description" là mô tả kiểu Marketplace 2–4 câu BẠN tự viết '
+    + "từ hồ sơ và ký ức của mình: làm gì, cho ai, giọng thế nào, KHÔNG làm gì (không chép nguyên SOP); người dùng đã dặn "
+    + "chỉnh gì trước đó thì viết theo; (3) tool đã đăng các câu tiến độ và thẻ mẫu có nút Publish — chốt bằng MỘT câu ngắn "
+    + "mời họ xem thẻ, bấm Publish để phát, và nói nếu muốn sửa gì thì bạn đóng gói lại. Không nhắc tên tool, không hỏi thêm.";
+}
+
 function huongDanSkill(agentId: string, tinNguoiDung: string): string {
   const ds = skillDuocGoi(agentId, tinNguoiDung).filter((w) => w.instructions.trim());
   if (!ds.length) return "";
@@ -350,6 +367,7 @@ const clearPresence = (agentId: string): void => {
   anhCuaLuot.delete(agentId);
   traLoiCuaLuot.delete(agentId);
   luotHocTuBanGhi.delete(agentId);
+  luotChiaSeMau.delete(agentId);
   // A turn that stopped is not driving the computer any more, so its screen goes off — the
   // original shows an idle bot's pane as off. `endComputerUse` refuses while a handoff is still
   // on screen, because that card exists precisely to make the user look at it.
@@ -537,6 +555,12 @@ const traLoiCuaLuot = new Map<string, { entryId: string; author: string; excerpt
  * client gửi, nên nhận ra nó không cần model hiểu gì cả.
  */
 const luotHocTuBanGhi = new Set<string>();
+/**
+ * Lượt "Share as template" — cùng cơ chế: client 0.43 tự gửi hằng `CAU_CHIA_SE_MAU` khi bấm nút
+ * — "Update template" gửi câu KHÁC (`CAU_CAP_NHAT_MAU`, đo 05/09) — nên nhận ra bằng chuỗi, và cũng khoá `ask_question`: đo app gốc 05/09
+ * (dr eggbot) — một câu mở, vài câu tiến độ, thẻ mẫu, một câu chốt mời duyệt, không hỏi gì.
+ */
+const luotChiaSeMau = new Set<string>();
 
 /** The capability object handed to a tool while it runs for one agent. */
 const ctxFor = (agentId: string, history?: PoolMessage[]): ToolCtx => ({
@@ -693,10 +717,13 @@ function runTool(
    * người bấm, và tắt presence. Nếu chỉ từ chối mà vẫn đi vào nhánh ấy thì bot IM — tệ hơn hẳn một
    * widget thừa. Nên câu chặn được trả về như kết quả của một tool THƯỜNG, và lượt chạy tiếp.
    */
-  const chanHoi = name === "ask_question" && luotHocTuBanGhi.has(agentId);
+  const chanHoi = name === "ask_question" && (luotHocTuBanGhi.has(agentId) || luotChiaSeMau.has(agentId));
   const goiTool = chanHoi
-    ? async () => "Lượt này là tin hệ thống sau khi buổi ghi kết thúc: đừng hỏi lại người dùng. "
-      + "Xem bản ghi, rút thành skill, rồi nói một câu ngắn về việc mình vừa học được."
+    ? async () => (luotChiaSeMau.has(agentId)
+      ? "Lượt này là nút \"Share as template\" của client: đừng hỏi người dùng. Tự viết mô tả 2–4 câu từ hồ sơ và ký ức "
+        + "của mình rồi gọi share_bot_template — thẻ mẫu có nút Publish để họ duyệt, sửa gì họ sẽ nói sau."
+      : "Lượt này là tin hệ thống sau khi buổi ghi kết thúc: đừng hỏi lại người dùng. "
+        + "Xem bản ghi, rút thành skill, rồi nói một câu ngắn về việc mình vừa học được.")
     : () => fn(arg, ctxFor(agentId, history));
 
   const chuBot = ownerOf(agentId) ?? DEFAULT_USER.authId;
@@ -1179,6 +1206,8 @@ export function sendPrompt(args: SendArgs) {
   if (replyTo) traLoiCuaLuot.set(agentId, replyTo); else traLoiCuaLuot.delete(agentId);
   // Lượt "học từ bản ghi" — xem `luotHocTuBanGhi`.
   if (text.trim() === CAU_GHI_XONG) luotHocTuBanGhi.add(agentId); else luotHocTuBanGhi.delete(agentId);
+  // Lượt "Share as template" / "Update template" — xem `luotChiaSeMau`.
+  if (laLuotChiaSeMau(text)) luotChiaSeMau.add(agentId); else luotChiaSeMau.delete(agentId);
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
   if (!args.silent) t.push(userEntry);
@@ -1568,7 +1597,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         "`view_image` chỉ dùng cho ảnh nằm trên máy BẠN mà bạn chưa nhìn thấy.",
       ].join(NEWLINE)
     : "";
-  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + huongDanSkill(agentId, tinCuoiCuaNguoi(history)), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
+  const opts = { url: config.poolUrl, key, model: config.model, system: system + visionNote + huongDanSkill(agentId, tinCuoiCuaNguoi(history)) + huongDanChiaSeMau(agentId), maxTokens, signal: controller.signal, knownTools: Object.keys(TOOLS), ...(image ? { image } : {}) };
   // Typewriter buffer: the pool often delivers a whole answer in one chunk, which would pop
   // in with no motion. Feed chunks into a target and let the displayed text catch up on a
   // timer, so the reply always animates in (GROKBOT2_PROGRESSIVE=0 disables).

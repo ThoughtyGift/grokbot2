@@ -328,3 +328,120 @@ test("0.43 import: bot mang ĐÚNG agentId client tự đúc + avatar chọn tr�
 });
 
 test("dọn", () => { sach(); });
+
+// ── Luồng "Share as template" của client 0.43: bản CHỜ → thẻ → Publish ─────────────────────────────
+
+test("stage: chưa có mẫu → bản nháp v1 chưa xuất bản, public, thân thẻ là câu bot tự viết", async () => {
+  sach();
+  const bot = as(A, () => createAgent({ name: "Kế toán", description: "SOP dài: đối soát mỗi sáng, chốt sổ 17:00, không tự chuyển tiền." }));
+  skillCua.set(bot.id, [{ name: "Đối soát", description: "So công nợ", content: "bước 1…" }]);
+  const tpl = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "Kế toán nội bộ cho shop nhỏ. Đối soát, chốt sổ, nhắc hạn. Không chuyển tiền." })))!;
+  assert.equal(tpl.published, false);
+  assert.equal(tpl.activeVersion, null);
+  assert.equal(tpl.version, 1);
+  assert.equal(tpl.visibility, "public", "app gốc stage với visibility public");
+  assert.equal(tpl.staged?.version, 1);
+  assert.match(tpl.description, /^Kế toán nội bộ/, "thân thẻ = câu bot viết, không phải SOP");
+  assert.match(tpl.snapshot.recipe.profile.description, /^SOP dài/, "recipe.profile.description vẫn là SOP toàn văn");
+  assert.match(tpl.shareId, T.SHARE_ID_RE);
+  // Thẻ trong bản ghi — đúng 6 khoá bắt buộc của SandSendMessage 0.43 và trạng thái "Publish" (published:false).
+  const the = T.shareCardOf(tpl);
+  assert.deepEqual(Object.keys(the).sort(), ["avatarColor", "avatarShape", "body", "name", "published", "shareId", "shareUrl", "version", "visibility"]);
+  assert.equal(the.published, false);
+  assert.equal(the.version, 1);
+  assert.equal("activeVersion" in the, false, "chưa xuất bản thì KHÔNG có activeVersion (khai number, không nullable)");
+  assert.equal(the.shareUrl, `https://x.ai/bot/${tpl.shareId}`);
+  // Dây: getBotTemplateVersion{shareId, version:1} → hộp View Details thấy đủ 5 mục ở đầu bảng.
+  const w = T.toWireView(tpl, 1);
+  assert.equal(w.body, the.body);
+  assert.equal(w.skills.length, 1);
+  assert.equal(w.skills[0].name, "Đối soát");
+  assert.equal(w.plugins[0].name, "Gmail");
+  assert.equal("activeVersion" in w, false);
+  assert.equal(w.creatorName, "nguoi-a");
+});
+
+test("stage rồi Publish đúng version: nâng nguyên bản chờ, KHÔNG chụp lại đè câu mô tả bot viết", async () => {
+  sach();
+  const bot = as(A, () => createAgent({ name: "Kho", description: "SOP kho." }));
+  const tpl = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "Bot kho: đếm tồn, báo thiếu." })))!;
+  // Người dùng sửa mô tả bot GIỮA lúc thẻ đang chờ — bản chờ là thứ họ đã đọc, không được đổi sau lưng.
+  as(A, () => updateAgent({ id: bot.id, description: "SOP kho bản MỚI." }));
+  const pub = (await as(A, () => T.publishBotTemplate(tpl.shareId, 1)))!;
+  assert.equal(pub.published, true);
+  assert.equal(pub.activeVersion, 1);
+  assert.equal(pub.description, "Bot kho: đếm tồn, báo thiếu.");
+  assert.equal(pub.snapshot.recipe.profile.description, "SOP kho.", "ảnh chụp là của lúc STAGE (đã duyệt)");
+  assert.equal(pub.staged, undefined, "bản chờ đã được nâng lên, không còn treo");
+  const the = T.shareCardOf(pub);
+  assert.equal(the.version, the.activeVersion, "client suy Published khi version === activeVersion");
+  // Menu header đọc `published` từ getBotTemplateForSourceAgent → Update template / Delete Template.
+  assert.equal(T.toWireView(as(A, () => T.getBotTemplateForSourceAgent(bot.id))!).published, true);
+});
+
+test("Update template: stage lại trên mẫu đã xuất bản → bản chờ = active+1, bản đang phát KHÔNG đổi", async () => {
+  sach();
+  const bot = as(A, () => createAgent({ name: "CS", description: "SOP CS v1." }));
+  const tpl = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "CS v1." })))!;
+  await as(A, () => T.publishBotTemplate(tpl.shareId, 1));
+  as(A, () => updateAgent({ id: bot.id, description: "SOP CS v2." }));
+  const lai = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "CS v2 — trả lời nhanh hơn." })))!;
+  assert.equal(lai.staged?.version, 2);
+  assert.equal(lai.published, true);
+  assert.equal(lai.activeVersion, 1);
+  assert.equal(lai.description, "CS v1.", "đầu bảng vẫn là bản đã xuất bản");
+  assert.equal(lai.snapshot.recipe.profile.description, "SOP CS v1.");
+  // Người import qua Marketplace lúc này vẫn nhận bản 1.
+  const pub = T.getPublicBotTemplate(tpl.shareId)!;
+  assert.equal(pub.template.snapshot.recipe.profile.description, "SOP CS v1.");
+  // Thẻ mới: version 2 ≠ activeVersion 1 → client vẽ nút Publish dù published:true.
+  const the = T.shareCardOf(lai);
+  assert.equal(the.version, 2);
+  assert.equal(the.activeVersion, 1);
+  assert.equal(the.published, true);
+  // Hộp chi tiết của thẻ hỏi version 2 → nội dung bản chờ; hỏi không version → bản đang phát.
+  assert.equal(T.toWireView(lai, 2).body, "CS v2 — trả lời nhanh hơn.");
+  assert.equal(T.toWireView(lai).body, "CS v1.");
+  // Stage lần nữa khi đang chờ: GHI ĐÈ bản chờ, không đẻ số 3.
+  const nua = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "CS v2b." })))!;
+  assert.equal(nua.staged?.version, 2);
+  // Bấm Publish bản 2 → đầu bảng đổi, activeVersion 2.
+  const pub2 = (await as(A, () => T.publishBotTemplate(tpl.shareId, 2)))!;
+  assert.equal(pub2.activeVersion, 2);
+  assert.equal(pub2.description, "CS v2b.");
+  assert.equal(pub2.snapshot.recipe.profile.description, "SOP CS v2.");
+});
+
+test("thẻ bot-template-share vào bản ghi đúng hình dạng send-message 0.43; thiếu shareId thì không tạo thẻ", async () => {
+  sach();
+  const { postBotTemplateShareCard } = await import("./conversation/cards.js");
+  const { tail } = await import("./chat/state.js");
+  const bot = as(A, () => createAgent({ name: "Ads", description: "SOP ads." }));
+  const tpl = (await as(A, () => T.stageTemplateForAgent(bot.id, { description: "Chạy ads." })))!;
+  const truoc = tail(bot.id).length;
+  const id = postBotTemplateShareCard(bot.id, T.shareCardOf(tpl));
+  assert.ok(id);
+  const e = tail(bot.id).at(-1)!;
+  assert.equal(e.kind, "send-message");
+  if (e.kind !== "send-message") return;
+  assert.equal(e.message.type, "bot-template-share");
+  if (e.message.type !== "bot-template-share") return;
+  for (const k of ["avatarColor", "avatarShape", "body", "name", "shareId", "shareUrl", "type"]) assert.ok(k in e.message, `thiếu khoá bắt buộc ${k}`);
+  assert.equal(e.message.published, false);
+  assert.equal(e.message.visibility, "public");
+  assert.equal("activeVersion" in e.message, false);
+  assert.equal(tail(bot.id).length, truoc + 1);
+  assert.equal(postBotTemplateShareCard(bot.id, { ...T.shareCardOf(tpl), shareId: "" }), null);
+  assert.equal(tail(bot.id).length, truoc + 1, "thẻ hỏng không được vào bản ghi");
+});
+
+test("hằng câu chia sẻ khớp nguyên văn i18n RN7y7S của client 0.43", () => {
+  assert.equal(T.CAU_CHIA_SE_MAU, "Create a template of yourself that I can share with somebody else.");
+});
+
+test("nút Update template gửi câu KHÁC (sfB+W/) — cả hai câu đều là lượt chia sẻ mẫu", () => {
+  assert.equal(T.CAU_CAP_NHAT_MAU, "Update the shared template of yourself.");
+  assert.equal(T.laLuotChiaSeMau("  Update the shared template of yourself. "), true);
+  assert.equal(T.laLuotChiaSeMau(T.CAU_CHIA_SE_MAU), true);
+  assert.equal(T.laLuotChiaSeMau("Create a template of yourself"), false);
+});

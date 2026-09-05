@@ -72,6 +72,32 @@ export type ListenerConnectMsg = { type: "listener-connect"; platform: string; r
  * và một thẻ không có kích thước vẫn vẽ được, chỉ là khung hình nhảy một nhịp khi tải xong.
  */
 export type AttachmentMsg = { type: "attachment"; url: string; file_name: string; alt: string; width?: number; height?: number };
+/**
+ * Thẻ "mẫu bot" trong bản ghi — cái renderer 0.43 vẽ sau khi bot đóng gói chính nó (`chunk-view`
+ * `qe`: `{message: t}` → `Te({template: {shareId, name, avatarShape, avatarColor, description: t.body,
+ * shareUrl, version?, published?, activeVersion?, visibility?}})`).
+ *
+ * Trạng thái "đã xuất bản" client tự suy, không đọc một cờ: `version!=null && activeVersion!=null ?
+ * version===activeVersion : published===false ? false : active===true` (`LQ`). Nên thẻ STAGE mang
+ * `published:false` + `version` → nút **Publish**; bấm xong client gọi `publishBotTemplate{shareId,version}`
+ * và ghép reply vào store — thẻ đổi sang **Published · Copy link** mà backend không phải sửa entry.
+ * Đo từ cache client app gốc 05/09 (bot "dr eggbot"): `{type, shareId, name, avatarShape, avatarColor,
+ * body, shareUrl, version:1, published:false, visibility:"public"}` — 6 khoá đầu là `required` của
+ * `SandSendMessage` 0.43.
+ */
+export type BotTemplateShareMsg = {
+  type: "bot-template-share";
+  shareId: string;
+  name: string;
+  avatarShape: string;
+  avatarColor: string;
+  body: string;
+  shareUrl: string;
+  version?: number;
+  activeVersion?: number;
+  published?: boolean | null;
+  visibility?: "public" | "team" | null;
+};
 export type EmailDraftMsg = { type: "email-draft"; draft: { from?: string; to: string[]; subject: string; body: string } };
 export type SlackDraftMsg = { type: "slack-draft"; draft: { workspace?: string; target: string; thread?: string; body: string } };
 /**
@@ -139,7 +165,7 @@ export type TranscriptEvent =
 
 export type Entry =
   | (Base & { kind: "message"; role: "user" | "assistant"; content: string; clientNonce?: string; isStreaming?: boolean; fromAgent?: { id: string; name: string }; toAgent?: { id: string; name: string; kind: "agent" }; message?: AttachmentMsg; replyTo?: { entryId: string; author: string; excerpt: string } })
-  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg | SecretRequestMsg | UserFormMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean;
+  | (Base & { kind: "send-message"; author: Author; boxRequestId?: string; boxInstruction?: string; boxResolution?: "handed_back" | "replied" | "dismissed"; message: TextMsg | PermMsg | ApprovalMsg | AttachmentMsg | WidgetMsg | EmailDraftMsg | SlackDraftMsg | ListenerConnectMsg | SecretRequestMsg | UserFormMsg | BotTemplateShareMsg; streaming?: boolean; respondedValue?: string; respondedValueEchoed?: boolean; widgetDismissed?: boolean; widgetSkipped?: boolean;
       /** Đã gửi bí mật chưa — renderer dùng để vẽ thẻ "đã lưu" thay cho ô nhập. Giá trị KHÔNG lưu. */
       secretProvided?: boolean;
       /** Trạng thái biểu mẫu; `!= null` thì renderer vẽ thẻ đã xong, không vẽ form nữa. */
@@ -260,7 +286,7 @@ export interface ToolCtx {
   note(text: string): void;
   requestBoxHelp(instruction: string): Promise<string>;
   agentId: string;
-  draft(message: EmailDraftMsg | SlackDraftMsg): void;
+  draft(message: EmailDraftMsg | SlackDraftMsg | BotTemplateShareMsg): void;
 }
 
 export interface SendArgs {

@@ -201,3 +201,28 @@ Bài đo đợt một chỉ quét 29 lệnh ĐỌC. Đợt hai gọi các lệnh
 Cùng lượt: **`.data/bot-templates`, `.data/box-secrets`, `.data/mcp-prefs` THẬT bị xoá** bởi chính bộ test khi chạy
 `npx tsx --test` trần — ba bài có `sach()` đọc `GROKBOT2_DATA_DIR ?? <src>/../.data`, và biến ấy chỉ do
 `scripts/run-tests.mjs` đặt. Nay ba bài tự `mkdtemp` khi biến vắng. Chi tiết ở bảng theo dõi §7.
+
+## 7c · Luồng "Share as template" (đo 05/09 tối — renderer 0.43 + cache client app gốc)
+
+Nguồn: `index-Df98_wE4.js` (nút, menu, store `botTemplates`), `chunk-view-BnUYVA_k.js` (thẻ), `chunk-bot-template-details-dialog-*.js`
+(hộp chi tiết), và transcript thật của bot "dr eggbot" trong `%APPDATA%/Grok Bot/sand-client-persistence` (export bằng
+`scripts/export-vendor-chat.mjs`). Không có gì ở đây là nội dung mẫu của hãng — chỉ hình dạng.
+
+| bước | client làm gì | dây |
+|---|---|---|
+| bấm ⬆ → *Share as template* | `i.dispatch({agentId, prompt: _("RN7y7S")})` — TỰ gửi tin người dùng `Create a template of yourself that I can share with somebody else.` | `sendAgentMessage` thường |
+| bot làm việc | 4–5 câu tiến độ (*đóng gói… / đọc xong memories… / skills… / routines… / plugins… / giữ N…*) rồi một entry `send-message` `{type:"bot-template-share", shareId, name, avatarShape, avatarColor, body, shareUrl, version:1, published:false, visibility:"public"}` rồi câu chốt *"đã stage … check card rồi confirm để publish"* | entry trong transcript |
+| thẻ vẽ | `qe({entry})` → `Te({template:{…description: t.body}})`; trạng thái `LQ(t) = version!=null&&activeVersion!=null ? version===activeVersion : published===false ? false : active===true` → **Unpublished · Publish · View Details** | — |
+| bấm Publish | `botTemplates.publish` → `publishBotTemplate{shareId, version}` → reply `SandBotTemplateWireView` ghép vào store (`applyShareResult`), thẻ đổi **Published · Copy link** (`shareUrl`), toast `goXsCS`; menu header đổi vì `RC(t)=t.published===true` trên `getBotTemplateForSourceAgent` | `publishBotTemplate` |
+| *Update template* | gửi câu KHÁC `Update the shared template of yourself.` (`sfB+W/`) → thẻ thứ hai `version` mới; thẻ cũ tự về Unpublished khi `activeVersion` đổi | như trên |
+| *View Details* | `prefetchVersion(shareId, version)` → `getBotTemplateVersion` → hộp đọc `title/description/body/creatorName/createdAtMs/updatedAtMs` + `skills[]/routines[]/memory[]/plugins[]` **ở đầu bảng** | `getBotTemplateVersion` |
+| *Delete Template* | hộp xác nhận → `deleteBotTemplate{shareId}` → store đánh dấu `user-deleted` (persist `shareIds`), mọi thẻ của shareId vẽ *This template was deleted* | `deleteBotTemplate` → `null` |
+| nút có hiện không | `sEe = exportPolicy!=="none" && gate sand_share_bot && getHostStatus.capabilities ∋ "botTemplateJsonShareV1"`; `botTemplateVisibilityV1` bật chọn tầm nhìn; `getBotTemplateExportPolicy → {exportPolicy}` | hai lệnh đọc |
+
+Schema `SandSendMessage` nhánh `bot-template-share`: required `avatarColor avatarShape body name shareId shareUrl type`; tuỳ chọn
+`version:number · activeVersion:number · published:boolean|null · visibility:"public"|"team"|null`. `SandBotTemplateWireView`
+required `avatarColor avatarShape body name shareId shareUrl`; `activeVersion` là `number` KHÔNG nullable → bản nháp phải VẮNG khoá.
+
+Bên ta sau đợt này: `stageTemplateForAgent` (bản chờ `staged`, đầu bảng giữ bản đã phát), `publishBotTemplate` nâng đúng bản chờ,
+`toWireView`, `postBotTemplateShareCard`, tool `share_bot_template` đăng tiến độ + thẻ, `laLuotChiaSeMau` khoá `ask_question` +
+hướng dẫn 3 nhịp. Đo bấm thật: `scripts/e2e-chia-se-mau.mjs` (share → publish → update → publish 2 → details → delete) 6/7, mốc 7 sửa cách kiểm sau; vòng trọn đã đo bằng tay. Bốn bẫy của bài đo ghi trong đầu file script: click tổng hợp, cuộn mượt, hàng ảo hoá đo sai chiều cao, DOM không theo thứ tự nhìn thấy.

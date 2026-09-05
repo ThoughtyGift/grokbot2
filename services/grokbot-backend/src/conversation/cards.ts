@@ -26,7 +26,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { tail, authorOf, nextEntryId, onUpdate } from "../chat/state.js";
-import type { FormField } from "./types.js";
+import type { BotTemplateShareMsg, FormField } from "./types.js";
 
 /**
  * Xin một giá trị bí mật. Trả về id của thẻ, hoặc `null` nếu không đủ dữ liệu để vẽ.
@@ -155,6 +155,35 @@ export function postAutoReview(
     },
     timestampMs: Date.now(),
   });
+  onUpdate(agentId);
+  return id;
+}
+
+/**
+ * Thẻ "mẫu bot" — bot vừa đóng gói chính nó (tool `share_bot_template`). Hình dạng: `BotTemplateShareMsg`.
+ *
+ * Sáu khoá đầu là `required` của `SandSendMessage` 0.43; `body` rỗng vẫn hợp lệ (client bỏ dòng mô tả),
+ * nhưng `shareId`/`name`/`shareUrl` rỗng thì thẻ không trỏ vào đâu → `null`, không tạo thẻ hỏng.
+ * Khoá tuỳ chọn vắng thì BỎ HẲN, không gửi `undefined`/`null`: renderer đọc `t.published==null` để
+ * quyết định có ghép trường vào view hay không.
+ */
+export function postBotTemplateShareCard(agentId: string, m: Omit<BotTemplateShareMsg, "type">): string | null {
+  if (!m.shareId || !m.name || !m.shareUrl) return null;
+  const message: BotTemplateShareMsg = {
+    type: "bot-template-share",
+    shareId: m.shareId,
+    name: m.name,
+    avatarShape: m.avatarShape,
+    avatarColor: m.avatarColor,
+    body: m.body ?? "",
+    shareUrl: m.shareUrl,
+    ...(m.version != null ? { version: m.version } : {}),
+    ...(m.activeVersion != null ? { activeVersion: m.activeVersion } : {}),
+    ...(m.published != null ? { published: m.published } : {}),
+    ...(m.visibility != null ? { visibility: m.visibility } : {}),
+  };
+  const id = nextEntryId();
+  tail(agentId).push({ id, kind: "send-message", author: authorOf(agentId), message, timestampMs: Date.now() });
   onUpdate(agentId);
   return id;
 }

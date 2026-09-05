@@ -113,6 +113,25 @@ Luật cũ vẫn áp: **hợp đồng 147 là của 0.30 — trích hợp đồn
 > NHÓM chưa chở skill từng thành viên; hồ sơ người tạo (tên suy từ tài khoản `nguoi-a@…` → `nguoi-a`); tầng proto
 > (`GetGrokBotTemplateImportDetails` + blob URL) — cần khi client 0.43 gọi qua Cursor RPC thay vì box-gateway.
 
+> **Nút "Share as template" — XONG 05/09 tối, đo bấm thật trên client 0.43 local** (tay trọn 7 bước; `scripts/e2e-chia-se-mau.mjs` 6/7, mốc 7 đã sửa cách kiểm — chạy lại khi app rảnh).
+> Luồng trích từ renderer 0.43 + cache client app gốc (bot "dr eggbot", 08:41 05/09): menu header (nút ⬆, `Template actions`)
+> → client TỰ gửi tin người dùng `"Create a template of yourself that I can share with somebody else."` (i18n `RN7y7S`)
+> → bot đăng vài câu tiến độ (memories → skills → routines → plugins → "giữ N…") → bản ghi mọc entry `send-message`
+> `{type:"bot-template-share", shareId, name, avatarShape, avatarColor, body, shareUrl, version:1, published:false,
+> visibility:"public"}` → thẻ vẽ **Unpublished · Publish · View Details** → người dùng bấm Publish → client gọi
+> `publishBotTemplate{shareId,version}` và ghép reply vào store → thẻ **Published · Copy link**, menu header đổi sang
+> *View template details / Update template / Delete Template* (đọc `published` từ `getBotTemplateForSourceAgent`).
+> **Update template** gửi câu KHÁC: `"Update the shared template of yourself."` (`sfB+W/`) → thẻ thứ hai bản active+1.
+> Trạng thái thẻ client tự suy (`LQ`): `version===activeVersion` (có cả hai) · `published===false → false` · `active`.
+> Bên ta: `stageTemplateForAgent` (bản CHỜ `staged`, đầu bảng giữ bản đã phát — người import không nhận bản chưa duyệt),
+> `publishBotTemplate` nâng đúng bản chờ thay vì chụp lại, `toWireView` (5 mục ở đầu bảng cho hộp View Details,
+> `activeVersion` vắng thay vì null), thẻ `postBotTemplateShareCard`, tool `share_bot_template` đăng tiến độ + thẻ,
+> lượt nhận ra bằng hằng câu (`laLuotChiaSeMau`) → khoá `ask_question` + hướng dẫn 3 nhịp trong SYSTEM.
+> Mục (5) `getBotTemplateExportPolicy` ✅ `{exportPolicy:"all"}`; `getHostStatus.capabilities` mang
+> `botTemplateJsonShareV1` + `botTemplateVisibilityV1` (điều kiện `sEe` để nút hiện). Chưa: hồ sơ người tạo thật
+> (`creatorName` suy từ tài khoản), nhóm chở skill thành viên, mã lỗi `bot-template/not-found` cho thẻ của mẫu đã xoá
+> (client tự đánh dấu "user-deleted" nên chưa cần).
+
 Đã có: `createTemplateForAgent` · `publishBotTemplate{shareId,version}` · `getBotTemplateForSourceAgent{sourceAgentId}` ·
 `getBotTemplateVersion{shareId,version}` · `setBotTemplateVisibility{shareId,visibility:"public"|"team"}` ·
 `deleteBotTemplate{shareId}` · `createAgentFromTemplate` · thẻ `bot-template-share` · tool `share_bot_template`.

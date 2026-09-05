@@ -134,7 +134,40 @@ export interface BotTemplate {
   ownerType: "user";
   imageUrl: string | null;
   snapshot: TemplateSnapshot;
+  /**
+   * Bản ĐANG CHỜ xác nhận — luồng "Share as template" của client 0.43 (xem `stageTemplateForAgent`).
+   *
+   * Bot đóng gói xong thì thẻ trong bản ghi mang `published:false` + nút Publish; người dùng bấm mới
+   * thành bản active. Trong lúc chờ, các trường đầu bảng vẫn là bản ĐÃ xuất bản (nếu có) — người
+   * đang import qua Marketplace không được nhận một bản chưa ai duyệt. Bấm Publish đúng `version`
+   * này thì `publishBotTemplate` nâng nó lên đầu bảng và xoá khoá này.
+   */
+  staged?: StagedTemplateVersion;
 }
+
+export interface StagedTemplateVersion {
+  version: number;
+  name: string;
+  /** Mô tả bot TỰ VIẾT kiểu Marketplace (2–4 câu) — là `body` của thẻ, khác `recipe.profile.description` (toàn văn SOP). */
+  description: string;
+  avatarShape: string;
+  avatarColor: string;
+  snapshot: TemplateSnapshot;
+  stagedAtMs: number;
+}
+
+/**
+ * Câu client 0.43 TỰ gửi khi bấm "Share as template" / "Update template" (i18n `RN7y7S`, nguyên văn
+ * tiếng Anh trong bundle). Nhận ra nó không cần model hiểu gì — cùng cách với `CAU_GHI_XONG`.
+ */
+export const CAU_CHIA_SE_MAU = "Create a template of yourself that I can share with somebody else.";
+/** Câu client gửi khi bấm "Update template" trong menu header (i18n `sfB+W/`) — đo trên client 0.43 local 05/09. */
+export const CAU_CAP_NHAT_MAU = "Update the shared template of yourself.";
+/** Lượt này có phải nút Share/Update template của client không. */
+export const laLuotChiaSeMau = (text: string): boolean => {
+  const t = text.trim();
+  return t === CAU_CHIA_SE_MAU || t === CAU_CAP_NHAT_MAU;
+};
 
 // ── Nguồn của 4 mục ngoài profile — TIÊM, không import ───────────────────────────────────────────
 
@@ -289,6 +322,85 @@ export async function createTemplateForAgent(sourceAgentId: string, owner: strin
   return draft;
 }
 
+/**
+ * Đóng gói bot thành bản CHỜ XÁC NHẬN — đường "Share as template" / "Update template" của client 0.43.
+ *
+ * Đo từ cache client app gốc (05/09, bot "dr eggbot"): bấm nút → client tự gửi `CAU_CHIA_SE_MAU` →
+ * bot đọc memories · skills · routines · plugins, viết một mô tả kiểu Marketplace, rồi bản ghi mọc
+ * thẻ `bot-template-share` với `published:false, version:1, visibility:"public"` và nút **Publish**.
+ * Người dùng bấm Publish thì client gọi `publishBotTemplate{shareId, version}`. Nên ở đây:
+ *
+ *   - chưa có mẫu → tạo record nháp (đầu bảng = chính bản nháp, chưa xuất bản) VÀ `staged` cùng nội dung;
+ *   - đã có → chụp lại bot, `version` = bản active + 1 (đang chờ một bản khác thì GHI ĐÈ bản chờ ấy,
+ *     không đẻ thêm số), đầu bảng giữ nguyên bản đã xuất bản.
+ *
+ * `description` là câu bot tự viết (thân thẻ); trống thì lấy mô tả bot. `visibility` mặc định
+ * `public` như app gốc — khác `createTemplateForAgent` (đường tab Templates cũ) mặc định `team`.
+ */
+export async function stageTemplateForAgent(
+  sourceAgentId: string,
+  opts: { description?: string; visibility?: "public" | "team" } = {},
+  owner: string = currentOwner(),
+): Promise<BotTemplate | null> {
+  if (!sourceAgentId) return null;
+  const snap = await snapshotOf(sourceAgentId, owner);
+  if (!snap) return null;
+  const rows = readAll(owner);
+  const i = rows.findIndex((t) => t.sourceAgentId === sourceAgentId);
+  const now = Date.now();
+  const moTa = String(opts.description ?? "").trim() || snap.description;
+  const staged = (version: number): StagedTemplateVersion => ({
+    version,
+    name: snap.name,
+    description: moTa,
+    avatarShape: hinhHopLe(snap.recipe.profile.avatarShape),
+    avatarColor: mauHopLe(snap.recipe.profile.avatarColor),
+    snapshot: snap,
+    stagedAtMs: now,
+  });
+  if (i < 0) {
+    const shareId = newShareId();
+    const s = staged(1);
+    const draft: BotTemplate = {
+      shareId,
+      shareUrl: shareUrlOf(shareId),
+      sourceAgentId,
+      name: s.name,
+      description: s.description,
+      avatarShape: s.avatarShape,
+      avatarColor: s.avatarColor,
+      version: 1,
+      activeVersion: null,
+      published: false,
+      active: false,
+      visibility: opts.visibility ?? "public",
+      createdAtMs: now,
+      updatedAtMs: now,
+      ownerAuthId: owner,
+      ownerType: "user",
+      imageUrl: null,
+      snapshot: snap,
+      staged: s,
+    };
+    writeAll(owner, [...rows, draft]);
+    return draft;
+  }
+  const cu = rows[i];
+  const daXuatBan = cu.published && cu.activeVersion != null;
+  const version = daXuatBan ? (cu.activeVersion as number) + 1 : cu.version;
+  const s = staged(version);
+  const next: BotTemplate = {
+    ...cu,
+    // Chưa từng xuất bản thì đầu bảng là bản nháp — đi theo bản chờ luôn, không có gì để bảo vệ.
+    ...(daXuatBan ? {} : { name: s.name, description: s.description, avatarShape: s.avatarShape, avatarColor: s.avatarColor, snapshot: snap }),
+    ...(opts.visibility ? { visibility: opts.visibility } : {}),
+    staged: s,
+    updatedAtMs: now,
+  };
+  writeAll(owner, rows.map((t, k) => (k === i ? next : t)));
+  return next;
+}
+
 export const getBotTemplateVersion = (
   shareId: string, _version: number, owner: string = currentOwner(),
 ): BotTemplate | null => readAll(owner).find((t) => t.shareId === shareId) ?? null;
@@ -305,10 +417,34 @@ export async function publishBotTemplate(
   const rows = readAll(owner);
   const i = rows.findIndex((t) => t.shareId === shareId);
   if (i < 0) return null;
-  const fresh = await snapshotOf(rows[i].sourceAgentId, owner);
-  const v = Number.isFinite(version) && version > 0 ? Math.floor(version) : rows[i].version;
+  const cu = rows[i];
+  const v = Number.isFinite(version) && version > 0 ? Math.floor(version) : cu.version;
+  /*
+   * Bấm Publish trên thẻ của một bản CHỜ (`staged.version === v`) thì đó chính là thứ người dùng vừa
+   * đọc và duyệt — nâng nguyên bản ấy lên, KHÔNG chụp lại: chụp lại sẽ ghi đè câu mô tả bot tự viết
+   * bằng SOP toàn văn, và người dùng duyệt một thẻ rồi nhận về một mẫu khác.
+   */
+  const { staged, ...conLai } = cu;
+  if (staged && staged.version === v) {
+    const next: BotTemplate = {
+      ...conLai,
+      name: staged.name,
+      description: staged.description,
+      avatarShape: staged.avatarShape,
+      avatarColor: staged.avatarColor,
+      snapshot: staged.snapshot,
+      version: v,
+      activeVersion: v,
+      published: true,
+      active: true,
+      updatedAtMs: Date.now(),
+    };
+    writeAll(owner, rows.map((t, k) => (k === i ? next : t)));
+    return next;
+  }
+  const fresh = await snapshotOf(cu.sourceAgentId, owner);
   const next: BotTemplate = {
-    ...rows[i],
+    ...cu,
     ...(fresh ? { snapshot: fresh, name: fresh.name, description: fresh.description } : {}),
     version: v,
     activeVersion: v,
@@ -385,6 +521,100 @@ export const mauHopLe = (c: unknown): string => (AVATAR_COLORS as readonly strin
 export const hinhHopLe = (s: unknown): string => (AVATAR_SHAPES as readonly string[]).includes(String(s)) ? String(s) : DEFAULT_SHAPE;
 
 export const shareUrlOf = (shareId: string): string => `https://x.ai/bot/${shareId}`;
+
+// ── Hình dạng DÂY cho client 0.43 ────────────────────────────────────────────────────────────────
+
+/**
+ * `SandBotTemplateWireView` — reply của `getBotTemplateForSourceAgent` · `getBotTemplateVersion` ·
+ * `publishBotTemplate` · `setBotTemplateVisibility` · phần tử `listBotTemplates`.
+ *
+ * Vì sao không trả thẳng record: (1) hộp "View Details" của thẻ đọc `t.skills`/`t.routines`/`t.memory`/
+ * `t.plugins`/`t.creatorName`/`t.body` ở ĐẦU BẢNG (đo `chunk-bot-template-details-dialog` 0.43) — record
+ * giữ chúng trong `snapshot.recipe` nên hộp hiện năm mục rỗng; (2) `activeVersion` khai `number`, không
+ * nullable — bản nháp mang `null` là coordinator 0.43 coi reply hỏng (vắng khoá thì được). Khoá thừa
+ * (`snapshot`, `ownerAuthId`…) validator structural bỏ qua, nhưng không có lý do gì để chở chúng.
+ *
+ * Hỏi đúng `version` đang CHỜ thì trả nội dung bản chờ (thẻ mở hộp chi tiết trước khi bấm Publish);
+ * `activeVersion` vẫn là bản đã xuất bản để client suy trạng thái thẻ.
+ */
+export interface BotTemplateWireView {
+  shareId: string;
+  sourceAgentId: string;
+  name: string;
+  title: string;
+  description: string;
+  body: string;
+  avatarShape: string;
+  avatarColor: string;
+  version: number;
+  activeVersion?: number;
+  published: boolean;
+  active: boolean;
+  visibility: "public" | "team";
+  createdAtMs: number;
+  updatedAtMs: number;
+  shareUrl: string;
+  creatorName: string;
+  memory: { content: string; createdAt?: string; kind?: "profile" | "log" }[];
+  skills: { name: string; description: string; content: string }[];
+  routines: { slug: string; name: string; description: string; content: string }[];
+  plugins: { pluginId: string; name: string; description?: string }[];
+}
+
+const bo = <T extends Record<string, unknown>>(o: T): T =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+
+export function toWireView(t: BotTemplate, version?: number): BotTemplateWireView {
+  // Không hỏi version → bản ĐẦU BẢNG (đã xuất bản, hoặc nháp). Hỏi đúng bản chờ → bản chờ.
+  const s = t.staged && version != null && t.staged.version === version ? t.staged : null;
+  const r = (s?.snapshot ?? t.snapshot).recipe;
+  return {
+    shareId: t.shareId,
+    sourceAgentId: t.sourceAgentId,
+    name: s?.name ?? t.name,
+    title: s?.name ?? t.name,
+    description: s?.description ?? t.description,
+    body: s?.description ?? t.description,
+    avatarShape: s?.avatarShape ?? t.avatarShape,
+    avatarColor: s?.avatarColor ?? t.avatarColor,
+    version: s?.version ?? t.version,
+    ...(t.activeVersion != null ? { activeVersion: t.activeVersion } : {}),
+    published: t.published,
+    active: t.active,
+    visibility: t.visibility,
+    createdAtMs: t.createdAtMs,
+    updatedAtMs: t.updatedAtMs,
+    shareUrl: t.shareUrl ?? shareUrlOf(t.shareId),
+    creatorName: ownerDisplayNameOf(t.ownerAuthId),
+    memory: (r.memory ?? []).map((m) => bo({ content: m.content, createdAt: m.createdAt, kind: m.kind })),
+    skills: (r.skills ?? []).map((k) => ({ name: k.name, description: coChu(k.description, "(chưa có mô tả)"), content: k.content ?? "" })),
+    routines: (r.routines ?? []).map((a) => ({ slug: a.slug, name: a.name ?? a.slug, description: coChu(a.description, "(chưa có mô tả)"), content: a.content ?? "" })),
+    plugins: (r.plugins ?? []).map((p) => bo({ pluginId: p.pluginId, name: p.name ?? p.pluginId, description: p.description })),
+  };
+}
+
+/**
+ * Thẻ `bot-template-share` cho bản ghi — luôn nói về bản CHỜ nếu có (đó là thứ vừa đóng gói), và mang
+ * `activeVersion` của bản đã xuất bản để client suy "Publish" hay "Published" (`LQ`: version===activeVersion).
+ */
+export function shareCardOf(t: BotTemplate): {
+  shareId: string; name: string; avatarShape: string; avatarColor: string; body: string; shareUrl: string;
+  version: number; activeVersion?: number; published: boolean; visibility: "public" | "team";
+} {
+  const s = t.staged ?? null;
+  return {
+    shareId: t.shareId,
+    name: s?.name ?? t.name,
+    avatarShape: s?.avatarShape ?? t.avatarShape,
+    avatarColor: s?.avatarColor ?? t.avatarColor,
+    body: s?.description ?? t.description,
+    shareUrl: t.shareUrl ?? shareUrlOf(t.shareId),
+    version: s?.version ?? t.version,
+    ...(t.activeVersion != null ? { activeVersion: t.activeVersion } : {}),
+    published: t.published,
+    visibility: t.visibility,
+  };
+}
 
 /** Schema `CB` của client đòi mọi chuỗi `min(1)` — chỗ trống thì lấp bằng câu có nghĩa, không để rỗng. */
 const KHONG_MO_TA = "(chưa có mô tả)";
