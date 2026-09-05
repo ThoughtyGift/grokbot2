@@ -32,7 +32,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const svcRoot = join(here, "..");
 const repoRoot = join(svcRoot, "..", "..");
 const DIST = join(svcRoot, ".data", "dist");
-const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+/*
+ * Ngày theo giờ MÁY DỰNG, không phải UTC. Đo 06/09 03:38 (UTC+7): `toISOString()` cho `20260905` — bản phát hành
+ * mang số của "hôm qua", và trùng đúng số `0.43.20260905` của bản dev 043 dựng chiều trước. Người vận hành đọc
+ * số phiên bản bằng lịch trên tường, nên lấy lịch ấy.
+ */
+const stamp = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; })();
 
 /**
  * Địa chỉ backend điền sẵn trong bộ cài.

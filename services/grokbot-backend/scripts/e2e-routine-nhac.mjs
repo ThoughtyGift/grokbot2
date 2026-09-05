@@ -11,8 +11,10 @@
  */
 const GW = process.env.GW ?? "http://127.0.0.1:8788/gw/api";
 const HEALTH = GW.replace(/\/gw\/api$/, "/gw/health");
+// `GW_TOKEN_FILE`/`GW_TOKEN`: vé cổng cho máy chủ `GROKBOT2_AUTH=enforce` (VPS) — thiếu nó là 401 ở "tạo bot thử", không phải sản phẩm hỏng (đo 06/09).
+const TOKEN = process.env.GW_TOKEN_FILE ? (await import("node:fs")).readFileSync(process.env.GW_TOKEN_FILE, "utf8").trim() : (process.env.GW_TOKEN ?? "");
 const gw = async (m, body = {}) => {
-  const r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(body) });
   return r.json().catch(() => null);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

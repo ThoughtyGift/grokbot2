@@ -368,10 +368,14 @@ end;
  * @param {string} appSrc thư mục cài của app sắp đóng gói
  */
 export function coVaUpdateFeed(appSrc) {
-  try {
-    return readFileSync(join(appSrc, "resources", "app", "dist", "electron-main", "main.cjs"), "utf8")
-      .includes("/*grokbot2:update-feed*/");
-  } catch { return false; }
+  // 0.29: bộ vá nằm trong `main.cjs`. 0.43: `main.cjs` chỉ là vỏ 12 KB, mã (và bộ vá) nằm ở `main-app.cjs`
+  // — đọc cả hai, không thì bản 0.43 đóng gói luôn bị coi là "chưa vá" và Settings hiện "Updates are disabled".
+  for (const f of ["main.cjs", "main-app.cjs"]) {
+    try {
+      if (readFileSync(join(appSrc, "resources", "app", "dist", "electron-main", f), "utf8").includes("/*grokbot2:update-feed*/")) return true;
+    } catch { /* file không có ở bản này */ }
+  }
+  return false;
 }
 
 /**
