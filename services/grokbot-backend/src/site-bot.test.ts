@@ -106,6 +106,15 @@ test("tên và mô tả do người khác viết được THOÁT — không có 
   assert.match(html, /<script nonce="n">/);
 });
 
+test("gạch chéo cuối → 301 về dạng chuẩn bằng Location TƯƠNG ĐỐI (giữ tiền tố /agent của nginx)", () => {
+  // Đo 06/09 trên cinai.app: từ `/agent/bot/<id>/`, link `../download/windows` của trang rơi vào `/agent/bot/download/windows` → 404.
+  const res = fakeRes();
+  assert.equal(handleBotSite("/bot/AAAAAAAAAAAAAAAAAAAAA/", GET, res), true);
+  assert.equal(res.code, 301);
+  assert.equal(res.headers.location, "../AAAAAAAAAAAAAAAAAAAAA", "tuyệt đối `/bot/<id>` sẽ mất `/agent` vì proxy_redirect chỉ viết lại URL tuyệt đối");
+  assert.equal(res.body, "");
+});
+
 test("đường không phải /bot/<id> trả false — router đi tiếp", () => {
   for (const p of ["/bot", "/bot/", "/bots/x", "/v1/login", "/download/windows", "/bot/a/b"]) {
     const res = fakeRes();

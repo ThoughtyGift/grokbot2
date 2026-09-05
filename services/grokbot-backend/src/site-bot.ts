@@ -167,8 +167,19 @@ export function botLandingHtml(shareId: string, nonce = randomBytes(12).toString
  */
 export function handleBotSite(url: string, req: IncomingMessage, res: ServerResponse): boolean {
   const path = url.split("?")[0];
-  const m = /^\/bot\/([^/]+)\/?$/.exec(path);
+  const m = /^\/bot\/([^/]+)(\/?)$/.exec(path);
   if (!m) return false;
+  /*
+   * Dạng chuẩn KHÔNG có gạch chéo cuối. Trang dùng link tương đối `../download/windows` để sống được sau mọi tiền tố
+   * nginx (`/agent/bot/<id>` → `/agent/download/windows`); có gạch chéo cuối thì `..` chỉ bỏ được đoạn rỗng và link
+   * rơi vào `/agent/bot/download/windows` → 404. Đo 06/09 bằng chính bài đo VPS. 301 về dạng chuẩn thay vì vẽ trang sai.
+   */
+  if (m[2]) {
+    // Location TƯƠNG ĐỐI: `/bot/<id>` tuyệt đối sẽ mất tiền tố `/agent` vì `proxy_redirect` của nginx chỉ viết lại URL tuyệt đối.
+    res.writeHead(301, { location: `../${encodeURIComponent(m[1])}` });
+    res.end();
+    return true;
+  }
   const nonce = randomBytes(12).toString("base64");
   const { code, html } = botLandingHtml(decodeURIComponent(m[1]), nonce);
   res.writeHead(code, {

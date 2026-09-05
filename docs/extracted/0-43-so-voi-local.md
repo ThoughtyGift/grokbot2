@@ -261,3 +261,8 @@ Deep link khớp `Si` của `main-core.cjs`: `schemes:["grokbot","sand"] · auth
 sai dạng → **cùng một** trang 404; mọi chuỗi qua `thoat()`, CSP nonce, chỉ số đếm skill/routine/plugin/memory (không lộ thân);
 `og:*`, `noindex`; không có `og:image` vì ta không dựng PNG. Scheme `grokbot://` trên máy có hai app thuộc về app **mở sau cùng**
 (Electron `setAsDefaultProtocolClient` ghi `HKCU\Software\Classes\grokbot` mỗi lần khởi động) — trang web không chọn được.
+
+**Đã sống trên `cinai.app` (06/09).** `GROKBOT2_PUBLIC_SITE=https://cinai.app/agent`, deploy `2e398bb`; `scripts/e2e-trang-chia-se.mjs`
+chạy trên VPS đi trọn: bot thử → `sendPrompt` câu share (đúng shape client) → stage 9 s → 404 → publish → 200 (title · og:url · deep link ·
+CSP) → xoá → 404. Dạng chuẩn là `/bot/<id>` KHÔNG gạch chéo cuối; có gạch chéo → 301 `Location: ../<id>` (tương đối, vì `proxy_redirect`
+của nginx chỉ viết lại URL tuyệt đối).
