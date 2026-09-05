@@ -78,8 +78,8 @@ Monorepo: **pnpm workspaces + Turborepo**. Node ≥20, TypeScript (ESM, strict).
 
 ## Reverse-engineering context
 
-The Grok Bot client is Cursor's `sand` build. **Ba số phiên bản, đừng hợp nhất** (05/09/2026): client LOCAL
-là **0.29** (`0.29.20260903`, cài ở `%LOCALAPPDATA%\Programs\Bot Noi Bo`; bản dev `C:\cai029`; bản dev **0.43 đã vá** chạy song song ở `C:\cai043`, hồ sơ `Grok Bot (local 043)`, CDP `:9225` — 05/09, xem bảng theo dõi §6 mục 20); hợp đồng lệnh
+The Grok Bot client is Cursor's `sand` build. **Ba số phiên bản, đừng hợp nhất** (06/09/2026): client PHÁT HÀNH
+là **0.43.20260906** (kênh `stable` từ 06/09, dựng từ `C:\cai043`; máy còn `0.29.20260903` ở `%LOCALAPPDATA%\Programs\Bot Noi Bo` tự lên qua launcher ở lần mở kế; bản dev `C:\cai029`; bản dev **0.43 đã vá** chạy song song ở `C:\cai043`, hồ sơ `Grok Bot (local 043)`, CDP `:9225` — xem bảng theo dõi §6 mục 20 và 27); hợp đồng lệnh
 đã trích là của **0.30** (`docs/extracted/gateway-commands.json`, 147 lệnh); app GỐC của hãng đang cài là
 **0.43.0** (`C:\Program Files\Grok Bot`, tự cập nhật 05/09) — so 0.43 với local:
 [docs/extracted/0-43-so-voi-local.md](docs/extracted/0-43-so-voi-local.md). Dòng này từng ghi *v0.20.0* cho tới 31/08/2026, tức nó nói sai

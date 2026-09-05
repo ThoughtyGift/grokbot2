@@ -1,9 +1,13 @@
 /**
  * Phát hành một bản cho app local — CÔNG TẮC duy nhất làm banner "New update available" hiện ra.
  *
- *   node services/grokbot-backend/scripts/phat-hanh.mjs --kenh dogfood
- *   node services/grokbot-backend/scripts/phat-hanh.mjs --kenh stable
- *   node services/grokbot-backend/scripts/phat-hanh.mjs --kenh stable --bo-qua-test   # xem README
+ *   npx tsx services/grokbot-backend/scripts/phat-hanh.mjs --kenh dogfood
+ *   npx tsx services/grokbot-backend/scripts/phat-hanh.mjs --kenh stable --with-app --len-vps
+ *   npx tsx services/grokbot-backend/scripts/phat-hanh.mjs --kenh stable --bo-qua-test   # xem README
+ *
+ * `npx tsx`, KHÔNG `node` trần: bước 2 import `src/site.ts` (để chọn gói đúng như trang tải chọn), và `node` không
+ * nạp được `.ts` — đo 06/09: chạy `node …` thì test xanh, gói dựng xong 106 MB, rồi chết ở dòng import với
+ * ERR_MODULE_NOT_FOUND `src/site.js`, chưa ghi manifest, chưa lên VPS. Mất một lượt dựng ~4 phút.
  *
  * ── Vì sao lệnh này tồn tại ────────────────────────────────────────────────────────────────────
  *
