@@ -5,8 +5,8 @@
  *
  * App gốc 0.43 (cache client, 05/09): mỗi thao tác trên bảng Routine để lại một hàng sự kiện (*Enabled routine · x*) và
  * bot trả MỘT câu ngay (*"btw `x` vừa bị tắt (paused). muốn bật lại không?"*), bật + sửa liền nhau thì một câu cho cả hai,
- * và KHÔNG có tin người dùng nào trong bản ghi. Bài này tạo một bot riêng, đi 4 nhịp (tạo · tắt · bật+sửa · xoá), đếm hàng
- * sự kiện, câu của bot, tin người dùng, rồi xoá bot. Gửi 4 lượt model — không chạy khi người dùng đang chat (`/gw/health`
+ * và KHÔNG có tin người dùng nào trong bản ghi. Bài này tạo một bot riêng, đi 5 nhịp (tạo · tắt · bật+sửa · thêm lịch thứ hai · xoá), đếm hàng
+ * sự kiện, câu của bot, tin người dùng, rồi xoá bot. Gửi 5 lượt model — không chạy khi người dùng đang chat (`/gw/health`
  * `isBusy`). Kết quả đo 05/09: 4/4 câu, 6–11 s mỗi câu, 0 tin người dùng.
  */
 const GW = process.env.GW ?? "http://127.0.0.1:8788/gw/api";
@@ -78,10 +78,24 @@ try {
   ok("[bật+sửa] MỘT câu cho cả hai thao tác", cauBot(ds3).length === 3, `${r.s.toFixed(1)}s · ${cauBot(ds3).length - 2} câu`);
   ds3.slice(-3).forEach((e) => console.log(inDong(e)));
 
-  await gw("deleteAgentAutomation", { agentId: id, automationId: auto.id });
+  // Nhịp 4 — "Add another" của panel 0.43: trigger thành `SandTriggerGroup` hai lịch. App gốc (ảnh 06/09): hàng
+  // *Updated routine* + bot *"giờ là mondays 8:49 hoặc mỗi ngày 00:15"*. Trước 06/09 nhóm bị hạ thành "0 9 * * *" im lặng.
+  const nhom = { type: "group", listeners: [{ type: "cron", schedule: "49 8 * * 1" }, { type: "cron", schedule: "15 0 * * *" }] };
+  await gw("updateAgentAutomation", { id, automationId: auto.id, spec: { ...spec, trigger: nhom } });
   r = await choCau(4);
+  ok("[thêm lịch] hàng sự kiện updated thứ hai", suKien(r.ds, "updated").length === 2);
+  ok("[thêm lịch] bot nói thêm 1 câu", cauBot(r.ds).length === 4, `${r.s.toFixed(1)}s`);
+  const cauNhom = cauBot(r.ds).at(-1)?.message?.content ?? "";
+  ok("[thêm lịch] câu nhắc nêu CẢ HAI lịch (8:49 và 00:15)", /8:49/.test(cauNhom) && /0:15|12:15/.test(cauNhom), cauNhom.replace(/\s+/g, " ").slice(0, 120));
+  const dsRoutine = await gw("getAgentAutomations", { id });
+  const trigNhom = (Array.isArray(dsRoutine) ? dsRoutine : []).find((x) => x.id === auto.id)?.trigger;
+  ok("[thêm lịch] panel nhận lại nhóm hai lịch để vẽ hai dòng", trigNhom?.type === "group" && trigNhom?.listeners?.length === 2, JSON.stringify(trigNhom)?.slice(0, 100));
+  r.ds.slice(-2).forEach((e) => console.log(inDong(e)));
+
+  await gw("deleteAgentAutomation", { agentId: id, automationId: auto.id });
+  r = await choCau(5);
   ok("[xoá] hàng sự kiện deleted", suKien(r.ds, "deleted").length === 1);
-  ok("[xoá] bot nói thêm 1 câu", cauBot(r.ds).length === 4, `${r.s.toFixed(1)}s`);
+  ok("[xoá] bot nói thêm 1 câu", cauBot(r.ds).length === 5, `${r.s.toFixed(1)}s`);
   r.ds.slice(-2).forEach((e) => console.log(inDong(e)));
 
   ok("không có tin NGƯỜI DÙNG nào trong bản ghi (lời nhắc im lặng)", r.ds.every((e) => e.kind !== "send-message" || e.author?.id === id));

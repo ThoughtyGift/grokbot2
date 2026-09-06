@@ -24,6 +24,11 @@ test("lời nhắc nói rõ đây là thao tác trên giao diện, đúng độn
   assert.match(hai, /- BẬT lại routine "a"\n- SỬA routine "a" \(mỗi ngày 00:15\)/);
   assert.match(hai, /nói lại lịch hoặc nội dung MỚI/, "gợi ý theo hành động cuối (sửa), như app gốc trả một câu cho cả bật + sửa");
   assert.equal(soanLoiNhac([]), "");
+
+  // "Add another" (0.43): lịch nối bằng " hoặc " → lời nhắc bắt nêu ĐỦ; một lịch thì không có câu dặn thừa.
+  const nhom = soanLoiNhac([{ action: "updated", name: "r", lich: "8:49 on Mon hoặc 0:15 daily" }]);
+  assert.match(nhom, /có 2 lịch — nêu ĐỦ cả 2/);
+  assert.doesNotMatch(s, /nêu ĐỦ/);
 });
 
 test("gom nhịp: hai thao tác trong một nhịp → MỘT lời nhắc mang cả hai", () => {

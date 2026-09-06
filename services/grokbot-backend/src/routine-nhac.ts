@@ -48,12 +48,16 @@ export function soanLoiNhac(ds: readonly ThayDoiRoutine[]): string {
   if (ds.length === 0) return "";
   const dong = ds.map((d) => `- ${DONG_TU[d.action]} routine "${d.name}"${d.lich ? ` (${d.lich})` : ""}`);
   const cuoi = ds[ds.length - 1];
+  // Routine nhiều lịch ("Add another" của panel 0.43): mô tả nối bằng " hoặc ". Đo 06/09: đưa "8:49 on Mon hoặc 0:15 daily"
+  // mà không dặn thì model chỉ nhắc lịch đầu — app gốc nói "mondays 8:49 hoặc mỗi ngày 00:15", nên phải bắt nêu đủ.
+  const soLich = cuoi.lich ? cuoi.lich.split(" hoặc ").length : 1;
+  const duLich = soLich > 1 ? ` Routine này có ${soLich} lịch — nêu ĐỦ cả ${soLich}, nối bằng "hoặc", không được bỏ lịch nào.` : "";
   return [
     "[Bảng Routine — thao tác của người dùng trên giao diện, KHÔNG phải câu chat; không có tin nào của họ trong hội thoại]",
     `Người dùng vừa:`,
     ...dong,
     "",
-    `Trả lời đúng MỘT câu ngắn, giọng như đang nói chuyện, tên routine để trong dấu \`: ${GOI_Y[cuoi.action]}.`,
+    `Trả lời đúng MỘT câu ngắn, giọng như đang nói chuyện, tên routine để trong dấu \`: ${GOI_Y[cuoi.action]}.${duLich}`,
     "Không gọi công cụ, không hỏi gì ngoài câu đó, không kể lại toàn bộ nội dung routine.",
   ].join("\n");
 }

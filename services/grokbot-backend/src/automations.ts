@@ -51,6 +51,12 @@ export interface Automation {
    */
   triggerSpec?: Record<string, unknown>;
   /**
+   * Lịch cron THỨ HAI trở đi của một `SandTriggerGroup` (nút "Add another" trong panel Routine 0.43 —
+   * app gốc đo 06/09: *Every Monday at 8:49 AM* + *Every day at 12:15 AM*). `trigger` giữ lịch đầu để
+   * mọi chỗ đọc chuỗi cũ còn đúng; bộ lập lịch đọc `cronsOf(rec)` = cả hai.
+   */
+  extraCrons?: string[];
+  /**
    * Bí mật của webhook — chỉ đúc khi ai đó thật sự hỏi (`getAutomationWebhookCredential`).
    *
    * KHÔNG BAO GIỜ được đi ra ngoài qua `toClientAutomation`: hàm đó trải `...rec`, nên thêm một
@@ -235,6 +241,56 @@ function structuredTrigger(raw: unknown): Record<string, unknown> | null {
   return { ...o, type };
 }
 
+/** Những gì bộ lập lịch, panel và câu nhắc bot cần từ một trigger client gửi. */
+interface TriggerDoc {
+  trigger: string;
+  extraCrons?: string[];
+  triggerSpec?: Record<string, unknown>;
+  triggerDescription: string;
+  /** Nền tảng phải nối để routine chạy được (Slack, GitHub…) — mỗi cái một thẻ "connect". */
+  platforms: string[];
+}
+
+/**
+ * MỘT phép đọc trigger cho cả tạo lẫn sửa. Ba hình client gửi:
+ *   · chuỗi cron / `{type:"cron", schedule}`      → lịch một dòng
+ *   · `{type:"slack"|"github"|…}`                 → listener, giữ nguyên object để panel vẽ lại đúng ô
+ *   · `{type:"group", listeners:[≥2]}` (0.43)     → nhiều lịch và/hoặc listener trong một routine
+ * Trước 06/09 nhóm rơi vào `normaliseTrigger` → cảnh báo rồi thành `"0 9 * * *"`: panel vẫn hiện đúng hai dòng
+ * (spec được trả lại nguyên qua `triggerObject`), nhưng routine CHẠY lúc 9:00 mỗi ngày và câu nhắc bot nói
+ * "9:00 daily" — sai im lặng đúng kiểu §7 bảng theo dõi. Cron đầu vào `trigger`, cron sau vào `extraCrons`.
+ */
+function docTrigger(raw: unknown): TriggerDoc {
+  const structured = structuredTrigger(raw);
+  if (structured && structured.type === "group" && Array.isArray(structured.listeners)) {
+    const crons: string[] = [];
+    const khac: Record<string, unknown>[] = [];
+    for (const l of structured.listeners as unknown[]) {
+      const s = structuredTrigger(l);
+      if (s) khac.push(s); else crons.push(normaliseTrigger(l));
+    }
+    const platforms = khac.map((k) => listenerPlatform(String(k.type ?? ""))).filter((p): p is string => p != null);
+    return {
+      trigger: crons[0] ?? String(khac[0]?.type ?? DEFAULT_TRIGGER),
+      ...(crons.length > 1 ? { extraCrons: crons.slice(1) } : {}),
+      triggerSpec: structured,
+      triggerDescription: [...crons.map(describe), ...khac.map(describeStructured)].join(" hoặc "),
+      platforms,
+    };
+  }
+  if (structured) {
+    const trigger = String(structured.type ?? "");
+    const p = listenerPlatform(trigger);
+    return { trigger, triggerSpec: structured, triggerDescription: describeStructured(structured), platforms: p ? [p] : [] };
+  }
+  const trigger = normaliseTrigger(raw);
+  const p = listenerPlatform(trigger);
+  return { trigger, triggerDescription: describe(trigger), platforms: p ? [p] : [] };
+}
+
+/** Mọi lịch cron của một routine — một dòng, hay cả nhóm "Add another". */
+export const cronsOf = (rec: Pick<Automation, "trigger" | "extraCrons">): string[] => [rec.trigger, ...(rec.extraCrons ?? [])];
+
 /** Câu mô tả cho một trigger phi-cron — FE dùng chính chuỗi này làm từ khoá tìm kiếm. */
 function describeStructured(t: Record<string, unknown>): string {
   const s = (k: string): string => (typeof t[k] === "string" ? (t[k] as string).trim() : "");
@@ -323,18 +379,13 @@ const applySpec = (target: Automation, spec: Spec): Automation => {
   if (typeof spec?.name === "string") target.name = spec.name;
   if (typeof spec?.prompt === "string") target.prompt = spec.prompt;
   if (spec?.trigger !== undefined) {
-    const structured = structuredTrigger(spec.trigger);
-    if (structured) {
-      target.triggerSpec = structured;
-      // `trigger` vẫn là chuỗi vì cả `listenerPlatform` lẫn bộ lập lịch đọc nó. Chuỗi giờ mang tên
-      // nền tảng, nên một routine Slack thật sự khớp được với sự kiện Slack.
-      target.trigger = String(structured.type ?? "");
-      target.triggerDescription = describeStructured(structured);
-    } else {
-      delete target.triggerSpec;
-      target.trigger = normaliseTrigger(spec.trigger);
-      target.triggerDescription = describe(target.trigger);
-    }
+    // `trigger` vẫn là chuỗi vì cả `listenerPlatform` lẫn bộ lập lịch đọc nó. Với listener, chuỗi mang
+    // tên nền tảng nên một routine Slack thật sự khớp được với sự kiện Slack; với nhóm, nó là lịch đầu.
+    const d = docTrigger(spec.trigger);
+    target.trigger = d.trigger;
+    target.triggerDescription = d.triggerDescription;
+    if (d.triggerSpec) target.triggerSpec = d.triggerSpec; else delete target.triggerSpec;
+    if (d.extraCrons) target.extraCrons = d.extraCrons; else delete target.extraCrons;
   }
   if (typeof spec?.isEnabled === "boolean") target.isEnabled = spec.isEnabled;
   return target;
@@ -426,20 +477,20 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   const spec = a?.spec ?? {};
   // Cùng một phép đọc trigger với `applySpec`. Bản đầu tạo và sửa dùng hai đường khác nhau, nên
   // sửa một đường là còn nguyên lỗi ở đường kia — và đường "tạo" mới là đường người dùng đi.
-  const structured = structuredTrigger(spec.trigger);
-  const trigger = structured ? String(structured.type ?? "") : normaliseTrigger(spec.trigger);
+  const d = docTrigger(spec.trigger);
   const rec: Automation = {
     id: `automation-${seq++}`,
     agentId,
     name: spec.name?.trim() || "Routine",
     prompt: spec.prompt ?? "",
-    trigger,
+    trigger: d.trigger,
     isEnabled: spec.isEnabled ?? true,
     createdAt: Date.now(),
     lastRunAt: null,
-    triggerDescription: structured ? describeStructured(structured) : describe(trigger),
+    triggerDescription: d.triggerDescription,
     runs: [],
-    ...(structured ? { triggerSpec: structured } : {}),
+    ...(d.triggerSpec ? { triggerSpec: d.triggerSpec } : {}),
+    ...(d.extraCrons ? { extraCrons: d.extraCrons } : {}),
   };
   listFor(agentId).push(rec);
   persist();
@@ -451,8 +502,7 @@ export function createAgentAutomation(a: { id?: string; agentId?: string; spec?:
   pushTranscriptEvent(agentId, {
     type: "automation-changed", action: "created", automationId: rec.id, automationName: rec.name,
   });
-  const platform = listenerPlatform(trigger);
-  if (platform) pushListenerConnect(agentId, platform);
+  for (const platform of d.platforms) pushListenerConnect(agentId, platform);
   automationsChanged(agentId);
   return listFor(agentId);
 }
@@ -681,8 +731,7 @@ export function tick(now = new Date()): void {
   for (const rec of all()) {
     if (!rec.isEnabled || !rec.prompt.trim()) continue;
     if (firedAtMinute.get(rec.id) === minute) continue;
-    const sched = parseCron(rec.trigger);
-    if (!sched || !matches(sched, now)) continue;
+    if (!cronsOf(rec).some((c) => { const s = parseCron(c); return s != null && matches(s, now); })) continue;
     firedAtMinute.set(rec.id, minute);
     fire(rec, "schedule");
   }
@@ -695,8 +744,7 @@ export function dueIds(now = new Date()): string[] {
   for (const rec of all()) {
     if (!rec.isEnabled || !rec.prompt.trim()) continue;
     if (firedAtMinute.get(rec.id) === minute) continue;
-    const sched = parseCron(rec.trigger);
-    if (!sched || !matches(sched, now)) continue;
+    if (!cronsOf(rec).some((c) => { const s = parseCron(c); return s != null && matches(s, now); })) continue;
     ids.push(rec.id);
   }
   return ids;

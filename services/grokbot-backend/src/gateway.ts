@@ -67,7 +67,6 @@ import { hostSettings, patchHostSettings } from "./host-settings.js";
 import {
   getAgentAutomationsForClient,
   getAgentAutomations,
-  describe as moTaTrigger,
   toClientAutomation,
   listAllAutomations,
   createAgentAutomation,
@@ -168,7 +167,7 @@ function nhacRoutine(
   action: "created" | "updated",
 ): void {
   const rec = a?.automationId ? sau.find((x) => x.id === a.automationId) : (sau.find((x) => x.name === a?.spec?.name) ?? sau[sau.length - 1]);
-  if (rec) nguoiNhac.ghi(rec.agentId, { action, name: rec.name, lich: moTaTrigger(rec.trigger) });
+  if (rec) nguoiNhac.ghi(rec.agentId, { action, name: rec.name, lich: rec.triggerDescription });
 }
 
 const ports: AclPorts = {
@@ -326,7 +325,7 @@ const ports: AclPorts = {
     create: (a) => { const r = createAgentAutomation(a); nhacRoutine(a, r, "created"); return r; },
     update: (a) => { const r = updateAgentAutomation(a); nhacRoutine(a, r, "updated"); return r; },
     remove: (a) => { const truoc = getAgentAutomations(a).find((x) => x.id === a?.automationId); const r = deleteAgentAutomation(a); if (truoc) nguoiNhac.ghi(truoc.agentId, { action: "deleted", name: truoc.name }); return r; },
-    setEnabled: (a) => { const r = setAgentAutomationEnabled(a); const rec = r.find((x) => x.id === a?.automationId); if (rec) nguoiNhac.ghi(rec.agentId, { action: rec.isEnabled ? "enabled" : "disabled", name: rec.name, lich: moTaTrigger(rec.trigger) }); return r; },
+    setEnabled: (a) => { const r = setAgentAutomationEnabled(a); const rec = r.find((x) => x.id === a?.automationId); if (rec) nguoiNhac.ghi(rec.agentId, { action: rec.isEnabled ? "enabled" : "disabled", name: rec.name, lich: rec.triggerDescription }); return r; },
     runNow: runAgentAutomationNow,
     webhookCredential: automationWebhookCredential,
   },
