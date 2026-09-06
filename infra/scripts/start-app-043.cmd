@@ -8,6 +8,9 @@ REM   GROKBOT2_CDP_PORT   -> 9225, de khong dung :9222 cua ban 0.29 dang mo
 REM   SAND_USER_DATA_DIR  -> "Grok Bot (local 043)": ho so RIENG. 0.43 nang schema kho cuc bo; dung chung ho so
 REM                          voi 0.29 la ban 0.29 mo lai co the hong. Khoa mot-ban cua Electron cung nam trong day.
 REM
+REM   GROKBOT2_APP_ARGS   -> (tuy chon) co Chromium them, cach nhau boi dau cach; bai E2E bam that dat
+REM                          --disable-backgrounding-occluded-windows de trang khong "hidden" khi cua so bi che (run.ps1 chuyen tiep)
+REM
 REM run.ps1 chi dong tien trinh cua DUNG ban sap mo (loc theo duong dan) — ban 0.29 va app cua hang khong bi dung.
 
 if not defined GROKBOT2_CDP_PORT set "GROKBOT2_CDP_PORT=9225"

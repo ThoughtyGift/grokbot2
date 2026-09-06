@@ -3,11 +3,11 @@
  *
  *   node services/grokbot-backend/scripts/e2e-mau-bot.mjs        (cwd = repo root, backend đã lên)
  *
- * Tự chứa, KHÔNG đụng bot thật của người dùng: tạo một bot nguồn tạm + 2 skill, đóng thành mẫu công khai
+ * Tự chứa, KHÔNG đụng bot thật của người dùng: tạo một bot nguồn tạm + 2 skill + 1 routine, đóng thành mẫu công khai
  * (ngoài tiến trình — xem `mau-bot-ngoai.mts`), rồi đi đúng đường Import Bot của Marketplace:
  *
  *   getPublicBotTemplate{shareId}         → `BotTemplateImport` qua được validator của renderer 0.43
- *   createAgentFromTemplate{expectedActiveVersion lệch} → từ chối · khớp → bot MỚI có đủ skill
+ *   createAgentFromTemplate{expectedActiveVersion lệch} → từ chối · khớp → bot MỚI có đủ skill + routine đúng nhịp cron (06/09)
  *
  * và dọn hết: hai bot, mẫu, và cả skill của hai bot — vì `deleteAgent` KHÔNG cascade sang kho skill
  * (đo 05/09: xoá bot xong `getAgentWorkflows{id}` vẫn trả 2).
@@ -37,7 +37,9 @@ const nguon = (await gw("createAgent", { name: "E2E nguồn mẫu (xoá)", descr
 if (!nguon?.id) { console.log("không tạo được bot nguồn"); process.exit(1); }
 await gw("createAgentWorkflow", { agentId: nguon.id, name: "Skill E2E một", description: "Cuối tuần", instructions: "1. mở báo cáo\n2. gửi" });
 await gw("createAgentWorkflow", { agentId: nguon.id, name: "Skill E2E hai", description: "", instructions: "chỉ có bước, không mô tả" });
-console.log(`bot nguồn: ${nguon.name} (${nguon.id}), ${(await gw("getAgentWorkflows", { id: nguon.id }))?.length} skill`);
+// …và MỘT routine (06/09, mục 32 "mẫu chở routine"): cron 8:00 mỗi ngày, để đo recipe chở nó và import dựng lại đúng nhịp.
+await gw("createAgentAutomation", { id: nguon.id, spec: { name: "Routine E2E sáng", prompt: "Tóm tắt việc hôm qua", trigger: "0 8 * * *", isEnabled: true } });
+console.log(`bot nguồn: ${nguon.name} (${nguon.id}), ${(await gw("getAgentWorkflows", { id: nguon.id }))?.length} skill, ${(await gw("getAgentAutomations", { id: nguon.id }))?.length} routine`);
 
 let shareId = null, botMoi = null;
 try {
@@ -45,6 +47,7 @@ try {
   shareId = tao.shareId;
   ok("shareId 21 ký tự [A-Za-z0-9_-] (regex client kiểm trước khi gọi)", /^[A-Za-z0-9_-]{21}$/.test(shareId ?? ""), shareId);
   ok("mẫu chở 2 skill", tao.skills === 2, String(tao.skills));
+  ok("mẫu chở 1 routine (mau-bot-ngoai hỏi backend qua getAgentAutomations)", tao.routines === 1, String(tao.routines));
   const mine = await gw("getBotTemplateForSourceAgent", { sourceAgentId: nguon.id });
   ok("gateway thấy mẫu trong kho của chủ", mine?.shareId === shareId);
 
@@ -55,6 +58,8 @@ try {
   ok("view.version = activeVersion = expectedActiveVersion · active · published", imp?.view?.published === true && imp?.view?.active === true && imp?.view?.version === 1 && imp?.view?.activeVersion === 1);
   ok("view KHÔNG có sourceAgentId (isPackedImportView đòi null)", imp && !("sourceAgentId" in imp.view));
   ok("view.skills = 2", imp?.view?.skills?.length === 2);
+  ok("view.routines = 1, đủ name·description·content (validator import đòi min(1))",
+    imp?.view?.routines?.length === 1 && imp.view.routines.every((r) => r.name && r.description && r.content), JSON.stringify(imp?.view?.routines?.map((r) => [r.name, r.description])));
   ok("skill thiếu mô tả được lấp — schema client đòi min(1)", (imp?.view?.skills ?? []).every((s) => s.name && s.description && s.content), JSON.stringify(imp?.view?.skills?.map((s) => s.description)));
   ok("creatorName suy từ tài khoản", typeof imp?.view?.creatorName === "string" && imp.view.creatorName.length > 0, imp?.view?.creatorName);
   ok("shareUrl trỏ về trang /bot/<shareId> của mình", typeof imp?.view?.shareUrl === "string" && imp.view.shareUrl.endsWith(`/bot/${shareId}`));
@@ -72,11 +77,17 @@ try {
       Array.isArray(ws) && ws.length === 2 && ws.every((w) => w.agentId === botMoi) && ws.some((w) => w.name === "Skill E2E một" && /mở báo cáo/.test(w.instructions)),
       JSON.stringify(ws?.map((w) => [w.name, w.agentId])));
     ok("bot nguồn vẫn đúng 2 skill", (await gw("getAgentWorkflows", { id: nguon.id }))?.length === 2);
+    const rs = await gw("getAgentAutomations", { id: botMoi });
+    ok("bot mới có routine từ recipe: đúng bot, đúng lời nhắc, ĐÚNG nhịp cron 0 8 * * *",
+      Array.isArray(rs) && rs.length === 1 && rs[0].agentId === botMoi && rs[0].prompt === "Tóm tắt việc hôm qua" && rs[0].schedule === "0 8 * * *" && rs[0].trigger?.type === "cron" && rs[0].trigger?.schedule === "0 8 * * *",
+      JSON.stringify(rs?.map((r) => [r.agentId, r.schedule, r.trigger])));
   }
 } finally {
   for (const id of [botMoi, nguon.id].filter(Boolean)) { await xoaSkillCua(id); await gw("deleteAgent", { id }); }
   if (shareId) ngoai("delete", shareId);
   ok("dọn xong: không còn mẫu", (await gw("getBotTemplateForSourceAgent", { sourceAgentId: nguon.id })) === null);
+  ok("dọn xong: routine đi theo bot bị xoá (bindAutomationCleanup), cả nguồn lẫn bot mới",
+    ((await gw("getAgentAutomations", { id: nguon.id }))?.length ?? 0) === 0 && (!botMoi || ((await gw("getAgentAutomations", { id: botMoi }))?.length ?? 0) === 0));
   ok("dọn xong: không còn skill mồ côi", ((await gw("getAgentWorkflows", { id: nguon.id }))?.length ?? 0) === 0 && (!botMoi || ((await gw("getAgentWorkflows", { id: botMoi }))?.length ?? 0) === 0));
   const conLai = (await gw("listAgents")) ?? [];
   ok("dọn xong: không còn bot E2E trong roster", !(Array.isArray(conLai) ? conLai : conLai.agents ?? []).some((a) => /E2E (nguồn )?mẫu/.test(a.name ?? "")));

@@ -199,7 +199,13 @@ if (Test-Path $tokenFile) { $env:GROKBOT2_GATEWAY_TOKEN = (Get-Content $tokenFil
 if (-not $env:SAND_USER_DATA_DIR) { $env:SAND_USER_DATA_DIR = Join-Path $env:APPDATA 'Grok Bot (local)' }
 Write-Host "User data: $env:SAND_USER_DATA_DIR" -ForegroundColor DarkGray
 Write-Host "Launching patched Grok Bot.exe  (CDP :$cdp, API :$bff) from $appExe" -ForegroundColor Cyan
-$app = Start-Process -FilePath $appExe -ArgumentList "--remote-debugging-port=$cdp" -PassThru
+# GROKBOT2_APP_ARGS: extra Chromium switches for the client (space-separated). Used by the real-click E2E
+# runs: "--disable-backgrounding-occluded-windows" keeps document.visibilityState=visible so animations and
+# the virtualized transcript keep measuring while the window is behind other windows (06/09: the Publish
+# button of a fresh share card stayed at opacity 0 and the click landed on the transcript inset).
+$appArgs = @("--remote-debugging-port=$cdp")
+if ($env:GROKBOT2_APP_ARGS) { $appArgs += ($env:GROKBOT2_APP_ARGS -split " " | Where-Object { $_ }) }
+$app = Start-Process -FilePath $appExe -ArgumentList $appArgs -PassThru
 if (-not $app) {
   Write-Host 'Start-Process returned no process. Retry from a console that is not running as Node.' -ForegroundColor Red
   exit 1

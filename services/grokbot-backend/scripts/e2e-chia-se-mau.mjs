@@ -45,6 +45,18 @@ const ev = async (expression) => {
   if (r.exceptionDetails) throw new Error("JS ném: " + JSON.stringify(r.exceptionDetails).slice(0, 500));
   return r.result.value;
 };
+/*
+ * `document.visibilityState === "hidden"` là THẬT và là lý do mốc 3 đỏ (06/09 21:13, ba lượt y nhau): Chromium coi cửa sổ bị
+ * che là "occluded" → trang hidden → không vẽ khung nào → animation vào của thẻ mới đứng ở opacity 0 / scale .94, danh sách ảo hoá
+ * không đo lại chiều cao hàng, và điểm bấm Publish rơi vào `sand-virtual-transcript__inset`. Backend chưa từng nhận
+ * `publishBotTemplate`. Phục hồi/đưa cửa sổ lên trước KHÔNG gỡ được cờ đó; thứ gỡ được là mở client với
+ * `GROKBOT2_APP_ARGS=--disable-backgrounding-occluded-windows` (run.ps1 chuyển cho Chromium) → visible, 7/7 ba lượt liền.
+ */
+if ((await ev("document.visibilityState")) === "hidden") {
+  console.error("RED  trang client trên :" + PORT + " đang hidden (Chromium coi cửa sổ bị che) — thẻ mới sẽ đứng ở opacity 0 và nút Publish không nhận bấm."
+    + " Mở lại client bằng start-app-043.cmd với GROKBOT2_APP_ARGS=--disable-backgrounding-occluded-windows rồi chạy lại.");
+  process.exit(1);
+}
 /** Bấm THẬT vào phần tử nhìn thấy cuối cùng khớp regex (aria-label · title · chữ) trong `sel`. */
 async function bam(re, sel) {
   /*
@@ -61,7 +73,9 @@ async function bam(re, sel) {
     const re = new RegExp(${JSON.stringify(re)});
     const els = [...document.querySelectorAll(${JSON.stringify(sel)})]
       .filter(e => re.test([e.getAttribute("aria-label"), e.getAttribute("title"), e.innerText || e.textContent].filter(Boolean).join(" | ")));
-    const vis = els.map(e => ({ e, r: e.getBoundingClientRect() })).filter(x => x.r.width > 0 && x.r.height > 0);
+    // Hàng ảo hoá KHÔNG theo thứ tự nhìn thấy trong DOM (như hàm the() bên dưới): xếp theo toạ độ rồi lấy cái THẤP NHẤT trên màn —
+    // bot có nhiều thẻ Unpublished (lượt đo trước đỏ giữa chừng) thì "cuối DOM" có thể là nút Publish của thẻ cũ.
+    const vis = els.map(e => ({ e, r: e.getBoundingClientRect() })).filter(x => x.r.width > 0 && x.r.height > 0).sort((p, q) => p.r.y - q.r.y);
     if (!vis.length) return false;
     const el = vis[vis.length - 1].e;
     window.__e2eEl = el;
@@ -75,17 +89,24 @@ async function bam(re, sel) {
   await sl(700);
   let rect = null;
   for (let i = 0; i < 15; i++) {
+    // Tâm nút bị hàng sau đè (đo 06/09: <p> câu chốt của bot phủ tâm nút Publish suốt 3 lượt) thì thử thêm 8 điểm khác trong nút
+    // — mép trên thường hở vì hàng sau chỉ đè phần dưới. Không điểm nào hở mới lay cuộn và thử lại.
     rect = await ev(`(function(){
-      const el = window.__e2eEl, r = el.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      if (hit && el.contains(hit)) return { x, y, ok: true };
+      const el = window.__e2eEl, r = el.getBoundingClientRect();
+      const diem = [[0.5, 0.5], [0.5, 0.2], [0.2, 0.2], [0.8, 0.2], [0.2, 0.5], [0.8, 0.5], [0.5, 0.8], [0.2, 0.8], [0.8, 0.8]];
+      let hitTag = null;
+      for (const [fx, fy] of diem) {
+        const x = r.x + r.width * fx, y = r.y + r.height * fy, hit = document.elementFromPoint(x, y);
+        if (hit && el.contains(hit)) return { x, y, ok: true };
+        if (!hitTag && hit) hitTag = hit.tagName + "." + String(hit.className).slice(0, 40);
+      }
       const sc = window.__e2eSc; if (sc) { sc.scrollBy({ top: -60, behavior: "instant" }); sc.scrollBy({ top: 60, behavior: "instant" }); }
-      return { x, y, ok: false };
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, ok: false, hitTag };
     })()`);
     if (rect.ok) { rect.lan = i; break; }
     await sl(700);
   }
-  if (!rect.ok) rect.mu = true;
+  if (!rect.ok) { rect.mu = true; console.log(`      (bấm mù "${re}": mọi điểm trong nút đều bị ${rect.hitTag ?? "?"} đè)`); }
   // Đúng chuỗi Playwright gửi (đo 06/09: bấm tay qua Playwright ăn, bản không `buttons` thì nút Publish làm ngơ):
   // move → pressed với `buttons:1` → 80 ms → released với `buttons:0`.
   await goi("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y, button: "none", buttons: 0 });
