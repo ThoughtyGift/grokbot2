@@ -102,6 +102,21 @@ let cached: { dau: string; html: string } | null = null;
  */
 const coChu = (b: number): string => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`);
 
+/**
+ * Ngày phát hành ghi trên trang — lấy từ TÊN GÓI trong manifest (`Cai-dat-…-20260906.cmd`), rơi về đuôi version.
+ *
+ * Trước 06/09 hai thứ trùng nhau nên lấy đuôi version là đủ. Từ khi manifest chép số của bundle (`phienBanTuBundle`),
+ * đuôi version là ngày `patch-client` ĐÓNG DẤU vào cây client (05/09), còn ngày dựng/phát hành là ngày trong tên gói
+ * (06/09) — trang tải hiện "phát hành 05/09/2026" cho bản phát 06/09, đo bằng Chrome thật. Không có tên gói thì đuôi
+ * version vẫn là số đúng nhất còn lại.
+ */
+export function ngayPhatHanh(ban: { version?: string; ten?: string } | undefined): string {
+  const tuTen = /(\d{4})(\d{2})(\d{2})\.[a-z]+$/i.exec(String(ban?.ten ?? ""));
+  const tuVer = /\.(\d{4})(\d{2})(\d{2})$/.exec(String(ban?.version ?? ""));
+  const m = tuTen ?? tuVer;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "—";
+}
+
 function landingHtml(): string | null {
   try {
     const { mtimeMs } = statSync(LANDING);
@@ -131,8 +146,7 @@ function landingHtml(): string | null {
      */
     const ban = docManifest()[process.env.GROKBOT2_LAUNCHER_KENH ?? "stable"];
     const phienBan = ban?.version ?? "chưa phát hành";
-    const ngay = /\.(\d{4})(\d{2})(\d{2})$/.exec(phienBan);
-    const ngayBan = ngay ? `${ngay[3]}/${ngay[2]}/${ngay[1]}` : "—";
+    const ngayBan = ngayPhatHanh(ban);   // ngày trong TÊN GÓI trước, đuôi version sau — xem chú thích hàm
     /*
      * `GROKBOT2_PUBLIC_FULL=1` ⇒ nút công khai phát bản chở-app, nên con số "bộ cài … MB" ở hero phải
      * là của gói ẤY, và trang phải bật nhánh chữ "không cần chuẩn bị gì trước" ngay cả khi không có

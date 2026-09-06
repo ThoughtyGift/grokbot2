@@ -348,3 +348,15 @@ test("chưa đặt token thì `?k=` bất kỳ cũng KHÔNG mở được bản 
   // Token rỗng phải là "đóng", không phải "ai gửi chuỗi rỗng cũng vào được".
   assert.equal((await dungCuaTai(dir, "/download/windows?k=", undefined)).ten, `${CMD.prefix}-20260903${CMD.ext}`);
 });
+
+/*
+ * Ngày phát hành trên trang: từ khi manifest chép số của bundle (06/09), đuôi version là ngày ĐÓNG DẤU (patch-client),
+ * còn ngày phát hành nằm trong TÊN GÓI. Đo bằng Chrome thật 06/09: trang ghi "phát hành 05/09/2026" cho bản phát 06/09.
+ */
+test("ngayPhatHanh: ưu tiên ngày trong tên gói, rơi về đuôi version, không có gì thì gạch", async () => {
+  const { ngayPhatHanh } = await import("./site.js");
+  assert.equal(ngayPhatHanh({ version: "0.43.20260905", ten: "Cai-dat-Bot-Noi-Bo-win-20260906.cmd" }), "06/09/2026");
+  assert.equal(ngayPhatHanh({ version: "0.29.20260903" }), "03/09/2026");
+  assert.equal(ngayPhatHanh({ version: "0.43.20260905", ten: "khong-co-ngay.cmd" }), "05/09/2026");
+  assert.equal(ngayPhatHanh(undefined), "—");
+});
