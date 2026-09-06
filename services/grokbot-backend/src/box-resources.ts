@@ -9,7 +9,7 @@
  *
  * Xem docs/plan/one-display-per-bot.md để biết con số đo được và vì sao nó quyết định kiến trúc.
  */
-import { boxCall, boxConfigured } from "./box-exec.js";
+import { boxCall, boxConfigured, boxPoolStatus, type PoolStatus } from "./box-exec.js";
 
 /** Một màn hình ảo đang chạy trên box, cùng những tiến trình sống nhờ nó. */
 export interface DisplayRow {
@@ -56,6 +56,11 @@ export interface BoxSnapshot {
   chromeProfiles: ChromeProfileRow[];
   /** Bao nhiêu bot nữa thì hết chỗ, tính riêng theo RAM và theo đĩa. */
   headroom: { byRamBots: number; byDiskBots: number; limit: "ram" | "disk"; bots: number };
+  /**
+   * Dải tài khoản `gb2u*` của router — trần chặn SỚM hơn RAM (bảng theo dõi §7 "hỏi sai khoá…"):
+   * hết dải là người kế thấy mọi tool box hỏng cùng lúc. Vắng khi router cũ chưa có `GET /pool`.
+   */
+  pool?: PoolStatus;
 }
 
 /** Đo được ngày 24/08/2026: một màn hình riêng đầy đủ tốn chừng này. */
@@ -255,7 +260,9 @@ const PROBE = [
 export async function boxSnapshot(): Promise<BoxSnapshot> {
   if (!boxConfigured()) return { ...EMPTY, atMs: Date.now(), error: "chưa nối box" };
   try {
-    const r = await boxCall<{ stdout?: string }>("exec", { command: PROBE });
+    // Hai câu hỏi song song: lệnh đo trên daemon và số dải ở router. `boxPoolStatus` không ném — nó
+    // trả `null` — nên một router cũ không làm hỏng cả bảng.
+    const [r, pool] = await Promise.all([boxCall<{ stdout?: string }>("exec", { command: PROBE }), boxPoolStatus()]);
     const text = String(r.stdout ?? "");
     const section = (name: string): string[] => {
       const i = text.indexOf(`#${name}`);
@@ -270,6 +277,7 @@ export async function boxSnapshot(): Promise<BoxSnapshot> {
     return {
       ok: true, atMs: Date.now(), ram, disk, displays, looseChromeMb, chromeProfiles,
       headroom: headroomOf(ram, disk),
+      ...(pool ? { pool } : {}),
     };
   } catch (e) {
     return { ...EMPTY, atMs: Date.now(), error: (e as Error).message };

@@ -132,6 +132,36 @@ export async function boxCall<T = any>(op: string, args: Record<string, unknown>
   return viaDaemon<T>(op, args);
 }
 
+/** Dải tài khoản của router (`GET /pool` — `infra/vps/exec-router.mjs`): đã cấp / tổng / còn trống. */
+export interface PoolStatus { perUser: boolean; used: number; size: number; free: number; owners: number }
+
+/**
+ * Hỏi router "dải còn mấy chỗ" cho bảng `/admin`. `null` khi chưa nối box, router cũ chưa có đường
+ * này (nó chuyển tiếp GET sang daemon và daemon không hiểu), hay bất kỳ lỗi nào — bảng vẫn phải vẽ
+ * được RAM/đĩa khi thiếu con số này, nên ở đây không ném.
+ */
+export async function boxPoolStatus(): Promise<PoolStatus | null> {
+  const BASE = daemonBase();
+  if (!BASE) return null;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), Math.min(TIMEOUT_MS(), 8_000));
+  try {
+    const res = await fetch(`${BASE.replace(/\/+$/, "")}/pool`, {
+      method: "GET",
+      headers: { ...(TOKEN() ? { authorization: `Bearer ${TOKEN()}` } : {}), "x-grokbot2-owner": currentOwner() },
+      signal: ctl.signal,
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as Partial<PoolStatus> & { error?: string };
+    if (!j || typeof j !== "object" || j.error || typeof j.size !== "number" || typeof j.used !== "number") return null;
+    return { perUser: !!j.perUser, used: j.used, size: j.size, free: j.free ?? j.size - j.used, owners: j.owners ?? j.used };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** One-shot reachability probe, used at startup so the log states the truth. */
 export async function boxHealth(): Promise<string> {
   const cu = computerBase();

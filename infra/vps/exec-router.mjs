@@ -88,6 +88,19 @@ export function poolAccounts() {
   } catch { return []; }
 }
 
+/**
+ * Dải đã cấp bao nhiêu / còn bao nhiêu — cho bảng `/admin` (bảng theo dõi §6 mục 26: "chưa hiện used/size").
+ * Đọc sổ + passwd LÚC HỎI, cùng hai nguồn với `osUserFor`, nên số ở đây không bao giờ cũ hơn số router cấp.
+ * `used` chỉ đếm tài khoản còn trong dải: một mapping trỏ tới tài khoản đã xoá khỏi passwd không chiếm chỗ.
+ */
+export function poolStatus(mapFile = MAP_FILE) {
+  let map = {};
+  try { map = JSON.parse(readFileSync(mapFile, "utf8")); } catch { /* sổ chưa có */ }
+  const pool = new Set(poolAccounts());
+  const used = new Set(Object.values(map).filter((u) => pool.has(u))).size;
+  return { perUser: PER_USER, used, size: pool.size, free: pool.size - used, owners: Object.keys(map).length };
+}
+
 /** Lỗi có MÃ để đầu gọi (`box-exec.ts`) nói được câu cho người dùng thay vì câu cho quản trị viên. */
 export class PoolExhausted extends Error {
   constructor(used, size) {
@@ -261,6 +274,10 @@ const server = createServer(async (req, res) => {
   // Kiểm token Ở ĐÂY, trước khi đọc thân hay bật tiến trình nào: một lời gọi không có giấy tờ không
   // được phép làm ta tốn dù một `spawn`.
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return fail(401, { error: "unauthorized" });
+
+  // Bảng `/admin` hỏi "dải còn mấy chỗ": router trả lời THẲNG — không cấp tài khoản, không bật daemon
+  // nào cho một câu hỏi chỉ đọc. Đặt trước khi đọc thân vì câu hỏi này không có thân.
+  if (req.method === "GET" && req.url === "/pool") return fail(200, poolStatus());
 
   const chunks = [];
   req.on("data", (c) => chunks.push(c));

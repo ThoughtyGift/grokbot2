@@ -139,8 +139,30 @@ function cards(p: AdminPayload): string {
     <div class="num">${p.desktop.heldBy ? esc(p.desktop.heldBy) : "trống"}</div>
     <div class="sub">${p.desktop.recording ? `đang ghi bài dạy cho ${esc(p.desktop.recording)}` : "không ai đang ghi"}</div>
   </div>
+  ${poolCard(p)}
 </div>
 `;
+}
+
+/**
+ * Thẻ "tài khoản box": dải `gb2u*` đã cấp / tổng. Đây là trần chặn SỚM hơn RAM (§7 bảng theo dõi:
+ * người thứ N+1 thấy mọi tool box hỏng cùng lúc), nên nó đứng cạnh RAM/đĩa chứ không nằm ở log router.
+ * Router cũ chưa có `GET /pool` thì thẻ nói thẳng là chưa hỏi được, không vẽ số 0 giả.
+ */
+function poolCard(p: AdminPayload): string {
+  const q = p.pool;
+  if (!q) return `<div class="card">
+    <h2>Tài khoản box</h2>
+    <div class="num">—</div>
+    <div class="sub">router chưa trả lời <code>GET /pool</code> — bản router cũ, hoặc box chưa nối</div>
+  </div>`;
+  const pct = q.size ? (q.used / q.size) * 100 : 0;
+  return `<div class="card">
+    <h2>Tài khoản box</h2>
+    <div class="num">${q.free}<span class="sub"> còn trống / ${q.size}</span></div>
+    ${bar(pct, q.free <= 2 ? "var(--hot)" : pct > 70 ? "var(--warn)" : "var(--ok)")}
+    <div class="sub">đã cấp ${q.used} · ${q.owners} người trong sổ${q.perUser ? "" : " · tách người dùng đang TẮT"}</div>
+  </div>`;
 }
 
 /**

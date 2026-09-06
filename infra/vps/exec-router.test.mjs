@@ -26,7 +26,20 @@ writeFileSync(passwd, [
 process.env.GROKBOT2_PASSWD_FILE = passwd;
 process.env.GROKBOT2_USER_POOL = "";
 process.env.GROKBOT2_EXEC_TOKEN = "t";
-const { poolAccounts, osUserFor, PoolExhausted } = await import("./exec-router.mjs");
+const { poolAccounts, osUserFor, PoolExhausted, poolStatus } = await import("./exec-router.mjs");
+
+test("poolStatus đếm đã cấp / còn trống từ sổ + passwd, bỏ mapping trỏ tài khoản đã xoá", () => {
+  const map = join(dir, "users-status.json");
+  assert.deepEqual(poolStatus(map), { perUser: false, used: 0, size: 3, free: 3, owners: 0 }, "sổ chưa có thì 0 đã cấp");
+  osUserFor("auth0|x", map);
+  osUserFor("auth0|y", map);
+  writeFileSync(map, JSON.stringify({ ...JSON.parse(readFileSync(map, "utf8")), "auth0|cu": "gb2u999" }));
+  const s = poolStatus(map);
+  assert.equal(s.used, 2, "gb2u999 không còn trong passwd thì không chiếm chỗ");
+  assert.equal(s.size, 3);
+  assert.equal(s.free, 1);
+  assert.equal(s.owners, 3, "nhưng vẫn là một owner trong sổ — để người vận hành thấy mapping cũ");
+});
 
 test("dải đọc từ passwd: chỉ gb2uNNN, sắp thứ tự, bỏ tên gần giống", () => {
   assert.deepEqual(poolAccounts(), ["gb2u001", "gb2u003", "gb2u010"]);
