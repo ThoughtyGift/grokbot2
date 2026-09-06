@@ -10,7 +10,7 @@
  *   3. bấm Publish → thẻ "Published" + Copy link; menu header đổi sang View template details / Update template / Delete Template
  *   4. bấm Update template → client gửi `Update the shared template of yourself.` → thẻ THỨ HAI "Unpublished" (bản 2)
  *   5. bấm Publish thẻ 2 → thẻ 2 "Published", thẻ 1 tự về "Unpublished" (client suy: version ≠ activeVersion)
- *   6. View Details mở hộp có Instructions · Routines · Integrations (đọc từ `toWireView`)
+ *   6. View Details mở hộp có Instructions · Integrations (đọc từ `toWireView`; Routines chỉ hiện khi bot có routine)
  *   7. Delete Template → xác nhận → cả hai thẻ "This template was deleted", menu về "Share as template"
  *
  * Vì sao bấm bằng `Input.dispatchMouseEvent` chứ không `el.click()`: menu Radix của client KHÔNG chọn mục khi nhận
@@ -21,15 +21,25 @@
  * dùng đang chat.
  */
 const PORT = Number(process.env.GROKBOT2_CDP_PORT ?? 9225);
+const HEALTH = process.env.GW_HEALTH ?? "http://127.0.0.1:8788/gw/health";
 const pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json().catch(() => null);
 const page = pages?.find((p) => p.type === "page" && /index\.html/.test(p.url));
 if (!page) { console.error(`RED  không có client trên CDP :${PORT} — mở bằng infra\\scripts\\start-app-043.cmd`); process.exit(1); }
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 let id = 0; const cho = new Map();
-const goi = (method, params = {}) => new Promise((res, rej) => { const n = ++id; cho.set(n, { res, rej }); ws.send(JSON.stringify({ id: n, method, params })); });
+// Đồng hồ 60 s cho MỌI lệnh CDP: 06/09 hai lượt treo 10 phút sau mốc 2 mà không in một dòng — một lệnh không về thì
+// phải ném có tên lệnh, không để bài đo im lặng tới hết giờ của người chạy.
+const goi = (method, params = {}) => new Promise((res, rej) => {
+  const n = ++id;
+  const dh = setTimeout(() => { cho.delete(n); rej(new Error(`CDP ${method} không về sau 60 s`)); }, 60_000);
+  cho.set(n, { res: (v) => { clearTimeout(dh); res(v); }, rej: (e) => { clearTimeout(dh); rej(e); } });
+  ws.send(JSON.stringify({ id: n, method, params }));
+});
 ws.onmessage = (ev) => { const m = JSON.parse(ev.data); if (m.id && cho.has(m.id)) { const { res, rej } = cho.get(m.id); cho.delete(m.id); m.error ? rej(new Error(JSON.stringify(m.error))) : res(m.result); } };
 await new Promise((r) => (ws.onopen = r));
 const sl = (ms) => new Promise((r) => setTimeout(r, ms));
+// Cửa sổ bị che là timer của trang bị bóp (xem `bam`) và click trusted rơi vào chỗ không nhìn thấy — đưa lên trước.
+await goi("Page.bringToFront").catch(() => {});
 const ev = async (expression) => {
   const r = await goi("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
   if (r.exceptionDetails) throw new Error("JS ném: " + JSON.stringify(r.exceptionDetails).slice(0, 500));
@@ -43,33 +53,45 @@ async function bam(re, sel) {
    *   2. hàng ảo hoá đo sai chiều cao thẻ mới → hàng kế ĐÈ lên nút vài giây (elementFromPoint ra <p> của hàng sau);
    *      chờ tới khi điểm bấm trúng đúng nút rồi mới bấm, lay cuộn để ép đo lại;
    *   3. so khớp gộp aria-label · title · chữ, lấy phần tử NHÌN THẤY cuối cùng.
+   * Lớp thứ tư (06/09): MỌI nhịp chờ nằm ở phía node. Bản trước ngủ bằng `setTimeout` TRONG trang qua `awaitPromise`,
+   * và khi cửa sổ client bị che thì Chromium bóp timer của trang — `Runtime.evaluate` không về, bài đo treo 10 phút
+   * không in gì (hai lượt). Trang chỉ còn làm việc ĐỒNG BỘ: chọn phần tử, đo, thử điểm bấm.
    */
-  const rect = await ev(`(async function(){
-    const sl = ms => new Promise(r => setTimeout(r, ms));
+  const chon = await ev(`(function(){
     const re = new RegExp(${JSON.stringify(re)});
     const els = [...document.querySelectorAll(${JSON.stringify(sel)})]
       .filter(e => re.test([e.getAttribute("aria-label"), e.getAttribute("title"), e.innerText || e.textContent].filter(Boolean).join(" | ")));
     const vis = els.map(e => ({ e, r: e.getBoundingClientRect() })).filter(x => x.r.width > 0 && x.r.height > 0);
-    if (!vis.length) return null;
+    if (!vis.length) return false;
     const el = vis[vis.length - 1].e;
+    window.__e2eEl = el;
     let sc = el.parentElement;
     while (sc && sc !== document.body && !(sc.scrollHeight > sc.clientHeight + 10 && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
-    el.scrollIntoView({ block: "center" }); await sl(700);
-    // Hàng ảo hoá ĐO SAI chiều cao thẻ vừa mọc: hàng sau đè lên chân thẻ vài giây rồi mới xếp lại (đo 05/09:
-    // elementFromPoint ra <p> của hàng kế, không phải composer). Chờ tới khi điểm bấm trúng nút, lay nhẹ cuộn để ép đo lại.
-    for (let i = 0; i < 15; i++) {
-      const r = el.getBoundingClientRect(); const x = r.x + r.width / 2, y = r.y + r.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      if (hit && el.contains(hit)) return { x, y, lan: i };
-      if (sc && sc !== document.body) { sc.scrollBy({ top: -60, behavior: "instant" }); await sl(150); sc.scrollBy({ top: 60, behavior: "instant" }); }
-      await sl(700);
-    }
-    const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, lan: 4, mu: true };
+    window.__e2eSc = sc && sc !== document.body ? sc : null;
+    el.scrollIntoView({ block: "center" });
+    return true;
   })()`);
-  if (!rect) throw new Error(`không thấy "${re}" trong ${sel}`);
-  await goi("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
-  await goi("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
-  await goi("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+  if (!chon) throw new Error(`không thấy "${re}" trong ${sel}`);
+  await sl(700);
+  let rect = null;
+  for (let i = 0; i < 15; i++) {
+    rect = await ev(`(function(){
+      const el = window.__e2eEl, r = el.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (hit && el.contains(hit)) return { x, y, ok: true };
+      const sc = window.__e2eSc; if (sc) { sc.scrollBy({ top: -60, behavior: "instant" }); sc.scrollBy({ top: 60, behavior: "instant" }); }
+      return { x, y, ok: false };
+    })()`);
+    if (rect.ok) { rect.lan = i; break; }
+    await sl(700);
+  }
+  if (!rect.ok) rect.mu = true;
+  // Đúng chuỗi Playwright gửi (đo 06/09: bấm tay qua Playwright ăn, bản không `buttons` thì nút Publish làm ngơ):
+  // move → pressed với `buttons:1` → 80 ms → released với `buttons:0`.
+  await goi("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y, button: "none", buttons: 0 });
+  await goi("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", buttons: 1, clickCount: 1 });
+  await sl(80);
+  await goi("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", buttons: 0, clickCount: 1 });
 }
 const go = async (key) => {
   const k = key === "Escape" ? 27 : 13;
@@ -98,10 +120,23 @@ const choDen = async (dk, ms, buoc = 1500) => { const t0 = Date.now(); while (Da
  * Chờ lượt bot XONG: số hàng transcript đứng yên 4 s. Bấm Publish ngay khi thẻ vừa mọc là bấm vào một trang còn
  * đang trôi — câu chốt của bot đến sau thẻ vài giây và đẩy nút đi (đo 05/09: lần chạy đầu RED ở mốc 3 đúng vì thế).
  */
-const choLuotXong = async () => {
+const choLuotXong = async (toiDaMs = 90_000) => {
   const dem = () => ev(`document.querySelectorAll("[data-row-key]").length`);
+  const t0 = Date.now();
   let truoc = await dem(), yen = 0;
-  while (yen < 4000) { await sl(1000); const n = await dem(); if (n === truoc) yen += 1000; else { yen = 0; truoc = n; } }
+  // Có trần: 06/09 một lượt treo 10 phút ở đây (số hàng không đứng yên đủ 4 s) mà không in gì — vòng chờ không trần
+  // là bài đo tự treo rồi báo đỏ sản phẩm.
+  while (yen < 4000 && Date.now() - t0 < toiDaMs) { await sl(1000); const n = await dem(); if (n === truoc) yen += 1000; else { yen = 0; truoc = n; } }
+  if (yen < 4000) console.log(`      (số hàng không đứng yên sau ${toiDaMs / 1000} s — đi tiếp)`);
+  // Số hàng đứng yên ≠ lượt xong: câu chốt của bot GÕ vào hàng cuối, không thêm hàng. Bấm Publish trong lúc bot còn gõ
+  // là client làm ngơ (đo 06/09: hai lượt cú bấm đúng toạ độ mà backend không nhận `publishBotTemplate`; bấm tay SAU
+  // khi bot im thì ăn ngay). Hỏi thẳng backend tới khi `isBusy` tắt.
+  while (Date.now() - t0 < toiDaMs) {
+    const h = await fetch(HEALTH).then((r) => r.json()).catch(() => null);
+    if (h && !h.isBusy) break;
+    await sl(1000);
+  }
+  await sl(1500);
 };
 /** Bấm Publish trên thẻ cuối; thử lại một lần nếu 8 s sau vẫn chưa đổi trạng thái. */
 const bamPublish = async (dk) => {
@@ -125,9 +160,9 @@ try {
   const t2 = (await the()).at(-1);
   moc("2 thẻ Unpublished + Publish/View Details", co2 && t2.buttons.some((b) => /Publish/.test(b)) && t2.buttons.some((b) => /View/.test(b)), JSON.stringify(t2));
   // 3
-  await choLuotXong();
-  const co3 = await bamPublish(async () => (await the()).at(-1).published);
-  const m3 = await menu(); await go("Escape");
+  console.log("      chờ lượt xong…"); await choLuotXong();
+  console.log("      bấm Publish…"); const co3 = await bamPublish(async () => (await the()).at(-1).published);
+  console.log("      mở menu…"); const m3 = await menu(); await go("Escape");
   moc("3 Publish → Published + Copy link; menu Update/Delete", co3 && (await the()).at(-1).buttons.some((b) => /Copy/.test(b)) && m3.includes("Update template") && m3.includes("Delete Template"), m3.join(" · "));
   // 4
   const khoa3 = (await the()).at(-1)?.key ?? null;
@@ -144,7 +179,9 @@ try {
   await sl(1200);
   const hop = co6 ? await ev(`document.querySelector("[role=dialog]").textContent`) : "";
   await go("Escape");
-  moc("6 View Details có Instructions · Routines · Integrations", co6 && /Instructions/.test(hop) && /Routines/.test(hop) && /Integrations/.test(hop), hop.slice(0, 80));
+  // Client 0.43 chỉ vẽ mục nào có dữ liệu: bot thử không có routine thì KHÔNG có "Routines" (đo 06/09 — hộp là
+  // Context · Instructions · Integrations). Ghim hai mục mọi bot đều có; "Routines" là dữ liệu của bot, không phải sản phẩm.
+  moc("6 View Details có Instructions · Integrations (đọc từ toWireView)", co6 && /Instructions/.test(hop) && /Integrations/.test(hop), hop.replace(/\s+/g, " ").slice(0, 80));
   // 7
   await sl(500); await menu(); await bam("Delete Template", "[role=menuitem]");
   await choDen(() => ev(`!!document.querySelector("[role=dialog],[role=alertdialog]")`), 5_000, 300);

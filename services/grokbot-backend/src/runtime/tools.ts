@@ -1549,10 +1549,24 @@ echo "wrote=$(wc -c < ${file})"`;
  * `update_state` của ta không có nhánh workflow, và thêm một nhánh chỉ để làm một việc thì khó đọc
  * hơn một tool gọi đúng tên việc.
  */
-TOOLS.create_workflow = (arg, ctx) => taoWorkflowTuBot(
-  (() => { try { return JSON.parse(arg); } catch { return { name: "", instructions: unquote(arg) }; } })(),
-  ctx.agentId,
-);
+TOOLS.create_workflow = (arg, ctx) => {
+  const spec = (() => { try { return JSON.parse(arg); } catch { return { name: "", instructions: unquote(arg) }; } })();
+  /*
+   * `agent` — ghi skill cho bot KHÁC cùng chủ (Thợ dựng bot gắn skill cho bot nó vừa tạo). Mặc định là chính mình,
+   * cùng luật với `create_routine{agent}` (28/08): tool không chỉ được sang bot khác thì mọi thứ bot mẹ dựng cho
+   * bot con rơi hết vào bot mẹ. Tra theo id rồi theo tên, chỉ trong bot của cùng chủ.
+   */
+  const wanted = String(spec?.agent ?? spec?.agentName ?? "").trim();
+  let target = ctx.agentId;
+  if (wanted) {
+    const owner = ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+    const mine = [...agents.values()].filter((a) => ownerOf(a.id) === owner);
+    const hit = mine.find((a) => a.id === wanted) ?? mine.find((a) => a.name.toLowerCase() === wanted.toLowerCase());
+    if (!hit) return `(không thấy bot "${wanted}" — create_agent trước, rồi gọi lại với đúng tên)`;
+    target = hit.id;
+  }
+  return taoWorkflowTuBot(spec, target);
+};
 
 TOOLS.get_mcp_tools = (arg, ctx) => getMcpTools(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
 TOOLS.call_mcp_tool = (arg, ctx) => callMcpTool(arg, ownerOf(ctx.agentId) ?? DEFAULT_USER.authId);
@@ -2061,6 +2075,7 @@ const SKILL_WRITE_PROTOCOL = boxConfigured()
     'For a task the user taught you (or asked you to remember as a step-by-step), use ' +
     'TOOL_CALL: create_workflow({"name":"Đặt hàng Shopee","description":"khi cần mua lại đơn cũ","instructions":"các bước"}) ' +
     "instead — that one shows up in the composer's `/` menu and only costs context when someone calls it, " +
+    'and it can target another bot you own with "agent":"<name>" (a bot you just built gets its skills that way); ' +
     "while create_skill writes a file that rides EVERY later turn. " +
     "It lands in <available_skills> for every later conversation. Skills are procedures; " +
     "knowledge_base is for facts about the person."

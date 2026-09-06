@@ -27,7 +27,7 @@ kênh           3: local-exec · webauthn · cookie-origin-approval
 mã             backend 692 bài · 692 xanh · proto 7/7 · web avatar 7/7 · router box 3/3 · typecheck sạch (đo 06/09, runner từ GỐC repo với glob tường minh — xem §7 "runner 0 bài"); bài đỏ cũ `avatar.test` đã sửa (nó ghim viewBox cố định của bản trước 3e60bdf)
 parity         0 ca lệch HÀNH VI — còn 21 (khác môi trường: WebGL) + 23 (khác cách vẽ: widget vs câu)
 bản vá client  10 mốc · 0.29: 6 áp · 0.43: 7 áp + 3 chứng minh thừa (`obsoleteIf`) · `--verify` xanh cả hai
-E2E 0.43       06/09 ~04:00 trên client 0.43.20260906 local: kiem-reply 29/29 · mẫu bot 20/20 · marketplace 26/26 · hai tài khoản 20/20 · routine XANH · trang chia sẻ 17/17 · teach 15/15 · share-as-template 7/7 — đối chiếu app gốc: [0-43-so-voi-local.md §8](../extracted/0-43-so-voi-local.md) (§6 mục 28)
+E2E 0.43       **06/09 ~08:30–09:10 chạy lại theo kịch bản [runbooks/kich-ban-e2e.md](../runbooks/kich-ban-e2e.md) trước deploy**: kiem-reply 29/29 · mẫu bot 20/20 · marketplace 26/26 · hai tài khoản 20/20 · routine XANH **5 nhịp** (thêm lịch thứ hai — §6 mục 30) · trang chia sẻ 17/17 · share-as-template 7/7 (trên bot thử, sau 4 lần sửa BÀI ĐO — §7) · teach ĐỎ vì **hết hạn mức pool giữa lượt** (*session limit · resets 10:30*), không phải sản phẩm · bản ghi sống chưa chạy lại (cùng lý do) — hai bài này chạy lại sau 10:30. Lượt trước 04:00: 06/09 ~04:00 trên client 0.43.20260906 local: kiem-reply 29/29 · mẫu bot 20/20 · marketplace 26/26 · hai tài khoản 20/20 · routine XANH · trang chia sẻ 17/17 · teach 15/15 · share-as-template 7/7 — đối chiếu app gốc: [0-43-so-voi-local.md §8](../extracted/0-43-so-voi-local.md) (§6 mục 28)
 bộ cài        **0.43.20260906 ĐANG PHÁT trên kênh stable (06/09 ~03:50)**: `Bot-Noi-Bo-Setup-20260906.exe` 111.213.078 B sha `236bd7f5…` (chở-app, cùng AppId với bản 0.29 → máy cũ tự cập nhật qua launcher) · cfg `Cai-dat-Bot-Noi-Bo-win-20260906.cmd` sha `86c0fed0…` · lùi: `phat-hanh.json.bak-20260906` trên VPS + `Bot-Noi-Bo-Setup-20260903.exe` còn trong `dist/` (xem §6 mục 27)
 ```
 
@@ -177,6 +177,8 @@ nay 0 ca lệch ổn định.*
 
 | chặng | kết quả |
 |---|---|
+| 31 · Thợ dựng bot — bot của mình chuyên dựng bot thành mẫu | **XONG 06/09 ~09:10** — trả lời câu hỏi chủ dự án *"tab Bots của app gốc (dr eggbot, Overheard, Tradbot…) có trích sang được không hay tự xây?"*: **tự xây**. Nội dung Marketplace của hãng là của hãng + người tạo bên thứ ba (`legal.md` cấm kéo/phân phối lại), và thân skill của họ nằm trên box hãng — chỉ thấy qua UI. Thứ đã chép là HÌNH (9 nhóm, Featured, thẻ, trang chia sẻ, import) — xong từ 05/09. Nay có bot đầu tiên của mình cùng vai dr eggbot: `src/tho-dung-bot.ts` (hồ sơ + SOP + skill `Dựng bot mới`, `source:"workflow"` để gõ `/`): hỏi tối đa 3 câu qua `ask_question` → `create_agent` → 2–4 `create_workflow{agent}` cho bot MỚI → `create_routine{agent}` nếu có nhịp → mời `share_bot_template{agent}` + `publish_bot_listing{agent,category}`; ghim luật validator client (mọi chuỗi phải có chữ) và cấm sao chép bot người khác. Kèm sửa sản phẩm: **`create_workflow` nhận `agent`** (trước cứng `ctx.agentId` — cùng lỗi `create_routine` 28/08: skill bot mẹ dựng cho bot con rơi vào bot mẹ). `scripts/dung-tho-dung-bot.mts` dựng bot + skill + mẫu (ngoài tiến trình như e2e-mau-bot) + listing `featured:true`, **0 lượt model**, chạy lại an toàn; đã chạy trên dev: `agent-1040`, mẫu `kqg4_izUYUfip-fRi6gaq`, slug `tho-dung-bot-kqg4xi`. 7 unit (`tho-dung-bot.test` · `create-workflow-target.test`). Chưa: một lượt dựng thật qua `/Dựng bot mới` (chờ hạn mức pool), đưa lên VPS |
+| 30 · Routine: nhóm trigger 0.43 ("Add another") | **XONG 06/09 ~08:20** — ảnh app gốc: một routine mang *Every Monday at 8:49 AM · Every day at 12:15 AM · + Add another*, sự kiện *Updated routine*, bot nói *"giờ là mondays 8:49 hoặc mỗi ngày 00:15"*. Client gửi `SandTriggerGroup {type:"group", listeners:[≥2]}`; bên ta rơi vào `normaliseTrigger` → cảnh báo rồi thành `0 9 * * *`: panel vẫn vẽ đúng hai dòng (spec trả lại nguyên) nhưng routine CHẠY 9:00 mỗi ngày và câu nhắc nói lịch sai — sai im lặng đúng kiểu §7. Nay `docTrigger()` một phép đọc cho tạo lẫn sửa (cron · listener · group): lịch đầu vào `trigger`, lịch sau vào `extraCrons`, `cronsOf(rec)` cho `tick`/`dueIds`, listener trong nhóm vẫn ra thẻ connect, `triggerDescription` nối " hoặc "; câu nhắc dùng `rec.triggerDescription` và dặn *"routine có N lịch — nêu ĐỦ"* (đo: không dặn thì model bỏ lịch thứ hai). `e2e-routine-nhac` thêm nhịp 5: XANH sống — hàng *updated* thứ hai + *"`kiem-ke-sang` giờ chạy 8:49 thứ 2 hoặc 0:15 mỗi ngày."* + `getAgentAutomations` trả lại nhóm hai lịch. 5 unit `automations-nhom-lich.test` |
 | 0 · Dọn mã | cổng 9/9; `mcp.ts` 936 → <800; `bootstrap.ts` 862 → <800 |
 | 1 · Đo được tiền | **`enforce` BẬT 02/09** sau 11 ngày warn (chủ ~18,7M token / trần free 100k → chủ lên `pro` TRƯỚC khi bật, không có cửa sổ bị khoá). Nhánh từ chối có test lần đầu (`billing-gate.test.ts`). Webhook đổi plan hoạt động (secret trong `.env`). Chưa đặt `GROKBOT2_CHECKOUT_URL` nên lời chặn không kèm link nâng cấp — đặt khi có trang thanh toán |
 | 2 · Ba lỗ đăng nhập | thu hồi token 200→204→**401** · đoán mật khẩu 6 lần → **429** · `/register` **403** · JWT 365 → **30 ngày** |
@@ -724,6 +726,22 @@ Trong khi đó backend đang dừng ffmpeg (SIGINT → chờ file đóng → ffp
 tạo skill "Mở trang example domains của IANA" với link `sand-workflow:wf-mtot1ac1-2` — đọc transcript mới thấy. Cùng họ
 với "cửa sổ đo không khớp với LƯỢT": ngưỡng chờ của bài đo phải suy từ ĐƯỜNG ĐI của sản phẩm (đếm số lượt qua hầm), không
 từ cảm giác. Nay chờ 45 s và in ra tin tới sau bao lâu.
+
+**Bài đo ngủ bằng `setTimeout` TRONG trang, cửa sổ bị che là Chromium bóp timer — `Runtime.evaluate` không về, bài treo 10 phút không in gì.**
+06/09 ~08:40, `e2e-chia-se-mau` treo hai lượt liền sau mốc 2 (`grep` ở đầu ống còn nuốt luôn output nên không thấy nó dừng ở đâu). Hàm `bam()`
+chạy một async IIFE trong trang với `await sl(700)` qua `awaitPromise`; mọi nhịp chờ phía node (`choLuotXong`, `choDen`) vẫn chạy, chỉ nhịp
+chờ phía trang đứng — dấu tay của timer bị bóp khi cửa sổ Electron không ở trước/bị che. Ba sửa: đồng hồ 60 s cho MỌI lệnh CDP (ném có tên
+lệnh), mọi `sleep` về phía node (trang chỉ làm việc đồng bộ: chọn, đo, thử điểm bấm), `Page.bringToFront` trước khi đo. Cùng lượt lộ thêm
+hai bẫy nhỏ: (1) nút **Publish của thẻ làm ngơ cú bấm trong lúc bot còn gõ** — "số hàng đứng yên 4 s" không phải "lượt xong" vì câu chốt
+gõ vào hàng cuối không thêm hàng; hỏi thẳng `/gw/health.isBusy` mới đúng; (2) hộp View Details của client 0.43 **chỉ vẽ mục có dữ liệu**
+— bot thử không có routine thì không có "Routines", mốc 6 ghim theo dữ liệu của bot hôm qua chứ không theo sản phẩm. Bốn lần đỏ, cả bốn là
+bài đo; sản phẩm 7/7 khi bài đo đúng. Kèm: bài bấm thật đo trên "bot đang mở", mà bot việc của người dùng (New Bot) nay CÓ mẫu đang lên
+Marketplace ⇒ mốc 1 đỏ là ĐÚNG, không phải store client nói dối — nay `chon-bot-cdp.mjs` mở một bot thử riêng rồi trả lại bot cũ.
+
+**Hết hạn mức pool GIỮA lượt trông y như bot bỏ dở.** `e2e-teach` 06/09 ~09:00: tin bàn giao tới 1 s, bot nhận phiếu, cắt khung đúng nhịp,
+rồi câu cuối của bản ghi là *"You've hit your session limit · resets 10:30am"* — bài đo chờ 302 s rồi báo "0 → 0 skill". Cùng họ với
+"một lượt hỏng có thể đội đúng lốt một lượt tốt" (429 ở lớp soát): bài đo đọc số skill, không đọc câu cuối của bot. Trước khi kết luận một
+lượt dài đỏ, đọc entry cuối của transcript — chữ *session limit* là hạn mức, không phải sản phẩm.
 
 ## 8 · Chưa chắc chắn
 
