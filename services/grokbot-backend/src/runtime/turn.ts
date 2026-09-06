@@ -380,6 +380,19 @@ const clearPresence = (agentId: string): void => {
   setPresence(agentId, { isRunning: false, isComposingMessage: false, isRetrying: false, currentActivity: null });
 };
 
+/**
+ * Bật lại cờ "đang chạy" cho một lượt NỐI TIẾP — cùng bộ cờ `startTurn` đặt trước token đầu.
+ *
+ * Lượt đầu đỗ lại chờ widget/bí mật/form/duyệt tool thì `clearPresence` đã tắt hết; khi người dùng trả lời,
+ * `continueAfterTool` gọi thẳng `runTurn` (không qua `startTurn`) nên không ai bật lại. Đo 06/09 trên VPS: bấm
+ * "Đưa lên Marketplace" xong, 12 s tới câu đầu của bot roster vẫn `isRunning:false` — client không quay spinner
+ * (đúng cái "app đứng" mà `startTurn` đã chữa cho lượt đầu), và bài đo đọc cờ ấy tưởng lượt đã xong. Gọi ngay sau
+ * `inflight.set`, ở MỌI chỗ nối lượt (`luot-noi-tiep-bat-co-chay.test.ts` khoá).
+ */
+const batLaiCoChay = (agentId: string): void => {
+  setPresence(agentId, { isRunning: true, isComposingMessage: false, currentActivity: { kind: "thinking" } });
+};
+
 export function broadcastToAgents(a: { ids?: string[]; agentIds?: string[]; prompt?: string; content?: string; text?: string }) {
   const ids = a.ids ?? a.agentIds ?? listAgents().map((x) => x.id);
   const text = a.prompt ?? a.content ?? a.text ?? "";
@@ -1770,7 +1783,7 @@ async function runTurn(agentId: string, bubble: Entry, history: PoolMessage[], k
         if (key2) {
           const b: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), message: { type: "text", content: "" }, timestampMs: Date.now(), streaming: true };
           tail(agentId).push(b); onUpdate(agentId);
-          const c = new AbortController(); inflight.set(agentId, c);
+          const c = new AbortController(); inflight.set(agentId, c); batLaiCoChay(agentId);
           void runTurn(agentId, b, history, key2, c);
           return;
         }
@@ -1940,6 +1953,7 @@ function continueAfterTools(agentId: string, history: PoolMessage[], done: { nam
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
+  batLaiCoChay(agentId);
   // Ảnh do TOOL vừa tạo được ưu tiên (nó là thứ model vừa xin nhìn); không có thì giữ lại ảnh
   // người dùng đính vào lượt này, nếu không bước sau sẽ trả lời như thể chưa từng có ảnh nào.
   const seen = pendingVision.get(agentId) ?? anhCuaLuot.get(agentId); pendingVision.delete(agentId);
@@ -1974,6 +1988,7 @@ function continueAfterTool(agentId: string, history: PoolMessage[], toolName: st
   t.push(bubble); onUpdate(agentId);
   const controller = new AbortController();
   inflight.set(agentId, controller);
+  batLaiCoChay(agentId);
   // Ảnh do TOOL vừa tạo được ưu tiên (nó là thứ model vừa xin nhìn); không có thì giữ lại ảnh
   // người dùng đính vào lượt này, nếu không bước sau sẽ trả lời như thể chưa từng có ảnh nào.
   const seen = pendingVision.get(agentId) ?? anhCuaLuot.get(agentId); pendingVision.delete(agentId);

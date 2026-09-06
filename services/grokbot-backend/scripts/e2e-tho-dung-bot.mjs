@@ -36,25 +36,30 @@ if (!tho) { console.log("chạy `npx tsx scripts/dung-tho-dung-bot.mts` trước
 const skillTho0 = (await gw("getAgentWorkflows", { id: tho.id })) ?? [];
 ok("1 Thợ có skill Dựng bot mới", skillTho0.some((w) => w.name === TEN_SKILL), skillTho0.map((w) => w.name).join(" · "));
 
-const tail = async (id) => { const t = await gw("getAgentTranscriptTail", { id, limit: 100 }); return Array.isArray(t?.entries) ? t.entries : []; };
+const tail = async (id) => { const t = await gw("getAgentTranscriptTail", { id, limit: 300 }); return Array.isArray(t?.entries) ? t.entries : []; };
 /**
  * Chờ một LƯỢT: phải thấy bản ghi mọc (hoặc backend bận) rồi mới chờ rảnh. Bản đầu ngủ 3 s rồi hỏi `isBusy` — lượt do
  * `respondToWidget` kích chưa kịp bắt đầu, backend "rảnh", bài đo đọc mẫu ngay và báo đỏ (đo 06/09 lượt 4: lượt 2 "xong sau 3 s").
  */
-const choRanh = async (maxMs, id = tho?.id, soTruoc = 0) => {
+/**
+ * Tín hiệu đúng là cờ `isRunning` của CHÍNH bot trong roster (`listAgents`) — turn.ts bật nó cho mọi lượt, kể cả lượt do
+ * `respondToWidget` kích; còn `/gw/health.isBusy` chỉ đếm lượt qua `sendPrompt` (bảng theo dõi §7). Ba lượt đo 06/09 đỏ giả vì
+ * (a) đọc `isBusy`, (b) đếm `length` của đuôi có trần 100, (c) cửa sổ yên 8 s ngắn hơn khoảng nghĩ giữa hai tool của model.
+ * Nay: "bắt đầu" = bot `isRunning` HOẶC có entry mới của bot sau `idTruoc`; "xong" = không `isRunning` và không mọc entry 6 s.
+ */
+const dangChay = async (id) => ((await gw("listAgents", {})) ?? []).find((a) => a.id === id)?.isRunning === true;
+const moiSau = (ds, idTruoc) => { const i = ds.findIndex((e) => e.id === idTruoc); return i >= 0 ? ds.slice(i + 1) : ds; };
+const choRanh = async (maxMs, id = tho?.id, idTruoc = null) => {
   const t0 = Date.now();
-  let batDau = false, yen = 0, nTruoc = -1;
+  let batDau = false, yen = 0, cuoi = idTruoc;
   while (Date.now() - t0 < maxMs) {
-    const h = await health();
-    const ds = id ? await tail(id) : [];
-    // "Bắt đầu" = có entry MỚI do BOT viết (tin hoặc tool-call) — tin người dùng mà respondToWidget echo ngay không tính.
-    // Lượt 2 đo 06/09: echo tới sau 1 s, bot mới lên tiếng sau 12 s; đọc `isBusy` giữa khoảng ấy là thấy "rảnh".
-    // `isBusy` KHÔNG bật trong lượt do respondToWidget kích (đo 06/09: bot viết sau 10–12 s mà health "rảnh" suốt) — nên
-    // "bắt đầu" chỉ tính theo bản ghi, và "xong" = bản ghi đứng yên 8 s (+ health rảnh khi nó có bật).
-    if (!batDau) batDau = ds.slice(soTruoc).some((e) => e.kind === "tool-call" || (e.kind === "send-message" && e.author?.id === id));
-    else if (!h.isBusy) { yen = ds.length === nTruoc ? yen + 2000 : 0; if (yen >= 8000) return true; }
+    const chay = await dangChay(id);
+    const ds = await tail(id);
+    const moi = moiSau(ds, idTruoc);
+    const botViet = moi.some((e) => e.kind === "tool-call" || (e.kind === "send-message" && e.author?.id === id));
+    if (!batDau) batDau = chay || botViet;
+    else if (!chay) { const c = ds.at(-1)?.id ?? null; yen = c === cuoi ? yen + 2000 : 0; cuoi = c; if (yen >= 6000) return true; }
     else yen = 0;
-    nTruoc = ds.length;
     await sleep(2000);
   }
   return false;
@@ -72,12 +77,12 @@ const VIEC = [
 const MA = Math.random().toString(36).slice(2, 6).toUpperCase();
 const DAU = `@${TEN_SKILL} Mình cần một bot cho shop mã ${MA} — shop KHÁC các lần trước, dựng bot mới riêng, tên bot phải có chữ "${MA}". Trả lời sẵn ba câu: (1) lĩnh vực: vận hành shop online, việc chính là ${VIEC}; (2) người dùng là đội CS của shop, giọng ngắn gọn thân mật, tiếng Việt; (3) chạy theo đúng nhịp trong việc, không cần kết nối gì thêm ngoài những gì đang có. Ba câu đã trả lời rồi, không hỏi lại ba câu đó — dựng luôn.`;
 const soTruoc = roster0.length;
-const entryTruoc = (await tail(tho.id)).length;
+const entryTruoc = (await tail(tho.id)).at(-1)?.id ?? null;
 await gw("sendPrompt", { agentId: tho.id, content: DAU });
 const t0 = Date.now();
 const ranh1 = await choRanh(240_000, tho.id, entryTruoc);
 const ds1 = await tail(tho.id);
-console.log(`      lượt 1 xong sau ${((Date.now() - t0) / 1000).toFixed(0)}s · tool: ${inTool(ds1) || "(không có)"}`);
+console.log(`      lượt 1 xong sau ${((Date.now() - t0) / 1000).toFixed(0)}s · tool: ${inTool(moiSau(ds1, entryTruoc)) || "(không có)"}`);
 ds1.filter((e) => e.kind === "send-message" && e.author?.id === tho.id && e.message?.type !== "widget").slice(-3).forEach((e) => console.log("      BOT", String(e.message?.content ?? "").replace(/\s+/g, " ").slice(0, 150)));
 
 const roster1 = (await gw("listAgents", {})) ?? [];
@@ -104,9 +109,9 @@ try {
     const chon = (widget.message.widget.options.find((o) => /marketplace/i.test(o.label ?? o.value)) ?? {});
     await gw("respondToWidget", { agentId: tho.id, entryId: widget.id, value: chon.value ?? chon.label });
     const t1 = Date.now();
-    const ranh2 = await choRanh(180_000, tho.id, ds1.length);
+    const ranh2 = await choRanh(180_000, tho.id, ds1.at(-1)?.id ?? null);
     const ds2 = await tail(tho.id);
-    console.log(`      lượt 2 xong sau ${((Date.now() - t1) / 1000).toFixed(0)}s · tool: ${inTool(ds2.slice(ds1.length)) || "(không có)"}`);
+    console.log(`      lượt 2 xong sau ${((Date.now() - t1) / 1000).toFixed(0)}s · tool: ${inTool(moiSau(ds2, ds1.at(-1)?.id ?? null)) || "(không có)"}`);
     ds2.filter((e) => e.kind === "send-message" && e.author?.id === tho.id && e.message?.type !== "widget").slice(-1).forEach((e) => console.log("      BOT", String(e.message?.content ?? "").replace(/\s+/g, " ").slice(0, 200)));
     const tpl = await gw("getBotTemplateForSourceAgent", { sourceAgentId: botMoi.id });
     shareId = tpl?.shareId ?? null;
