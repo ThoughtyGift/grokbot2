@@ -832,6 +832,43 @@ export function resolveLocalToolPermission(a: { requestId?: string; entryId?: st
   }
   onUpdate(p.agentId); return { resolved: true };
 }
+
+/**
+ * Nút "Always allow" trên thẻ chạm máy — và vì sao nó phải đi qua ĐƯỜNG NÀY.
+ *
+ * Client 0.43 KHÔNG gọi `resolveLocalToolPermission` khi người dùng bấm nút ấy. Đo 07/09 bằng
+ * `coverage.lastArgs` trong một lượt thật: 15 lời gọi `setHostSettings`
+ * `{localToolPermission:"always", localToolPermissionMachineId:"<uuid>"}` và **0** lời gọi
+ * `resolveLocalToolPermission`. Tức thẻ là của client, còn câu trả lời đi bằng một cửa khác.
+ *
+ * Bên ta thì `standing === "always"` trơn cố ý KHÔNG mở cửa cho nhóm `CHAM_MAY_NGUOI_DUNG` (xem
+ * khối chú thích ở chỗ dựng thẻ: `always` cũ được bấm trong bối cảnh mọi lệnh chạy trên BOX). Hai
+ * quyết định ấy đều đúng ở chỗ đứng của chúng, và khoảng trống nằm GIỮA: thẻ nằm `pending` vĩnh
+ * viễn, mỗi lệnh sau lại chồng thêm một thẻ, và người dùng thấy đúng cái "bấm rồi mà treo mãi".
+ *
+ * Thứ lấp được khoảng trống mà không nới luật là `localToolPermissionMachineId`. Cài đặt mang mã
+ * MÁY là câu trả lời cho ĐÚNG máy đang hỏi, không phải một mức chung bấm từ hồi chỉ có box — nên
+ * nhận nó là nghe người dùng, không phải suy diễn thay họ. Thiếu mã máy thì đây chỉ là người dùng
+ * đổi mức trong Settings, và thẻ vẫn phải chờ họ bấm.
+ *
+ * Sống trong bộ nhớ tiến trình như `daChoPhepChamMay`: khởi động lại backend là hỏi lại từ đầu.
+ */
+export function apDungQuyenChamMay(a: { permission?: unknown; machineId?: unknown }): { resolved: number } {
+  const may = String(a.machineId ?? "").trim();
+  if (!may) return { resolved: 0 };
+  const muc = String(a.permission ?? "").trim();
+  const resolution = muc === "always" ? "always" : muc === "never" ? "never" : "";
+  if (!resolution) return { resolved: 0 };
+  let n = 0;
+  // `entries()` trả một mảng đã sao ra, nên gỡ thẻ trong vòng lặp là an toàn.
+  for (const [requestId, p] of pending.entries()) {
+    if (!CHAM_MAY_NGUOI_DUNG.has(String((p as { name?: string }).name ?? "").toLowerCase())) continue;
+    resolveLocalToolPermission({ requestId, resolution });
+    n++;
+  }
+  return { resolved: n };
+}
+
 export function resolveAutoReviewApproval(a: { requestId?: string; approved?: boolean }) {
   const p = findPending(a.requestId); if (!p) return {};
   pending.delete(p.requestId);

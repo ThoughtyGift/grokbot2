@@ -198,6 +198,25 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
        * `e.fields === undefined` and `.includes` throws inside the handler.
        */
       const fields = a && typeof a === "object" ? Object.keys(a as Record<string, unknown>) : [];
+      /*
+       * Cú bấm "Always allow" của thẻ chạm máy tới ĐÂY, không tới `resolveLocalToolPermission`.
+       *
+       * Client 0.43 vẽ thẻ hỏi "run commands on your local computer?" nhưng khi bấm nút thì nó chỉ
+       * ghi cài đặt kèm mã máy — đo 07/09 trong một lượt thật: 15 `setHostSettings`, 0
+       * `resolveLocalToolPermission`. Không nối hai đầu ở đây thì thẻ nằm `pending` mãi và mỗi lệnh
+       * sau lại chồng thêm một thẻ; người dùng thấy "bấm rồi mà treo".
+       *
+       * Chỉ nối khi patch MANG mã máy: đó là dấu hiệu người dùng vừa trả lời cho đúng máy đang hỏi,
+       * khác hẳn việc họ đổi mức chung trong Settings (runtime ta cố ý không coi `always` trơn là
+       * lời đồng ý cho máy thật — xem `apDungQuyenChamMay` trong runtime/turn.ts).
+       */
+      const patch = (a ?? {}) as { localToolPermission?: unknown; localToolPermissionMachineId?: unknown };
+      if (patch.localToolPermission != null && patch.localToolPermissionMachineId != null) {
+        runtime.applyLocalToolPermissionSetting?.({
+          permission: patch.localToolPermission,
+          machineId: patch.localToolPermissionMachineId,
+        });
+      }
       push("host-settings", { fields });
       return next;
     },

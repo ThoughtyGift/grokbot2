@@ -86,6 +86,14 @@ export interface RuntimePort {
   sendPrompt: Call;
   interruptAgentRun: Call;
   resolveLocalToolPermission: Call;
+  /**
+   * Câu trả lời quyền chạm máy đi bằng `setHostSettings`, không bằng lệnh trên.
+   *
+   * Client 0.43 bấm "Always allow" trên thẻ thì chỉ ghi cài đặt kèm `localToolPermissionMachineId`
+   * (đo 07/09: 15 lời gọi `setHostSettings`, 0 lời gọi `resolveLocalToolPermission`). Tuỳ chọn vì
+   * đây là chuyện của runtime ta, không phải một lệnh trong hợp đồng của hãng.
+   */
+  applyLocalToolPermissionSetting?: Call;
   resolveAutoReviewApproval: Call;
   respondToWidget: Call;
   submitSecret: Call;
