@@ -717,6 +717,10 @@ function runTool(
    * người bấm, và tắt presence. Nếu chỉ từ chối mà vẫn đi vào nhánh ấy thì bot IM — tệ hơn hẳn một
    * widget thừa. Nên câu chặn được trả về như kết quả của một tool THƯỜNG, và lượt chạy tiếp.
    */
+  // Khoá sinh ra để chặn "hỏi THAY VÌ học" (parity ca 3). Skill đã có thì lý do khoá hết — và hãng kết
+  // lượt dạy bằng widget mời chạy thử (*Dry run · Để sau*, 0-43-so-voi-local §8). Mở đúng lúc
+  // `create_workflow` chạy: trước đó ask_question vẫn bị chặn, sau đó widget cuối lượt đi qua như thường.
+  if (name === "create_workflow" && luotHocTuBanGhi.has(agentId)) luotHocTuBanGhi.delete(agentId);
   const chanHoi = name === "ask_question" && (luotHocTuBanGhi.has(agentId) || luotChiaSeMau.has(agentId));
   const goiTool = chanHoi
     ? async () => (luotChiaSeMau.has(agentId)

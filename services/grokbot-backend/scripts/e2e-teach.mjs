@@ -321,8 +321,14 @@ if (tinBanGiao) {
     const khop = Array.isArray(ds) && ds.some((w) => w?.id === linkSkill[2]);
     ok("id trong link là id skill thật (renderer so bằng)", khop, linkSkill[2]);
   }
-  const hoi = (await tail()).some((e) => e?.kind === "ask-question" || e?.kind === "question");
-  ok("bot KHÔNG hỏi lại (ask_question bị khoá trong lượt học)", !hoi);
+  // Khoá `ask_question` chỉ tới lúc `create_workflow` chạy: hãng kết bằng widget *Dry run · Để sau*, ta cũng vậy từ 06/09.
+  // Nên "hỏi lại" chỉ đỏ khi câu hỏi tới TRƯỚC khi skill có mặt.
+  const ents = await tail();
+  const laHoi = (e) => e?.kind === "ask-question" || e?.kind === "question";
+  const iSkill = ents.findIndex((e) => e?.kind === "tool-call" && e?.name === "create_workflow" && Number(e?.timestampMs ?? 0) >= tDung);
+  const hoiTruoc = ents.some((e, i) => laHoi(e) && Number(e?.timestampMs ?? 0) >= tDung && (iSkill < 0 || i < iSkill));
+  const hoiSau = iSkill >= 0 && ents.some((e, i) => laHoi(e) && i > iSkill);
+  ok("bot KHÔNG hỏi lại trước khi có skill (ask_question khoá tới create_workflow)", !hoiTruoc, hoiSau ? "kết bằng widget mời chạy thử — như hãng" : "kết bằng câu văn");
 } else {
   console.log("  ·    đường CŨ (không có video) — backend ghi routine + skill ngay");
   // Skill được ghi trong lượt `stopTeachRecording`, nhưng lượt đó cũng đi qua box (`finish()` gỡ

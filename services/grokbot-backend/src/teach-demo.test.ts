@@ -77,7 +77,9 @@ test("không có box thì không quay, và nói ra vì sao", async () => {
 test("mời chạy thử với giá trị trong demo, và KHÔNG tự chạy", () => {
   // App gốc kết ca học-từ-demo bằng đúng một câu: "Muốn chạy thử với nến thơm không?"
   assert.match(NOI_DUNG_SKILL, /[Mm]ời chạy thử/);
-  assert.match(NOI_DUNG_SKILL, /một câu, không widget/);
+  // Hãng kết lượt dạy bằng widget *Dry run · Để sau*; khoá `ask_question` của turn.ts mở khi `create_workflow` đã chạy.
+  assert.match(NOI_DUNG_SKILL, /Mời chạy thử[^\n]*bằng `ask_question`/);
+  assert.match(NOI_DUNG_SKILL, /SAU khi `create_workflow` đã chạy/);
   // Bài học vừa viết chưa ai kiểm; chạy ngay là hỏng việc trước khi người dùng kịp đọc nó.
   assert.match(NOI_DUNG_SKILL, /KHÔNG BAO GIỜ tự chạy skill vừa học/);
 });
