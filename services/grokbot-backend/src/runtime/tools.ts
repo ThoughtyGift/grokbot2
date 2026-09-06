@@ -90,11 +90,28 @@ const soatDieuHuong = async (arg: string, agentId: string): Promise<string | nul
   return `Chưa mở ${url}: trang này nằm ngoài phạm vi người dùng đã nhờ, đã đặt thẻ xin duyệt trong khung chat. Lý do: ${soat.lyDo}`;
 };
 
-const boiCanhGanNhat = (agentId: string): string => tail(agentId).slice(-6).map((e: Entry) => {
-  if (e.kind === "message") return `${e.role === "user" ? "NGƯỜI DÙNG" : "BOT"}: ${String(e.content ?? "").slice(0, 400)}`;
-  if (e.kind === "send-message" && e.message.type === "text") return `BOT: ${String(e.message.content ?? "").slice(0, 400)}`;
-  return "";
-}).filter(Boolean).join("\n");
+/**
+ * Bối cảnh đưa cho lớp tự soát: 6 DÒNG CHỮ gần nhất, và LUÔN kèm tin người dùng gần nhất.
+ *
+ * Bản cũ lấy 6 ENTRY cuối rồi mới lọc ra chữ. Đo 06/09 trên VPS (Thợ dựng bot): một lượt dựng là tin người dùng →
+ * ba câu tiến độ + ba tool-call → `create_routine`; sáu entry cuối toàn tool-call (lọc thành rỗng) và câu tiến độ,
+ * tin đầu *"shop Z05R … chạy mỗi tối 21h"* rơi ra ngoài. Người soát đọc một bối cảnh KHÔNG có lời người dùng nào và
+ * trả đúng như nó thấy — *"người dùng chưa hề đồng ý nhịp chạy"* — 3/4 routine ra thẻ duyệt dù đúng y yêu cầu.
+ * Lớp soát chỉ trả lời được câu "người dùng đã nhờ gì" khi được đưa câu người dùng nói; đây là sửa ĐẦU VÀO của nó,
+ * không nới luật. `boi-canh-soat.test.ts` khoá.
+ */
+export const boiCanhGanNhat = (agentId: string): string => {
+  const dong = (e: Entry): string => {
+    if (e.kind === "message") return `${e.role === "user" ? "NGƯỜI DÙNG" : "BOT"}: ${String(e.content ?? "").slice(0, 600)}`;
+    if (e.kind === "send-message" && e.message.type === "text") return `BOT: ${String(e.message.content ?? "").slice(0, 400)}`;
+    return "";
+  };
+  const ds = tail(agentId);
+  const chu = ds.filter((e) => dong(e) !== "").slice(-6);
+  const nguoiDung = [...ds].reverse().find((e) => e.kind === "message" && e.role === "user");
+  const ketHop = nguoiDung && !chu.includes(nguoiDung) ? [nguoiDung, ...chu] : chu;
+  return ketHop.map(dong).join("\n");
+};
 import { createAgent, createGroup, updateAgent, rosterChanged, ownerOf } from "../directory/index.js";
 import { createTemplateForAgent, publishBotTemplate, shareUrlOf, getBotTemplateForSourceAgent, stageTemplateForAgent, shareCardOf } from "../bot-templates.js";
 import { publishListing, CATEGORIES } from "../marketplace.js";
