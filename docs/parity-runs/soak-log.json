@@ -29,6 +29,15 @@
       "agents": 0,
       "counts": false,
       "why": "only +0 gateway calls (need 50)"
+    },
+    {
+      "date": "2026-09-06",
+      "at": "2026-09-06T12:31:45.527Z",
+      "patchOk": true,
+      "callsTotal": 135,
+      "callsDelta": 135,
+      "agents": 11,
+      "counts": true
     }
   ],
   "note": "A day counts only when the patch verifies AND the gateway served ≥ 50 calls since the previous recorded day. ROADMAP F7 needs 5."

@@ -24,7 +24,7 @@ app gốc.**
 | Bot tự dựng đội: description + phòng | 1 (nửa đầu) | ✅ **28/08** | `e2e-team-build.mjs` 5/5 |
 | Description vào lời nhắc hệ thống | nền của 1 và 2 | ✅ **28/08** | `prompt-persona.test.ts` |
 | Bot xem video, tự chấm đầu ra | 3L | ✅ **28/08** | `e2e-watch-video.mjs` 8/8 — clip đen: bot tự thấy 'đen tuyền, -91 dB'; clip testsrc: tả đúng dải màu |
-| Bot tự cài phần mềm trên box (OBS…) | 3 | ⬜ hạ tầng, làm sau 3L | — |
+| Bot tự cài phần mềm trên box (OBS…) | 3 | ✅ **theo lối ① (không root)** — bot tự tải + chạy OBS 32.2.2 AppImage, quay ra mp4 (bảng theo dõi §2 · §6 chặng 10); lối ② `install_app` qua sudo whitelist **không làm**, chưa có nhu cầu đo được | một lượt thật: bot bật OBS, quay, đo file, gửi clip |
 | Sơ đồ · mẫu bot · subagent soi media | mở rộng | ✅ **28/08** | `e2e-today.mjs` **9/9**: model TỰ gọi `create_diagram` (khối `flowchart`), TỰ gọi `share_bot_template` (mẫu chở 2 thành viên kèm SOP, dựng lại ra nhóm đủ người), và kể được tên `mediaReview` |
 | Lời nhắc "bộ não" gợi ý skill/MCP/plugin | 2 | ✅ **28/08** | `e2e-feature2` A1/A2 xanh; và đo **trong app thật**: bot rà danh mục, kể tên thật theo 3 nhóm, kết thúc bằng widget A–F + ô tự gõ |
 | Chạy lại kịch bản B2 (24 case) | khép vòng | 🟡 **lần 3: 28/08** | qua CỔNG: trả lời **24/24**, widget 1/5, thẻ quyền 0/2 (`b2-replay-2026-08-28-10-50.md`). Bốn case widget còn lại là **khoảng trống danh mục**, không phải hành vi. Trong APP: `app-replay-b2.mjs` đang chạy lần đầu |

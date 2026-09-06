@@ -1,7 +1,13 @@
 # Multi-tenant roadmap — grokbot2
 
 **Ngày:** 2026-08-22
-**Trạng thái:** Phase 1 đang triển khai (owner_id + backfill). Phần còn lại: kế hoạch.
+**Trạng thái (cập nhật 06/09/2026):** các ô `[ ]` bên dưới **không được tick lúc làm** — đọc chúng như bản kế hoạch gốc,
+không phải tiến độ. Tiến độ thật ở [bảng theo dõi](../state/bang-theo-doi.md): Phase 1–5 **đã lên** (owner_id trong
+`store.ts`; roster/transcript lọc theo chủ; SSE theo chủ ở cả `sse.ts` lẫn `native.ts`; login web + hash + throttle;
+billing `enforce` từ 02/09) và Phase 6 phần lớn (MCP theo chủ, box 30 tài khoản OS). Bằng chứng chạy được:
+`e2e-hai-tai-khoan.mjs` 20/20 (người B không thấy/không xoá được của A). **Còn mở duy nhất:** "cô lập turn/inflight theo
+user" (Phase 6) — `inflight` vẫn khoá theo `agentId`, chưa có trần theo chủ. Dòng cũ ở đây ("Phase 1 đang triển khai") đã
+sai từ cuối 08/2026.
 **Mục tiêu:** biến grokbot2 từ "một kho dùng chung, một user giả" thành **đa người dùng thật** —
 mỗi người một tài khoản, dữ liệu riêng, login riêng, billing riêng.
 **Nền tái dùng:** billing infra (commit `59ee062`) + `userFromToken` + `withDb` dùng lại nguyên.

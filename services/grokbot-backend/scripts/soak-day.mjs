@@ -77,7 +77,19 @@ if (STATUS_ONLY) {
 
 // ── the two things a soak day has to prove ────────────────────────────────────
 
-const patch = spawnSync(process.execPath, [join(REPO, "infra", "scripts", "patch-client.mjs"), "--verify"], { encoding: "utf8" });
+/*
+ * Kiểm ĐÚNG bản đang dùng, không phải đường mặc định của patch-client (`Programs\Grok Bot` — đã bị bộ cài 0.29 của
+ * hãng chiếm rồi xoá từ 27/08). Đo 06/09: sổ soak ghi "patch BROKEN" cho một bản cài `Programs\Bot Noi Bo` vừa
+ * `--verify` xanh qua run.ps1 — cùng lỗi run.ps1 đã sửa 05/09 (bảng theo dõi §7 "run.ps1 chết theo ba cách"). Danh
+ * sách ứng viên chép y run.ps1; `GROKBOT2_CLIENT_DIR` đặt sẵn thì thắng.
+ */
+const LAPP = process.env.LOCALAPPDATA ?? "";
+const ungVien = [
+  join(LAPP, "Programs", "Grok Bot"), join(LAPP, "Programs", "Bot Noi Bo"), "C:\\cai", join(LAPP, "Bot Noi Bo"),
+];
+const clientDir = process.env.GROKBOT2_CLIENT_DIR ?? ungVien.find((d) => existsSync(join(d, "Grok Bot.exe")));
+const patch = spawnSync(process.execPath, [join(REPO, "infra", "scripts", "patch-client.mjs"), "--verify"],
+  { encoding: "utf8", env: { ...process.env, ...(clientDir ? { GROKBOT2_CLIENT_DIR: clientDir } : {}) } });
 const patchOk = patch.status === 0;
 if (!patchOk) {
   console.log(patch.stdout?.split("\n").filter((l) => /FAIL|problem/.test(l)).join("\n") || "(patch verify failed)");
@@ -89,7 +101,8 @@ const callsTotal = cov ? Object.values(cov.calls ?? {}).reduce((n, v) => n + (v.
 const agents = await gw("listAgents", {});
 const list = Array.isArray(agents) ? agents : (agents?.agents ?? []);
 
-const today = new Date().toISOString().slice(0, 10);
+// Ngày theo GIỜ MÁY: `toISOString()` trước 07:00 sáng (UTC+7) ra ngày hôm qua — bẫy phat-hanh/patch-client đã trả giá 06/09.
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
 const prev = log.days.filter((d) => d.date !== today).at(-1);
 /**
  * The gateway counter is cumulative and survives restarts, but not a wiped `.data`. A reset makes
