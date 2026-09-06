@@ -147,9 +147,27 @@ if (pkgApp && existsSync(pkgApp)) {
   nen = JSON.parse(readFileSync(STATE, "utf8")).clientVersion ?? "0.0.0"; nguonNen = STATE;
 }
 console.log(`  nền client đọc từ: ${nguonNen}`);
-const [maj, min] = String(nen).split(".");
-const version = `${maj}.${min}.${stamp}`;
-console.log(`  nền client: ${nen} → phiên bản phát hành: ${version}`);
+/*
+ * Có cây app (`--with-app`) thì số phiên bản là CHÍNH số trong `package.json` của nó — thứ launcher sẽ khai — không phải
+ * nền + ngày tên file. Đo 06/09: hai nguồn lệch một ngày (`0.43.20260906` manifest / `0.43.20260905` bundle) và mọi máy
+ * đã cập nhật tải lại 106 MB mỗi 24 h. Xem `phienBanTuBundle` trong update-feed.ts; manifest trên VPS đã sửa tay về
+ * `0.43.20260905` hôm ấy. Không có cây app (gói cấu hình 50 KB) thì vẫn nền + ngày như cũ — client của người dùng được
+ * `patch-client` đóng dấu đúng ngày cài, không có số nào để đọc trước.
+ */
+let version;
+if (pkgApp && existsSync(pkgApp)) {
+  const { phienBanTuBundle } = await import(join(REPO, "services/grokbot-backend/src/update-feed.ts").replace(/\\/g, "/"))
+    .catch(async () => await import("../src/update-feed.js"));
+  let kq;
+  try { kq = phienBanTuBundle(nen, stamp); } catch (e) { console.error(`✘ ${e instanceof Error ? e.message : e}`); process.exit(1); }
+  version = kq.version;
+  if (kq.luuY) console.log(`  ⚠ ${kq.luuY}`);
+  console.log(`  bundle khai: ${nen} → phiên bản phát hành: ${version} (đọc từ bundle, không tính)`);
+} else {
+  const [maj, min] = String(nen).split(".");
+  version = `${maj}.${min}.${stamp}`;
+  console.log(`  nền client: ${nen} → phiên bản phát hành: ${version}`);
+}
 
 // ── 4 · ghi manifest ───────────────────────────────────────────────────────────────────────────
 buoc(4, `ghi manifest — kênh ${KENH}`);

@@ -514,7 +514,10 @@ ${chk.stderr}`); process.exit(1); }
    * lấy ngày hôm nay: một lần vá thủ công trên máy dev vẫn cần một số để khai, và ngày hôm nay là
    * số đúng nhất có thể biết ở đây.
    */
-  const stamp = (process.env.GROKBOT2_RELEASE_STAMP ?? new Date().toISOString().slice(0, 10).replace(/-/g, "")).trim();
+  // Ngày theo GIỜ MÁY, không UTC: `toISOString()` lúc 03:38 sáng (UTC+7) ra ngày HÔM QUA — cùng bẫy phat-hanh.mjs đã
+  // trả giá 06/09 (bảng theo dõi §7), và số này chính là số launcher khai với feed.
+  const homNay = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; })();
+  const stamp = (process.env.GROKBOT2_RELEASE_STAMP ?? homNay).trim();
   if (!/^\d{8}$/.test(stamp)) { console.error(`FAIL GROKBOT2_RELEASE_STAMP phai la YYYYMMDD, nhan duoc: ${stamp}`); process.exit(1); }
   // `gb2Base` ghi MỘT LẦN: lần vá thứ hai không được lấy số đã đóng dấu làm nền.
   if (pkg.gb2Base === undefined) { pkg.gb2Base = pkg.version; doiPkg = true; }

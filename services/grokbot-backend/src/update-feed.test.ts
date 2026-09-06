@@ -278,3 +278,22 @@ test("`full.url` được dùng khi có — vì `stable.url` nay trỏ cửa c�
   assert.equal(b?.url, "https://x/download/windows?k=bi-mat");
   assert.equal(b?.sha256hash, "hash-full");
 });
+
+// ── phienBanTuBundle: manifest chép số của bundle, không tính (06/09, vòng tải lại 106 MB mỗi ngày) ──
+const { phienBanTuBundle } = await import("./update-feed.js");
+
+test("bundle đóng dấu đúng ngày tên gói → manifest = số bundle, không lưu ý", () => {
+  assert.deepEqual(phienBanTuBundle("0.43.20260906", "20260906"), { version: "0.43.20260906" });
+});
+
+test("bundle đóng dấu ngày KHÁC tên gói → manifest theo BUNDLE (số launcher khai) và nói ra", () => {
+  const kq = phienBanTuBundle("0.43.20260905", "20260906");
+  assert.equal(kq.version, "0.43.20260905", "đây là ca thật 06/09: theo tên file là tự dựng vòng lặp");
+  assert.match(String(kq.luuY), /20260905/);
+  assert.equal(moiHon(kq.version, "0.43.20260905"), false, "máy đã cài bản này phải nhận 204");
+});
+
+test("bundle chưa đóng dấu (0.43.0 của hãng) → từ chối phát, câu lỗi chỉ đúng lệnh", () => {
+  assert.throws(() => phienBanTuBundle("0.43.0", "20260906"), /patch-client --apply/);
+  assert.throws(() => phienBanTuBundle("", "20260906"));
+});

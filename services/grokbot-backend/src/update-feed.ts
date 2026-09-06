@@ -106,6 +106,27 @@ export function moiHon(a: string, b: string): boolean {
   return false;
 }
 
+/**
+ * Số phiên bản ghi vào manifest = số launcher SẼ KHAI sau khi cài — đọc từ `package.json` của bundle, KHÔNG tính.
+ *
+ * Đo 06/09 trên chính máy dev sau khi cập nhật 0.29 → 0.43: manifest ghi `0.43.20260906` (nền `0.43` + ngày trong TÊN
+ * FILE bộ cài), còn `package.json` trong bundle khai `0.43.20260905` (ngày `patch-client --apply` đóng dấu vào `C:\cai043`
+ * hôm trước) ⇒ `moiHon("0.43.20260906","0.43.20260905")` = true ⇒ máy vừa cập nhật vẫn nhận 200 và tải lại 106 MB mỗi
+ * 24 h, mãi mãi, không lỗi nào nổi lên. Hai nguồn cho một con số thì lệch nhau đúng lúc không ai nhìn. Nguồn duy nhất
+ * đúng là cái file launcher đọc; manifest chép nó. Chưa đóng dấu ngày (vd `0.43.0` của hãng) thì từ chối: phát bản ấy
+ * là launcher khai `0.43.0` < mọi manifest ⇒ cùng vòng lặp.
+ */
+export function phienBanTuBundle(pkgVersion: string, stampTenGoi: string): { version: string; luuY?: string } {
+  const v = String(pkgVersion ?? "").trim();
+  const m = /^(\d+)\.(\d+)\.(\d{8})$/.exec(v);
+  if (!m) {
+    throw new Error(`package.json của cây client khai "${v}" — chưa có dấu ngày <nền>.<YYYYMMDD>. Chạy patch-client --apply (GROKBOT2_RELEASE_STAMP=${stampTenGoi}) lên cây ấy rồi đóng gói lại; phát bản này là launcher tải lại mỗi 24 h.`);
+  }
+  return m[3] === stampTenGoi
+    ? { version: v }
+    : { version: v, luuY: `bundle khai ${v} nhưng tên gói mang ngày ${stampTenGoi} — manifest theo BUNDLE (số launcher khai); tên file chỉ là tên file.` };
+}
+
 export interface KetQua {
   status: 204 | 200 | 400;
   body?: BanPhatHanh;
