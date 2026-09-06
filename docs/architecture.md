@@ -56,8 +56,12 @@ graph TB
     proto["packages/grokbot-proto<br/>10 RPC bootstrap"]
     pool["Claude pool"]
 
+    daemon["daemon local-exec<br/>đi kèm client, chạy trên máy người dùng"]
+
     app -->|protobuf| proto
     app -->|"/gw/api"| acl
+    app -.- daemon
+    daemon -->|"SSE /gw/local-exec"| bff
     web -->|"/v1"| bff
     proto --> bff
     acl --> bff
@@ -68,6 +72,12 @@ graph TB
     rt --> pool
     comp -->|"exec · VNC"| box2["Box Linux"]
 ```
+
+Hai "máy tính" khác nhau, và bot phân biệt được: **box** là máy của bot (Linux, vứt đi được, tool
+`run_terminal_command_v2`…), còn **máy người dùng** là máy Windows họ đang ngồi — daemon local-exec
+của chính client treo một luồng SSE vào backend và chạy 5 việc (`local_shell` · `local_read` ·
+`local_write` · `local_shell_bg` · `local_browser`) trong thư mục người dùng, mỗi việc một thẻ xin
+phép. Chi tiết: [extracted/tool-doi-chieu.md §2b](extracted/tool-doi-chieu.md).
 
 `cursor-acl` và `grokbot-proto` là **lõi vĩnh viễn**, không phải adapter tạm — đảo hướng
 2026-08-20 làm chúng thành đường sản xuất duy nhất của app hãng. Mọi comment nào nói "Phase 8 xoá
@@ -181,11 +191,71 @@ một chỗ thì lúc process kia chết sẽ treo vô hạn — `e2e-computer-d
 
 ## Triển khai — process nào nghe cổng nào, ai ghi dữ liệu
 
+Hai bố cục, vì chúng KHÁC nhau ở đúng chỗ dễ nhầm: trên VPS backend là **một** tiến trình; bốn
+tiến trình 8788–8791 chỉ có ở máy dev (`pnpm backend`). Số đọc từ máy thật ngày 06/09/2026
+(`systemctl list-units`, `ss -ltnp`, `sites-enabled/cinai-app`).
+
+### Sản xuất — VPS `103.75.186.63`, một máy chứa cả backend lẫn box
+
+```mermaid
+graph LR
+    subgraph user["Máy người dùng (Windows, bất kỳ)"]
+        app["Grok Bot.exe đã vá<br/>Programs\\Bot Noi Bo<br/>launcher start-bot.cmd"]
+        daemon["daemon local-exec<br/>(trong client, main.cjs)<br/>gốc %USERPROFILE%, terminals/"]
+        lchrome["Chrome riêng của bot<br/>:9333"]
+        app -.- daemon
+        daemon -.->|"local_browser"| lchrome
+    end
+
+    cf["Cloudflare Tunnel<br/>cinai.app · *.halcion.vn"]
+
+    subgraph vps["VPS 103.75.186.63"]
+        nginx["nginx :443<br/>site cinai-app"]
+        subgraph be["grokbot2-be.service — MỘT tiến trình"]
+            bff["tsx src/index.ts<br/>127.0.0.1:8788<br/>auth · bootstrap · /gw · /v1 · trang tải · feed"]
+        end
+        data[("/opt/grokbot2/shared/data<br/>grokbot.sqlite (+WAL) · bot-templates<br/>box-secrets · attachments · dist/ · phat-hanh.json<br/>gateway-token.txt · jwt-secret.txt")]
+        rel["/opt/grokbot2/releases/&lt;stamp&gt;<br/>current → bản đang chạy<br/>bin/deploy.sh · rollback.sh"]
+        subgraph boxx["Box — cùng máy"]
+            router["grok-exec.service<br/>exec-router.mjs 127.0.0.1:1337<br/>GROKBOT2_PER_USER=1"]
+            d3["exec-daemon gb2uNNN<br/>127.0.0.1:13400+N<br/>30 tài khoản từ /etc/passwd"]
+            subgraph disp["màn :77 (grok-*-77.service)"]
+                xvfb["Xvfb · wm · picom · dock"]
+                bchrome["google-chrome<br/>CDP :9224 (SwiftShader)<br/>:9223 bản cũ"]
+            end
+            vnc["x11vnc 127.0.0.1:5977<br/>→ websockify :7077<br/>grokbot2-vnc-grokbox.service"]
+        end
+    end
+
+    pool["Pool Claude<br/>admin.halcion.vn/v1/claude"]
+
+    app -->|"https://cinai.app/agent/…<br/>proto · /gw/api · SSE"| cf --> nginx
+    daemon -->|"GET /gw/local-exec/requests (SSE)<br/>POST /gw/local-exec/responses"| cf
+    nginx -->|"/agent/ → :8788/ (cắt tiền tố)<br/>/oauth/token · /auth/* · /loginDeepControl · /aiserver.v1.* → :8788<br/>/tai/ → 301 /agent/"| bff
+    nginx -->|"/flowvnc-grokbox/"| vnc
+    bff --> data
+    bff -.- rel
+    bff -->|"admin.halcion.vn/grok-exec/*"| router
+    router -->|"cấp + chuyển lệnh"| d3
+    d3 --> bchrome
+    d3 --> xvfb
+    vnc --> xvfb
+    bff -->|"/v1/claude"| pool
+```
+
+Đường đi của một lệnh trên **máy người dùng**: bot (trong `bff`) xếp khung vào hàng đợi trong bộ
+nhớ → daemon đang treo SSE nhận `{kind:"exec"|"upload"}` → chạy trong `localRoot` → `POST
+…/responses`. Hàng đợi ấy sống trong TIẾN TRÌNH backend, nên chỉ backend đang giữ luồng SSE mới
+nói được với máy đó (`local-exec.ts`). Trên VPS mọi máy người dùng đều treo vào cùng tiến trình
+:8788 — đúng như cần.
+
+### Máy dev — bốn tiến trình, client cắm thẳng
+
 ```mermaid
 graph LR
     subgraph win["Máy Windows của chủ máy"]
-        app["Grok Bot.exe<br/>CDP :9222"]
-        vite["Vite :5173<br/>bind 127.0.0.1"]
+        app["Grok Bot.exe đã vá<br/>0.43 ở Programs\\Bot Noi Bo — CDP :9222<br/>0.43 dev ở C:\\cai043 — CDP :9225"]
+        vite["Vite :5173<br/>bind 127.0.0.1 (fallback UI)"]
         subgraph node["pnpm backend — 4 process node"]
             bff["BFF :8788<br/>DUY NHẤT ghi SQLite"]
             rt["runtime :8789<br/>DUY NHẤT gọi pool"]
@@ -196,7 +266,7 @@ graph LR
         patched["resources/app<br/>bản patch, app.asar dời sang một bên"]
     end
     pool["admin.halcion.vn"]
-    box["Box Linux — Xvfb · x11vnc · exec daemon"]
+    box["Box trên VPS — qua admin.halcion.vn/grok-exec/"]
 
     app --> bff
     vite --> bff
@@ -209,14 +279,18 @@ graph LR
     app -.- patched
 ```
 
-Bốn điều bất biến đáng nhớ, vì mỗi cái đã từng là một sự cố:
+Những điều bất biến đáng nhớ, vì mỗi cái đã từng là một sự cố:
 
-| Bất biến | Sai thì sao | Runbook |
+| Bất biến | Sai thì sao | Ở đâu |
 |---|---|---|
-| **Chỉ BFF ghi SQLite** | hai process ghi cùng lúc thì `seq` va nhau | — |
-| Mỗi process **một cổng riêng**, 8788–8791 | tiến trình rò rỉ chiếm cổng và chạy dữ liệu fixture | [runbooks/wrong-bots-in-roster.md](runbooks/wrong-bots-in-roster.md) |
+| **Chỉ backend ghi SQLite** (dev: BFF; VPS: tiến trình duy nhất) | hai process ghi cùng lúc thì `seq` va nhau | — |
+| Mỗi process **một cổng riêng**, 8788–8791 (dev) | tiến trình rò rỉ chiếm cổng và chạy dữ liệu fixture | [runbooks/wrong-bots-in-roster.md](runbooks/wrong-bots-in-roster.md) |
 | Vite bind **`127.0.0.1`**, không phải `localhost` | trên Windows `localhost` ra `::1` trước, `127.0.0.1` bị từ chối | [runbooks/ipv4-refused.md](runbooks/ipv4-refused.md) |
 | App boot từ **`resources/app`**, `app.asar` phải dời sang một bên | `app.asar` thắng thứ tự nạp → boot bản hãng, patch vô tác dụng | [runbooks/patch-half-applied.md](runbooks/patch-half-applied.md) |
+| `deploy.sh` **không đụng `shared/`**; gói + manifest phát hành lên bằng `phat-hanh.mjs` | deploy xong mà feed vẫn phát gói cũ, không cửa sức khoẻ nào kêu | [state/bang-theo-doi.md §7](state/bang-theo-doi.md) "BỐN cổng cùng chặn" |
+| Manifest lên **SAU** gói, và số manifest là bản chép của số bundle | launcher tải lại 106 MB mỗi 24 h, hoặc so hash trượt rồi bỏ cập nhật mãi | bảng theo dõi §7 "hai nguồn cho một số phiên bản" |
+| Mỗi mắt trong chuỗi VNC có **một unit systemd** sở hữu | `x11vnc` chết segfault một lần là khung "màn hình của bot" chết mãi | bảng theo dõi §7 "`-forever`" |
+| Dải tài khoản box đọc từ **`/etc/passwd`**, không từ env/drop-in | danh sách sống hai nơi thì cái mình đọc là cái cũ | bảng theo dõi §6 mục 26 |
 
 ## The seam
 

@@ -70,9 +70,9 @@ không có file nào cầm tay một người mới từ `git clone` tới "chat
 - [x] **T1.2** [adr/README.md](../adr/README.md) — **một mục lục cho cả hai chỗ ở**, 20 ADR kèm trạng thái đọc thẳng từ file gộp: 18 ✅ · 1 ⚠️ (P7-1, mệnh đề cutover đã bị thay) · 1 ⛔ (P0-4). **Không tách file** — xem ghi chú ở trên về lời phê sai.
 
 ### T2 — sơ đồ thiết kế (chặng Design)
-- [ ] T2.1 C4 mức 1 + mức 2 bằng Mermaid, đặt trong [architecture.md](../architecture.md)
-- [ ] T2.2 Ba sequence diagram: gửi tin · tool call xin phép · handoff box
-- [ ] T2.3 Sơ đồ triển khai: process nào nghe cổng nào, ai ghi SQLite
+- [x] T2.1 C4 mức 1 + mức 2 bằng Mermaid, đặt trong [architecture.md](../architecture.md) — **có từ 25/08** (`0d9cfef`), ô này quên tick; 06/09 thêm nhánh daemon local-exec trên máy người dùng vào mức 2
+- [x] T2.2 Ba sequence diagram: gửi tin · tool call xin phép · handoff box — **có từ 25/08**, mục "Ba luồng quan trọng (C4 dynamic)"
+- [x] T2.3 Sơ đồ triển khai: process nào nghe cổng nào, ai ghi SQLite — bản 25/08 tả máy dev; **06/09 vẽ lại theo máy thật**: VPS (Cloudflare Tunnel → nginx `cinai-app` → `grokbot2-be` MỘT tiến trình :8788 → `shared/data`; router box :1337 → daemon `gb2uNNN` :13400+N; màn :77 Xvfb · Chrome :9224 · x11vnc 5977 · websockify 7077) + máy người dùng (daemon local-exec SSE) + máy dev (4 tiến trình). Bảng bất biến thêm 4 dòng từ các sự cố 03–06/09
 
 ### T3 — hợp đồng API thành nguồn sự thật — ✅ xong 2026-08-22
 
