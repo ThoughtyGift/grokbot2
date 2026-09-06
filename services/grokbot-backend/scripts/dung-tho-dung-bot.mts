@@ -32,8 +32,12 @@ const ngoai = (moTa: string, ...args: string[]): J => JSON.parse(execFileSync("n
 // 1 · bot
 const roster: J[] = (await gw("listAgents")) ?? [];
 let bot = roster.find((a) => a.name === TEN_THO);
-if (bot) console.log(`bot đã có: ${bot.id}`);
-else {
+if (bot) {
+  // SOP đổi trong mã (06/09: thêm luật "≥ 2 skill, kết bằng widget") thì bot đã có cũng phải nhận — description là lời nhắc hệ thống.
+  const muon = `${MO_TA_THO}\n\n${SOP_THO}`;
+  if (bot.description !== muon) { await gw("updateAgent", { id: bot.id, description: muon }); console.log(`bot đã có: ${bot.id} — cập nhật SOP`); }
+  else console.log(`bot đã có: ${bot.id}`);
+} else {
   // Mô tả kiểu thẻ đứng TRƯỚC (thẻ Marketplace cắt vài dòng đầu), SOP theo sau — cả hai cùng vào lời nhắc hệ thống.
   bot = (await gw("createAgent", { name: TEN_THO, description: `${MO_TA_THO}
 

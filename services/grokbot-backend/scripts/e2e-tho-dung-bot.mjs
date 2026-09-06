@@ -37,14 +37,45 @@ const skillTho0 = (await gw("getAgentWorkflows", { id: tho.id })) ?? [];
 ok("1 Thợ có skill Dựng bot mới", skillTho0.some((w) => w.name === TEN_SKILL), skillTho0.map((w) => w.name).join(" · "));
 
 const tail = async (id) => { const t = await gw("getAgentTranscriptTail", { id, limit: 100 }); return Array.isArray(t?.entries) ? t.entries : []; };
-const choRanh = async (maxMs) => { const t0 = Date.now(); await sleep(3000); while (Date.now() - t0 < maxMs) { if (!(await health()).isBusy) return true; await sleep(2000); } return false; };
+/**
+ * Chờ một LƯỢT: phải thấy bản ghi mọc (hoặc backend bận) rồi mới chờ rảnh. Bản đầu ngủ 3 s rồi hỏi `isBusy` — lượt do
+ * `respondToWidget` kích chưa kịp bắt đầu, backend "rảnh", bài đo đọc mẫu ngay và báo đỏ (đo 06/09 lượt 4: lượt 2 "xong sau 3 s").
+ */
+const choRanh = async (maxMs, id = tho?.id, soTruoc = 0) => {
+  const t0 = Date.now();
+  let batDau = false, yen = 0, nTruoc = -1;
+  while (Date.now() - t0 < maxMs) {
+    const h = await health();
+    const ds = id ? await tail(id) : [];
+    // "Bắt đầu" = có entry MỚI do BOT viết (tin hoặc tool-call) — tin người dùng mà respondToWidget echo ngay không tính.
+    // Lượt 2 đo 06/09: echo tới sau 1 s, bot mới lên tiếng sau 12 s; đọc `isBusy` giữa khoảng ấy là thấy "rảnh".
+    // `isBusy` KHÔNG bật trong lượt do respondToWidget kích (đo 06/09: bot viết sau 10–12 s mà health "rảnh" suốt) — nên
+    // "bắt đầu" chỉ tính theo bản ghi, và "xong" = bản ghi đứng yên 8 s (+ health rảnh khi nó có bật).
+    if (!batDau) batDau = ds.slice(soTruoc).some((e) => e.kind === "tool-call" || (e.kind === "send-message" && e.author?.id === id));
+    else if (!h.isBusy) { yen = ds.length === nTruoc ? yen + 2000 : 0; if (yen >= 8000) return true; }
+    else yen = 0;
+    nTruoc = ds.length;
+    await sleep(2000);
+  }
+  return false;
+};
 const inTool = (ds) => ds.filter((e) => e.kind === "tool-call").map((e) => `${e.name}:${e.status}`).join(" · ");
 
-const DAU = `@${TEN_SKILL} Mình cần một bot theo dõi đơn hoàn Shopee. Trả lời sẵn ba câu: (1) lĩnh vực: vận hành shop Shopee, việc chính là mỗi sáng gom danh sách đơn yêu cầu hoàn/trả trong ngày, phân loại lý do, soạn câu trả lời cho khách; (2) người dùng là đội CS của shop, giọng ngắn gọn thân mật, tiếng Việt; (3) chạy 8:30 sáng thứ 2 đến thứ 6, không cần kết nối gì thêm ngoài những gì đang có. Không hỏi lại — dựng luôn.`;
+// Mỗi lần chạy một VIỆC khác và một mã shop riêng: bản ghi của Thợ giữ ký ức các lượt trước (bot thử thì đã xoá), nên cùng một
+// yêu cầu lặp lại là bot nói "đã dựng rồi, không tạo trùng" — đúng hành vi, sai bài đo (đo 06/09 lượt 3).
+const VIEC = [
+  "mỗi sáng gom danh sách đơn yêu cầu hoàn/trả Shopee trong ngày, phân loại lý do, soạn câu trả lời cho khách",
+  "mỗi tối gom bình luận dưới các video TikTok Shop trong ngày, tách câu hỏi mua hàng khỏi khen/chê, soạn câu trả lời",
+  "mỗi sáng thứ 2 lập lịch livestream tuần, nhắc chuẩn bị kịch bản và mã giảm giá trước mỗi phiên",
+  "mỗi chiều đối soát đơn đã giao với sổ thu tiền COD, chỉ ra đơn lệch và soạn tin hỏi đơn vị vận chuyển",
+][Math.floor(Date.now() / 1000) % 4];
+const MA = Math.random().toString(36).slice(2, 6).toUpperCase();
+const DAU = `@${TEN_SKILL} Mình cần một bot cho shop mã ${MA} — shop KHÁC các lần trước, dựng bot mới riêng, tên bot phải có chữ "${MA}". Trả lời sẵn ba câu: (1) lĩnh vực: vận hành shop online, việc chính là ${VIEC}; (2) người dùng là đội CS của shop, giọng ngắn gọn thân mật, tiếng Việt; (3) chạy theo đúng nhịp trong việc, không cần kết nối gì thêm ngoài những gì đang có. Ba câu đã trả lời rồi, không hỏi lại ba câu đó — dựng luôn.`;
 const soTruoc = roster0.length;
+const entryTruoc = (await tail(tho.id)).length;
 await gw("sendPrompt", { agentId: tho.id, content: DAU });
 const t0 = Date.now();
-const ranh1 = await choRanh(240_000);
+const ranh1 = await choRanh(240_000, tho.id, entryTruoc);
 const ds1 = await tail(tho.id);
 console.log(`      lượt 1 xong sau ${((Date.now() - t0) / 1000).toFixed(0)}s · tool: ${inTool(ds1) || "(không có)"}`);
 ds1.filter((e) => e.kind === "send-message" && e.author?.id === tho.id && e.message?.type !== "widget").slice(-3).forEach((e) => console.log("      BOT", String(e.message?.content ?? "").replace(/\s+/g, " ").slice(0, 150)));
@@ -73,7 +104,7 @@ try {
     const chon = (widget.message.widget.options.find((o) => /marketplace/i.test(o.label ?? o.value)) ?? {});
     await gw("respondToWidget", { agentId: tho.id, entryId: widget.id, value: chon.value ?? chon.label });
     const t1 = Date.now();
-    const ranh2 = await choRanh(180_000);
+    const ranh2 = await choRanh(180_000, tho.id, ds1.length);
     const ds2 = await tail(tho.id);
     console.log(`      lượt 2 xong sau ${((Date.now() - t1) / 1000).toFixed(0)}s · tool: ${inTool(ds2.slice(ds1.length)) || "(không có)"}`);
     ds2.filter((e) => e.kind === "send-message" && e.author?.id === tho.id && e.message?.type !== "widget").slice(-1).forEach((e) => console.log("      BOT", String(e.message?.content ?? "").replace(/\s+/g, " ").slice(0, 200)));

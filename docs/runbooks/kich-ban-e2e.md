@@ -34,8 +34,9 @@ Thứ tự: rẻ trước (0 lượt model), đắt sau; bài bấm thật trên
 | 7 | share-as-template trên client | `node services/grokbot-backend/scripts/e2e-chia-se-mau.mjs` | bấm THẬT menu header: share → Publish → Update → Publish 2 → View Details → Delete, 7 mốc | 2 (vào bot đang mở) | — nếu xanh; đỏ giữa chừng ⇒ dọn bằng menu **Delete Template của client**, không qua gateway (§7) |
 | 8 | teach a task | `CDP_APP=http://127.0.0.1:9225 CDP_BOX=http://127.0.0.1:9224 node services/grokbot-backend/scripts/e2e-teach.mjs` | `+` → Teach → Start → demo → Stop → tin bàn giao (≤45 s) → skill + link `sand-workflow:<id>` (≤5 phút), 15 mốc | 1 (dài) | skill thử — xoá qua `deleteAgentWorkflow{workflowId}` |
 | 9 | bản ghi sống | `node services/grokbot-backend/scripts/do-ban-ghi-song.mjs` | bot thử, một câu 25 dòng: đếm lượt `getAgentTranscriptTail` trong lúc gõ (mốc 06/09: **5**, trước sửa 38), DOM mọc chữ, replica đĩa có `epochHint` | 1 | — |
+| 10 | Thợ dựng bot | `node services/grokbot-backend/scripts/e2e-tho-dung-bot.mjs` | `@Dựng bot mới` → bot mới + ≥ 2 skill đúng bot + routine → widget → publish → listing, 7 mốc | 2 | — (cần `dung-tho-dung-bot.mts` đã chạy) |
 
-Tổng ~10 lượt model, ~15–20 phút nếu không có gì đỏ.
+Tổng ~12 lượt model, ~20–25 phút nếu không có gì đỏ. Hạn mức pool là cửa sổ theo phiên của tài khoản Claude sau pool và dùng chung dev/VPS: bot trả lời *"You've hit your session limit · resets HH:MM"* là hết hạn mức, không phải sản phẩm — đọc entry cuối của transcript trước khi kết luận một bài dài đỏ.
 
 ## 2 · Đọc kết quả — cái gì là đỏ thật
 

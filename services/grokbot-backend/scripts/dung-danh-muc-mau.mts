@@ -36,6 +36,7 @@ const roster: J[] = (await gw("listAgents")) ?? [];
 let dung = 0;
 for (const b of DANH_MUC) {
   let bot = roster.find((a) => a.name === b.name);
+  if (bot && bot.description !== `${b.moTa}\n\n${b.sop}`) await gw("updateAgent", { id: bot.id, description: `${b.moTa}\n\n${b.sop}` });   // SOP đổi trong mã → bot đã có nhận theo
   if (!bot) {
     bot = (await gw("createAgent", { name: b.name, description: `${b.moTa}\n\n${b.sop}` }))?.agent;
     if (!bot?.id) { console.error(`✗ ${b.name}: không tạo được bot`, bot); continue; }
