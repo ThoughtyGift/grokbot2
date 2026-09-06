@@ -50,10 +50,11 @@
  * không nối thì DỪNG với câu nói rõ, không im lặng rơi sang máy khác: chạy nhầm máy là thứ không
  * phát hiện được từ kết quả trả về.
  *
- * ── Vì sao chỉ ba thao tác ──────────────────────────────────────────────────────────────────────
+ * ── Sáu thao tác, không hơn (ba đầu 30/08, ba sau 06/09) ───────────────────────────────────────
  *
  * Sổ đăng ký khai 40 cặp Args→Result, nhưng đó là bảng mã dùng CHUNG với box host. Đếm số lần
- * xuất hiện trong chính daemon thì chỉ 8 thao tác có thân xử lý — shell và đọc tệp. `computerUse`
+ * xuất hiện trong chính daemon thì chỉ 8 thao tác có thân xử lý — shell (đồng bộ, nền, stdin) và
+ * đọc/ghi/liệt kê tệp; xem chú thích trên `LocalOp` cho ba thao tác thêm sau. `computerUse`
  * và `recordScreen` chỉ có đúng 2 lần, cả hai ở dòng đăng ký codec, và trong 3,4 MB không có một
  * chữ `SendInput`/`user32`/`SendKeys`/`robotjs` nào. Daemon của hãng KHÔNG bấm chuột được; nó chạy
  * lệnh. App gốc lái OBS bằng dòng lệnh, không bằng con trỏ.
@@ -64,10 +65,36 @@ import { queueRequest, waitForResponse, connectedMachine, connectedMachines, fin
 /** Bằng `JM` trong daemon (12e4). Lệnh dài hơn hai phút thì nên chạy nền, không nên treo lượt. */
 const MAX_TIMEOUT_MS = 120_000;
 
+/*
+ * Sáu việc, khớp bảy hành động daemon 0.43 khai trong `isSandLocalToolAction` (trừ hai việc
+ * Messages của macOS). Ba việc sau thêm 06/09 — đọc từ chính daemon, không đoán:
+ *
+ *   write  → khung RIÊNG `{kind:"upload", requestId, path, bytesBase64}` (không đi qua `serverMessage`;
+ *            `describeLocalExec` không có nhánh write — daemon mô tả upload là `write-file` ở chỗ nhận
+ *            khung). Trả `{kind:"file"}` khi xong, `{kind:"file-error", error}` khi hỏng. Đường dẫn phải
+ *            nằm dưới `localRoot` (`containPath`), quá 100 MiB thì từ chối trước khi ghi.
+ *   spawn  → `backgroundShellSpawnArgs {command, workingDirectory, toolCallId, enableWriteShellStdinTool}`
+ *            → `backgroundShellSpawnResult.success {shellId, pid, workingDirectory}`; đầu ra chảy vào
+ *            `<terminalsFolder>/<shellId>.txt` (`isTerminalFile`), đọc lại bằng `read` — daemon coi tệp
+ *            ấy thuộc cùng phép duyệt với lệnh (`attachToResourcePath`). Lệnh SỐNG QUA lượt.
+ *   stdin  → `writeShellStdinArgs {shellId, chars}` → `writeShellStdinResult.success|error` THEO HỢP ĐỒNG —
+ *            nhưng ĐO 06/09 trên máy thật: daemon trả *"No handler found for server message of type
+ *            writeShellStdinArgs"*. `buildLocalExecManager` của daemon (0.29 lẫn 0.43) chỉ đăng ký BỐN bộ:
+ *            shellStreamArgs · backgroundShellSpawnArgs · readArgs · lsArgs. `send-input` có tên trong
+ *            `isSandLocalToolAction` và có nhánh trong `describeLocalExec`, nhưng không có người thực thi
+ *            — bẫy "trường có trong hợp đồng ≠ có người đọc" (bảng theo dõi §7) lần nữa. Giữ nhánh này
+ *            để cửa `/internal/ops/local-exec` đo lại khi daemon đổi; KHÔNG có tool nào cho model gọi nó.
+ */
 export type LocalOp =
   | { kind: "shell"; command: string; cwd?: string; timeoutMs?: number }
   | { kind: "read"; path: string }
-  | { kind: "ls"; path: string };
+  | { kind: "ls"; path: string }
+  | { kind: "write"; path: string; bytesBase64: string }
+  | { kind: "spawn"; command: string; cwd?: string; description?: string }
+  | { kind: "stdin"; shellId: number; chars: string };
+
+/** Hành động daemon gắn cho mỗi việc — đúng chuỗi `isSandLocalToolAction` của daemon, thẻ quyền dùng lại. */
+export type LocalAction = "run-command" | "read-file" | "list-directory" | "write-file" | "send-input";
 
 export interface LocalResult {
   ok: boolean;
@@ -110,19 +137,54 @@ function serverMessage(op: LocalOp, machineId: string, execId: string): Record<s
     };
   }
   if (op.kind === "read") return { ...base, readArgs: { path: op.path } };
+  if (op.kind === "spawn") {
+    return {
+      ...base,
+      backgroundShellSpawnArgs: {
+        command: op.command,
+        workingDirectory: op.cwd ?? cwdCuaMay.get(machineId) ?? "",
+        toolCallId: execId,
+        ...(op.description ? { description: op.description } : {}),
+      },
+    };
+  }
+  if (op.kind === "stdin") return { ...base, writeShellStdinArgs: { shellId: op.shellId, chars: op.chars } };
+  if (op.kind === "write") throw new Error("write đi bằng khung upload, không qua serverMessage");
   return { ...base, lsArgs: { path: op.path } };
 }
 
-/** Hành động tương ứng cho thẻ xin quyền — khớp `describeLocalExec` của daemon. */
-export function actionOf(op: LocalOp): "run-command" | "read-file" | "list-directory" {
-  if (op.kind === "shell") return "run-command";
+/**
+ * Khung đi trên dây cho một việc — tách ra để test ghim được HÌNH DẠNG mà không cần daemon.
+ *
+ * `write` là khung `upload` riêng; mọi việc khác là `exec` bọc một `ExecServerMessage`.
+ */
+export function khungGui(op: LocalOp, machineId: string, requestId: string, approvalId?: string): Record<string, unknown> {
+  const duyet = approvalId ? { approvalId } : {};
+  if (op.kind === "write") return { kind: "upload", requestId, path: op.path, bytesBase64: op.bytesBase64, ...duyet };
+  return { kind: "exec", requestId, serverMessage: serverMessage(op, machineId, requestId), ...duyet };
+}
+
+/** Hành động tương ứng cho thẻ xin quyền — khớp `describeLocalExec` (và nhánh upload) của daemon. */
+export function actionOf(op: LocalOp): LocalAction {
+  if (op.kind === "shell" || op.kind === "spawn") return "run-command";
   if (op.kind === "read") return "read-file";
+  if (op.kind === "write") return "write-file";
+  if (op.kind === "stdin") return "send-input";
   return "list-directory";
 }
 
-/** Thứ hiện trên thẻ quyền: lệnh, hoặc đường dẫn. */
+/** Thứ hiện trên thẻ quyền: lệnh, đường dẫn, hoặc chính chuỗi sẽ gõ vào — như `describeLocalExec` chọn. */
 export function targetOf(op: LocalOp): string {
-  return op.kind === "shell" ? op.command : op.path;
+  if (op.kind === "shell" || op.kind === "spawn") return op.command;
+  if (op.kind === "stdin") return op.chars;
+  return op.path;
+}
+
+/** Tệp đầu ra của một lệnh nền trên máy đó — daemon ghi `<terminalsFolder>/<shellId>.txt`. */
+export function tepDauRaNen(may: { terminalsFolder?: string; localRoot?: string }, shellId: number): string {
+  const goc = may.terminalsFolder ?? (may.localRoot ? `${may.localRoot.replace(/[\\/]+$/, "")}\\terminals` : "terminals");
+  const noi = goc.includes("/") && !goc.includes("\\") ? "/" : "\\";
+  return `${goc.replace(/[\\/]+$/, "")}${noi}${shellId}.txt`;
 }
 
 /**
@@ -176,12 +238,7 @@ export async function runOnUserComputer(
    * Bộ `aiserver.v1.GrokBotUserComputer*` là hợp đồng của đường LÊN MÁY CHỦ HÃNG, không phải cửa
    * HTTP này. Hai tầng khác nhau, và tôi đã xây nhầm tầng một lần.
    */
-  queueRequest("local-exec", {
-    kind: "exec",
-    requestId,
-    serverMessage: serverMessage(op, machineId, requestId),
-    ...(opts.approvalId ? { approvalId: opts.approvalId } : {}),
-  }, machineId);
+  queueRequest("local-exec", khungGui(op, machineId, requestId, opts.approvalId), machineId);
 
   /*
    * Shell là LUỒNG; đọc/liệt kê thì một khung là xong.
@@ -231,12 +288,44 @@ export async function runOnUserComputer(
     }
     return { ok: false, error: loi, ...keo };
   }
-  if (khungs.some((f) => String(f.kind ?? "") === "file-error")) {
-    return { ok: false, error: JSON.stringify(khungs[khungs.length - 1]).slice(0, 300), ...keo };
+  const loiTep = khungs.find((f) => String(f.kind ?? "") === "file-error");
+  if (loiTep) {
+    // Câu của daemon đã đủ rõ ("Path is outside the allowed local-exec root…", "File is 120.3 MiB…").
+    return { ok: false, error: String(loiTep.error ?? JSON.stringify(loiTep).slice(0, 300)), ...keo };
   }
+  if (op.kind === "write") {
+    return khungs.some((f) => String(f.kind ?? "") === "file")
+      ? { ok: true, data: { written: true, path: op.path }, ...keo }
+      : { ok: false, error: `daemon trả khung lạ cho upload: ${JSON.stringify(cuoiCung).slice(0, 300)}`, ...keo };
+  }
+  if (op.kind === "spawn" || op.kind === "stdin") return docKetQuaMotNhanh(op, thans[0] ?? cuoiCung, keo);
 
   if (!laShell) return { ok: true, data: thans[0] ?? cuoiCung, ...keo };
   return { ok: true, data: gomLuongShell(thans), ...keo };
+}
+
+/**
+ * Kết quả `oneof result` của spawn/stdin — daemon trả MỘT khung `control` mang
+ * `{backgroundShellSpawnResult:{success|error|rejected|permissionDenied|sandboxUnsupported}}` hoặc
+ * `{writeShellStdinResult:{success|error}}` (tên khoá lowerCamel vì `toJson()` của protobuf-es).
+ *
+ * Nhánh không phải `success` đều là lỗi cho người gọi, nhưng giữ TÊN nhánh trong câu lỗi: "rejected"
+ * và "permissionDenied" là hai chuyện khác nhau với người dùng.
+ */
+function docKetQuaMotNhanh(
+  op: Extract<LocalOp, { kind: "spawn" | "stdin" }>,
+  than: Record<string, unknown>,
+  keo: { cwd?: string },
+): LocalResult {
+  const khoa = op.kind === "spawn" ? "backgroundShellSpawnResult" : "writeShellStdinResult";
+  const kq = than?.[khoa] as Record<string, Record<string, unknown>> | undefined;
+  if (!kq || typeof kq !== "object") {
+    return { ok: false, error: `daemon không trả ${khoa}: ${JSON.stringify(than).slice(0, 300)}`, ...keo };
+  }
+  if (kq.success) return { ok: true, data: kq.success, ...keo };
+  const [nhanh, gia] = Object.entries(kq)[0] ?? ["?", {}];
+  const chu = String((gia as Record<string, unknown>)?.error ?? (gia as Record<string, unknown>)?.reason ?? JSON.stringify(gia)).slice(0, 400);
+  return { ok: false, error: `${nhanh}: ${chu}`, ...keo };
 }
 
 /** Thân bên trong một khung trả lời — daemon gói nó dưới vài tên khác nhau tuỳ loại khung. */
@@ -246,6 +335,7 @@ function thanCua(f: Record<string, unknown>): Record<string, unknown> | null {
   if (t != null && typeof t === "object") return t as Record<string, unknown>;
   // Khung `client` phẳng: chính nó đã là thân (đo được: `{"id":6,"shellStream":{…}}`).
   return "shellStream" in f || "readResult" in f || "lsResult" in f || "throw" in f || "streamClose" in f
+    || "backgroundShellSpawnResult" in f || "writeShellStdinResult" in f
     ? f : null;
 }
 

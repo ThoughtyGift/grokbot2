@@ -327,11 +327,16 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
        */
       if (url.startsWith("/internal/ops/local-exec") && req.method === "POST") {
         const kind = String(bodyJ.kind ?? "shell");
-        if (kind !== "shell" && kind !== "read" && kind !== "ls") return json({ error: "kind phải là shell|read|ls" }, 400);
+        const HOP_LE = ["shell", "read", "ls", "write", "spawn", "stdin"];
+        if (!HOP_LE.includes(kind)) return json({ error: `kind phải là ${HOP_LE.join("|")}` }, 400);
         if (!userComputerConnected()) return json({ ok: false, error: "máy của người dùng không nối (app Grok Bot chưa mở?)" }, 409);
         const op = kind === "shell" ? { kind: "shell" as const, command: String(bodyJ.command ?? "") }
           : kind === "read" ? { kind: "read" as const, path: String(bodyJ.path ?? "") }
-          : { kind: "ls" as const, path: String(bodyJ.path ?? "") };
+          : kind === "ls" ? { kind: "ls" as const, path: String(bodyJ.path ?? "") }
+          // `content` là chữ; cửa chẩn đoán không nhận bytes thô — đủ để đo đường ghi.
+          : kind === "write" ? { kind: "write" as const, path: String(bodyJ.path ?? ""), bytesBase64: Buffer.from(String(bodyJ.content ?? ""), "utf8").toString("base64") }
+          : kind === "spawn" ? { kind: "spawn" as const, command: String(bodyJ.command ?? ""), ...(bodyJ.cwd ? { cwd: String(bodyJ.cwd) } : {}) }
+          : { kind: "stdin" as const, shellId: Number(bodyJ.shellId ?? 0), chars: String(bodyJ.chars ?? "") };
         /*
          * `may` — chạy trên MÁY NÀO, khi có nhiều máy nối cùng lúc.
          *

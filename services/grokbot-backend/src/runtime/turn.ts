@@ -22,7 +22,7 @@ import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
 import { loadMemory, renderMemory } from "../memory.js";
-import type { Entry, SendArgs, SubagentRow, ToolCtx } from "../conversation/types.js";
+import type { Entry, LocalToolAction, SendArgs, SubagentRow, ToolCtx } from "../conversation/types.js";
 import {
   agents, transcripts, inflight, compaction, persist, park, unpark, pending,
   nextEntryId, nextReqId, nextToolId, tail, authorOf, onUpdate, acceptance, hostSettingsRef, ownsAgent,
@@ -637,7 +637,16 @@ const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tool
  * Tách riêng khỏi `AUTO_APPROVED` vì đây là chiều ngược lại: không phải "khỏi hỏi", mà là "hỏi kể
  * cả khi cài đặt nói khỏi hỏi". Xem khối chú thích ở chỗ dùng nó.
  */
-const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read"]);
+const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read", "local_write", "local_shell_bg"]);
+
+/**
+ * Hành động ghi trên thẻ quyền — đúng tên daemon khai (`isSandLocalToolAction`), vì client 0.43 chọn câu
+ * hỏi trên thẻ theo chữ này ("read a file" · "write a file" · "run a command"). Lệnh nền vẫn là
+ * `run-command`, như `describeLocalExec` của daemon xếp `backgroundShellSpawnArgs`. Không có nhánh
+ * `send-input`: daemon không có handler stdin cho máy người dùng (đo 06/09, xem `local-exec.ts`).
+ */
+const hanhDongThe = (lower: string): LocalToolAction =>
+  lower === "local_read" ? "read-file" : lower === "local_write" ? "write-file" : "run-command";
 
 /**
  * Người dùng đã bấm "Always allow" TRÊN CHÍNH THẺ CHẠM MÁY hay chưa.
@@ -1487,7 +1496,7 @@ function injectTool(agentId: string, spec: string, history?: PoolMessage[]): voi
    */
   if (known && CHAM_MAY_NGUOI_DUNG.has(lower) && standing !== "never" && !daChoPhepChamMay.has(agentId)) {
     const card: Entry = { id: nextEntryId(), kind: "send-message", author: authorOf(agentId), timestampMs: Date.now(),
-      message: { type: "local-tool-permission", ask: { status: "pending", action: lower === "local_read" ? "read-file" : "run-command", target: `${name}(${arg})`, requestId } } };
+      message: { type: "local-tool-permission", ask: { status: "pending", action: hanhDongThe(lower), target: `${name}(${arg})`, requestId } } };
     t.push(card);
     pending.set(requestId, { agentId, entryId: card.id, toolCallId, name: lower, arg, history });
     onUpdate(agentId);

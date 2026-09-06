@@ -78,20 +78,24 @@ Daemon local-exec của hãng khai đúng 7 hành động (`isSandLocalToolActio
 và 7 dạng tham số RPC: `shellStreamArgs` · `backgroundShellSpawnArgs` · `forceBackgroundShellArgs` ·
 `writeShellStdinArgs` · `readArgs` · `redactedReadArgs` · `lsArgs`.
 
-**Bên mình có 3 trên 7** — `LocalOp` là `shell | read | ls`, `actionOf` trả `run-command` /
-`read-file` / `list-directory`.
+**Bên mình có 5 trên 7, và 5 là TRẦN của chính daemon** (06/09) — `LocalOp` là
+`shell | read | ls | write | spawn (| stdin chỉ để đo)`, `actionOf` trả đúng tên hành động của daemon.
 
 | hãng có | ta có | ghi chú |
 |---|---|---|
-| `run-command` | ✅ `local_shell` | ta chạy đồng bộ, trần 120s |
+| `run-command` | ✅ `local_shell` | đồng bộ, trần 120s |
 | `read-file` | ✅ `local_read` | |
 | `list-directory` | ✅ `local_read` (ls) | |
-| `write-file` | ❌ | **bot không GHI được file lên máy người dùng** |
-| `send-input` | ❌ | không gõ được vào lệnh đang chạy (stdin) |
-| chạy nền vượt lượt (`backgroundShellSpawn`, `forceBackgroundShell`, `outlivesScope`) | ❌ | lệnh dài hơn 120s là hết đường |
+| `write-file` | ✅ `local_write` (06/09) | khung `{kind:"upload", path, bytesBase64}` riêng, KHÔNG qua `serverMessage`; daemon giữ trong `localRoot`, quá 100 MiB từ chối; đo: 61 byte UTF-8 có dấu về nguyên |
+| chạy nền vượt lượt (`backgroundShellSpawnArgs`, `outlivesScope`) | ✅ `local_shell_bg` (06/09) | trả `shellId`+`pid`; đầu ra ở `<localRoot>/terminals/<shellId>.txt` (đầu `status:`, cuối `exit_code:`), đọc bằng `local_read`; đo: tệp mọc 14–16 s SAU khi lượt model đã xong |
+| `send-input` | ❌ **và hãng cũng không** | daemon trả *"No handler found for server message of type writeShellStdinArgs"*: `buildLocalExecManager` (0.29 lẫn 0.43) chỉ đăng ký 4 handler `shellStreamArgs · backgroundShellSpawnArgs · readArgs · lsArgs`. Tên có trong `isSandLocalToolAction` và nhánh có trong `describeLocalExec`, nhưng không có người thực thi |
+| `forceBackgroundShellArgs` | ❌ và hãng cũng không | cùng lý do — không nằm trong 4 handler |
 | `read-messages` · `send-imessage` | ❌ | Messages của macOS — không áp cho Windows |
 
-Bốn cái thiếu thật nằm ở đây, và chỉ ở đây.
+Hai dòng "❌ và hãng cũng không" là bẫy §7 lần thứ sáu, đo bằng cách gửi khung thật xuống daemon thật
+(`/internal/ops/local-exec` kind `stdin`) chứ không bằng đọc danh sách hành động. Đo đường model:
+`scripts/e2e-may-nguoi-dung.mjs` 7/7 (thẻ `write-file` · tệp đúng nội dung · thẻ `run-command` · shellId
+trong câu bot · tệp của lệnh nền xuất hiện khi không còn lượt nào chạy).
 
 ### 2c · Ba mặt tự soát — TRÙNG KHỚP
 

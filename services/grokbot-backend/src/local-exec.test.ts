@@ -70,3 +70,52 @@ test("không có daemon thì trả lỗi rõ ràng, KHÔNG treo mãi", async () 
   assert.match(String(r.error), /không trả lời/);
   assert.ok(troi < 5_000, `phải bỏ cuộc theo timeoutMs, nhưng mất ${troi}ms`);
 });
+
+/*
+ * ── Ba việc thêm 06/09: write · spawn · stdin (bảng theo dõi §5 mục 11) ─────────────────────────
+ *
+ * Hình dạng dây ghim ở đây là thứ ĐỌC từ daemon 0.43 (`local-exec-daemon/main.cjs`), không phải thứ
+ * đoán: `parseSandLocalExecRequestFrame` nhận `{kind:"upload", requestId, path, bytesBase64}`;
+ * `describeLocalExec` xếp `backgroundShellSpawnArgs` vào `run-command`, `writeShellStdinArgs` vào
+ * `send-input`; nhánh upload được mô tả là `write-file` ngay chỗ nhận khung. Đường thật đo bằng cửa
+ * `/internal/ops/local-exec` trên máy Windows đang nối — xem bảng theo dõi §2.
+ */
+import { khungGui, tepDauRaNen } from "./local-exec.js";
+
+test("write đi bằng khung upload riêng, không bọc trong serverMessage", () => {
+  const k = khungGui({ kind: "write", path: "C:/Users/admin/ghi-chu.txt", bytesBase64: "eGluIGNow6Bv" }, "may-1", "req-9", "ap-3");
+  assert.deepEqual(k, { kind: "upload", requestId: "req-9", path: "C:/Users/admin/ghi-chu.txt", bytesBase64: "eGluIGNow6Bv", approvalId: "ap-3" });
+  assert.equal(actionOf({ kind: "write", path: "x", bytesBase64: "" }), "write-file");
+  assert.equal(targetOf({ kind: "write", path: "C:/x.txt", bytesBase64: "" }), "C:/x.txt");
+});
+
+test("spawn là backgroundShellSpawnArgs; stdin là writeShellStdinArgs{shellId,chars} (daemon chưa có handler — chỉ để đo)", () => {
+  const s = khungGui({ kind: "spawn", command: "ping -t 127.0.0.1", cwd: "C:/tmp", description: "giữ mạng" }, "may-1", "req-1");
+  assert.equal(s.kind, "exec");
+  const sm = s.serverMessage as Record<string, Record<string, unknown>>;
+  assert.equal(sm.machineId, "may-1", "daemon so machineId trước khi nhận việc");
+  assert.deepEqual(sm.backgroundShellSpawnArgs, {
+    command: "ping -t 127.0.0.1", workingDirectory: "C:/tmp", toolCallId: "req-1", description: "giữ mạng",
+  });
+  assert.equal(actionOf({ kind: "spawn", command: "x" }), "run-command", "daemon xếp lệnh nền vào run-command");
+  assert.equal(targetOf({ kind: "spawn", command: "npm run dev" }), "npm run dev");
+
+  const i = khungGui({ kind: "stdin", shellId: 7, chars: "y\n" }, "may-1", "req-2");
+  assert.deepEqual((i.serverMessage as Record<string, unknown>).writeShellStdinArgs, { shellId: 7, chars: "y\n" });
+  assert.equal(actionOf({ kind: "stdin", shellId: 7, chars: "y\n" }), "send-input");
+  // Thẻ quyền hiện CHÍNH chuỗi sẽ gõ — người dùng phải đọc được mình đang cho phép gõ gì.
+  assert.equal(targetOf({ kind: "stdin", shellId: 7, chars: "rm -rf x\n" }), "rm -rf x\n");
+});
+
+test("tệp đầu ra lệnh nền: <terminalsFolder>/<shellId>.txt, đúng dấu ngăn của máy", () => {
+  assert.equal(tepDauRaNen({ terminalsFolder: "C:\\Users\\admin\\terminals" }, 3), "C:\\Users\\admin\\terminals\\3.txt");
+  assert.equal(tepDauRaNen({ terminalsFolder: "/Users/an/terminals/" }, 12), "/Users/an/terminals/12.txt");
+  // hello cũ không có terminalsFolder thì suy từ localRoot — daemon đặt nó ở `<root>/terminals`.
+  assert.equal(tepDauRaNen({ localRoot: "C:\\Users\\admin" }, 1), "C:\\Users\\admin\\terminals\\1.txt");
+});
+
+test("không có daemon thì write cũng bỏ cuộc theo timeoutMs với câu rõ", async () => {
+  const r = await runOnUserComputer({ kind: "write", path: "C:/Users/admin/x.txt", bytesBase64: "eA==" }, { timeoutMs: 300 });
+  assert.equal(r.ok, false);
+  assert.match(String(r.error), /không trả lời/);
+});

@@ -7,7 +7,7 @@ import { config, loadPoolKey } from "../config.js";
 import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowserTool, browserProbe, activateTabOf } from "../browser.js";
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
-import { runOnUserComputer, connectedMachine, connectedMachines, findMachine } from "../local-exec.js";
+import { runOnUserComputer, connectedMachine, connectedMachines, findMachine, tepDauRaNen } from "../local-exec.js";
 import { lamTrenTrinhDuyet } from "../local-browser.js";
 import { soatHanhDong } from "./auto-review.js";
 import { postAutoReview } from "../conversation/cards.js";
@@ -949,6 +949,81 @@ TOOLS.local_shell = async (arg, _ctx) => {
     d.stderr?.trim() ? `stderr:\n${d.stderr.trim()}` : "",
   ].filter(Boolean);
   return catBot(phan.join("\n"));
+};
+
+/**
+ * Máy nào — theo TÊN hoặc id trong spec; không chỉ định thì máy vừa thấy gần nhất.
+ *
+ * Trả câu từ chối thay vì máy khi không có: chỉ định một máy không nối mà lặng lẽ rơi sang máy khác là
+ * chạy nhầm máy — thứ không phát hiện được từ kết quả (cùng luật với `runOnUserComputer`).
+ */
+const chonMay = (spec: { machine?: unknown } | null | undefined):
+  { may: NonNullable<ReturnType<typeof connectedMachine>> } | { loi: string } => {
+  const chiDinh = String(spec?.machine ?? "").trim();
+  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  if (chiDinh && !may) {
+    const co = connectedMachines().map((m) => m.label);
+    return { loi: `Không thấy máy "${chiDinh}" đang nối` + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối") };
+  }
+  if (!may) return { loi: "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại." };
+  return { may };
+};
+
+/** Đường dẫn Windows đưa vào ví dụ JSON cho model: gạch xuôi, vì `C:\Users` chép vào JSON là escape hỏng. */
+const duongJson = (p: string): string => p.replace(/\\/g, "/");
+
+/**
+ * GHI một tệp lên máy người dùng — `write-file`, việc thứ tư trong bảy của daemon (bảng theo dõi §5 mục 11).
+ *
+ * Đi bằng khung `upload` riêng của daemon, không qua `serverMessage`. Ghi đè toàn bộ; daemon tạo thư mục
+ * cha; đường dẫn phải nằm dưới thư mục gốc của máy (`localRoot`, thường `C:\Users\<tên>`) — ngoài đó
+ * daemon từ chối với câu rõ. Nội dung là CHỮ (utf-8): tệp nhị phân đi đường `local_shell` (curl/Invoke-WebRequest).
+ */
+TOOLS.local_write = async (arg, _ctx) => {
+  let spec: { path?: string; content?: string; machine?: unknown };
+  try { spec = JSON.parse(arg); } catch { return 'local_write cần {"path":"C:/Users/<tên>/...","content":"<nội dung>"}'; }
+  const path = String(spec?.path ?? "").trim();
+  if (!path) return 'local_write cần {"path":"<đường dẫn trên máy bạn>","content":"<nội dung>"}';
+  if (typeof spec?.content !== "string") return 'local_write cần "content" là chuỗi (rỗng cũng được, để tạo tệp trống)';
+  const m = chonMay(spec);
+  if ("loi" in m) return m.loi;
+  const bytes = Buffer.from(spec.content, "utf8");
+  const r = await runOnUserComputer(
+    { kind: "write", path, bytesBase64: bytes.toString("base64") },
+    { machineId: m.may.computerId, timeoutMs: 30_000 },
+  );
+  if (!r.ok) return `Không ghi được trên ${m.may.label}: ${r.error}`;
+  return `[${m.may.label}] đã ghi ${bytes.length} byte vào ${path}`;
+};
+
+/**
+ * Chạy lệnh NỀN trên máy người dùng — sống qua lượt này (`backgroundShellSpawnArgs`, `outlivesScope`).
+ *
+ * `local_shell` treo lượt tới trần 120 s của daemon; việc dài hơn (server dev, quay màn hình, tải lớn,
+ * cài đặt) là hết đường — đúng khoảng cách năng lực với app gốc mà tool-doi-chieu.md §2b chỉ ra. Daemon
+ * ghi đầu ra vào `<terminals>/<shellId>.txt` (đầu tệp có `status: running|…`, cuối có `exit_code`), đọc
+ * lại bằng `local_read`. KHÔNG gõ được vào stdin: daemon 0.29 lẫn 0.43 không đăng ký handler
+ * `writeShellStdinArgs` cho máy người dùng (đo 06/09: *"No handler found for server message of type
+ * writeShellStdinArgs"*) — nên lệnh nền phải tự chạy không hỏi (`-y`, `-NonInteractive`, `--yes`).
+ */
+TOOLS.local_shell_bg = async (arg, _ctx) => {
+  let spec: { command?: string; cwd?: string; description?: string; machine?: unknown };
+  try { spec = JSON.parse(arg); } catch { spec = { command: unquote(arg) }; }
+  const command = String(spec?.command ?? "").trim();
+  if (!command) return 'local_shell_bg cần {"command":"<lệnh chạy nền>"}';
+  const m = chonMay(spec);
+  if ("loi" in m) return m.loi;
+  const r = await runOnUserComputer(
+    { kind: "spawn", command, ...(spec?.cwd ? { cwd: String(spec.cwd) } : {}), ...(spec?.description ? { description: String(spec.description) } : {}) },
+    { machineId: m.may.computerId, timeoutMs: 30_000 },
+  );
+  if (!r.ok) return `Không chạy nền được trên ${m.may.label}: ${r.error}`;
+  const d = (r.data ?? {}) as { shellId?: number; pid?: number; workingDirectory?: string };
+  const shellId = Number(d.shellId ?? 0);
+  const tep = duongJson(tepDauRaNen(m.may, shellId));
+  return `[${m.may.label}] lệnh đang chạy nền — shellId ${shellId}${d.pid ? `, pid ${d.pid}` : ""}, thư mục ${d.workingDirectory || "?"}.\n`
+    + `Đầu ra ghi vào ${tep} — xem bằng local_read({"path":"${tep}"}) (dòng "status:" ở đầu, "exit_code:" ở cuối khi xong). `
+    + "Lệnh vẫn chạy sau khi lượt này kết thúc; không gõ được vào nó, nên nếu nó dừng chờ hỏi thì phải chạy lại với cờ tự trả lời.";
 };
 
 TOOLS.local_read = async (arg, _ctx) => {
@@ -2211,7 +2286,7 @@ const TASK_PROTOCOL =
   "Chỉ dùng đúng những tên trên; không có tên nào hợp thì tự làm.";
 
 /**
- * Máy THẬT của người dùng — bốn tool `local_*`, và cách gọi chúng.
+ * Máy THẬT của người dùng — sáu tool `local_*`, và cách gọi chúng.
  *
  * Danh sách tên tool được sinh tự động từ `TOOLS`, nên `local_browser` đã có mặt ở đó từ lúc thêm
  * hàm. Nhưng CHỈ có tên. Bài học `create_routine` (28/08) đúng nguyên văn ở đây: model biết tool
@@ -2231,6 +2306,9 @@ const localProtocol = (): string => {
     + 'TOOL_CALL: local_machines({}) — liệt kê. '
     + 'TOOL_CALL: local_shell({"command":"...","machine":"<tên máy>"}) — chạy lệnh; bỏ "machine" thì lấy máy vừa thấy gần nhất. '
     + 'TOOL_CALL: local_read({"path":"C:/..."}) — đọc một file. '
+    + 'TOOL_CALL: local_write({"path":"C:/Users/<tên>/...","content":"..."}) — GHI một file chữ (ghi đè toàn bộ, tự tạo thư mục cha; chỉ trong thư mục người dùng). '
+    + 'TOOL_CALL: local_shell_bg({"command":"..."}) — chạy lệnh NỀN sống qua lượt này (server, quay màn hình, tải lớn, việc quá 2 phút); trả shellId và file đầu ra, xem lại bằng local_read. '
+    + "Lệnh nền không nhận được bàn phím — dùng cờ tự trả lời (-y, -NonInteractive) thay vì để nó hỏi. "
     + 'TOOL_CALL: local_browser({"viec":"mo","url":"https://..."}) — mở trang trong CỬA SỔ CHROME RIÊNG của bạn trên máy đó; '
     + 'rồi {"viec":"doc"} để đọc chữ trên trang, {"viec":"bam","chu":"<chữ trên nút>"} để bấm, '
     + '{"viec":"go","o":"<tên ô>","chu":"...","enter":true} để điền, {"viec":"anh"} để chụp màn hình trang cho người dùng xem. '
