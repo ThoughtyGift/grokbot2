@@ -538,9 +538,16 @@ TOOLS.publish_bot_listing = async (arg, ctx) => {
   if (!target) return `(không thấy bot "${wanted}")`;
   const category = String(spec?.category ?? "").trim().toLowerCase();
   if (!(CATEGORIES as readonly string[]).includes(category)) return `publish_bot_listing cần "category" là một trong: ${CATEGORIES.join(", ")}`;
-  const tpl = await runWithOwner(owner, async () => (getBotTemplateForSourceAgent(target.id) ?? await createTemplateForAgent(target.id)));
+  // Thân thẻ: model đưa "description" (2–4 câu kiểu Marketplace) thì đóng gói bản chờ với đúng câu ấy — không thì thẻ
+  // mang mô tả bot = cả SOP (đo 06/09 với danh mục mẫu). Có description ⇒ luôn stage (kể cả mẫu đã phát: bản chờ mới).
+  const description = String(spec?.description ?? spec?.body ?? "").trim();
+  const tpl = await runWithOwner(owner, async () => description
+    ? stageTemplateForAgent(target.id, { description, visibility: "public" })
+    : (getBotTemplateForSourceAgent(target.id) ?? await createTemplateForAgent(target.id)));
   if (!tpl) return "(không tạo được mẫu cho bot này)";
-  const pub = tpl.published && tpl.activeVersion != null ? tpl : await runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.version));
+  // Bản chờ (do share_bot_template hoặc dòng trên) thì phát bản chờ; đã phát và không chờ gì thì giữ.
+  const daPhat = tpl.published && tpl.activeVersion != null && tpl.staged == null;
+  const pub = daPhat ? tpl : await runWithOwner(owner, () => publishBotTemplate(tpl.shareId, tpl.staged?.version ?? tpl.version));
   if (!pub) return "(không xuất bản được mẫu)";
   try {
     const l = runWithOwner(owner, () => publishListing({ shareId: pub.shareId, category, categories: spec?.categories }, owner, DEFAULT_USER.authId));
@@ -1883,7 +1890,7 @@ const PEER_PROTOCOL =
   // a briefing message is just one line in its transcript.
   'TOOL_CALL: create_agent({"agents":[{"name":"Kho","description":"vai trò + luật làm việc, viết kỹ như một bản SOP"}]}) — one entry per bot. ' +
   'TOOL_CALL: share_bot_template({"agent":"Kế toán","description":"2–4 câu kiểu Marketplace: làm gì, cho ai, giọng thế nào, KHÔNG làm gì"}) — package a bot (or a whole team) as a template CARD the user confirms with its Publish button; omit "agent" for yourself. Always write "description" yourself from the profile and memories, never ask the user for it. ' +
-  'TOOL_CALL: publish_bot_listing({"agent":"Kế toán","category":"ops-finance"}) — list that bot on the community Marketplace (tab Marketplace → Bots); category is one of engineering, design, marketing, customer-support, product, ops-finance, recruiting-people, sales, productivity. Ask which category if the user did not say. ' +
+  'TOOL_CALL: publish_bot_listing({"agent":"Kế toán","category":"ops-finance","description":"2–4 câu kiểu Marketplace"}) — ONE step: packages (with that card text), publishes and lists the bot on the community Marketplace (tab Marketplace → Bots); do not call share_bot_template first when the user already chose to publish. category is one of engineering, design, marketing, customer-support, product, ops-finance, recruiting-people, sales, productivity. Ask which category if the user did not say. ' +
   'TOOL_CALL: create_group({"name":"Ops","members":["Kho","Ads"]}) — a shared room; every member answers in turn when the user speaks there. ' +
   "A room is NOT a bot: never create_agent for something meant to hold members — create the member bots first, then create_group with their names. " +
   /*
