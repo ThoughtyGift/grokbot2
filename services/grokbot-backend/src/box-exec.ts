@@ -84,14 +84,30 @@ async function viaComputer<T>(op: string, args: Record<string, unknown>): Promis
   }
 }
 
-async function viaDaemon<T>(op: string, args: Record<string, unknown>): Promise<T> {
-  const BASE = daemonBase();
-  if (!BASE) {
-    throw new BoxUnavailable(
-      "Chưa nối box: đặt GROKBOT2_BOX_EXEC_URL (và GROKBOT2_EXEC_TOKEN) trỏ tới exec daemon. " +
-      "Công cụ shell/file chỉ chạy trong box, không chạy trên máy này.",
-    );
-  }
+const RETRY_MS = (): number => Number(process.env.GROKBOT2_BOX_RETRY_MS ?? 1500);
+const nghi = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Lỗi "chưa TỚI được daemon" — an toàn để thử lại, kể cả với op `append` không idempotent.
+ *
+ * Router đẻ daemon con theo yêu cầu (`daemonFor` trong `exec-router.mjs`); khi box vừa thu daemon lúc
+ * nghỉ (`reapIdle`, mặc định 10 phút), lời gọi kế có thể rơi vào lúc daemon CHƯA lên: router trả
+ * `daemon con không lên` (waitPort hết giờ), hoặc `box unavailable` (cổng con chưa nghe), hoặc
+ * Cloudflare trả 5xx (gồm 520) vì router chưa có phản hồi hợp lệ để chuyển tiếp, hoặc `fetch` ngã ở
+ * tầng mạng. TẤT CẢ những cái đó xảy ra TRƯỚC khi daemon đọc thân request, nên op **chưa chạy** —
+ * thử lại là an toàn: `daemonFor` đã `children.set` daemon vừa đẻ, nên lượt hai đi thẳng vào nó (đo
+ * 07/09: daemon lên lại ~4 s sau khi bị thu). Đây là gốc của "lượt đầu đỏ rồi tự xanh" (§8).
+ *
+ * KHÔNG gộp vào đây: AbortError (`… không phản hồi`) — daemon ĐÃ nhận request và đang chạy chậm, thử
+ * lại một `append` là ghi đôi; `pool-exhausted` — hết dải, thử lại vô ích; lỗi daemon thật (ngoài
+ * root, thiếu tham số) — tất định, thử lại vẫn hỏng. Không cái nào khớp các mẫu dưới.
+ */
+export function laLoiKhoiDongLanh(e: unknown): boolean {
+  const m = String((e as Error)?.message ?? e);
+  return /-> HTTP 5\d\d\b/.test(m) || /daemon con không lên/.test(m) || /box unavailable/.test(m) || /fetch failed/i.test(m);
+}
+
+async function goiDaemonMotLan<T>(BASE: string, op: string, args: Record<string, unknown>): Promise<T> {
   const timeout = TIMEOUT_MS();
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeout);
@@ -123,6 +139,26 @@ async function viaDaemon<T>(op: string, args: Record<string, unknown>): Promise<
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function viaDaemon<T>(op: string, args: Record<string, unknown>): Promise<T> {
+  const BASE = daemonBase();
+  if (!BASE) {
+    throw new BoxUnavailable(
+      "Chưa nối box: đặt GROKBOT2_BOX_EXEC_URL (và GROKBOT2_EXEC_TOKEN) trỏ tới exec daemon. " +
+      "Công cụ shell/file chỉ chạy trong box, không chạy trên máy này.",
+    );
+  }
+  try {
+    return await goiDaemonMotLan<T>(BASE, op, args);
+  } catch (e) {
+    // Thử lại ĐÚNG một lần, và chỉ khi op chưa chạy (xem `laLoiKhoiDongLanh`). Lượt đầu đã kích router
+    // đẻ daemon; nghỉ một nhịp cho nó lên rồi đi thẳng vào. `GROKBOT2_BOX_RETRY_MS=0` tắt (test dùng).
+    const cho = RETRY_MS();
+    if (cho <= 0 || !laLoiKhoiDongLanh(e)) throw e;
+    await nghi(cho);
+    return await goiDaemonMotLan<T>(BASE, op, args);
   }
 }
 
