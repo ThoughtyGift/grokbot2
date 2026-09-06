@@ -41,6 +41,7 @@ import {
   promptAcceptanceStatus,
   getConversationOutline,
   latestEntry,
+  nextTranscriptOrdered,
 } from "./conversation/index.js";
 import {
   sendPrompt,
@@ -209,6 +210,7 @@ const ports: AclPorts = {
     promptAcceptanceStatus,
     getConversationOutline,
     latestEntry,
+    nextTranscriptOrdered,
   },
   runtime: {
     sendPrompt,

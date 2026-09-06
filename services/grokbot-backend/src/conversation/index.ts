@@ -77,6 +77,14 @@ export function seqFor(agentId: string): number {
   return seeded;
 }
 
+/**
+ * `OrderedStamp` của một sự kiện bản ghi — đúng hình 0.43: `replicaKey` = `transcript:<agentId>` (renderer
+ * `Lh`/`tz` tách agentId sau tiền tố `transcript:`), `epoch` chuỗi chung cả tiến trình (đổi khi backend
+ * khởi động lại → client thấy epoch lạ → tự tải đuôi neo lại), `sequence` +1 mỗi sự kiện của bot đó.
+ * Viết 08/2026 cho một lần thử không thành trên client 0.30; từ 06/09/2026 `sse.ts` dùng thật cho 0.43 —
+ * bằng chứng hãng đi đường này: replica bản ghi mà client app gốc 0.43 ghi xuống đĩa mang
+ * `epochHint: "fbf22d21-…"`, `acceptedSequenceHint: 9` (bot cũ 01/09 thì `null`).
+ */
 export function nextTranscriptOrdered(agentId: string) {
   const next = seqFor(agentId) + 1;
   transcriptSeq.set(agentId, next);
@@ -109,12 +117,21 @@ const choClientGoc = (e: CoSeq): CoSeq => {
   const rt = (e as { replyTo?: { entryId: string } }).replyTo;
   // Cast qua `unknown`: shape ra dây KHÁC `Entry` đúng ở một trường, và nói thật điều đó bằng một
   // cast hẹp thì rõ hơn là dựng một kiểu song song chỉ để lệch một chỗ.
-  const raDay = rt ? ({ ...e, replyTo: rt.entryId, replyToId: rt.entryId } as unknown as CoSeq) : e;
+  let raDay = rt ? ({ ...e, replyTo: rt.entryId, replyToId: rt.entryId } as unknown as CoSeq) : e;
+  // `SandToolCallEntry` 0.43 chỉ có id·kind·name·status·summary·timestampMs·reactions; renderer đọc
+  // `rawArgs` 0 lần và `result` 0 lần trên hàng tool-call. Đo 06/09 trên New Bot: hai khoá ấy chiếm
+  // **51 %** của trang đuôi 292 KB (117 tool-call) mà client tải lại sau MỖI khung SSE — bỏ ở cửa `/gw`,
+  // bản ghi nội bộ (và `/v1` cho FE riêng) vẫn giữ nguyên.
+  if (raDay.kind === "tool-call") {
+    const { rawArgs: _a, result: _r, ...gon } = raDay as CoSeq & { rawArgs?: unknown; result?: unknown };
+    raDay = gon as CoSeq;
+  }
   // `SandMessageEntry` 0.43 bắt buộc `isStreaming`; tin người dùng ghi vào tail không có nó, và một
   // entry trượt là cả trang bị coordinator coi là hỏng → app chỉ còn "Showing saved messages".
   return raDay.kind === "message" && (raDay as { isStreaming?: boolean }).isStreaming === undefined
     ? ({ ...raDay, isStreaming: false } as CoSeq) : raDay;
 };
+
 
 export function latestEntry(agentId: string): (Entry & { seq: number }) | null {
   const all = transcripts.get(agentId) ?? [];

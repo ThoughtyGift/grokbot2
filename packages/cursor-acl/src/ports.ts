@@ -73,6 +73,12 @@ export interface ConversationPort {
   promptAcceptanceStatus: Call;
   getConversationOutline: Call;
   latestEntry(agentId: string): { seq: number } | null | undefined;
+  /**
+   * `OrderedStamp` cho MỘT sự kiện bản ghi (0.43: `{replicaKey:"transcript:<agentId>", epoch, sequence}`),
+   * đếm +1 mỗi lần gọi theo bot. Có nó thì client 0.43 áp thẳng `entry` trong khung vào replica; không có
+   * thì mỗi khung là một tiếng gõ → client tải lại cả đuôi (500 entry) — xem `sse.ts`.
+   */
+  nextTranscriptOrdered?(agentId: string): { replicaKey: string; epoch: string; sequence: number };
 }
 
 /** S4 runtime — turns, approvals, widgets, subagents. */

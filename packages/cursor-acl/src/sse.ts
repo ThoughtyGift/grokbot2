@@ -169,14 +169,24 @@ export function createSseHub(ports: AclPorts): SseHub {
   // default: `appended` / `updated` / `removed` / `cleared`. `added` matches nothing there,
   // so the reducer returns undefined for it.
   //
-  // NO `ordered` on transcript events — the original does not send one either. Sending it is
-  // what froze the conversation pane: an `ordered` envelope opts the client into its strict
-  // replica mode, where anything that is not the next sequence for the epoch it joined on is
-  // parked as foreign and dropped. Proof is in what each client WROTE TO DISK, same binary,
-  // two servers: the original never anchors a transcript at all (no epochHint), ours accepted
-  // exactly ONE event and then stood still. The envelope IS required for the roster below —
-  // generalising that measured fix to transcripts was the mistake.
+  // `ordered` on transcript events — HAI lần đo, hai kết luận, vì hai bản client:
+  //
+  //   · 08/2026, client 0.30: KHÔNG gửi `ordered`. Bản 0.30 không neo bản ghi (không `epochHint` trên
+  //     đĩa của app gốc), và khung có phong bì làm replica của nó nhận đúng MỘT sự kiện rồi đứng.
+  //   · 06/09/2026, client 0.43: GỬI `ordered`. Replica bản ghi của app GỐC 0.43 ghi xuống đĩa
+  //     (`sand-client-persistence/…transcript.replicas.<bot>`) mang `epochHint: "fbf22d21-…"`,
+  //     `acceptedSequenceHint: 9` — hãng đã chuyển sang đường replica. Renderer 0.43 đọc khung THẲNG
+  //     (`{type, entry, agentId, ordered}` — không lồng trong `event`): có `ordered` → `replica.ingestEvent`
+  //     áp `entry` ngay; KHÔNG có → coi là tiếng gõ, bỏ `entry`, gọi `getAgentTranscriptTail(limit 500)`
+  //     tải lại cả đuôi. Ta phát một khung MỖI token (tick 45 ms) ⇒ 198.691 lượt tải đuôi 292 KB đo được —
+  //     đó là cái "giật" người dùng thấy, và là gốc của bản ghi sống đứng (bảng theo dõi §5 mục 19).
+  //
+  // Neo: client nhận sự kiện epoch lạ → tự tải đuôi rồi `ingestSnapshot({epoch, throughSequence})` theo
+  // sự kiện cuối đã thấy; sau đó chỉ nhận `sequence === accepted + 1`. Vì đuôi và sự kiện cùng đọc một
+  // bản ghi trong bộ nhớ nên chuỗi luôn khớp; backend khởi động lại = epoch mới = neo lại, không đứng.
+  // Tắt khẩn: `GROKBOT2_TRANSCRIPT_ORDERED=0` → khung tiếng gõ như trước.
   const announced = new Map<string, number>();
+  const dungOrdered = process.env.GROKBOT2_TRANSCRIPT_ORDERED !== "0" && typeof ports.conversation.nextTranscriptOrdered === "function";
   const onTranscriptAppend = (agentId: string): void => {
     const owner = ownerFor(agentId);
     ports.runAsOwner(owner, () => {
@@ -184,6 +194,10 @@ export function createSseHub(ports: AclPorts): SseHub {
       if (!last) { broadcast("transcript", { agentId }, owner); return; }
       const type = announced.get(agentId) === last.seq ? "updated" : "appended";
       announced.set(agentId, last.seq);
+      if (dungOrdered) {
+        broadcast("transcript", { type, agentId, entry: last, ordered: ports.conversation.nextTranscriptOrdered!(agentId) }, owner);
+        return;
+      }
       broadcast("transcript", { agentId, event: { type, entry: last } }, owner);
     });
   };
