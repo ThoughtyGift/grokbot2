@@ -117,6 +117,35 @@ export function ngayPhatHanh(ban: { version?: string; ten?: string } | undefined
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "—";
 }
 
+/**
+ * Tên tệp NGƯỜI DÙNG thấy trong lịch sử tải — cố ý KHÁC tên trên đĩa.
+ *
+ * Tên trên đĩa (`Bot-Noi-Bo-Setup-<ngày>.exe`) là ĐỊNH DANH TRONG NHÀ, và ba chỗ cùng đọc nó:
+ * `newestMatching`/`SETUP_KINDS` tìm gói bằng tiền tố ấy, cờ `chiRieng` chặn gói chở-app khỏi nút
+ * công khai cũng bằng nó, và `ngayPhatHanh()` lấy NGÀY PHÁT HÀNH từ đuôi `-<YYYYMMDD>` của nó.
+ *
+ * Nên tên đẹp KHÔNG được leo ngược vào tên đĩa hay vào `ten` của manifest. Đo 07/09 trước khi sửa:
+ * `Cinai x Grok Bot 0.43.20260905.cmd` làm regex của `ngayPhatHanh` bắt vào ĐUÔI VERSION, trang tải
+ * quay lại ghi *"phát hành 05/09/2026"* cho bản phát 06/09 — đúng lỗi vừa chữa hôm 06/09 (`73689e7`),
+ * và nó sai im lặng vì không có gì đỏ. Tên đẹp sống ở đúng một biên giới: `content-disposition`.
+ *
+ * Số phiên bản lấy từ MANIFEST — cùng nguồn với trang, feed và launcher, nên tên tệp không thể nói
+ * một số khác với dòng "Phiên bản …" ngay bên trên nút. Chưa phát hành lần nào thì giữ tên đĩa thay
+ * vì bịa một số.
+ */
+export function tenTaiVe(tenDia: string, version?: string): string {
+  const v = String(version ?? "").trim();
+  if (!v) return tenDia;
+  const duoi = /\.[A-Za-z0-9]+$/.exec(tenDia)?.[0] ?? "";
+  // `"` đóng sớm `filename="…"`, xuống dòng chẻ đôi header: version đến từ file manifest nên là DỮ
+  // LIỆU, không phải hằng số của ta.
+  return `Cinai x Grok Bot ${v}${duoi}`.replace(/["\r\n]/g, "");
+}
+
+/** Số phiên bản đang phát, cho `tenTaiVe` — cùng kênh với trang tải. */
+const phienBanPhat = (): string | undefined =>
+  docManifest()[process.env.GROKBOT2_LAUNCHER_KENH ?? "stable"]?.version;
+
 function landingHtml(): string | null {
   try {
     const { mtimeMs } = statSync(LANDING);
@@ -268,7 +297,7 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
     res.writeHead(200, {
       "content-type": "application/octet-stream",
       "content-length": String(cfg.size),
-      "content-disposition": `attachment; filename="${cfg.name}"`,
+      "content-disposition": `attachment; filename="${tenTaiVe(cfg.name, phienBanPhat())}"`,
     });
     if (req.method === "HEAD") { res.end(); return true; }
     createReadStream(cfg.path).pipe(res);
@@ -313,7 +342,7 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
         res.writeHead(200, {
           "content-type": "application/octet-stream",
           "content-length": String(full.size),
-          "content-disposition": `attachment; filename="${full.name}"`,
+          "content-disposition": `attachment; filename="${tenTaiVe(full.name, phienBanPhat())}"`,
         });
         if (req.method === "HEAD") { res.end(); return true; }
         createReadStream(full.path).pipe(res);
@@ -334,7 +363,7 @@ export async function handleSite(url: string, req: IncomingMessage, res: ServerR
       // Không phải zip nữa: một script cài. `octet-stream` để trình duyệt tải về thay vì mở ra đọc.
       "content-type": "application/octet-stream",
       "content-length": String(pkg.size),
-      "content-disposition": `attachment; filename="${pkg.name}"`,
+      "content-disposition": `attachment; filename="${tenTaiVe(pkg.name, phienBanPhat())}"`,
     });
     if (req.method === "HEAD") { res.end(); return true; }
     createReadStream(pkg.path).pipe(res);

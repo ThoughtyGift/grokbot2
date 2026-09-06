@@ -77,7 +77,9 @@ test("/download/mac phát gói Mac, không phải gói Windows", async () => {
   const res = fakeRes();
   assert.equal(await handleSite("/download/mac", HEAD, res), true);
   if (res.code === 200) {
-    assert.match(res.headers["content-disposition"], /Cai-dat-Bot-Noi-Bo-mac.*\.command/,
+    // Ghim theo ĐUÔI, không theo tiền tố: tên hiện ra cho người dùng nay là `Cinai x Grok Bot <ver>`
+    // (xem `tenTaiVe`), còn thứ phải đúng ở đây là "gói Mac chứ không phải gói Windows".
+    assert.match(res.headers["content-disposition"], /filename="[^"]*\.command"/,
       "người dùng Mac tải nhầm gói Windows thì lỗi rất khó hiểu");
   } else {
     assert.equal(res.code, 503);
@@ -359,4 +361,39 @@ test("ngayPhatHanh: ưu tiên ngày trong tên gói, rơi về đuôi version, k
   assert.equal(ngayPhatHanh({ version: "0.29.20260903" }), "03/09/2026");
   assert.equal(ngayPhatHanh({ version: "0.43.20260905", ten: "khong-co-ngay.cmd" }), "05/09/2026");
   assert.equal(ngayPhatHanh(undefined), "—");
+});
+
+/*
+ * Tên tệp người dùng thấy khi tải (yêu cầu chủ dự án 07/09: "Cinai x Grok Bot" + số phiên bản).
+ *
+ * Bài này giữ hai vế cùng lúc, vì chúng kéo ngược nhau: tên PHẢI đẹp ở cửa tải, và tên trên đĩa PHẢI
+ * giữ nguyên vì `ngayPhatHanh`/`newestMatching`/`chiRieng` đều đọc nó.
+ */
+test("tenTaiVe: 'Cinai x Grok Bot <phiên bản>' + giữ đuôi, mỗi nền một đuôi", async () => {
+  const { tenTaiVe } = await import("./site.js");
+  assert.equal(tenTaiVe("Bot-Noi-Bo-Setup-20260906.exe", "0.43.20260905"), "Cinai x Grok Bot 0.43.20260905.exe");
+  assert.equal(tenTaiVe("Cai-dat-Bot-Noi-Bo-win-20260906.cmd", "0.43.20260905"), "Cinai x Grok Bot 0.43.20260905.cmd");
+  assert.equal(tenTaiVe("Cai-dat-Bot-Noi-Bo-mac-20260906.command", "0.43.20260905"), "Cinai x Grok Bot 0.43.20260905.command");
+});
+
+test("tenTaiVe: chưa phát hành thì giữ tên đĩa, không bịa một số", async () => {
+  const { tenTaiVe } = await import("./site.js");
+  for (const v of [undefined, "", "   "])
+    assert.equal(tenTaiVe("Bot-Noi-Bo-Setup-20260906.exe", v), "Bot-Noi-Bo-Setup-20260906.exe");
+});
+
+test("tenTaiVe: version là DỮ LIỆU từ manifest — không cho nó đóng sớm filename=\"…\"", async () => {
+  const { tenTaiVe } = await import("./site.js");
+  const t = tenTaiVe("a.exe", '1.0" ; drop\r\nx');
+  assert.ok(!/["\r\n]/.test(t), `header phải sạch, nhận: ${t}`);
+});
+
+/*
+ * Vì sao tên đẹp KHÔNG leo vào `ten` của manifest — đo 07/09 trước khi sửa. Giữ bài này để lần sau
+ * ai định "cho thống nhất một tên" thì thấy ngay cái giá: trang tải ghi sai NGÀY PHÁT HÀNH, im lặng.
+ */
+test("tên đẹp mà đặt vào manifest.ten thì ngayPhatHanh bắt nhầm đuôi version (lý do giữ tên đĩa)", async () => {
+  const { ngayPhatHanh } = await import("./site.js");
+  assert.equal(ngayPhatHanh({ version: "0.43.20260905", ten: "Cai-dat-Bot-Noi-Bo-win-20260906.cmd" }), "06/09/2026");
+  assert.equal(ngayPhatHanh({ version: "0.43.20260905", ten: "Cinai x Grok Bot 0.43.20260905.cmd" }), "05/09/2026");
 });
