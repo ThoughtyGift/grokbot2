@@ -32,10 +32,10 @@
     },
     {
       "date": "2026-09-06",
-      "at": "2026-09-06T12:31:45.527Z",
+      "at": "2026-09-06T13:21:20.908Z",
       "patchOk": true,
-      "callsTotal": 135,
-      "callsDelta": 135,
+      "callsTotal": 679,
+      "callsDelta": 679,
       "agents": 11,
       "counts": true
     }

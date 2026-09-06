@@ -214,3 +214,17 @@ if (-not $cdpUp) {
   exit 1
 }
 Write-Host "Grok Bot pid $($app.Id) - CDP :$cdp up. Chat in the app window." -ForegroundColor Green
+
+# F7 soak: dong dau "hom nay co dung app" ngay luc mo, chay nen, khong chan gi (06/09).
+# soak-day.mjs chi tinh mot ngay khi patch-client --verify xanh TREN BAN VUA MO (GROKBOT2_CLIENT_DIR) va
+# gateway da phuc vu >= 50 loi goi ke tu ngay ghi truoc; chay lai trong ngay chi cap nhat so cua ngay do,
+# nen mo app nhieu lan khong sinh them ngay. Ban ghi luc mo co the con "does NOT count" (chua du loi goi)
+# - `pnpm soak` cuoi ngay chot lai. Thieu node hay loi gi cung khong duoc lam hong lan mo app.
+try {
+  $env:GROKBOT2_CLIENT_DIR = Split-Path -Parent $appExe
+  $soak = Join-Path $repo 'services\grokbot-backend\scripts\soak-day.mjs'
+  Start-Process -FilePath 'node' -ArgumentList "`"$soak`"" -WorkingDirectory $repo -WindowStyle Hidden | Out-Null
+  Write-Host 'soak: dang dong dau ngay dung app (nen).' -ForegroundColor DarkGray
+} catch {
+  Write-Host "soak: khong dong dau duoc ($_)" -ForegroundColor DarkGray
+}

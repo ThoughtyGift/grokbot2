@@ -545,6 +545,8 @@ we answer       : 120/120 (100%)
   **Nó đo việc DÙNG, không đo điểm danh.** Một ngày chỉ được tính khi **cả hai**: patch verify sạch **và** gateway phục vụ ≥ 50 lệnh kể từ ngày ghi trước. Script chỉ đóng dấu ngày tháng sẽ cho phép đóng phase bằng 5 ngày app nằm im — tệ hơn không có gì. Ngày không tính cũng được ghi kèm lý do (`patch not intact`, `only +N gateway calls`), vì "5 ngày mà 3 ngày patch hỏng" không phải một cuộc soak.
 
   `pnpm soak:status` xem tiến độ, không ghi gì.
+
+  **06/09: 2/5 ngày, và launcher tự đóng dấu.** `infra/scripts/run.ps1` chạy `soak-day.mjs` nền, im lặng, ngay sau khi app lên (với `GROKBOT2_CLIENT_DIR` = bản vừa mở, nên `--verify` kiểm đúng bản), nên mở app qua `start-app.cmd` là ngày ấy có mục — mục lúc mở có thể còn "does NOT count" (chưa đủ 50 lời gọi), `pnpm soak` cuối ngày chốt lại cùng mục ấy. Cần 3 ngày dùng thật nữa.
 - [x] **Rebuild từ trạng thái hãng sạch — xong 2026-08-21, và nó tìm ra một bug thật.**
 
   Chu trình đầy đủ trên install thật: `--undo` → `resources/` trở về **đúng layout bản cài mới** (`app.asar`, `app.asar.unpacked`, `elevate.exe`), app hãng **boot được** từ `app.asar` (đường lùi là thật, không phải lý thuyết) → `--apply` → `--verify` 6/6 → boot từ cây đã patch → **Gate B 15/16**.
