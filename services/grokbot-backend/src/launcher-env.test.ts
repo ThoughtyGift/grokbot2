@@ -69,3 +69,16 @@ test("bộ cài đặt đủ cả bốn biến — thiếu cái nào cũng hỏn
     assert.ok(assignmentsOf(text, name).length > 0, `bộ cài thiếu ${name}`);
   }
 });
+
+/*
+ * ELECTRON_RUN_AS_NODE=1 thừa hưởng từ VS Code làm `Grok Bot.exe` chạy như Node trần rồi thoát — không cửa sổ, không lỗi.
+ * Đo 06/09 trên máy dev: hai lần launcher của bộ cài "mở app" mà 0 tiến trình; `run.ps1` của repo đã gỡ biến này từ lâu.
+ * Cả ba lối mở phát ra ngoài phải gỡ nó trước `start`/`open`.
+ */
+test("cả ba launcher phát ra ngoài đều gỡ ELECTRON_RUN_AS_NODE trước khi mở app", () => {
+  const exe = readFileSync(join(repoRoot, "services", "grokbot-backend", "scripts", "setup-exe.mjs"), "utf8");
+  const tpl = readFileSync(join(repoRoot, "services", "grokbot-backend", "scripts", "setup-templates.mjs"), "utf8");
+  assert.match(exe, /set "ELECTRON_RUN_AS_NODE="/, "launcher chở-app (setup-exe) phải gỡ");
+  assert.match(tpl, /set "ELECTRON_RUN_AS_NODE="[\s\S]*start "" "%APP%"/, "launcher cấu hình Windows phải gỡ TRƯỚC start");
+  assert.match(tpl, /unset ELECTRON_RUN_AS_NODE/, "launcher Mac phải gỡ");
+});

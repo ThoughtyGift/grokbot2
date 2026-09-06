@@ -421,6 +421,11 @@ REM duoc mot banner dan toi nut Install luon that bai. Cap nhat do khoi duoi day
 REM GROKBOT2_NATIVE_UPDATES=1 mo lai — cho ngay co chung chi ky so + ban va noi danh sach trang.
 if not "%GROKBOT2_NATIVE_UPDATES%"=="1" set "SAND_DISABLE_UPDATES=1"
 
+REM Mo tu terminal VS Code (hay bat ky tien trinh con nao cua no) thi thua huong ELECTRON_RUN_AS_NODE=1:
+REM Electron chay nhu Node tran, thoat ngay, khong cua so, khong loi — do 06/09 tren may dev, hai lan
+REM launcher "mo app" ma 0 tien trinh. run.ps1 cua repo da go bien nay tu lau; launcher nay cung phai go.
+set "ELECTRON_RUN_AS_NODE="
+
 if not exist "%~dp0Grok Bot.exe" (
   echo Thieu "%~dp0Grok Bot.exe" — cai dat khong tron. Chay lai bo cai.
   pause

@@ -261,6 +261,9 @@ REM GROKBOT2_NATIVE_UPDATES=1 mo lai — de danh cho ngay co chung chi ky so + b
 REM trang nguoi ky. Luc do banner + Install goc chay that, va khoi tren tu tat (dat NO_SELF_UPDATE).
 if not "%GROKBOT2_NATIVE_UPDATES%"=="1" set "SAND_DISABLE_UPDATES=1"
 
+REM Thua huong ELECTRON_RUN_AS_NODE=1 (terminal VS Code) la Electron chay nhu Node roi thoat im — go truoc khi mo.
+set "ELECTRON_RUN_AS_NODE="
+
 start "" "%APP%" %*
 `;
 
@@ -359,6 +362,8 @@ APP="\${GROKBOT2_CLIENT_DIR:-/Applications/Grok Bot.app}"
 if ! grep -q "grokbot2:update-feed" "$APP/Contents/Resources/app/dist/electron-main/main.cjs" 2>/dev/null; then
   export SAND_DISABLE_UPDATES=1
 fi
+# Thua huong ELECTRON_RUN_AS_NODE=1 (terminal VS Code) la Electron chay nhu Node roi thoat im — go truoc khi mo.
+unset ELECTRON_RUN_AS_NODE
 
 # Ten file thuc thi do CFBundleExecutable quyet dinh — lay cai dau tien thay vi doan ten.
 BIN="$(ls "$APP/Contents/MacOS" 2>/dev/null | head -1)"
