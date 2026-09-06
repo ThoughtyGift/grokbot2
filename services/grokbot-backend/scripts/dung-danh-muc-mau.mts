@@ -26,8 +26,8 @@ const gw = async (m: string, body: Record<string, unknown> = {}): Promise<J> => 
   const r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(body) });
   return r.json().catch(() => null);
 };
-const ngoai = (...args: string[]): J => JSON.parse(execFileSync("npx", ["tsx", NGOAI, ...args],
-  { encoding: "utf8", shell: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MAU_OWNER: OWNER } }).trim().split("\n").pop()!);
+const ngoai = (moTa: string, ...args: string[]): J => JSON.parse(execFileSync("npx", ["tsx", NGOAI, ...args],
+  { encoding: "utf8", shell: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MAU_OWNER: OWNER, MAU_MO_TA: moTa } }).trim().split("\n").pop()!);
 
 const loi = loiDanhMuc();
 if (loi.length) { console.error("danh mục có lỗi — không dựng:\n  " + loi.join("\n  ")); process.exit(1); }
@@ -47,9 +47,10 @@ for (const b of DANH_MUC) {
     if (!co) { await gw("createAgentWorkflow", { agentId: bot.id, name: s.name, description: s.description, instructions: s.instructions }); moi++; }
     else if (co.instructions !== s.instructions || co.description !== s.description) { await gw("updateAgentWorkflow", { workflowId: co.id, agentId: bot.id, name: s.name, description: s.description, instructions: s.instructions }); nang++; }
   }
+  // Thân thẻ = b.moTa (không phải description của bot = mô tả + SOP); lệch hoặc chưa có mẫu → bản chờ mới, xuất bản ngay.
   let tpl = await gw("getBotTemplateForSourceAgent", { sourceAgentId: bot.id });
-  if (!tpl?.shareId) {
-    const t = ngoai("create", bot.id);
+  if (!tpl?.shareId || (tpl.description ?? tpl.body) !== b.moTa) {
+    const t = ngoai(b.moTa, "stage", bot.id);
     if (!t.shareId) { console.error(`✗ ${b.name}: không tạo được mẫu`, t); continue; }
     tpl = await gw("getBotTemplateForSourceAgent", { sourceAgentId: bot.id });
   }

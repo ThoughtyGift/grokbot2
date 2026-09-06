@@ -26,8 +26,8 @@ const gw = async (m: string, body: Record<string, unknown> = {}): Promise<J> => 
   const r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(body) });
   return r.json().catch(() => null);
 };
-const ngoai = (...args: string[]): J => JSON.parse(execFileSync("npx", ["tsx", NGOAI, ...args],
-  { encoding: "utf8", shell: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MAU_OWNER: OWNER } }).trim().split("\n").pop()!);
+const ngoai = (moTa: string, ...args: string[]): J => JSON.parse(execFileSync("npx", ["tsx", NGOAI, ...args],
+  { encoding: "utf8", shell: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MAU_OWNER: OWNER, MAU_MO_TA: moTa } }).trim().split("\n").pop()!);
 
 // 1 · bot
 const roster: J[] = (await gw("listAgents")) ?? [];
@@ -54,12 +54,14 @@ if (!co) {
 } else console.log("skill đúng bản:", co.id);
 
 // 3 · mẫu (ngoài tiến trình, như e2e-mau-bot) — đã có thì giữ, vì mẫu là thứ người dùng đã import theo version
+// Thân thẻ = MO_TA_THO (2–4 câu), KHÔNG phải description của bot (mô tả + SOP — đo 06/09: thẻ hiện cả SOP). Lệch thì
+// bản chờ mới với thân thẻ đúng, xuất bản ngay.
 let tpl = await gw("getBotTemplateForSourceAgent", { sourceAgentId: bot.id });
-if (!tpl?.shareId) {
-  const t = ngoai("create", bot.id);
+if (!tpl?.shareId || (tpl.description ?? tpl.body) !== MO_TA_THO) {
+  const t = ngoai(MO_TA_THO, "stage", bot.id);
   if (!t.shareId) { console.error("không tạo được mẫu:", t); process.exit(1); }
   tpl = await gw("getBotTemplateForSourceAgent", { sourceAgentId: bot.id });
-  console.log(`tạo mẫu: ${tpl?.shareId} (${t.skills} skill)`);
+  console.log(`mẫu ${tpl?.shareId} bản ${t.version} (${t.skills} skill) — thân thẻ đã đặt`);
 } else console.log(`mẫu đã có: ${tpl.shareId} v${tpl.activeVersion ?? "?"}`);
 
 // 4 · listing nổi bật
