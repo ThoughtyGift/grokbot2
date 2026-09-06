@@ -90,6 +90,8 @@ export type LocalOp =
   | { kind: "read"; path: string }
   | { kind: "ls"; path: string }
   | { kind: "write"; path: string; bytesBase64: string }
+  /** Đọc BYTES thô — khung `{kind:"download", path}` → `{kind:"file", bytesBase64}`; cặp với `write`. Cho chép tệp sang box. */
+  | { kind: "download"; path: string }
   | { kind: "spawn"; command: string; cwd?: string; description?: string }
   | { kind: "stdin"; shellId: number; chars: string };
 
@@ -149,7 +151,7 @@ function serverMessage(op: LocalOp, machineId: string, execId: string): Record<s
     };
   }
   if (op.kind === "stdin") return { ...base, writeShellStdinArgs: { shellId: op.shellId, chars: op.chars } };
-  if (op.kind === "write") throw new Error("write đi bằng khung upload, không qua serverMessage");
+  if (op.kind === "write" || op.kind === "download") throw new Error("write/download đi bằng khung upload/download, không qua serverMessage");
   return { ...base, lsArgs: { path: op.path } };
 }
 
@@ -161,13 +163,14 @@ function serverMessage(op: LocalOp, machineId: string, execId: string): Record<s
 export function khungGui(op: LocalOp, machineId: string, requestId: string, approvalId?: string): Record<string, unknown> {
   const duyet = approvalId ? { approvalId } : {};
   if (op.kind === "write") return { kind: "upload", requestId, path: op.path, bytesBase64: op.bytesBase64, ...duyet };
+  if (op.kind === "download") return { kind: "download", requestId, path: op.path, ...duyet };
   return { kind: "exec", requestId, serverMessage: serverMessage(op, machineId, requestId), ...duyet };
 }
 
 /** Hành động tương ứng cho thẻ xin quyền — khớp `describeLocalExec` (và nhánh upload) của daemon. */
 export function actionOf(op: LocalOp): LocalAction {
   if (op.kind === "shell" || op.kind === "spawn") return "run-command";
-  if (op.kind === "read") return "read-file";
+  if (op.kind === "read" || op.kind === "download") return "read-file";
   if (op.kind === "write") return "write-file";
   if (op.kind === "stdin") return "send-input";
   return "list-directory";
@@ -293,10 +296,12 @@ export async function runOnUserComputer(
     // Câu của daemon đã đủ rõ ("Path is outside the allowed local-exec root…", "File is 120.3 MiB…").
     return { ok: false, error: String(loiTep.error ?? JSON.stringify(loiTep).slice(0, 300)), ...keo };
   }
-  if (op.kind === "write") {
-    return khungs.some((f) => String(f.kind ?? "") === "file")
+  if (op.kind === "write" || op.kind === "download") {
+    const tep = khungs.find((f) => String(f.kind ?? "") === "file");
+    if (!tep) return { ok: false, error: `daemon trả khung lạ cho ${op.kind}: ${JSON.stringify(cuoiCung).slice(0, 300)}`, ...keo };
+    return op.kind === "write"
       ? { ok: true, data: { written: true, path: op.path }, ...keo }
-      : { ok: false, error: `daemon trả khung lạ cho upload: ${JSON.stringify(cuoiCung).slice(0, 300)}`, ...keo };
+      : { ok: true, data: { path: op.path, bytesBase64: String(tep.bytesBase64 ?? "") }, ...keo };
   }
   if (op.kind === "spawn" || op.kind === "stdin") return docKetQuaMotNhanh(op, thans[0] ?? cuoiCung, keo);
 

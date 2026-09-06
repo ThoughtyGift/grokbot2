@@ -13,7 +13,7 @@
  */
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { readFile, writeFile, readdir, stat, mkdir, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, appendFile, open, readdir, stat, mkdir, rename, unlink } from "node:fs/promises";
 import { resolve, join, relative, isAbsolute, dirname } from "node:path";
 
 const PORT = Number(process.argv[2] ?? process.env.GROKBOT2_EXEC_PORT ?? 1337);
@@ -164,8 +164,41 @@ const handlers = {
     const from = Math.max(0, Number(offset) || 0);
     const want = Number(length) || 0;
     if (want <= 0 || from >= totalSize) return { path: abs, totalSize, bytesBase64: "" };
-    const buf = await readFile(abs);
-    return { path: abs, totalSize, bytesBase64: buf.subarray(from, from + want).toString("base64") };
+    // Đọc ĐÚNG khúc cần (positional read), không nạp cả tệp rồi cắt: chép tệp trăm MB về máy người
+    // dùng đi 25 khúc — nạp cả tệp mỗi khúc là O(n²) IO trên box dùng chung.
+    const n = Math.min(want, totalSize - from);
+    const fh = await open(abs, "r");
+    try {
+      const buf = Buffer.alloc(n);
+      const { bytesRead } = await fh.read(buf, 0, n, from);
+      return { path: abs, totalSize, bytesBase64: buf.subarray(0, bytesRead).toString("base64") };
+    } finally {
+      await fh.close();
+    }
+  },
+
+  /**
+   * Ghi bytes thô — chiều "chép tệp từ máy người dùng lên box" (CopyToBox của hãng, 06/09).
+   *
+   * Tệp lớn tới đây thành nhiều khúc `append:true`, vì đường backend → box đi qua nginx
+   * `admin.halcion.vn` có `client_max_body_size 20m` mỗi request. Khúc đầu (`append` rỗng) ghi MỚI
+   * bằng tmp+rename như `write` — chép lại một tệp cùng tên là thay hẳn, không nối vào đuôi tệp cũ;
+   * các khúc sau nối vào. `safePath` giữ trong ROOT như mọi op khác.
+   */
+  async writeBytes({ target_file, path, bytesBase64, append }) {
+    const abs = safePath(target_file ?? path);
+    if (typeof bytesBase64 !== "string") throw new Error("bytesBase64 required");
+    const buf = Buffer.from(bytesBase64, "base64");
+    await mkdir(dirname(abs), { recursive: true });
+    if (append) {
+      await appendFile(abs, buf);
+    } else {
+      const tmp = `${abs}.tmp`;
+      await writeFile(tmp, buf);
+      await rename(tmp, abs);
+    }
+    const info = await stat(abs);
+    return { path: abs, bytes: buf.length, totalSize: info.size };
   },
 
   // delete_file

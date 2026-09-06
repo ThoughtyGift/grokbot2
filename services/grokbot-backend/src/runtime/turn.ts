@@ -637,7 +637,7 @@ const AUTO_APPROVED = new Set(["ask_question", "request_box_help", "get_mcp_tool
  * Tách riêng khỏi `AUTO_APPROVED` vì đây là chiều ngược lại: không phải "khỏi hỏi", mà là "hỏi kể
  * cả khi cài đặt nói khỏi hỏi". Xem khối chú thích ở chỗ dùng nó.
  */
-const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read", "local_write", "local_shell_bg"]);
+const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read", "local_write", "local_shell_bg", "local_copy_to_box", "local_copy_from_box"]);
 
 /**
  * Hành động ghi trên thẻ quyền — đúng tên daemon khai (`isSandLocalToolAction`), vì client 0.43 chọn câu
@@ -646,7 +646,9 @@ const CHAM_MAY_NGUOI_DUNG = new Set(["local_shell", "local_read", "local_write",
  * `send-input`: daemon không có handler stdin cho máy người dùng (đo 06/09, xem `local-exec.ts`).
  */
 const hanhDongThe = (lower: string): LocalToolAction =>
-  lower === "local_read" ? "read-file" : lower === "local_write" ? "write-file" : "run-command";
+  lower === "local_read" || lower === "local_copy_to_box" ? "read-file"
+    : lower === "local_write" || lower === "local_copy_from_box" ? "write-file"
+      : "run-command";
 
 /**
  * Người dùng đã bấm "Always allow" TRÊN CHÍNH THẺ CHẠM MÁY hay chưa.

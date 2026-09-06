@@ -91,6 +91,12 @@ và 7 dạng tham số RPC: `shellStreamArgs` · `backgroundShellSpawnArgs` · `
 | `send-input` | ❌ **và hãng cũng không** | daemon trả *"No handler found for server message of type writeShellStdinArgs"*: `buildLocalExecManager` (0.29 lẫn 0.43) chỉ đăng ký 4 handler `shellStreamArgs · backgroundShellSpawnArgs · readArgs · lsArgs`. Tên có trong `isSandLocalToolAction` và nhánh có trong `describeLocalExec`, nhưng không có người thực thi |
 | `forceBackgroundShellArgs` | ❌ và hãng cũng không | cùng lý do — không nằm trong 4 handler |
 | `read-messages` · `send-imessage` | ❌ | Messages của macOS — không áp cho Windows |
+| **CopyToBox** (tool host của hãng, dùng khung `download`) | ✅ `local_copy_to_box` (06/09) | máy → backend một khung, backend → box `writeBytes` khúc 6 MiB; 13,6 MB sha trùng, 26 s |
+| **CopyFromBox** (khung `upload`) | ✅ `local_copy_from_box` (06/09) | box `readBytes` khúc 4 MiB → một khung `upload` về Desktop; `e2e-chep-tep` 7/7 |
+
+Hai tool Copy không nằm trong 7 hành động của daemon — chúng là tool ở tầng HOST của hãng, chỉ dùng
+hai khung `upload`/`download` của daemon; tên lộ trong câu báo `jU` (*"…plus CopyToBox and
+CopyFromBox, cannot run on their computer"*).
 
 Hai dòng "❌ và hãng cũng không" là bẫy §7 lần thứ sáu, đo bằng cách gửi khung thật xuống daemon thật
 (`/internal/ops/local-exec` kind `stdin`) chứ không bằng đọc danh sách hành động. Đo đường model:

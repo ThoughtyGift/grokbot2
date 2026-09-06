@@ -119,3 +119,10 @@ test("không có daemon thì write cũng bỏ cuộc theo timeoutMs với câu r
   assert.equal(r.ok, false);
   assert.match(String(r.error), /không trả lời/);
 });
+
+test("download là khung riêng {kind:'download', path} và mang hành động read-file trên thẻ", () => {
+  const k = khungGui({ kind: "download", path: "C:/Users/admin/Desktop/clip.mp4" }, "may-1", "req-5");
+  assert.deepEqual(k, { kind: "download", requestId: "req-5", path: "C:/Users/admin/Desktop/clip.mp4" });
+  assert.equal(actionOf({ kind: "download", path: "x" }), "read-file");
+  assert.equal(targetOf({ kind: "download", path: "C:/x.bin" }), "C:/x.bin");
+});

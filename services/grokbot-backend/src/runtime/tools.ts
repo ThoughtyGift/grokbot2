@@ -8,6 +8,7 @@ import { BROWSER_TOOL_NAMES, isBrowserConfigured, isBrowserReachable, runBrowser
 import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { runOnUserComputer, connectedMachine, connectedMachines, findMachine, tepDauRaNen } from "../local-exec.js";
+import { chepLenBox, chepVeMay } from "../chep-tep.js";
 import { lamTrenTrinhDuyet } from "../local-browser.js";
 import { soatHanhDong } from "./auto-review.js";
 import { postAutoReview } from "../conversation/cards.js";
@@ -1024,6 +1025,45 @@ TOOLS.local_shell_bg = async (arg, _ctx) => {
   return `[${m.may.label}] lệnh đang chạy nền — shellId ${shellId}${d.pid ? `, pid ${d.pid}` : ""}, thư mục ${d.workingDirectory || "?"}.\n`
     + `Đầu ra ghi vào ${tep} — xem bằng local_read({"path":"${tep}"}) (dòng "status:" ở đầu, "exit_code:" ở cuối khi xong). `
     + "Lệnh vẫn chạy sau khi lượt này kết thúc; không gõ được vào nó, nên nếu nó dừng chờ hỏi thì phải chạy lại với cờ tự trả lời.";
+};
+
+/**
+ * Chép tệp máy người dùng → box (CopyToBox của hãng). Sau đó mọi tool box (run_terminal_command_v2,
+ * read_file_v2, ffmpeg…) làm việc trên bản chép; tệp trên máy người dùng không bị đụng. Trần 100 MiB.
+ */
+TOOLS.local_copy_to_box = async (arg, _ctx) => {
+  let spec: { path?: string; boxPath?: string; machine?: unknown };
+  try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
+  const path = String(spec?.path ?? "").trim();
+  if (!path) return 'local_copy_to_box cần {"path":"C:/Users/<tên>/…/tep.mp4"} (thêm "boxPath" nếu muốn đặt chỗ khác trên box)';
+  if (!boxConfigured()) return "Chưa nối box nên không có chỗ để chép tới.";
+  const m = chonMay(spec);
+  if ("loi" in m) return m.loi;
+  const r = await chepLenBox({ machineId: m.may.computerId, duongMay: path, ...(spec?.boxPath ? { duongBox: String(spec.boxPath) } : {}) });
+  if (!r.ok) return `Không chép được từ ${m.may.label}: ${r.error}`;
+  return `[${m.may.label}] đã chép ${r.duongMay} → box:${r.duongBox} (${r.bytes} byte, ${r.khuc} khúc, sha256 ${r.sha256.slice(0, 16)}…). `
+    + `Giờ dùng tool box trên đường dẫn ${r.duongBox}; tệp gốc trên máy không đổi.`;
+};
+
+/**
+ * Chép tệp box → máy người dùng (CopyFromBox). Mặc định ghi vào Desktop của họ; đường dẫn đích phải
+ * nằm trong thư mục người dùng (daemon từ chối chỗ khác). Ghi đè nếu trùng tên.
+ */
+TOOLS.local_copy_from_box = async (arg, _ctx) => {
+  let spec: { boxPath?: string; source?: string; path?: string; machine?: unknown };
+  try { spec = JSON.parse(arg); } catch { spec = { boxPath: unquote(arg) }; }
+  const boxPath = String(spec?.boxPath ?? spec?.source ?? "").trim();
+  if (!boxPath) return 'local_copy_from_box cần {"boxPath":"<tệp trên box>"} (thêm "path":"C:/Users/<tên>/Desktop/…" để đặt tên/chỗ khác)';
+  if (!boxConfigured()) return "Chưa nối box nên không có gì để chép về.";
+  const m = chonMay(spec);
+  if ("loi" in m) return m.loi;
+  const r = await chepVeMay({
+    machineId: m.may.computerId, duongBox: boxPath,
+    ...(spec?.path ? { duongMay: String(spec.path) } : {}),
+    ...(m.may.localRoot ? { localRoot: m.may.localRoot } : {}),
+  });
+  if (!r.ok) return `Không chép được về ${m.may.label}: ${r.error}`;
+  return `[${m.may.label}] đã chép box:${r.duongBox} → ${r.duongMay} (${r.bytes} byte, sha256 ${r.sha256.slice(0, 16)}…). Người dùng mở được ngay trên máy họ.`;
 };
 
 TOOLS.local_read = async (arg, _ctx) => {
@@ -2286,7 +2326,7 @@ const TASK_PROTOCOL =
   "Chỉ dùng đúng những tên trên; không có tên nào hợp thì tự làm.";
 
 /**
- * Máy THẬT của người dùng — sáu tool `local_*`, và cách gọi chúng.
+ * Máy THẬT của người dùng — tám tool `local_*`, và cách gọi chúng.
  *
  * Danh sách tên tool được sinh tự động từ `TOOLS`, nên `local_browser` đã có mặt ở đó từ lúc thêm
  * hàm. Nhưng CHỈ có tên. Bài học `create_routine` (28/08) đúng nguyên văn ở đây: model biết tool
@@ -2309,6 +2349,9 @@ const localProtocol = (): string => {
     + 'TOOL_CALL: local_write({"path":"C:/Users/<tên>/...","content":"..."}) — GHI một file chữ (ghi đè toàn bộ, tự tạo thư mục cha; chỉ trong thư mục người dùng). '
     + 'TOOL_CALL: local_shell_bg({"command":"..."}) — chạy lệnh NỀN sống qua lượt này (server, quay màn hình, tải lớn, việc quá 2 phút); trả shellId và file đầu ra, xem lại bằng local_read. '
     + "Lệnh nền không nhận được bàn phím — dùng cờ tự trả lời (-y, -NonInteractive) thay vì để nó hỏi. "
+    + 'TOOL_CALL: local_copy_to_box({"path":"C:/Users/<tên>/Desktop/clip.mp4"}) — chép một tệp của họ (video, ảnh, bảng tính… tới 100 MB) lên máy của BẠN để xử lý bằng tool box; '
+    + 'TOOL_CALL: local_copy_from_box({"boxPath":"ket-qua.mp4"}) — trả kết quả từ máy bạn về Desktop của họ. '
+    + "Xử lý tệp nặng thì làm trên máy bạn rồi chép về, đừng cố làm bằng local_shell. "
     + 'TOOL_CALL: local_browser({"viec":"mo","url":"https://..."}) — mở trang trong CỬA SỔ CHROME RIÊNG của bạn trên máy đó; '
     + 'rồi {"viec":"doc"} để đọc chữ trên trang, {"viec":"bam","chu":"<chữ trên nút>"} để bấm, '
     + '{"viec":"go","o":"<tên ô>","chu":"...","enter":true} để điền, {"viec":"anh"} để chụp màn hình trang cho người dùng xem. '

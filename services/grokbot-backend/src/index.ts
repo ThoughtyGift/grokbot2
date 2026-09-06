@@ -50,7 +50,7 @@ import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
 import { closeTeach } from "./teach.js";
-import { runOnUserComputer, userComputerConnected, findMachine, connectedMachines } from "./local-exec.js";
+import { runOnUserComputer, userComputerConnected, findMachine, connectedMachine, connectedMachines } from "./local-exec.js";
 import { lamTrenTrinhDuyet } from "./local-browser.js";
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -327,14 +327,25 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
        */
       if (url.startsWith("/internal/ops/local-exec") && req.method === "POST") {
         const kind = String(bodyJ.kind ?? "shell");
-        const HOP_LE = ["shell", "read", "ls", "write", "spawn", "stdin"];
+        const HOP_LE = ["shell", "read", "ls", "write", "download", "spawn", "stdin", "copy-to-box", "copy-from-box"];
         if (!HOP_LE.includes(kind)) return json({ error: `kind phải là ${HOP_LE.join("|")}` }, 400);
         if (!userComputerConnected()) return json({ ok: false, error: "máy của người dùng không nối (app Grok Bot chưa mở?)" }, 409);
+        // Hai chiều chép tệp (chep-tep.ts) — trả sha256 + số khúc, không trả bytes, để đo bằng mắt được.
+        if (kind === "copy-to-box" || kind === "copy-from-box") {
+          const { chepLenBox, chepVeMay } = await import("./chep-tep.js");
+          const may = connectedMachine();
+          if (!may) return json({ ok: false, error: "không máy nào nối" }, 409);
+          const r = kind === "copy-to-box"
+            ? await chepLenBox({ machineId: may.computerId, duongMay: String(bodyJ.path ?? ""), ...(bodyJ.boxPath ? { duongBox: String(bodyJ.boxPath) } : {}) })
+            : await chepVeMay({ machineId: may.computerId, duongBox: String(bodyJ.boxPath ?? ""), ...(bodyJ.path ? { duongMay: String(bodyJ.path) } : {}), ...(may.localRoot ? { localRoot: may.localRoot } : {}) });
+          return json({ ...r, may: may.label }, r.ok ? 200 : 502);
+        }
         const op = kind === "shell" ? { kind: "shell" as const, command: String(bodyJ.command ?? "") }
           : kind === "read" ? { kind: "read" as const, path: String(bodyJ.path ?? "") }
           : kind === "ls" ? { kind: "ls" as const, path: String(bodyJ.path ?? "") }
           // `content` là chữ; cửa chẩn đoán không nhận bytes thô — đủ để đo đường ghi.
           : kind === "write" ? { kind: "write" as const, path: String(bodyJ.path ?? ""), bytesBase64: Buffer.from(String(bodyJ.content ?? ""), "utf8").toString("base64") }
+          : kind === "download" ? { kind: "download" as const, path: String(bodyJ.path ?? "") }
           : kind === "spawn" ? { kind: "spawn" as const, command: String(bodyJ.command ?? ""), ...(bodyJ.cwd ? { cwd: String(bodyJ.cwd) } : {}) }
           : { kind: "stdin" as const, shellId: Number(bodyJ.shellId ?? 0), chars: String(bodyJ.chars ?? "") };
         /*
