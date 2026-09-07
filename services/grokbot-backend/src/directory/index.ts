@@ -21,12 +21,41 @@ let rosterSeq = 0;
 export const nextRosterOrdered = () => ({ replicaKey: "roster", epoch: EPOCH, sequence: ++rosterSeq });
 export const peekRosterSeq = () => rosterSeq;
 
+/**
+ * `awaitingUserResponse` phải ĐỦ ba khoá, nếu không cả `listAgents` bị coi là lệnh thất bại.
+ *
+ * Schema 0.43 `SandAgentAwaitingState` đòi `required:["reason","since","tabId"]` với
+ * `additionalProperties:false`; ta chỉ gửi `{reason}` — nên `anyOf` trượt cả hai nhánh (object thiếu
+ * `since`, mà cũng không phải `null`). Coordinator 0.43 coi reply trượt schema là LỆNH HỎNG chứ
+ * không phải trường thiếu (§7 "kết nối xanh ≠ reply được nhận"), và `listAgents` là thứ vẽ sidebar.
+ *
+ * Đo 07/09: `kiem-reply-0-43` đỏ đúng lệnh này ngay khi có bot đang chờ — hai bot của người dùng
+ * mang *"Waiting for you: Mở file nào trước?"*. Bảng theo dõi ghi 29/29 hôm 06/09 vì hôm đó không
+ * bot nào ở trạng thái chờ; một lỗi chỉ hiện ra theo TRẠNG THÁI DỮ LIỆU thì một lượt đo xanh không
+ * chứng minh được gì.
+ *
+ * `since` là giờ ĐẶT, không phải giờ đọc: đọc mà tính lại thì mỗi lần roster được hỏi là mốc chờ
+ * nhảy về hiện tại. `tabId` để chuỗi rỗng — của hãng nó trỏ tab trình duyệt trong luồng auto-review;
+ * bên ta không có tab nào, và bịa một id là bịa dữ liệu. Renderer không đọc hai khoá này cho dấu
+ * "blocked" (`t.awaitingUserResponse != null`), nhưng máy kiểm thì có.
+ */
+const duChoDoi = (v: unknown): unknown => {
+  if (v == null || typeof v !== "object") return v;
+  const o = v as Record<string, unknown>;
+  return {
+    ...o,
+    since: typeof o.since === "number" ? o.since : Date.now(),
+    tabId: typeof o.tabId === "string" ? o.tabId : "",
+  };
+};
+
 export function setPresence(agentId: string, patch: Partial<Pick<AgentRecord, "isRunning" | "isComposingMessage" | "isRetrying" | "currentActivity" | "awaitingUserResponse">>): void {
   const rec = agents.get(agentId);
   if (!rec) return;
   const bag = rec as unknown as Record<string, unknown>;
   let changed = false;
-  for (const [k, v] of Object.entries(patch)) {
+  for (const [k, v0] of Object.entries(patch)) {
+    const v = k === "awaitingUserResponse" ? duChoDoi(v0) : v0;
     if (bag[k] !== v) { bag[k] = v; changed = true; }
   }
   if (changed) { rosterChanged(agentId); persist(); }
@@ -122,7 +151,17 @@ function summarise(a: AgentRecord): RosterRow {
     isGroup: a.isGroup === true,
     origin: "user",
     lastMessageId: last ? last.id : null,
-    awaitingUserResponse: a.awaitingUserResponse ?? null,
+    // Hoàn thiện lại ở CỬA DÂY nữa, không chỉ ở `setPresence`: bản ghi đã nằm trên đĩa từ trước
+    // 07/09 chỉ có `{reason}`, và chúng không tự sửa cho tới lần đặt kế tiếp — mà "lần kế tiếp"
+    // của một bot đang đứng chờ có thể là ngày mai. Mốc chờ lấy `updatedAt` (entry cuối) chứ không
+    // lấy `Date.now()`: tính lại lúc ĐỌC thì mỗi lần roster được hỏi là mốc nhảy về hiện tại.
+    awaitingUserResponse: a.awaitingUserResponse == null ? null : {
+      ...(a.awaitingUserResponse as Record<string, unknown>),
+      since: typeof (a.awaitingUserResponse as { since?: unknown }).since === "number"
+        ? (a.awaitingUserResponse as { since: number }).since : updatedAt,
+      tabId: typeof (a.awaitingUserResponse as { tabId?: unknown }).tabId === "string"
+        ? (a.awaitingUserResponse as { tabId: string }).tabId : "",
+    },
     memberIds: a.memberIds ?? [],  // hardcode [] cũ từng đè danh sách thành viên thật
     conversationPartnerIds: partnersOf(a.id),
     lastEntry: lastEntry ?? null,

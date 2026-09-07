@@ -45,3 +45,56 @@ test("tin từ BOT khác KHÔNG tắt chấm vàng — người mới gỡ đư�
   as(OWNER, () => sendPrompt({ agentId: a.id, content: "cho mình xin số", fromAgent: { id: "agent-x", name: "Ads" } }));
   assert.notEqual(row(a.id)?.awaitingUserResponse, null);
 });
+
+// ── Ba khoá, không phải một ────────────────────────────────────────────────────────────────────
+//
+// Ba bài trên ghim thứ RENDERER đọc (`!= null` là đủ). Ba bài dưới ghim thứ MÁY KIỂM đọc: schema
+// 0.43 `SandAgentAwaitingState` đòi `required:["reason","since","tabId"]` + `additionalProperties:
+// false`, và coordinator coi reply trượt schema là LỆNH HỎNG — nên thiếu `since` là sidebar không
+// vẽ được, dù HTTP 200 và dù chấm vàng đúng. Đo 07/09 trên hai bot thật của người dùng.
+//
+// Vì sao bài này đáng có: lỗi chỉ hiện khi CÓ bot đang chờ, nên `kiem-reply-0-43` xanh 29/29 hôm
+// 06/09 mà không chứng minh gì. Một bài đo chỉ chạy qua nhánh có dữ liệu mới nói được điều gì.
+
+const { agents } = await import("./chat/state.js");
+
+test("setPresence tự hoàn thiện đủ ba khoá — schema 0.43 đòi since và tabId", () => {
+  const a = as(OWNER, () => createAgent({ name: "Cho 4" }));
+  const truoc = Date.now();
+  setPresence(a.id, { awaitingUserResponse: { reason: "Mở file nào trước?" } });
+  const got = row(a.id)?.awaitingUserResponse as Record<string, unknown> | null;
+  assert.deepEqual(Object.keys(got ?? {}).sort(), ["reason", "since", "tabId"]);
+  assert.equal(got?.reason, "Mở file nào trước?");
+  assert.equal(typeof got?.since, "number");
+  assert.ok((got?.since as number) >= truoc, "since là giờ ĐẶT, không phải một hằng số");
+  assert.equal(got?.tabId, "", "không có tab thì để rỗng — bịa một id là bịa dữ liệu");
+});
+
+test("mốc chờ ĐỨNG YÊN qua nhiều lượt đọc roster", () => {
+  // Tính lại lúc đọc thì mỗi nhịp client hỏi roster là mốc nhảy về hiện tại, và "chờ 2 tiếng" của
+  // người dùng vĩnh viễn hiện thành "vừa xong".
+  const a = as(OWNER, () => createAgent({ name: "Cho 5" }));
+  setPresence(a.id, { awaitingUserResponse: { reason: "Đọc file nào trước?" } });
+  const lan1 = (row(a.id)?.awaitingUserResponse as { since: number }).since;
+  const lan2 = (row(a.id)?.awaitingUserResponse as { since: number }).since;
+  assert.equal(lan1, lan2);
+});
+
+test("bản ghi CŨ trên đĩa chỉ có {reason} vẫn ra dây đủ ba khoá", () => {
+  // Bản ghi ghi trước 07/09 không tự sửa cho tới lần `setPresence` kế tiếp — mà lần kế tiếp của một
+  // bot đang đứng chờ có thể là ngày mai. Nên cửa DÂY phải hoàn thiện lại, và mốc lấy `updatedAt`.
+  const a = as(OWNER, () => createAgent({ name: "Cho 6" }));
+  const rec = agents.get(a.id) as unknown as Record<string, unknown>;
+  rec.awaitingUserResponse = { reason: "câu hỏi từ hôm qua" };   // cố ý bỏ qua setPresence
+  const r = row(a.id);
+  const got = r?.awaitingUserResponse as Record<string, unknown> | null;
+  assert.deepEqual(Object.keys(got ?? {}).sort(), ["reason", "since", "tabId"]);
+  assert.equal(got?.since, r?.updatedAt, "mốc suy từ entry cuối, không phải Date.now()");
+  assert.equal(got?.tabId, "");
+});
+
+test("không chờ ai thì vẫn là null — nhánh còn lại của anyOf", () => {
+  const a = as(OWNER, () => createAgent({ name: "Cho 7" }));
+  assert.equal(row(a.id)?.awaitingUserResponse, null,
+    "hoàn thiện khoá không được biến 'không chờ' thành một object rỗng");
+});
