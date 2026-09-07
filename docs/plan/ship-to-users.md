@@ -69,7 +69,7 @@ flowchart TB
   end
   subgraph C["③ DỮ LIỆU"]
     DB[("SQLite<br/>10 bảng có owner_id")]
-    BOX[("Box VPS<br/>CHƯA tách theo user")]
+    BOX[("Box VPS<br/>30 tài khoản OS, mỗi người một cái")]
   end
   subgraph M["④ TIỀN"]
     U["usage(auth_id, day, tokens)"]

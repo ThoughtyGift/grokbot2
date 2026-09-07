@@ -43,11 +43,20 @@ Grok Bot.exe (vá) ──cùng hợp đồng──► BE grokbot2 ──► pool
 
 | Lệnh / cụm | BE gốc | BE grokbot2 | Hiệu ứng |
 |---|---|---|---|
-| `injectChromeCookies` | bơm cookie Chrome user vào Chrome box | không có | 5 bot Shopee đứng “Waiting for you: Đăng nhập…” |
-| `getVoiceCall` · `nudgeVoiceCall` · `recordVoiceCall` · `readVoiceCallAgentContext` · `readVoiceCallSentMessages` | voice call | không có | UI gọi thoại chết lặng |
-| `generateAgentAvatarImage` · `getAgentNotificationAvatar` · `getMcpPluginLogo` | có | không có | avatar / logo plugin trống |
-| `resolveVirtualCardApproval` | Stripe Link / thẻ ảo, **mới 0.30** | không có | thẻ thanh toán không duyệt được |
+| ~~`injectChromeCookies`~~ | bơm cookie Chrome user vào Chrome box | **XONG 31/08** | — |
+| ~~`getAgentNotificationAvatar`~~ | avatar thông báo | **XONG 06/09** (`avatar-mac-dinh.ts` chép đúng hai hàm băm của renderer) | — |
+| `getVoiceCall` · `nudgeVoiceCall` · `recordVoiceCall` · `readVoiceCallAgentContext` · `readVoiceCallSentMessages` · `previewVoice` · `setAgentVoice` · `setVoiceCallPresence` | voice call | không có | **không hệ quả**: cờ `sand_voice_call` trong bundle 0.43 là `{client:!0,default:!1}` — đo 07/09 |
+| `generateAgentAvatarImage` · `getMcpPluginLogo` | có | không có | avatar sinh ảnh / logo plugin trống |
+| `resolveVirtualCardApproval` · `listVirtualCardPaymentMethods` | Stripe Link / thẻ ảo | không có | **ngủ đông, không hỏng**: thẻ chỉ hiện nếu backend ta phát ra `virtual_card_approval`, và ta chưa bao giờ phát (đo 07/09) |
 | `getBotTemplateExportPolicy` | chính sách xuất mẫu, **mới 0.30** | không có | xuất template không có policy |
+| 4 lệnh `user_form_vault` | tự điền form | **0/4 — nhóm duy nhất trống hoàn toàn** | nếu bị gọi: reply đòi mảng mà ta trả `{}` ⇒ **banner "mất kết nối"** (07/09) |
+| `completeGithubConnect` | nối GitHub | không có | ngủ đông: `getListenerConnectUrl` của ta là stub trả `{url:""}` nên luồng không khởi động |
+
+*Cập nhật 07/09: bảng này đo lại bằng hai nguồn (bảng lệnh `main-app.cjs` **và** bảng lệnh của
+renderer). Hợp đồng thật là **155** lệnh, không phải 150 — 5 lệnh chỉ renderer biết
+(`noteMountedAgent` · `resolveAgentCreation` · `getServerAgentRoster` ·
+`restoreTemporalAgentRouting` · `listVirtualCardPaymentMethods`). Ta thiếu **24**, và
+`coverage.unknownPaths` **rỗng**: client chưa gọi một cái nào.*
 
 ### 1.2 Map được, cố ý khác
 

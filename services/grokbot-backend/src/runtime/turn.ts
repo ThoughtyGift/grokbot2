@@ -18,6 +18,7 @@ import { requestBoxHelp, setHandBackSink, setHandoffStartSink, setHandoffEndSink
 import { compact, applyCompaction, needsCompaction, estimateTokens, historyTokens } from "../compaction.js";
 import { billingMode, recordUsage, accessVerdict, upgradeUrl } from "../billing.js";
 import { ownerOf } from "../directory/index.js";
+import { quaTranLuot, cauQuaTran } from "./tran-luot.js";
 import { runWithOwner } from "../request-context.js";
 import { DEFAULT_USER } from "../auth.js";
 import { buildSystemPrompt } from "../prompt.js";
@@ -1582,6 +1583,26 @@ async function startTurn(agentId: string, bubble: Entry, history: PoolMessage[],
     postNotice(agentId, url
       ? `Hết hạn mức tháng. [Nâng cấp gói để tiếp tục](${url})`
       : "Hết hạn mức tháng — nâng cấp gói để tiếp tục.");
+    clearPresence(agentId); onUpdate(agentId); persist();
+    return;
+  }
+  /*
+   * Trần lượt song song THEO CHỦ (roadmap đa người dùng, việc cuối còn mở) — xem `tran-luot.ts`.
+   *
+   * Đứng ở đây, cạnh cửa billing, vì cả hai cùng một hình dạng: kiểm bằng `ownerOf(agentId)` (lượt
+   * chạy tách khỏi request nên `currentOwner()` ở đây là danh tính mặc định), chưa tốn gì thì đã
+   * quyết, và từ chối bằng `notice` chứ không bằng miệng con bot.
+   *
+   * Và đứng trong `startTurn` là điều kiện để lượt NỐI TIẾP không bị chặn: `continueAfterTool` gọi
+   * thẳng `runTurn`, không đi qua đây (bảng theo dõi §7) — nên trần chỉ chặn lượt MỚI, không cắt
+   * một lượt đang giữa đường.
+   */
+  const tran = quaTranLuot(agentId, (id) => ownerOf(id) ?? DEFAULT_USER.authId, inflight.keys());
+  if (tran.qua) {
+    setText(bubble, "");
+    if (bubble.kind === "send-message") bubble.streaming = false;
+    postNotice(agentId, cauQuaTran(tran));
+    console.warn(`[grokbot2] [tran-luot] ${turnOwner} có ${tran.dang} lượt đang chạy, trần ${tran.tran} — từ chối lượt mới của ${agentId}`);
     clearPresence(agentId); onUpdate(agentId); persist();
     return;
   }

@@ -5,9 +5,10 @@
 không phải tiến độ. Tiến độ thật ở [bảng theo dõi](../state/bang-theo-doi.md): Phase 1–5 **đã lên** (owner_id trong
 `store.ts`; roster/transcript lọc theo chủ; SSE theo chủ ở cả `sse.ts` lẫn `native.ts`; login web + hash + throttle;
 billing `enforce` từ 02/09) và Phase 6 phần lớn (MCP theo chủ, box 30 tài khoản OS). Bằng chứng chạy được:
-`e2e-hai-tai-khoan.mjs` 20/20 (người B không thấy/không xoá được của A). **Còn mở duy nhất:** "cô lập turn/inflight theo
-user" (Phase 6) — `inflight` vẫn khoá theo `agentId`, chưa có trần theo chủ. Dòng cũ ở đây ("Phase 1 đang triển khai") đã
-sai từ cuối 08/2026.
+`e2e-hai-tai-khoan.mjs` 20/20 (người B không thấy/không xoá được của A). ~~**Còn mở duy nhất:** "cô lập turn/inflight
+theo user" (Phase 6)~~ — **ĐÓNG 07/09**: `runtime/tran-luot.ts` + cửa trần trong `startTurn`, mặc định 4 lượt song song
+mỗi chủ (`GROKBOT2_MAX_TURNS_PER_USER`, 0 = tắt), đo sống bằng hai bot cùng chủ với trần hạ tạm về 1 — bảng theo dõi §6
+mục 38. **Roadmap này không còn việc mở nào.** Dòng cũ ở đây ("Phase 1 đang triển khai") đã sai từ cuối 08/2026.
 **Mục tiêu:** biến grokbot2 từ "một kho dùng chung, một user giả" thành **đa người dùng thật** —
 mỗi người một tài khoản, dữ liệu riêng, login riêng, billing riêng.
 **Nền tái dùng:** billing infra (commit `59ee062`) + `userFromToken` + `withDb` dùng lại nguyên.
