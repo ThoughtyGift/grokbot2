@@ -1,0 +1,21 @@
+# Một mảnh của desktop :77. Xem chú thích đầy đủ trong grok-xvfb-77.service.
+[Unit]
+Description=grokbot2 box :77 desktop Chrome (CDP 9223)
+After=grok-wm-77.service
+Requires=grok-xvfb-77.service
+
+[Service]
+Type=simple
+User=box
+Group=box
+WorkingDirectory=/home/box/workspace
+Environment="DISPLAY=:77" "HOME=/home/box" "XDG_CONFIG_HOME=/home/box/.config" "XDG_CACHE_HOME=/home/box/.cache"
+# Xvfb có thể vừa lên mà socket chưa mở; chờ ở đây rẻ hơn để Restart=always dập liên hồi.
+ExecStartPre=/bin/sh -c 'until [ -e /tmp/.X11-unix/X77 ]; do sleep 0.5; done'
+TimeoutStartSec=60
+ExecStart=/usr/bin/google-chrome --no-first-run --no-default-browser-check --disable-features=Translate --disable-component-update --disable-background-networking --no-service-autorun --user-data-dir=/home/box/.config/grok-chrome-77 --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --window-position=120,60 --window-size=1400,900 about:blank
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target

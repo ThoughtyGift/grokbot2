@@ -1,3 +1,5 @@
-
 # Script chay tren Linux: LUON LF. CRLF lam bash bao "pipefail: invalid option name".
 *.sh text eol=lf
+# Unit systemd chay tren Linux: LUON LF. Mot ky tu CR con lai se nam TRONG gia tri
+# ExecStart/Environment, va systemd khong bao loi.
+*.service text eol=lf

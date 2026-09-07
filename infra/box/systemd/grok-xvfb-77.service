@@ -1,0 +1,26 @@
+# Màn hình của box — cái mà bảng "màn hình của bot" trong app chiếu vào.
+#
+# Vì sao có thư mục này: cho tới 07/09 cả BẢY unit dựng nên desktop :77 đều là **transient**
+# (`/run/systemd/transient/`, systemd tự ghi "Do not edit"), tức chúng biến mất sau lần reboot đầu
+# tiên. Không kịch bản nào trên box dựng lại — `grep` cả /root /opt /usr/local/bin /etc không thấy,
+# crontab rỗng, không rc.local. Máy đã chạy liền 11 tuần nên chưa ai gặp, và đó chính là hình dạng
+# của bẫy x11vnc đã trả giá ngày 03/09: "một mắt trong chuỗi mà không ai giám sát thì lần chết đầu
+# tiên là lần cuối cùng". Lần này cái chết sẽ tới cùng lúc với lần reboot đầu tiên.
+#
+# Cài: scp lên /etc/systemd/system/ rồi `systemctl daemon-reload && systemctl enable --now grok-*-77`.
+[Unit]
+Description=grokbot2 box display :77 (Xvfb)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xvfb :77 -screen 0 1920x1080x24 -ac
+# Type=simple chỉ nói "đã sinh tiến trình", không nói "đã sẵn sàng". Các unit xếp After= chờ
+# ExecStartPost xong, nên chờ socket X ở đây là chỗ duy nhất khiến thứ tự có nghĩa thật.
+ExecStartPost=/bin/sh -c 'until [ -e /tmp/.X11-unix/X77 ]; do sleep 0.2; done'
+TimeoutStartSec=60
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

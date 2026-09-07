@@ -141,3 +141,39 @@ người dùng, không phải quyết định kỹ thuật.
 
 Đổi khi nào muốn: `GROKBOT2_BROWSER_CDP=http://127.0.0.1:9224` trong `.env`, rồi khởi động lại backend
 (biến đọc lúc nạp tiến trình). Trên VPS thì đổi cổng, không cần hầm.
+
+## Màn hình `:77` — bảy unit thật, sống qua reboot (07/09)
+
+Bảng *"màn hình của bot"* trong app chiếu display `:77` của box. Bảy tiến trình dựng nên nó nằm ở
+[`systemd/`](systemd/) và được cài bằng:
+
+```
+scp infra/box/systemd/*.service <box>:/etc/systemd/system/
+ssh <box> 'systemctl daemon-reload && systemctl enable --now grok-{xvfb,wm,picom,dock,term,files,chrome}-77'
+```
+
+| unit | chạy gì | ghi chú |
+|---|---|---|
+| `grok-xvfb-77` | `Xvfb :77` | user **root**; `ExecStartPost` chờ `/tmp/.X11-unix/X77` mở |
+| `grok-wm-77` | `xfwm4 --compositor=off` | sáu unit dưới chạy user `box` |
+| `grok-picom-77` | `compton --backend xrender` | |
+| `grok-dock-77` | `plank` | dock 3 icon — xem bảng theo dõi §6 mục 36 |
+| `grok-term-77` | `xfce4-terminal` | |
+| `grok-files-77` | `thunar` | |
+| `grok-chrome-77` | `google-chrome` CDP **9223** | trình duyệt cũ; của ta là 9224, xem phần trên |
+
+Cả sáu unit con `Requires=grok-xvfb-77.service` và chờ socket X trong `ExecStartPre` — Xvfb báo
+"đã lên" trước khi socket mở được, và `Restart=always` sẽ dập liên hồi trong khoảng trống ấy.
+
+**Trước 07/09 bảy unit này là *transient*** (`systemd-run`, nằm ở `/run/systemd/transient/`): không
+file, không ai sở hữu, mất sạch khi reboot. Máy đã chạy liền 11 tuần nên chưa ai gặp — cùng họ với
+bẫy x11vnc trong bảng theo dõi §7.
+
+**Đọc trạng thái bằng `NRestarts`, không bằng `is-active`.** Một unit `Restart=always` đang chết đi
+sống lại hiển thị `activating` giữa hai lần dập, trông hệt như "đang khởi động". Lúc bật lần đầu,
+`grok-term-77` đã dập **96 lần** vì `ExecStart=… --title=Grok Bot box` thiếu nháy: systemd tách theo
+khoảng trắng, terminal chết với `Unknown option "Bot"`. Dòng lệnh ấy đúng khi gõ trong shell.
+
+```
+systemctl show -p NRestarts --value grok-term-77   # phải là 0
+```

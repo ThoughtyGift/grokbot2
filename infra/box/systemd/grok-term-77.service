@@ -1,0 +1,26 @@
+# Một mảnh của desktop :77. Xem chú thích đầy đủ trong grok-xvfb-77.service.
+[Unit]
+Description=grokbot2 box :77 terminal
+After=grok-wm-77.service
+Requires=grok-xvfb-77.service
+
+[Service]
+Type=simple
+User=box
+Group=box
+WorkingDirectory=/home/box/workspace
+Environment="DISPLAY=:77" "HOME=/home/box" "XDG_CONFIG_HOME=/home/box/.config" "XDG_CACHE_HOME=/home/box/.cache"
+# Xvfb có thể vừa lên mà socket chưa mở; chờ ở đây rẻ hơn để Restart=always dập liên hồi.
+ExecStartPre=/bin/sh -c 'until [ -e /tmp/.X11-unix/X77 ]; do sleep 0.5; done'
+TimeoutStartSec=60
+# systemd tách dòng lệnh theo KHOẢNG TRẮNG. Không có nháy thì `--title=Grok Bot box` thành ba đối
+# số, xfce4-terminal chết với `Unknown option "Bot"`, và Restart=always dập 96 lần trong vài phút
+# mà `is-active` chỉ nói `activating` — đúng cái đo được lúc 07:57 ngày 07/09.
+# `--disable-server`: thiếu nó, xfce4-terminal giao việc cho một tiến trình server rồi TỰ THOÁT,
+# systemd thấy main process exit và lại dập tiếp.
+ExecStart=/usr/bin/xfce4-terminal --disable-server --geometry=100x30+40+40 --title="Grok Bot box"
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
