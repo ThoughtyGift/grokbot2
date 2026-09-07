@@ -35,15 +35,15 @@ const CHO_MAY_MS = 120_000;
 
 /** Bốn động tác I/O; bản thật ở `dayThat`, test tiêm bản giả. */
 export interface Day {
-  taiTuMay(path: string, machineId: string): Promise<LocalResult>;
-  dayLenMay(path: string, bytesBase64: string, machineId: string): Promise<LocalResult>;
+  taiTuMay(path: string, machineId: string, owner: string): Promise<LocalResult>;
+  dayLenMay(path: string, bytesBase64: string, machineId: string, owner: string): Promise<LocalResult>;
   ghiBox(a: { path: string; bytesBase64: string; append: boolean }): Promise<{ totalSize?: number }>;
   docBox(a: { path: string; offset: number; length: number }): Promise<{ totalSize: number; bytesBase64: string }>;
 }
 
 export const dayThat: Day = {
-  taiTuMay: (path, machineId) => runOnUserComputer({ kind: "download", path }, { machineId, timeoutMs: CHO_MAY_MS }),
-  dayLenMay: (path, bytesBase64, machineId) => runOnUserComputer({ kind: "write", path, bytesBase64 }, { machineId, timeoutMs: CHO_MAY_MS }),
+  taiTuMay: (path, machineId, owner) => runOnUserComputer({ kind: "download", path }, { machineId, owner, timeoutMs: CHO_MAY_MS }),
+  dayLenMay: (path, bytesBase64, machineId, owner) => runOnUserComputer({ kind: "write", path, bytesBase64 }, { machineId, owner, timeoutMs: CHO_MAY_MS }),
   ghiBox: (a) => boxCall("writeBytes", { path: a.path, bytesBase64: a.bytesBase64, append: a.append }),
   docBox: (a) => boxCall("readBytes", { target_file: a.path, offset: a.offset, length: a.length }),
 };
@@ -69,12 +69,12 @@ export type KetQuaChep =
  * kéo lên nằm một chỗ và không đè lên việc bot đang làm.
  */
 export async function chepLenBox(
-  vao: { machineId: string; duongMay: string; duongBox?: string },
+  vao: { machineId: string; duongMay: string; duongBox?: string; owner: string },
   day: Day = dayThat,
 ): Promise<KetQuaChep> {
   const duongMay = vao.duongMay.trim();
   if (!duongMay) return { ok: false, error: "thiếu đường dẫn tệp trên máy" };
-  const r = await day.taiTuMay(duongMay, vao.machineId);
+  const r = await day.taiTuMay(duongMay, vao.machineId, vao.owner);
   if (!r.ok) return { ok: false, error: `không đọc được ${duongMay} trên máy: ${r.error}` };
   const b64 = String((r.data as { bytesBase64?: unknown })?.bytesBase64 ?? "");
   const buf = Buffer.from(b64, "base64");
@@ -97,7 +97,7 @@ export async function chepLenBox(
  * ngoài đó daemon từ chối ghi.
  */
 export async function chepVeMay(
-  vao: { machineId: string; duongBox: string; duongMay?: string; localRoot?: string },
+  vao: { machineId: string; duongBox: string; duongMay?: string; localRoot?: string; owner: string },
   day: Day = dayThat,
 ): Promise<KetQuaChep> {
   const duongBox = vao.duongBox.trim();
@@ -128,7 +128,7 @@ export async function chepVeMay(
     return { ok: false, error: `đọc ${duongBox} trên box hỏng: ${String((e as Error)?.message ?? e).slice(0, 300)}` };
   }
   const buf = Buffer.concat(phan);
-  const r = await day.dayLenMay(duongMay, buf.toString("base64"), vao.machineId);
+  const r = await day.dayLenMay(duongMay, buf.toString("base64"), vao.machineId, vao.owner);
   if (!r.ok) return { ok: false, error: `không ghi được ${duongMay} trên máy: ${r.error}` };
   return { ok: true, duongMay, duongBox, bytes: buf.length, sha256: sha256(buf), khuc: phan.length };
 }

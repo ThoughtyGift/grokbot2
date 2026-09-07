@@ -29,6 +29,7 @@
  */
 import type { ServerResponse } from "node:http";
 import { nhoMay } from "./may-da-biet.js";
+import { currentOwner } from "./request-context.js";
 import { randomUUID } from "node:crypto";
 import { redact } from "./redact.js";
 
@@ -183,7 +184,16 @@ export function parkRequests(name: ChannelName, res: ServerResponse): void {
  *
  * Nơi gọi cần biết để nói câu từ chối cho tử tế: "máy bạn đang tắt app" khác hẳn "lệnh chạy hỏng".
  */
-export const userComputerConnected = (): boolean => channels["local-exec"].waiters.size > 0;
+/*
+ * Đếm theo CHỦ, và đếm máy đã `hello` chứ không đếm luồng đang mở.
+ *
+ * Bản trước đọc `waiters.size > 0`: một luồng SSE bất kỳ của bất kỳ ai là "máy bạn đang nối". Hai
+ * chỗ lệch, cả hai đều dẫn tới một câu nói dối: luồng của người khác không phải máy của bạn, và
+ * một luồng chưa gửi `hello` thì chưa có `computerId` nên KHÔNG định tuyến được — `connectedMachine`
+ * trả `null` và lời gọi hỏng sau đó, muộn hơn và với câu khó hiểu hơn. Hỏi cùng một nguồn với chỗ
+ * định tuyến thì hai câu trả lời không thể lệch nhau.
+ */
+export const userComputerConnected = (owner: string): boolean => connectedMachine(owner) != null;
 
 /**
  * Máy người dùng vừa tự khai gì — lấy từ khung `hello` daemon gửi ngay khi nối.
@@ -215,6 +225,15 @@ export interface UserMachine {
   seenAtMs: number;
   /** Luồng SSE nào đang giữ máy này. Rời đi thì bản ghi bị gỡ — xem `res.on("close")`. */
   providerId: string;
+  /**
+   * CHỦ của máy — `authId` của vé mà daemon trình khi nó gửi `hello`.
+   *
+   * Đọc bằng `currentOwner()` và điều đó chạy được vì `index.ts` đã bọc CẢ `handleGateway` trong
+   * `runWithOwner(ownerFromAuth(...))`, còn `hello` thì tới qua `POST /gw/local-exec/responses` —
+   * tức nằm trong đúng phạm vi ấy, và `submitResponses` được gọi ĐỒNG BỘ nên AsyncLocalStorage còn
+   * nguyên. Không phải kéo dây gì thêm: danh tính vốn đã ở đúng chỗ, chỉ chưa ai nhặt.
+   */
+  owner: string;
 }
 
 /**
@@ -229,28 +248,57 @@ export interface UserMachine {
  */
 const mayDangNoi = new Map<string, UserMachine>();
 
-/** Máy để dùng khi không ai chỉ định — máy vừa thấy gần nhất. */
-export const connectedMachine = (): UserMachine | null => {
+/*
+ * ── Ba hàm đọc dưới đây đều ĐÒI `owner`, và đó là cả điểm của chúng ─────────────────────────────
+ *
+ * Trước 07/09 cả ba đọc thẳng `mayDangNoi` toàn cục. `connectedMachine()` là "máy mới thấy nhất
+ * TOÀN HỆ", và `findMachine` khớp cả tên rút gọn (`label.includes`) — nên với hai người cùng mở
+ * app, bot của người B có đường gọi tên máy Windows của người A, và hàng rào duy nhất còn lại là
+ * `standing` của daemon: một cài đặt theo MÁY, không theo NGƯỜI.
+ *
+ * `owner` để bắt buộc chứ không cho mặc định "tất cả": chỗ nào quên truyền thì `tsc` phải đỏ. Một
+ * tham số tuỳ chọn ở đây là mời đúng cái lỗi vừa vá quay lại dưới dạng "chưa kịp sửa chỗ kia".
+ *
+ * Chủ lấy từ đâu thì tuỳ đường: lệnh gateway đọc `currentOwner()`; TOOL thì KHÔNG — lượt chạy tách
+ * khỏi request nên `currentOwner()` trong một lượt là danh tính mặc định, phải đi bằng
+ * `ownerOf(agentId)` (cùng luật đã ghi cho trần lượt và cho `mcpProtocolFor`).
+ */
+
+/** Máy để dùng khi không ai chỉ định — máy vừa thấy gần nhất CỦA CHỦ ĐÓ. */
+export const connectedMachine = (owner: string): UserMachine | null => {
   let moiNhat: UserMachine | null = null;
-  for (const m of mayDangNoi.values()) if (!moiNhat || m.seenAtMs > moiNhat.seenAtMs) moiNhat = m;
+  for (const m of mayDangNoi.values()) {
+    if (m.owner !== owner) continue;
+    if (!moiNhat || m.seenAtMs > moiNhat.seenAtMs) moiNhat = m;
+  }
   return moiNhat;
 };
 
 /** Danh sách máy cho bảng Settings → Computer, mới thấy trước. */
-export const connectedMachines = (): UserMachine[] =>
-  [...mayDangNoi.values()].sort((a, b) => b.seenAtMs - a.seenAtMs);
+export const connectedMachines = (owner: string): UserMachine[] =>
+  [...mayDangNoi.values()].filter((m) => m.owner === owner).sort((a, b) => b.seenAtMs - a.seenAtMs);
 
 /** Tìm một máy theo id hoặc theo tên hiển thị — người dùng gọi tên, model có thể gọi id. */
-export function findMachine(idHoacTen: string): UserMachine | null {
+export function findMachine(idHoacTen: string, owner: string): UserMachine | null {
   const s = idHoacTen.trim();
   if (!s) return null;
-  const theoId = mayDangNoi.get(s);
+  // Lọc TRƯỚC khi tra id: `mayDangNoi.get(s)` trúng thẳng máy của người khác nếu ai đó biết id.
+  const cua = [...mayDangNoi.values()].filter((m) => m.owner === owner);
+  const theoId = cua.find((m) => m.computerId === s);
   if (theoId) return theoId;
   const thap = s.toLowerCase();
-  return [...mayDangNoi.values()].find((m) => m.label.toLowerCase() === thap)
-    ?? [...mayDangNoi.values()].find((m) => m.label.toLowerCase().includes(thap))
+  return cua.find((m) => m.label.toLowerCase() === thap)
+    ?? cua.find((m) => m.label.toLowerCase().includes(thap))
     ?? null;
 }
+
+/**
+ * Bao nhiêu máy đang nối, KHÔNG phân biệt chủ — chỉ cho phép đo sức khoẻ/`__coverage`.
+ *
+ * Tách hẳn tên để không ai lỡ tay dùng nó vào định tuyến: cái tên phải tự nói ra rằng nó xuyên
+ * người dùng.
+ */
+export const soMayDangNoiMoiNguoi = (): number => mayDangNoi.size;
 
 /**
  * Đẩy một khung yêu cầu vào hàng đợi, đánh thức một poll đang treo nếu có.
@@ -386,12 +434,16 @@ export function submitResponses(name: ChannelName, body: Buffer): { ok: true } {
         ...(typeof f.standing === "string" ? { standing: f.standing } : {}),
         seenAtMs: Date.now(),
         providerId: nguoiGui,
+        // Danh tính của vé daemon vừa trình. Đây là dòng biến sổ máy từ toàn cục thành theo người.
+        owner: currentOwner(),
       };
       mayDangNoi.set(may.computerId, may);
       // Nhớ sang sổ BỀN nữa: bảng Settings → Computer hỏi một lần lúc app khởi động, mà lúc đó
       // daemon chưa kịp nối. Xem `may-da-biet.ts` để biết vì sao hai sổ chứ không phải một.
-      nhoMay({ computerId: may.computerId, label: may.label, ...(may.standing ? { standing: may.standing } : {}) });
-      console.log(`[grokbot2] [local-exec] máy nối vào: ${may.label} (${may.computerId}) — đang có ${mayDangNoi.size} máy`);
+      nhoMay({ computerId: may.computerId, label: may.label, owner: may.owner, ...(may.standing ? { standing: may.standing } : {}) });
+      // Chủ vào log để lần sau chẩn đoán "bảng trống" đọc được ngay là lệch chủ hay lệch máy. Đây
+      // là `authId`, không phải vé — vé thì không bao giờ được in (§7 token trong journald).
+      console.log(`[grokbot2] [local-exec] máy nối vào: ${may.label} (${may.computerId}) của ${may.owner} — đang có ${mayDangNoi.size} máy`);
       continue;
     }
     // Mọi khung khác cũng là dấu hiệu máy còn sống (`ping` gửi đều đặn) — cập nhật giờ thấy cuối.

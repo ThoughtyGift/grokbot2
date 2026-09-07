@@ -329,15 +329,24 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
         const kind = String(bodyJ.kind ?? "shell");
         const HOP_LE = ["shell", "read", "ls", "write", "download", "spawn", "stdin", "copy-to-box", "copy-from-box"];
         if (!HOP_LE.includes(kind)) return json({ error: `kind phải là ${HOP_LE.join("|")}` }, 400);
-        if (!userComputerConnected()) return json({ ok: false, error: "máy của người dùng không nối (app Grok Bot chưa mở?)" }, 409);
+        /*
+         * Cửa này cũng đi theo CHỦ (07/09) — nó là cửa chẩn đoán loopback, không phải cửa đứng
+         * ngoài luật.
+         *
+         * `ownerFromRequest` chứ không phải một tham số `owner` trong thân JSON: một cửa nhận
+         * "tôi là ai" từ thân request là một cửa cho mạo danh, và nó sẽ được dùng — chính tôi sẽ
+         * dùng, lúc đo. Không gắn auth thì ra danh tính mặc định, đúng như mọi script đo hiện có.
+         */
+        const chuOps = ownerFromRequest(req.headers);
+        if (!userComputerConnected(chuOps)) return json({ ok: false, error: "máy của người dùng không nối (app Grok Bot chưa mở?)" }, 409);
         // Hai chiều chép tệp (chep-tep.ts) — trả sha256 + số khúc, không trả bytes, để đo bằng mắt được.
         if (kind === "copy-to-box" || kind === "copy-from-box") {
           const { chepLenBox, chepVeMay } = await import("./chep-tep.js");
-          const may = connectedMachine();
+          const may = connectedMachine(chuOps);
           if (!may) return json({ ok: false, error: "không máy nào nối" }, 409);
           const r = kind === "copy-to-box"
-            ? await chepLenBox({ machineId: may.computerId, duongMay: String(bodyJ.path ?? ""), ...(bodyJ.boxPath ? { duongBox: String(bodyJ.boxPath) } : {}) })
-            : await chepVeMay({ machineId: may.computerId, duongBox: String(bodyJ.boxPath ?? ""), ...(bodyJ.path ? { duongMay: String(bodyJ.path) } : {}), ...(may.localRoot ? { localRoot: may.localRoot } : {}) });
+            ? await chepLenBox({ machineId: may.computerId, owner: chuOps, duongMay: String(bodyJ.path ?? ""), ...(bodyJ.boxPath ? { duongBox: String(bodyJ.boxPath) } : {}) })
+            : await chepVeMay({ machineId: may.computerId, owner: chuOps, duongBox: String(bodyJ.boxPath ?? ""), ...(bodyJ.path ? { duongMay: String(bodyJ.path) } : {}), ...(may.localRoot ? { localRoot: may.localRoot } : {}) });
           return json({ ...r, may: may.label }, r.ok ? 200 : 502);
         }
         const op = kind === "shell" ? { kind: "shell" as const, command: String(bodyJ.command ?? "") }
@@ -357,12 +366,13 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
          * model có thể gõ id.
          */
         const ten = String(bodyJ.may ?? bodyJ.machine ?? bodyJ.machineId ?? "").trim();
-        const may = ten ? findMachine(ten) : null;
+        const may = ten ? findMachine(ten, chuOps) : null;
         if (ten && !may) {
-          const co = connectedMachines().map((m) => m.label);
+          const co = connectedMachines(chuOps).map((m) => m.label);
           return json({ ok: false, error: `không có máy nào tên "${ten}". Đang nối: ${co.join(", ") || "(không máy nào)"}` }, 404);
         }
         const r = await runOnUserComputer(op, {
+          owner: chuOps,
           timeoutMs: Number(bodyJ.timeoutMs) || 30_000,
           ...(may ? { machineId: may.computerId } : {}),
         });
@@ -380,6 +390,7 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
           return json({ error: "viec phải là mo|doc|bam|go|anh" }, 400);
         }
         const r = await lamTrenTrinhDuyet(bodyJ as never, {
+          owner: ownerFromRequest(req.headers),
           timeoutMs: Number(bodyJ.timeoutMs) || 120_000,
           ...(bodyJ.may ? { machineId: String(bodyJ.may) } : {}),
         });

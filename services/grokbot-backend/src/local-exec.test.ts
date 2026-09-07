@@ -34,18 +34,25 @@ test("thẻ quyền hiện đúng thứ người dùng cần đọc để quyế
   assert.equal(targetOf({ kind: "read", path: "C:/Users/admin/.ssh/id_rsa" }), "C:/Users/admin/.ssh/id_rsa");
 });
 
+/**
+ * Mọi hàm đọc máy đều ĐÒI chủ từ 07/09 — sổ máy trước đó là toàn cục, nên bot của người B tìm được
+ * máy Windows của người A bằng đúng cái tên rút gọn (`label.includes`). Đây là danh tính giả cho
+ * bài đo; điều đáng ghim là các hàm ấy **không có** dạng gọi không tham số nữa.
+ */
+const CHU = "auth0|nguoi-do";
+
 test("không máy nào nối thì danh sách rỗng và tìm theo tên trả null", () => {
   // Bảng Settings → Computer đọc danh sách này. Trả một máy đã rớt là vẽ ra một máy không nhận việc.
-  assert.deepEqual(connectedMachines(), []);
-  assert.equal(findMachine("Admin-PC"), null);
-  assert.equal(findMachine(""), null);
+  assert.deepEqual(connectedMachines(CHU), []);
+  assert.equal(findMachine("Admin-PC", CHU), null);
+  assert.equal(findMachine("", CHU), null);
 });
 
 test("không máy nào nối thì `connectedMachine` trả null, không trả bản ghi cũ", () => {
   // Quan trọng: sau khi daemon rớt, một `label` còn sót lại đọc y như đang nối. Bản ghi máy bị gỡ
   // ngay trong `res.on("close")` của luồng SSE, nên danh sách không bao giờ giữ một máy đã đi.
-  assert.equal(userComputerConnected(), false);
-  assert.equal(connectedMachine(), null);
+  assert.equal(userComputerConnected(CHU), false);
+  assert.equal(connectedMachine(CHU), null);
 });
 
 test("chỉ định một máy không nối thì DỪNG, không im lặng rơi sang máy khác", async () => {
@@ -55,7 +62,7 @@ test("chỉ định một máy không nối thì DỪNG, không im lặng rơi s
    * Người dùng bảo "chạy trên Admin-PC"; nếu Admin-PC không nối mà ta lặng lẽ gửi sang
    * DESKTOP-7D2FJG8 thì lệnh chạy xong, trả về stdout hợp lệ, và không ai biết nó chạy nhầm máy.
    */
-  const r = await runOnUserComputer({ kind: "shell", command: "hostname" }, { machineId: "Admin-PC" });
+  const r = await runOnUserComputer({ kind: "shell", command: "hostname" }, { machineId: "Admin-PC", owner: CHU });
   assert.equal(r.ok, false);
   assert.match(String(r.error), /Admin-PC/, "phải nhắc tên máy đã yêu cầu");
   assert.match(String(r.error), /không (thấy|máy nào)/, "và nói rõ là không tìm thấy, không phải lỗi lệnh");
@@ -64,7 +71,7 @@ test("chỉ định một máy không nối thì DỪNG, không im lặng rơi s
 test("không có daemon thì trả lỗi rõ ràng, KHÔNG treo mãi", async () => {
   // Nếu hàm này treo thì cả lượt của bot treo theo, và người dùng chỉ thấy con bot đứng im.
   const t0 = Date.now();
-  const r = await runOnUserComputer({ kind: "shell", command: "hostname" }, { timeoutMs: 300 });
+  const r = await runOnUserComputer({ kind: "shell", command: "hostname" }, { timeoutMs: 300, owner: CHU });
   const troi = Date.now() - t0;
   assert.equal(r.ok, false);
   assert.match(String(r.error), /không trả lời/);
@@ -115,7 +122,7 @@ test("tệp đầu ra lệnh nền: <terminalsFolder>/<shellId>.txt, đúng dấ
 });
 
 test("không có daemon thì write cũng bỏ cuộc theo timeoutMs với câu rõ", async () => {
-  const r = await runOnUserComputer({ kind: "write", path: "C:/Users/admin/x.txt", bytesBase64: "eA==" }, { timeoutMs: 300 });
+  const r = await runOnUserComputer({ kind: "write", path: "C:/Users/admin/x.txt", bytesBase64: "eA==" }, { timeoutMs: 300, owner: CHU });
   assert.equal(r.ok, false);
   assert.match(String(r.error), /không trả lời/);
 });

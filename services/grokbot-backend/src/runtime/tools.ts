@@ -854,8 +854,8 @@ const catBot = (s: string, max = 8000): string =>
  * Có tool này thì model mới chỉ định máy được. Không có nó, "chạy trên Admin-PC" là model đoán một
  * cái tên và ta trả về "không thấy máy đó" — đúng nhưng vô ích.
  */
-TOOLS.local_machines = async () => {
-  const ds = connectedMachines();
+TOOLS.local_machines = async (_arg, ctx) => {
+  const ds = connectedMachines(chuLuot(ctx));
   if (!ds.length) {
     return "Hiện không máy nào của bạn đang nối. Mở app Grok Bot trên máy đó và đăng nhập là nó tự nối.";
   }
@@ -887,15 +887,17 @@ TOOLS.local_browser = async (arg, ctx) => {
       + 'mo cần "url"; bam cần "chu" (chữ trên nút/liên kết); go cần "o" (tên ô) và "chu", thêm "enter":true để gửi luôn.';
   }
 
+  const chu = chuLuot(ctx);
   const chiDinh = String(spec?.machine ?? "").trim();
-  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  const may = chiDinh ? findMachine(chiDinh, chu) : connectedMachine(chu);
   if (chiDinh && !may) {
-    const co = connectedMachines().map((m) => m.label);
+    const co = connectedMachines(chu).map((m) => m.label);
     return `Không thấy máy "${chiDinh}" đang nối` + (co.length ? ` — đang có: ${co.join(", ")}` : "");
   }
   if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
 
   const r = await lamTrenTrinhDuyet(spec as never, {
+    owner: chu,
     machineId: may.computerId,
     // Lần đầu trong phiên phải chở script sang rồi bật Chrome — mất tới nửa phút.
     timeoutMs: Number(spec?.timeoutMs) || 150_000,
@@ -921,16 +923,17 @@ ${chu}${them}`);
   return `[${may.label}] đã gõ xong — đang ở ${r.url ?? "?"}`;
 };
 
-TOOLS.local_shell = async (arg, _ctx) => {
+TOOLS.local_shell = async (arg, ctx) => {
   let spec: { command?: string; cwd?: string; timeoutMs?: number };
   try { spec = JSON.parse(arg); } catch { spec = { command: unquote(arg) }; }
   const command = String(spec?.command ?? "").trim();
   if (!command) return 'local_shell cần {"command":"<lệnh>"}';
   // Chỉ định máy bằng TÊN hoặc id. Không chỉ định thì lấy máy vừa thấy gần nhất.
+  const chu = chuLuot(ctx);
   const chiDinh = String((spec as { machine?: unknown })?.machine ?? "").trim();
-  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  const may = chiDinh ? findMachine(chiDinh, chu) : connectedMachine(chu);
   if (chiDinh && !may) {
-    const co = connectedMachines().map((m) => m.label);
+    const co = connectedMachines(chu).map((m) => m.label);
     return `Không thấy máy "${chiDinh}" đang nối`
       + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối");
   }
@@ -940,7 +943,7 @@ TOOLS.local_shell = async (arg, _ctx) => {
   }
   const r = await runOnUserComputer(
     { kind: "shell", command, ...(spec?.cwd ? { cwd: String(spec.cwd) } : {}) },
-    { machineId: may.computerId, timeoutMs: Number(spec?.timeoutMs) || 30_000 },
+    { machineId: may.computerId, owner: chu, timeoutMs: Number(spec?.timeoutMs) || 30_000 },
   );
   if (!r.ok) return `Không chạy được trên ${may.label}: ${r.error}`;
   const d = (r.data ?? {}) as { stdout?: string; stderr?: string; exitCode?: number; aborted?: string };
@@ -958,12 +961,22 @@ TOOLS.local_shell = async (arg, _ctx) => {
  * Trả câu từ chối thay vì máy khi không có: chỉ định một máy không nối mà lặng lẽ rơi sang máy khác là
  * chạy nhầm máy — thứ không phát hiện được từ kết quả (cùng luật với `runOnUserComputer`).
  */
-const chonMay = (spec: { machine?: unknown } | null | undefined):
+/**
+ * CHỦ của lượt đang chạy — danh tính dùng cho mọi lời gọi tới máy người dùng.
+ *
+ * `ownerOf(ctx.agentId)`, KHÔNG phải `currentOwner()`: một lượt chạy tách khỏi request đã sinh ra
+ * nó (`void startTurn(...)`), nên trong thân lượt `currentOwner()` luôn là danh tính mặc định —
+ * cùng cái luật đã ghi cho `mcpProtocolFor` và cho trần lượt song song. Dùng nhầm hàm ở đây thì
+ * mọi bot đều thấy máy của người mặc định, tức đúng cái lỗ vừa vá, khoác một cái tên khác.
+ */
+const chuLuot = (ctx: ToolCtx): string => ownerOf(ctx.agentId) ?? DEFAULT_USER.authId;
+
+const chonMay = (spec: { machine?: unknown } | null | undefined, owner: string):
   { may: NonNullable<ReturnType<typeof connectedMachine>> } | { loi: string } => {
   const chiDinh = String(spec?.machine ?? "").trim();
-  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  const may = chiDinh ? findMachine(chiDinh, owner) : connectedMachine(owner);
   if (chiDinh && !may) {
-    const co = connectedMachines().map((m) => m.label);
+    const co = connectedMachines(owner).map((m) => m.label);
     return { loi: `Không thấy máy "${chiDinh}" đang nối` + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối") };
   }
   if (!may) return { loi: "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại." };
@@ -980,18 +993,18 @@ const duongJson = (p: string): string => p.replace(/\\/g, "/");
  * cha; đường dẫn phải nằm dưới thư mục gốc của máy (`localRoot`, thường `C:\Users\<tên>`) — ngoài đó
  * daemon từ chối với câu rõ. Nội dung là CHỮ (utf-8): tệp nhị phân đi đường `local_shell` (curl/Invoke-WebRequest).
  */
-TOOLS.local_write = async (arg, _ctx) => {
+TOOLS.local_write = async (arg, ctx) => {
   let spec: { path?: string; content?: string; machine?: unknown };
   try { spec = JSON.parse(arg); } catch { return 'local_write cần {"path":"C:/Users/<tên>/...","content":"<nội dung>"}'; }
   const path = String(spec?.path ?? "").trim();
   if (!path) return 'local_write cần {"path":"<đường dẫn trên máy bạn>","content":"<nội dung>"}';
   if (typeof spec?.content !== "string") return 'local_write cần "content" là chuỗi (rỗng cũng được, để tạo tệp trống)';
-  const m = chonMay(spec);
+  const m = chonMay(spec, chuLuot(ctx));
   if ("loi" in m) return m.loi;
   const bytes = Buffer.from(spec.content, "utf8");
   const r = await runOnUserComputer(
     { kind: "write", path, bytesBase64: bytes.toString("base64") },
-    { machineId: m.may.computerId, timeoutMs: 30_000 },
+    { machineId: m.may.computerId, owner: chuLuot(ctx), timeoutMs: 30_000 },
   );
   if (!r.ok) return `Không ghi được trên ${m.may.label}: ${r.error}`;
   return `[${m.may.label}] đã ghi ${bytes.length} byte vào ${path}`;
@@ -1007,16 +1020,16 @@ TOOLS.local_write = async (arg, _ctx) => {
  * `writeShellStdinArgs` cho máy người dùng (đo 06/09: *"No handler found for server message of type
  * writeShellStdinArgs"*) — nên lệnh nền phải tự chạy không hỏi (`-y`, `-NonInteractive`, `--yes`).
  */
-TOOLS.local_shell_bg = async (arg, _ctx) => {
+TOOLS.local_shell_bg = async (arg, ctx) => {
   let spec: { command?: string; cwd?: string; description?: string; machine?: unknown };
   try { spec = JSON.parse(arg); } catch { spec = { command: unquote(arg) }; }
   const command = String(spec?.command ?? "").trim();
   if (!command) return 'local_shell_bg cần {"command":"<lệnh chạy nền>"}';
-  const m = chonMay(spec);
+  const m = chonMay(spec, chuLuot(ctx));
   if ("loi" in m) return m.loi;
   const r = await runOnUserComputer(
     { kind: "spawn", command, ...(spec?.cwd ? { cwd: String(spec.cwd) } : {}), ...(spec?.description ? { description: String(spec.description) } : {}) },
-    { machineId: m.may.computerId, timeoutMs: 30_000 },
+    { machineId: m.may.computerId, owner: chuLuot(ctx), timeoutMs: 30_000 },
   );
   if (!r.ok) return `Không chạy nền được trên ${m.may.label}: ${r.error}`;
   const d = (r.data ?? {}) as { shellId?: number; pid?: number; workingDirectory?: string };
@@ -1031,15 +1044,15 @@ TOOLS.local_shell_bg = async (arg, _ctx) => {
  * Chép tệp máy người dùng → box (CopyToBox của hãng). Sau đó mọi tool box (run_terminal_command_v2,
  * read_file_v2, ffmpeg…) làm việc trên bản chép; tệp trên máy người dùng không bị đụng. Trần 100 MiB.
  */
-TOOLS.local_copy_to_box = async (arg, _ctx) => {
+TOOLS.local_copy_to_box = async (arg, ctx) => {
   let spec: { path?: string; boxPath?: string; machine?: unknown };
   try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
   const path = String(spec?.path ?? "").trim();
   if (!path) return 'local_copy_to_box cần {"path":"C:/Users/<tên>/…/tep.mp4"} (thêm "boxPath" nếu muốn đặt chỗ khác trên box)';
   if (!boxConfigured()) return "Chưa nối box nên không có chỗ để chép tới.";
-  const m = chonMay(spec);
+  const m = chonMay(spec, chuLuot(ctx));
   if ("loi" in m) return m.loi;
-  const r = await chepLenBox({ machineId: m.may.computerId, duongMay: path, ...(spec?.boxPath ? { duongBox: String(spec.boxPath) } : {}) });
+  const r = await chepLenBox({ machineId: m.may.computerId, owner: chuLuot(ctx), duongMay: path, ...(spec?.boxPath ? { duongBox: String(spec.boxPath) } : {}) });
   if (!r.ok) return `Không chép được từ ${m.may.label}: ${r.error}`;
   return `[${m.may.label}] đã chép ${r.duongMay} → box:${r.duongBox} (${r.bytes} byte, ${r.khuc} khúc, sha256 ${r.sha256.slice(0, 16)}…). `
     + `Giờ dùng tool box trên đường dẫn ${r.duongBox}; tệp gốc trên máy không đổi.`;
@@ -1049,16 +1062,16 @@ TOOLS.local_copy_to_box = async (arg, _ctx) => {
  * Chép tệp box → máy người dùng (CopyFromBox). Mặc định ghi vào Desktop của họ; đường dẫn đích phải
  * nằm trong thư mục người dùng (daemon từ chối chỗ khác). Ghi đè nếu trùng tên.
  */
-TOOLS.local_copy_from_box = async (arg, _ctx) => {
+TOOLS.local_copy_from_box = async (arg, ctx) => {
   let spec: { boxPath?: string; source?: string; path?: string; machine?: unknown };
   try { spec = JSON.parse(arg); } catch { spec = { boxPath: unquote(arg) }; }
   const boxPath = String(spec?.boxPath ?? spec?.source ?? "").trim();
   if (!boxPath) return 'local_copy_from_box cần {"boxPath":"<tệp trên box>"} (thêm "path":"C:/Users/<tên>/Desktop/…" để đặt tên/chỗ khác)';
   if (!boxConfigured()) return "Chưa nối box nên không có gì để chép về.";
-  const m = chonMay(spec);
+  const m = chonMay(spec, chuLuot(ctx));
   if ("loi" in m) return m.loi;
   const r = await chepVeMay({
-    machineId: m.may.computerId, duongBox: boxPath,
+    machineId: m.may.computerId, owner: chuLuot(ctx), duongBox: boxPath,
     ...(spec?.path ? { duongMay: String(spec.path) } : {}),
     ...(m.may.localRoot ? { localRoot: m.may.localRoot } : {}),
   });
@@ -1066,20 +1079,21 @@ TOOLS.local_copy_from_box = async (arg, _ctx) => {
   return `[${m.may.label}] đã chép box:${r.duongBox} → ${r.duongMay} (${r.bytes} byte, sha256 ${r.sha256.slice(0, 16)}…). Người dùng mở được ngay trên máy họ.`;
 };
 
-TOOLS.local_read = async (arg, _ctx) => {
+TOOLS.local_read = async (arg, ctx) => {
   let spec: { path?: string };
   try { spec = JSON.parse(arg); } catch { spec = { path: unquote(arg) }; }
   const path = String(spec?.path ?? "").trim();
   if (!path) return 'local_read cần {"path":"<đường dẫn trên máy bạn>"}';
+  const chu = chuLuot(ctx);
   const chiDinh = String((spec as { machine?: unknown })?.machine ?? "").trim();
-  const may = chiDinh ? findMachine(chiDinh) : connectedMachine();
+  const may = chiDinh ? findMachine(chiDinh, chu) : connectedMachine(chu);
   if (chiDinh && !may) {
-    const co = connectedMachines().map((m) => m.label);
+    const co = connectedMachines(chu).map((m) => m.label);
     return `Không thấy máy "${chiDinh}" đang nối`
       + (co.length ? ` — đang có: ${co.join(", ")}` : " — hiện không máy nào nối");
   }
   if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
-  const r = await runOnUserComputer({ kind: "read", path }, { machineId: may.computerId, timeoutMs: 20_000 });
+  const r = await runOnUserComputer({ kind: "read", path }, { machineId: may.computerId, owner: chu, timeoutMs: 20_000 });
   if (!r.ok) return `Không đọc được trên ${may.label}: ${r.error}`;
   const d = (r.data ?? {}) as { readResult?: { success?: { content?: string }; invalidFile?: { reason?: string } } };
   const rr = d.readResult;
@@ -2337,8 +2351,8 @@ const TASK_PROTOCOL =
  * Chỉ phát khi thật sự có máy đang nối. Dạy một tool không dùng được là mời model hứa với người
  * dùng một việc rồi thất bại.
  */
-const localProtocol = (): string => {
-  const ds = connectedMachines();
+const localProtocol = (owner: string): string => {
+  const ds = connectedMachines(owner);
   if (!ds.length) return "";
   const ten = ds.map((m) => m.label).join(", ");
   return "\n\nMÁY CỦA NGƯỜI DÙNG: bạn nối được vào máy tính THẬT của họ, ngoài máy của chính bạn. "
@@ -2363,7 +2377,7 @@ const localProtocol = (): string => {
 };
 
 const toolProtocolFor = (owner: string): string =>
-  toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + localProtocol() + TASK_PROTOCOL + mcpProtocolFor(owner);
+  toolProtocolBase() + PLUGIN_PROTOCOL + SKILL_WRITE_PROTOCOL + TEACH_PROTOCOL + desktopProtocol() + localProtocol(owner) + TASK_PROTOCOL + mcpProtocolFor(owner);
 
 /** Every tool this install can run — chat-level tools plus the box tools from tools.ts. */
 const isKnownTool = (name: string): boolean => name.toLowerCase() in TOOLS;

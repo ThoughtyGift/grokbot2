@@ -11,6 +11,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { chepLenBox, chepVeMay, catKhuc, tenTep, KHUC_LEN_BOX, KHUC_TU_BOX, TRAN_TEP, type Day } from "./chep-tep.js";
 
+/** Chủ giả — `chepLenBox`/`chepVeMay` đòi owner từ 07/09 (sổ máy tách theo người). */
+const CHU = "auth0|nguoi-do";
+
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const dem = (n: number, seed: number) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) b[i] = (i * 31 + seed) & 255; return b; };
 
@@ -50,7 +53,7 @@ test("máy → box: 13 MiB thành 3 khúc, khúc đầu ghi mới, hai khúc sau
   const goc = dem(13 * 1024 * 1024 + 7, 3);
   const box = new Map<string, Buffer>();
   const { day, goi } = dungDay({ "C:/Users/admin/Desktop/clip.mp4": goc }, box);
-  const r = await chepLenBox({ machineId: "may-1", duongMay: "C:/Users/admin/Desktop/clip.mp4" }, day);
+  const r = await chepLenBox({ machineId: "may-1", owner: CHU, duongMay: "C:/Users/admin/Desktop/clip.mp4" }, day);
   assert.ok(r.ok, JSON.stringify(r));
   if (!r.ok) return;
   assert.equal(r.duongBox, "tu-may/clip.mp4");
@@ -64,11 +67,11 @@ test("máy → box: 13 MiB thành 3 khúc, khúc đầu ghi mới, hai khúc sau
 test("máy → box: boxPath tự chọn được; tệp rỗng vẫn tạo; ngoài root máy thì trả lỗi của daemon", async () => {
   const box = new Map<string, Buffer>();
   const { day, goi } = dungDay({ "C:/Users/admin/rong.txt": Buffer.alloc(0) }, box);
-  const r = await chepLenBox({ machineId: "may-1", duongMay: "C:/Users/admin/rong.txt", duongBox: "inbox/r.txt" }, day);
+  const r = await chepLenBox({ machineId: "may-1", owner: CHU, duongMay: "C:/Users/admin/rong.txt", duongBox: "inbox/r.txt" }, day);
   assert.ok(r.ok && r.duongBox === "inbox/r.txt" && r.khuc === 1 && r.bytes === 0);
   assert.equal(box.get("inbox/r.txt")!.length, 0);
   assert.equal(goi.ghi[0].append, false);
-  const x = await chepLenBox({ machineId: "may-1", duongMay: "C:/Windows/x.dll" }, day);
+  const x = await chepLenBox({ machineId: "may-1", owner: CHU, duongMay: "C:/Windows/x.dll" }, day);
   assert.equal(x.ok, false);
   assert.match(String(!x.ok && x.error), /outside the allowed local-exec root/);
 });
@@ -76,7 +79,7 @@ test("máy → box: boxPath tự chọn được; tệp rỗng vẫn tạo; ngo�
 test("máy → box: quá 100 MiB thì nói bằng câu tiếng Việt, không gửi khúc nào lên box", async () => {
   const box = new Map<string, Buffer>();
   const { day, goi } = dungDay({ "C:/Users/admin/to.bin": Buffer.alloc(TRAN_TEP + 1) }, box);
-  const r = await chepLenBox({ machineId: "may-1", duongMay: "C:/Users/admin/to.bin" }, day);
+  const r = await chepLenBox({ machineId: "may-1", owner: CHU, duongMay: "C:/Users/admin/to.bin" }, day);
   assert.equal(r.ok, false);
   assert.match(String(!r.ok && r.error), /vượt trần 100\.0 MiB/);
   assert.equal(goi.ghi.length, 0);
@@ -87,7 +90,7 @@ test("box → máy: 9 MiB đọc 3 khúc 4 MiB, ghi MỘT lần lên máy vào <
   const box = new Map<string, Buffer>([["ket-qua/ra.mp4", goc]]);
   const tepMay: Record<string, Buffer> = {};
   const { day, goi } = dungDay(tepMay, box);
-  const r = await chepVeMay({ machineId: "may-1", duongBox: "ket-qua/ra.mp4", localRoot: "C:\\Users\\admin" }, day);
+  const r = await chepVeMay({ machineId: "may-1", owner: CHU, duongBox: "ket-qua/ra.mp4", localRoot: "C:\\Users\\admin" }, day);
   assert.ok(r.ok, JSON.stringify(r));
   if (!r.ok) return;
   assert.equal(r.duongMay, "C:\\Users\\admin\\Desktop\\ra.mp4");
@@ -99,10 +102,10 @@ test("box → máy: 9 MiB đọc 3 khúc 4 MiB, ghi MỘT lần lên máy vào <
 
 test("box → máy: thiếu localRoot lẫn path thì từ chối có chữ; tệp không có trên box thì nói tên tệp", async () => {
   const { day } = dungDay({}, new Map([["a.txt", Buffer.from("x")]]));
-  const r = await chepVeMay({ machineId: "may-1", duongBox: "a.txt" }, day);
+  const r = await chepVeMay({ machineId: "may-1", owner: CHU, duongBox: "a.txt" }, day);
   assert.equal(r.ok, false);
   assert.match(String(!r.ok && r.error), /"path"/);
-  const x = await chepVeMay({ machineId: "may-1", duongBox: "khong-co.txt", duongMay: "C:/Users/admin/Desktop/k.txt" }, day);
+  const x = await chepVeMay({ machineId: "may-1", owner: CHU, duongBox: "khong-co.txt", duongMay: "C:/Users/admin/Desktop/k.txt" }, day);
   assert.equal(x.ok, false);
   assert.match(String(!x.ok && x.error), /khong-co\.txt/);
 });

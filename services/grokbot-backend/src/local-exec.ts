@@ -198,7 +198,7 @@ export function tepDauRaNen(may: { terminalsFolder?: string; localRoot?: string 
  */
 export async function runOnUserComputer(
   op: LocalOp,
-  opts: { machineId?: string; approvalId?: string; authorizedByStanding?: boolean; timeoutMs?: number } = {},
+  opts: { machineId?: string; approvalId?: string; authorizedByStanding?: boolean; timeoutMs?: number; owner: string },
 ): Promise<LocalResult> {
   // `machineId` PHẢI là id máy tự khai trong khung `hello`: daemon so nó trước khi nhận việc
   // (`localToolApprovalCovers` mở đầu bằng `t.machineId !== e.machineId`). Gửi chuỗi rỗng thì
@@ -211,10 +211,14 @@ export async function runOnUserComputer(
    *
    * Chỉ định một máy không nối thì DỪNG ngay ở đây với câu nói rõ, chứ không im lặng rơi về máy
    * khác: chạy một lệnh trên nhầm máy là thứ không phát hiện được từ kết quả trả về.
+   *
+   * `opts.owner` bắt buộc (07/09): việc tìm máy phải nằm TRONG phạm vi một người. Máy của người
+   * khác thì trông y như máy không tồn tại — cùng một câu từ chối, nên không ai dò ra được rằng
+   * cái tên mình vừa gõ có thật ở đâu đó.
    */
-  const may = opts.machineId ? findMachine(opts.machineId) : connectedMachine();
+  const may = opts.machineId ? findMachine(opts.machineId, opts.owner) : connectedMachine(opts.owner);
   if (opts.machineId && !may) {
-    const co = connectedMachines().map((m) => m.label);
+    const co = connectedMachines(opts.owner).map((m) => m.label);
     return {
       ok: false,
       error: `không thấy máy "${opts.machineId}" đang nối`

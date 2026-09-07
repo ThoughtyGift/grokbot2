@@ -50,13 +50,13 @@ type Viec =
 const CHIA = 5_000;
 let duongDanCache: string | null = null;
 
-async function dambaoScript(opts: { machineId?: string }): Promise<{ duong?: string; loi?: string }> {
+async function dambaoScript(opts: { machineId?: string; owner: string }): Promise<{ duong?: string; loi?: string }> {
   const nguon = scriptDaThay();
   const b64 = Buffer.from(nguon, "utf8").toString("base64");
   const may = opts.machineId ? { machineId: opts.machineId } : {};
 
   const chay = async (command: string, timeoutMs = 40_000) => {
-    const r = await runOnUserComputer({ kind: "shell", command }, { timeoutMs, ...may });
+    const r = await runOnUserComputer({ kind: "shell", command }, { timeoutMs, owner: opts.owner, ...may });
     if (!r.ok) return { ok: false as const, loi: String(r.error ?? "lệnh hỏng") };
     return { ok: true as const, out: String((r.data as { stdout?: string })?.stdout ?? "").trim() };
   };
@@ -91,7 +91,7 @@ async function dambaoScript(opts: { machineId?: string }): Promise<{ duong?: str
  * `timeoutMs` rộng tay ở lần gọi đầu: nếu Chrome chưa mở cổng gỡ lỗi thì script phải tự bật một
  * cửa sổ và chờ tới 20 giây cho nó lên.
  */
-export async function lamTrenTrinhDuyet(v: Viec, opts: { machineId?: string; timeoutMs?: number } = {}): Promise<KetQuaTrinhDuyet> {
+export async function lamTrenTrinhDuyet(v: Viec, opts: { machineId?: string; timeoutMs?: number; owner: string }): Promise<KetQuaTrinhDuyet> {
   const goi = Buffer.from(JSON.stringify(v), "utf8").toString("base64");
   const cho = await dambaoScript(opts);
   if (!cho.duong) return { ok: false, loi: cho.loi ?? "không chở được script sang máy" };
@@ -99,6 +99,7 @@ export async function lamTrenTrinhDuyet(v: Viec, opts: { machineId?: string; tim
   const command = `node "${cho.duong}" ${goi}`;
 
   const r = await runOnUserComputer({ kind: "shell", command }, {
+    owner: opts.owner,
     timeoutMs: opts.timeoutMs ?? 60_000,
     ...(opts.machineId ? { machineId: opts.machineId } : {}),
   });

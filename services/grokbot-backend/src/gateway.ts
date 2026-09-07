@@ -342,9 +342,21 @@ const ports: AclPorts = {
     //
     // Trả cả máy ĐÃ TỪNG nối, không chỉ máy đang nối: bảng hỏi đúng một lần lúc app khởi động, và
     // lúc ấy daemon chưa kịp cắm. Định tuyến thì vẫn chỉ đọc máy đang nối — xem `may-da-biet.ts`.
-    connectedMachines: () => mayChoBang(connectedMachines()),
-    renameMachine: datTen,
-    setMachinePermission: datQuyen,
+    //
+    // Cả ba cửa dưới đây đóng `currentOwner()` vào lúc GỌI, và chỗ đóng nằm ở đây chứ không ở
+    // `cursor-acl`: lệnh gateway chạy trong `runWithOwner` của `index.ts`, còn `cursor-acl` là gói
+    // không biết gì về danh tính của ta — bắt nó nhận thêm một tham số owner là kéo một khái niệm
+    // của backend vào một gói chỉ nên biết hình dạng lệnh.
+    //
+    // MỘT chỗ hở còn lại, và nó là chỗ hở của bản vá chứ không của backend: `computer-tab` gọi
+    // `getSandMachines` bằng `Bearer ${GROKBOT2_GATEWAY_TOKEN}` — vé DÙNG CHUNG, mà vé cũ thì
+    // `ownerOfTicket` trả `null` ⇒ `currentOwner()` ra danh tính mặc định. Trên máy dev hai thứ
+    // trùng nhau nên bảng vẫn đúng; trên VPS thì biến đó không được đặt trong launcher phát ra
+    // ngoài nên lời gọi nhận 401 và bảng trống. Muốn bảng đúng cho nhiều người thì bản vá phải đi
+    // bằng vé CỦA NGƯỜI DÙNG — ghi ở bảng theo dõi, không sửa được từ phía backend.
+    connectedMachines: () => mayChoBang(connectedMachines(currentOwner()), currentOwner()),
+    renameMachine: (id, label) => datTen(id, label, currentOwner()),
+    setMachinePermission: (id, quyen) => datQuyen(id, quyen, currentOwner()),
     submitResponses,
     channelSnapshot,
   },

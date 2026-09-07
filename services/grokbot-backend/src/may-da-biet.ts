@@ -29,7 +29,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dataDir } from "./store.js";
 
 /** Một máy từng nối. Cố tình HẸP hơn `UserMachine`: chỉ thứ bảng cần vẽ. */
 export interface MayDaBiet {
@@ -46,10 +46,41 @@ export interface MayDaBiet {
   tenNguoiDat?: string;
   /** Lần cuối máy này còn sống. Nạp từ đĩa thì đây là giờ của phiên trước. */
   seenAtMs: number;
+  /**
+   * CHỦ của máy — `authId` của người mà daemon đã trình vé khi nó gửi `hello`.
+   *
+   * Trường này thiếu suốt cho tới 07/09, và đó là một lỗ THẬT chứ không phải chỗ chưa gọn: sổ là
+   * một `Map` toàn cục cộng một file JSON duy nhất, nên bảng Settings → Computer của người B vẽ
+   * máy Windows của người A, và `findMachine("Admin-PC")` của bot người B tìm thấy nó. Đo 07/09
+   * bằng `/gw/__coverage`: kênh `local-exec` tới với `saw:"user-ticket"` (n=1 luồng + 135 lượt trả
+   * lời) — tức danh tính CÓ ở đúng lúc `hello` tới, ta chỉ đang bỏ nó đi.
+   *
+   * `host-settings.ts` ngay cạnh đã làm đúng chuyện này từ trước (`byOwner[ownerId]`, kèm chú thích
+   * "hai tài khoản cùng dùng một backend sẽ ghi đè bố cục của nhau"). Sổ máy là thứ bị bỏ lại.
+   */
+  owner: string;
 }
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const FILE = join(HERE, "..", ".data", "may-da-biet.json");
+/**
+ * Đường dẫn sổ — đọc LÚC GỌI, và **không tự dựng `../.data`**.
+ *
+ * File này từng ghim `join(HERE, "..", ".data", "may-da-biet.json")` như một hằng số ở mức module,
+ * và cái giá đo được ngày 07/09: `may-da-biet.test.ts` gọi `nhoMay({computerId:"cu"})` nên một lượt
+ * chạy bộ test ghi thẳng một máy tên **"Máy cũ"** vào sổ THẬT, rồi bảng Settings → Computer của
+ * người dùng vẽ ra một máy không tồn tại. Cùng họ với bẫy §7 "bộ test xoá kho thật" nhưng ngược
+ * chiều — đây là GHI, nên không có gì trông như hỏng.
+ *
+ * Nó cũng là lần thứ tư của đúng một chuyện: chú thích `dataDir()` trong `store.ts` đã chép rằng
+ * `attachments.ts` và `observe.ts` từng tự dựng `../.data` của riêng chúng. Nên chỗ đúng không phải
+ * là thêm một biến môi trường thứ năm mà là **dùng lại một nguồn sự thật** — `dataDir()` đã biết
+ * `GROKBOT2_STATE_FILE` lẫn `NODE_TEST_CONTEXT`, tức bài test chạy trần cũng không tới được `.data`.
+ *
+ * `GROKBOT2_MAY_DA_BIET_FILE` là nửa thứ hai của cái bẫy (đúng nếp `GROKBOT2_WORKFLOWS_FILE`): bài
+ * nào TẠO dữ liệu thì tự trỏ nó vào `mkdtemp` của riêng mình, vô điều kiện — vì `dataDir()` dưới
+ * `NODE_TEST_CONTEXT` là MỘT thư mục dùng chung cho cả bộ, mà `node --test` chạy các file song song.
+ */
+const duongSo = (): string =>
+  process.env.GROKBOT2_MAY_DA_BIET_FILE ?? join(dataDir(), "may-da-biet.json");
 
 const so = new Map<string, MayDaBiet>();
 
@@ -59,9 +90,10 @@ const TOI_DA = 20;
 
 const luu = (): void => {
   try {
-    mkdirSync(dirname(FILE), { recursive: true });
+    const f = duongSo();
+    mkdirSync(dirname(f), { recursive: true });
     const ds = [...so.values()].sort((a, b) => b.seenAtMs - a.seenAtMs).slice(0, TOI_DA);
-    writeFileSync(FILE, JSON.stringify(ds, null, 2), "utf8");
+    writeFileSync(f, JSON.stringify(ds, null, 2), "utf8");
   } catch {
     // Đĩa đầy hay quyền ghi — bảng mất trí nhớ qua lần khởi động sau, không đáng làm hỏng lượt nào.
   }
@@ -70,10 +102,18 @@ const luu = (): void => {
 /** Nạp sổ từ đĩa. Gọi một lần lúc backend lên. */
 export function napMayDaBiet(): number {
   try {
-    const ds = JSON.parse(readFileSync(FILE, "utf8")) as MayDaBiet[];
+    const ds = JSON.parse(readFileSync(duongSo(), "utf8")) as MayDaBiet[];
     for (const m of Array.isArray(ds) ? ds : []) {
-      if (typeof m?.computerId === "string" && typeof m?.label === "string") {
-        so.set(m.computerId, { computerId: m.computerId, label: m.label, seenAtMs: Number(m.seenAtMs) || 0, ...(m.standing ? { standing: m.standing } : {}), ...(m.tenNguoiDat ? { tenNguoiDat: m.tenNguoiDat } : {}) });
+      /*
+       * Hàng KHÔNG có `owner` bị BỎ, không phải gán cho danh tính mặc định.
+       *
+       * Sổ ghi trước 07/09 không mang chủ, nên "của ai" là thứ không đọc được nữa — và đoán chính
+       * là cái lỗ đang vá: gán hết cho `DEFAULT_USER` thì trên VPS máy của người khác thành máy
+       * của người mặc định, tức leak y như cũ, chỉ khoác một cái tên. Bỏ đi thì bảng trống đúng
+       * vài giây: daemon nào còn sống sẽ gửi `hello` mới kèm vé của chủ nó và tự điền lại.
+       */
+      if (typeof m?.computerId === "string" && typeof m?.label === "string" && typeof m?.owner === "string" && m.owner) {
+        so.set(m.computerId, { computerId: m.computerId, label: m.label, owner: m.owner, seenAtMs: Number(m.seenAtMs) || 0, ...(m.standing ? { standing: m.standing } : {}), ...(m.tenNguoiDat ? { tenNguoiDat: m.tenNguoiDat } : {}) });
       }
     }
   } catch {
@@ -82,13 +122,17 @@ export function napMayDaBiet(): number {
   return so.size;
 }
 
-/** Ghi nhận một máy vừa tự khai `hello`. */
-export function nhoMay(m: { computerId: string; label: string; standing?: string }): void {
+/** Ghi nhận một máy vừa tự khai `hello`. `owner` là chủ của vé mà daemon trình lúc nối. */
+export function nhoMay(m: { computerId: string; label: string; standing?: string; owner: string }): void {
   // Giữ lại tên người dùng đã đặt: `hello` mang tên máy tự khai, không phải quyết định của người.
-  const cu = so.get(m.computerId);
+  // Chỉ giữ khi CÙNG chủ — cùng một `computerId` đổi chủ nghĩa là máy đã sang tay người khác, và
+  // mang tên người trước sang là nói dối cả hai.
+  const truoc = so.get(m.computerId);
+  const cu = truoc?.owner === m.owner ? truoc : undefined;
   so.set(m.computerId, {
     computerId: m.computerId,
     label: m.label,
+    owner: m.owner,
     seenAtMs: Date.now(),
     ...(m.standing ? { standing: m.standing } : {}),
     ...(cu?.tenNguoiDat ? { tenNguoiDat: cu.tenNguoiDat } : {}),
@@ -101,16 +145,21 @@ export function nhoMay(m: { computerId: string; label: string; standing?: string
  *
  * Nhận `dangNoi` từ `channels.ts` thay vì tự import — tránh vòng import, và giữ đúng ranh giới:
  * file này biết "đã từng", `channels.ts` biết "đang".
+ *
+ * `owner` là BẮT BUỘC, không phải tuỳ chọn có mặc định "tất cả": một tham số bỏ quên phải là lỗi
+ * biên dịch, không phải một lần rò rỉ im lặng.
  */
-export function mayChoBang(dangNoi: { computerId: string; label: string; standing?: string; seenAtMs: number }[]): MayDaBiet[] {
+export function mayChoBang(dangNoi: { computerId: string; label: string; standing?: string; seenAtMs: number; owner: string }[], owner: string): MayDaBiet[] {
   const ra = new Map<string, MayDaBiet>();
-  for (const m of so.values()) ra.set(m.computerId, m);
+  for (const m of so.values()) if (m.owner === owner) ra.set(m.computerId, m);
   // Máy đang nối luôn thắng bản ghi cũ: tên có thể đã đổi, và `seenAtMs` của nó là bây giờ.
   for (const m of dangNoi) {
+    if (m.owner !== owner) continue;
     const cu = so.get(m.computerId);
     ra.set(m.computerId, {
       computerId: m.computerId,
       label: m.label,
+      owner,
       seenAtMs: m.seenAtMs,
       // `standing` của daemon là sự thật về máy nên nó thắng — nhưng chỉ khi daemon CÓ khai. Không
       // khai mà vẫn ghi đè thì mức quyền người dùng vừa đặt biến mất ngay lần daemon nối lại, và
@@ -130,11 +179,14 @@ export function mayChoBang(dangNoi: { computerId: string; label: string; standin
  * Nên `tenNguoiDat` là một trường riêng, và `mayChoBang` ưu tiên nó.
  *
  * Trả về `null` nếu không biết máy nào mang id đó — người gọi phải nói ra thay vì im lặng thành công.
+ * Máy của người KHÁC cũng trả `null`: từ chối phải trông giống "không có máy đó", vì một câu lỗi
+ * khác đi là xác nhận với người hỏi rằng id ấy tồn tại ở đâu đó (cùng luật với cửa `?k=` của trang
+ * tải, §7 — token sai thì rơi về gói công khai chứ không trả 403).
  */
-export function datTen(computerId: string, ten: string): MayDaBiet | null {
+export function datTen(computerId: string, ten: string, owner: string): MayDaBiet | null {
   const m = so.get(computerId);
   const t = ten.trim();
-  if (!m || !t) return null;
+  if (!m || m.owner !== owner || !t) return null;
   const moi: MayDaBiet = { ...m, tenNguoiDat: t };
   so.set(computerId, moi);
   luu();
@@ -148,10 +200,10 @@ export function datTen(computerId: string, ten: string): MayDaBiet | null {
  * chính nó và tự quyết định từ chối hay không — ta chỉ ghi lại thứ người dùng đã chọn, và client
  * đồng bộ tiếp xuống máy qua `setLocalToolPermission` của nó.
  */
-export function datQuyen(computerId: string, quyen: string): MayDaBiet | null {
+export function datQuyen(computerId: string, quyen: string, owner: string): MayDaBiet | null {
   const m = so.get(computerId);
   const q = quyen.trim();
-  if (!m || !q) return null;
+  if (!m || m.owner !== owner || !q) return null;
   const moi: MayDaBiet = { ...m, standing: q };
   so.set(computerId, moi);
   luu();
