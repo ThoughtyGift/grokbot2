@@ -103,10 +103,20 @@ const co = {
  *                       `(n=<store>)=>readSecret(...)`, chỉ đổi tên rút gọn.
  */
 const thanMoi = (wrap, idFn) => `getSandMachines:${wrap}(async()=>{try{`
-  + 'const u=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
-  + 'const k=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+  // Chờ vé của NGƯỜI DÙNG — nhưng CHỈ khi không còn gì để dùng thay.
+  //
+  // Bảng hỏi ĐÚNG MỘT LẦN lúc app khởi động (bẫy 30/08) và box nối sau đó vài giây, nên "chưa có vé
+  // thì thôi" nghĩa là bảng trống suốt phiên. Nhưng chờ VÔ ĐIỀU KIỆN thì trên máy dev — nơi
+  // `GROKBOT2_GATEWAY_TOKEN` có sẵn — mỗi lần mở Settings phải trả 5 s cho một thứ đã có sẵn câu
+  // trả lời. Nên: có vé thì đi ngay, không vé mà cũng không token dự phòng thì mới chờ.
+  + 'let ve=globalThis.__grokbot2_ve;'
+  + 'if((!ve||!ve.token)&&!process.env.GROKBOT2_GATEWAY_TOKEN)'
+  + 'for(let i=0;i<50;i++){await new Promise(z=>setTimeout(z,100));ve=globalThis.__grokbot2_ve;if(ve&&ve.token)break;}'
+  + 'const u=ve&&ve.baseUrl?String(ve.baseUrl).replace(/\\/+$/,"")'
+  + ':String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"")+"/gw";'
+  + 'const k=(ve&&ve.token)||process.env.GROKBOT2_GATEWAY_TOKEN||"";'
   + `let cur=null;try{cur=await ${idFn}()}catch{}`
-  + 'const r=await fetch(u+"/gw/api/getSandMachines",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify(cur?{currentMachineId:cur}:{}),signal:AbortSignal.timeout(8000)});'
+  + 'const r=await fetch(u+"/api/getSandMachines",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k},body:JSON.stringify(cur?{currentMachineId:cur}:{}),signal:AbortSignal.timeout(8000)});'
   + 'if(!r.ok)return null;const a=await r.json();'
   + 'return Array.isArray(a)&&a.length>0?a:null;'
   + '}catch{return null}},"getSandMachines")';
@@ -139,9 +149,11 @@ const doiTen = {
       replace: 'updateMachineLabel:s(async({machineId:p,label:A})=>{/*grokbot2:computer-tab-label*/'
         + 'const y2=String(A??"").trim();'
         + 'if(!(p&&p.length>0&&p.length<=127&&y2.length>0&&[...y2].length<=s7t))throw new Error("Machine label update requires a bounded machine id and label.");'
-        + 'const u2=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
-        + 'const k2=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-        + 'const r2=await fetch(u2+"/gw/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
+        + 'const ve2=globalThis.__grokbot2_ve;'
+        + 'const u2=ve2&&ve2.baseUrl?String(ve2.baseUrl).replace(/\\/+$/,"")'
+        + ':String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"")+"/gw";'
+        + 'const k2=(ve2&&ve2.token)||process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r2=await fetch(u2+"/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
         + 'if(!r2.ok)throw new Error("Machine label update failed: "+r2.status);'
         + 'return await r2.json();}/*grokbot2:label-cu*/,"updateMachineLabel"),unusedUpdateMachineLabel:s(async({machineId:p,label:A})=>{let y=A.trim();',
       marker: "/*grokbot2:computer-tab-label*/",
@@ -160,9 +172,11 @@ const doiTen = {
       replace: 'updateMachineLabel:o(async({machineId:p,label:g})=>{/*grokbot2:computer-tab-label*/'
         + 'const y2=String(g??"").trim();'
         + 'if(!(p&&p.length>0&&p.length<=127&&y2.length>0&&[...y2].length<=Qee))throw new Error("Machine label update requires a bounded machine id and label.");'
-        + 'const u2=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
-        + 'const k2=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-        + 'const r2=await fetch(u2+"/gw/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
+        + 'const ve2=globalThis.__grokbot2_ve;'
+        + 'const u2=ve2&&ve2.baseUrl?String(ve2.baseUrl).replace(/\\/+$/,"")'
+        + ':String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"")+"/gw";'
+        + 'const k2=(ve2&&ve2.token)||process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r2=await fetch(u2+"/api/updateSandMachineLabel",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k2},body:JSON.stringify({machineId:p,label:y2}),signal:AbortSignal.timeout(8000)});'
         + 'if(!r2.ok)throw new Error("Machine label update failed: "+r2.status);'
         + 'return await r2.json();}/*grokbot2:label-cu*/,"updateMachineLabel"),unusedUpdateMachineLabel:o(async({machineId:p,label:g})=>{let A=g.trim();',
       marker: "/*grokbot2:computer-tab-label*/",
@@ -189,9 +203,11 @@ const doiQuyen = {
       find: 'updateMachineLocalToolPermission:s(async({machineId:p,localToolPermission:A,expectedAccountScope:y})=>{let S=await e(),',
       expected: 1,
       replace: 'updateMachineLocalToolPermission:s(async({machineId:p,localToolPermission:A})=>{/*grokbot2:computer-tab-permission*/'
-        + 'const u3=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
-        + 'const k3=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-        + 'const r3=await fetch(u3+"/gw/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:A}),signal:AbortSignal.timeout(8000)});'
+        + 'const ve3=globalThis.__grokbot2_ve;'
+        + 'const u3=ve3&&ve3.baseUrl?String(ve3.baseUrl).replace(/\\/+$/,"")'
+        + ':String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"")+"/gw";'
+        + 'const k3=(ve3&&ve3.token)||process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r3=await fetch(u3+"/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:A}),signal:AbortSignal.timeout(8000)});'
         + 'if(!r3.ok)throw new Error("Machine permission update failed: "+r3.status);'
         + 'return await r3.json();}/*grokbot2:quyen-cu*/,"updateMachineLocalToolPermission"),unusedUpdateMachinePermission:s(async({machineId:p,localToolPermission:A,expectedAccountScope:y})=>{let S=await e(),',
       marker: "/*grokbot2:computer-tab-permission*/",
@@ -203,9 +219,11 @@ const doiQuyen = {
       find: 'updateMachineLocalToolPermission:o(async({machineId:p,localToolPermission:g,expectedAccountScope:A})=>{let h=await t(),',
       expected: 1,
       replace: 'updateMachineLocalToolPermission:o(async({machineId:p,localToolPermission:g})=>{/*grokbot2:computer-tab-permission*/'
-        + 'const u3=String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"");'
-        + 'const k3=process.env.GROKBOT2_GATEWAY_TOKEN||"";'
-        + 'const r3=await fetch(u3+"/gw/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:g}),signal:AbortSignal.timeout(8000)});'
+        + 'const ve3=globalThis.__grokbot2_ve;'
+        + 'const u3=ve3&&ve3.baseUrl?String(ve3.baseUrl).replace(/\\/+$/,"")'
+        + ':String(process.env.SAND_BACKEND_URL||process.env.CURSOR_API_BASE_URL||"http://localhost:8788").replace(/\\/+$/,"")+"/gw";'
+        + 'const k3=(ve3&&ve3.token)||process.env.GROKBOT2_GATEWAY_TOKEN||"";'
+        + 'const r3=await fetch(u3+"/api/updateSandMachineLocalToolPermission",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+k3},body:JSON.stringify({machineId:p,localToolPermission:g}),signal:AbortSignal.timeout(8000)});'
         + 'if(!r3.ok)throw new Error("Machine permission update failed: "+r3.status);'
         + 'return await r3.json();}/*grokbot2:quyen-cu*/,"updateMachineLocalToolPermission"),unusedUpdateMachinePermission:o(async({machineId:p,localToolPermission:g,expectedAccountScope:A})=>{let h=await t(),',
       marker: "/*grokbot2:computer-tab-permission*/",
@@ -241,4 +259,72 @@ const cau = {
   ],
 };
 
-export default [co, cau, doiTen, doiQuyen];
+/**
+ * Vé CỦA NGƯỜI DÙNG cho ba lời gọi trên — cất lại ngay chỗ client đúc ra nó.
+ *
+ * ── Vì sao cần ────────────────────────────────────────────────────────────────────────────────
+ *
+ * Ba bản vá trên đi bằng `GROKBOT2_GATEWAY_TOKEN`, và biến đó có đúng MỘT chỗ đặt trong cả kho:
+ * `infra/scripts/run.ps1` — bộ khởi chạy của máy dev. Launcher phát ra ngoài (`setup-templates.mjs`)
+ * đặt bốn biến và **không có** biến này. Đo 07/09: lời gọi từ một máy tải về gửi `Bearer ` rỗng và
+ * nhận **401**, nên bảng Computer trên mọi máy người dùng thật là trống — im lặng, vì bản vá trả
+ * `null` khi `!r.ok` và bảng trống trông y như "chưa có máy nào".
+ *
+ * Và kể cả khi có: vé dùng chung **không mang danh tính**. `ownerOfTicket` trả `null` cho nó nên
+ * backend suy ra danh tính mặc định, tức bảng không lọc theo ai được — đúng chỗ hở còn lại sau khi
+ * định tuyến đã cô lập xong (bảng theo dõi §6 mục 39).
+ *
+ * ── Vé thật nằm ở đâu ─────────────────────────────────────────────────────────────────────────
+ *
+ * `EnsureSandBox` đóng vé riêng của từng người vào **trường 11** của bản mô tả box
+ * (`packages/grokbot-proto/src/bootstrap.ts`), và app dội đúng chuỗi ấy lại trên mọi lời gọi `/gw`.
+ * Trong main nó đi qua đúng một hàm — `buildConnection`, thứ duy nhất đúc ra
+ * `{baseUrl, token, headers, vncProxy}`:
+ *
+ *     function MAe(e,t,r,n){ … return{baseUrl:e,token:t.length>0?t:void 0,headers:…} }
+ *     o(MAe,"buildConnection")
+ *
+ * Nên neo ở đây thay vì đi tìm một singleton: mọi đường tới vé đều chảy qua chỗ này, kể cả khi box
+ * nối lại và vé đổi.
+ *
+ * `baseUrl` cũng lấy luôn từ đó — nó là `gateway_url` (trường 10), tức `<backend>/gw`. Bằng chứng
+ * rằng đường ghép `${gatewayUrl}/api/<lệnh>` là đúng nằm trong chính bundle: `flushBoxStore` gọi
+ * `fetch(`${t.gatewayUrl}/api/snapshotBoxStoreNow`)`. Nhờ vậy bảng thôi phụ thuộc `SAND_BACKEND_URL`.
+ *
+ * ── Giòn ở đâu, và vì sao vẫn chấp nhận ───────────────────────────────────────────────────────
+ *
+ * Neo bám vào tên THAM SỐ rút gọn (`e,t` ở 0.43 · `n,e` ở 0.29) — cùng kiểu giòn với `doiTen` và
+ * `doiQuyen` ở trên, và cách chữa cũng cùng một chỗ: thêm một `variants[]`. Gãy thì gãy ĐỎ kèm id,
+ * không gãy im. Không neo được vào chữ `"buildConnection"` vì bộ vá chỉ biết find/replace chuỗi
+ * thẳng, không có bước tính toán để moi tên hàm ra rồi vá tiếp.
+ *
+ * Ghi vào `globalThis` chứ không vào một module: bản vá chèn một câu lệnh vào giữa thân hàm đã rút
+ * gọn, nên nó không có chỗ nào để `export`. Cùng một tiến trình main, nên `getSandMachines` đọc được.
+ * Chỉ ghi khi vé không rỗng — một vé rỗng đè lên vé thật là đúng cái lỗi nó sinh ra để chữa.
+ */
+const veNguoiDung = {
+  id: "computer-tab-ve",
+  summary: "cất vé cổng của người dùng lúc buildConnection đúc ra nó, để bảng Computer đi bằng vé thật",
+  variants: [
+    {
+      version: "0.29.0",
+      file: MAIN,
+      find: 'return{baseUrl:n,token:e.length>0?e:void 0,headers:',
+      expected: 1,
+      replace: '/*grokbot2:ve-nguoi-dung*/try{if(typeof e=="string"&&e.length>0)globalThis.__grokbot2_ve={baseUrl:n,token:e};}catch{}'
+        + 'return{baseUrl:n,token:e&&e.length>0?e:void 0,headers:',
+      marker: "/*grokbot2:ve-nguoi-dung*/",
+    },
+    {
+      version: "0.43.0",
+      file: MAIN043,
+      find: 'return{baseUrl:e,token:t.length>0?t:void 0,headers:',
+      expected: 1,
+      replace: '/*grokbot2:ve-nguoi-dung*/try{if(typeof t=="string"&&t.length>0)globalThis.__grokbot2_ve={baseUrl:e,token:t};}catch{}'
+        + 'return{baseUrl:e,token:t&&t.length>0?t:void 0,headers:',
+      marker: "/*grokbot2:ve-nguoi-dung*/",
+    },
+  ],
+};
+
+export default [co, cau, doiTen, doiQuyen, veNguoiDung];
