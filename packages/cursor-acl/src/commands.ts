@@ -19,6 +19,7 @@
 import { listMarketplacePluginsJson, getEffectiveUserPluginsJson, type PluginEntry } from "@grokbot2/proto";
 import type { AclPorts, Call } from "./ports.js";
 import type { WireChannel } from "./sse.js";
+import { taoKhoGomKhuc } from "./gom-khuc-dinh-kem.js";
 
 /**
  * The nine shared-room commands, and the one honest answer to all of them.
@@ -98,6 +99,9 @@ export const REPLY_NULL: ReadonlySet<string> = new Set([
 export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel, payload: unknown) => void): Record<string, Call> {
   const { identity, directory, conversation, runtime, computer, media, memory, automations, extensions, botTemplates, workflows, marketplace } = ports;
   const push = (channel: WireChannel, payload: unknown) => { broadcast?.(channel, payload); };
+  // Kho gom khúc của `uploadAttachmentChunk` — theo BỘ LỆNH, không toàn cục: hai backend trong
+  // một tiến trình (bài đo) không được thấy tệp đang dở của nhau.
+  const khoGomKhuc = taoKhoGomKhuc();
 
   /**
    * Danh mục plugin, và cách bóc mảng ra khỏi hai hàm dựng hình đã có.
@@ -500,6 +504,36 @@ export function buildCommands(ports: AclPorts, broadcast?: (channel: WireChannel
       // `path` is what the client keeps and later sends back in `attachments[]`; `url`/`fileName`
       // are kept for our own scripts. Same value — the staged virtual path.
       return url ? { ok: true, path: url, url, fileName: name } : { ok: false, reason: "empty or unreadable attachment bytes" };
+    },
+
+    /**
+     * Đường client 0.43 đi THẬT SỰ cho mọi đính kèm gửi từ khung soạn.
+     *
+     * `uploadStaged` trong `main-app.cjs` thử chia khúc TRƯỚC, và chỉ rơi về `uploadAttachment` khi
+     * gateway báo *không biết lệnh*. Cửa `/gw/api` của ta trả `200 {}` cho lệnh không có handler —
+     * tức nói "xong rồi" chứ không nói "không biết lệnh" ⇒ client gửi hết khúc, không thấy
+     * `committedPath`, rồi ném `SandStagedUploadIncompleteError`, và vì lỗi ấy không phải
+     * `isUnknownGatewayMethodError` nên đường một-phát ngay trên **không bao giờ được chạm tới**.
+     * Đo 08/09/2026 trên máy người dùng: ảnh 552.191 byte, `unmapped: ["uploadAttachmentChunk"]`,
+     * khung soạn hiện *"Couldn't send your message. Check your connection and try again."*
+     *
+     * Client đọc đúng MỘT khoá: `committedPath`. Khúc chưa đủ phải trả reply **VẮNG** khoá ấy —
+     * `null` ở chỗ không nullable là thứ coordinator 0.43 coi là reply hỏng (§7 bảng theo dõi), nên
+     * ở đây là vắng khoá, không phải `null`.
+     *
+     * Phép gom nằm ở `gom-khuc-dinh-kem.ts` (module THUẦN, 12 unit) vì file này kéo `@grokbot2/proto`
+     * nên bài đo không nạp được; còn việc stage thì đi đúng đường của `uploadAttachment` ngay trên.
+     */
+    uploadAttachmentChunk: (a) => {
+      const r = khoGomKhuc.nhan(a);
+      if ("loi" in r) return { ok: false, reason: r.loi };
+      if (!r.xong) return {};
+      const url = media.stageImage(r.dataUrl, r.ten) ?? media.stageFile(r.dataUrl, r.ten, r.mime);
+      // `path`/`url`/`fileName` giữ cho bài đo của mình, giống `uploadAttachment`; `committedPath`
+      // mới là khoá client đọc.
+      return url
+        ? { committedPath: url, ok: true, path: url, url, fileName: r.ten }
+        : { ok: false, reason: "empty or unreadable attachment bytes" };
     },
 
     // Answered, but answered NO. Writing the card needs a plain-text transcript writer; a
