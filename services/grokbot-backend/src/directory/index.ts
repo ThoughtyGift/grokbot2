@@ -12,13 +12,19 @@ import { currentOwner } from "../request-context.js";
 import {
   agents, transcripts, inflight, persist, EPOCH, automationCleanupRef, nextAgentId, introduceRef,
 } from "../chat/state.js";
+import { mocSeq, datCho } from "../chat/epoch-ben.js";
 import { lastEntryOf, transcriptContains, pushTranscriptEvent } from "../conversation/index.js";
 import type { AgentRecord, RosterRow } from "../conversation/types.js";
 
 export const rosterChanged = (agentId?: string): void => publish({ type: "agent.upserted", agentId });
 
-let rosterSeq = 0;
-export const nextRosterOrdered = () => ({ replicaKey: "roster", epoch: EPOCH, sequence: ++rosterSeq });
+// Roster cũng là một replica có epoch, nên mốc của nó cũng phải bền — cùng lý do với bản ghi.
+let rosterSeq = mocSeq("roster");
+export const nextRosterOrdered = () => {
+  const sequence = ++rosterSeq;
+  datCho("roster", sequence);
+  return { replicaKey: "roster", epoch: EPOCH, sequence };
+};
 export const peekRosterSeq = () => rosterSeq;
 
 /**

@@ -6,6 +6,7 @@ import { extname } from "node:path";
 import { stageImage } from "../attachments.js";
 import { ME } from "../identity/index.js";
 import { persist, onUpdate, tail, authorOf, nextEntryId, EPOCH, acceptance, transcripts, ownsAgent } from "../chat/state.js";
+import { mocSeq, datCho } from "../chat/epoch-ben.js";
 import { ensureSeq as stampSeq, isToolEcho, textOf } from "./seq.js";
 import type { Entry, LastEntry, WidgetOption, TranscriptEvent } from "./types.js";
 
@@ -69,18 +70,26 @@ export function transcriptContains(agentId: string, q: string): boolean {
 
 const transcriptSeq = new Map<string, number>();
 
+/** Khoá mốc bền của một bot — cùng chuỗi với `replicaKey` để đọc tệp mốc là biết ngay của ai. */
+const khoaSeq = (agentId: string) => `transcript:${agentId}`;
+
 export function seqFor(agentId: string): number {
   const known = transcriptSeq.get(agentId);
   if (known !== undefined) return known;
-  const seeded = (transcripts.get(agentId) ?? []).length;
+  // Sàn là MAX(độ dài bản ghi, mốc đã đặt chỗ): mốc giữ cho số KHÔNG TỤT sau khởi động lại
+  // (`sequence` tăng mỗi SỰ KIỆN nên nó vượt xa độ dài trong một lượt streaming), còn độ dài lo cho
+  // bot có bản ghi mà chưa từng phát khung nào (mốc = 0).
+  const seeded = Math.max((transcripts.get(agentId) ?? []).length, mocSeq(khoaSeq(agentId)));
   transcriptSeq.set(agentId, seeded);
   return seeded;
 }
 
 /**
  * `OrderedStamp` của một sự kiện bản ghi — đúng hình 0.43: `replicaKey` = `transcript:<agentId>` (renderer
- * `Lh`/`tz` tách agentId sau tiền tố `transcript:`), `epoch` chuỗi chung cả tiến trình (đổi khi backend
- * khởi động lại → client thấy epoch lạ → tự tải đuôi neo lại), `sequence` +1 mỗi sự kiện của bot đó.
+ * `Lh`/`tz` tách agentId sau tiền tố `transcript:`), `epoch` chuỗi **BỀN qua khởi động lại**
+ * (trước 08/09 nó là `Date.now()` mỗi lần nạp, và chú thích ở đây từng khẳng định *"client thấy
+ * epoch lạ → tự tải đuôi neo lại"* — đo thì **không**: nó thôi hỏi luôn, xem `chat/epoch-ben.ts`),
+ * `sequence` +1 mỗi sự kiện của bot đó.
  * Viết 08/2026 cho một lần thử không thành trên client 0.30; từ 06/09/2026 `sse.ts` dùng thật cho 0.43 —
  * bằng chứng hãng đi đường này: replica bản ghi mà client app gốc 0.43 ghi xuống đĩa mang
  * `epochHint: "fbf22d21-…"`, `acceptedSequenceHint: 9` (bot cũ 01/09 thì `null`).
@@ -88,7 +97,8 @@ export function seqFor(agentId: string): number {
 export function nextTranscriptOrdered(agentId: string) {
   const next = seqFor(agentId) + 1;
   transcriptSeq.set(agentId, next);
-  return { replicaKey: `transcript:${agentId}`, epoch: EPOCH, sequence: next };
+  datCho(khoaSeq(agentId), next);
+  return { replicaKey: khoaSeq(agentId), epoch: EPOCH, sequence: next };
 }
 
 const numbered = (agentId: string | undefined, all: Entry[]) => stampSeq(agentId, all, persist);

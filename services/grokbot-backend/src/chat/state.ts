@@ -6,6 +6,7 @@ import { napMayDaBiet } from "../may-da-biet.js";
 import { napWorkflows } from "../workflows.js";
 import { doObsTrenBox } from "../box-obs.js";
 import { loadState, scheduleSave, type PersistedState } from "../store.js";
+import { epochBen } from "./epoch-ben.js";
 import { ensureSeq } from "../conversation/seq.js";
 import { incompleteToolCallStart } from "../tool-calls.js";
 import { publish } from "../events.js";
@@ -262,7 +263,9 @@ function migrate(e: any, agentName: string): Entry | null {
  * đều là `string`, và coordinator 0.43 kiểm reply theo schema — số ở đây là "listAgents reply is
  * malformed" ở phía client. Renderer 0.29 chỉ so bằng `!==`, không kiểm kiểu, nên đổi kiểu vô hại.
  */
-export const EPOCH = String(Date.now());
+// BỀN qua khởi động lại. `Date.now()` mỗi lần nạp làm MỒ CÔI mọi replica đang neo — đo 08/09,
+// xem `chat/epoch-ben.ts` cho số đo và vì sao phải kèm mốc thứ tự không tụt.
+export const EPOCH = epochBen();
 export const transcriptEpoch = (_agentId: string): string => EPOCH;
 
 /**
