@@ -122,6 +122,31 @@ export function hasIncompleteToolCall(text: string, known: (name: string) => boo
   return false;
 }
 
+/**
+ * Chỗ bắt đầu của một lời gọi KHÔNG đóng ngoặc — điểm cắt cho một reply model chưa viết xong.
+ *
+ * `hasIncompleteToolCall` trả lời "có bị cắt không"; hàm này trả lời "cắt từ đâu", thứ duy nhất
+ * dùng được khi phải DỌN văn bản chứ chỉ báo động. Đo 08/09/2026: backend nạp lại đúng 2 giây sau
+ * khi bot bắt đầu viết `TOOL_CALL: message_agent({...`, nên khối JSON dở nằm lại trong bản ghi và
+ * người dùng thấy nguyên một cục token + ID bảng bày giữa hội thoại (§7 bảng theo dõi).
+ *
+ * KHÔNG nhận `known` như hai hàm trên, và đó là chủ ý: người gọi duy nhất là lúc NẠP bản ghi
+ * (`chat/state.ts`), nơi bảng tool không với tới được — `runtime/tools.ts` kéo cả pool lẫn box. Mà
+ * một lời gọi mở ngoặc rồi bị cắt thì là phần dư dù cái tên có phân giải được hay không: nó chưa
+ * bao giờ chạy, vì bộ bóc cũng đòi ngoặc cân.
+ */
+export function incompleteToolCallStart(text: string): number {
+  NAME.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = NAME.exec(text)) !== null) {
+    const open = m.index + m[0].length - 1;
+    const close = findArgEnd(text, open);
+    if (close < 0) return m.index;
+    NAME.lastIndex = close + 1;
+  }
+  return -1;
+}
+
 export function wasTruncated(text: string, known: (name: string) => boolean): boolean {
   // Counting without the cap: cheap, and the only honest way to report "I ran 6 of your 9".
   const all: string[] = [];

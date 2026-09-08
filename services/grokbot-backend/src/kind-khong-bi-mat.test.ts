@@ -31,7 +31,12 @@ test("danh sách trắng của migrate phủ hết union Entry", () => {
   assert.ok(kinds.length >= 5, `phải bắt được các kind của Entry, đọc ra: ${kinds.join(", ")}`);
 
   const state = doc("chat", "state.ts");
-  const migrate = state.slice(state.indexOf("function migrate"), state.indexOf("function migrate") + 3000);
+  // Cắt tới ĐÚNG biên hàm, không phải một cửa sổ 3000 ký tự: 08/09 hàm dài thêm một nhánh và danh
+  // sách trắng rơi ra ngoài cửa sổ ⇒ bài đỏ vì phép ĐO, không vì sản phẩm. Dấu đóng hàm là `}` ở
+  // đầu dòng — cùng lối với mọi phép đọc mã khác trong bộ này.
+  const dau = state.indexOf("function migrate");
+  const cuoi = state.indexOf(String.fromCharCode(10) + "}" + String.fromCharCode(10), dau);
+  const migrate = state.slice(dau, cuoi > dau ? cuoi : undefined);
   const thieu = kinds.filter((k) => !migrate.includes(`"${k}"`));
   assert.deepEqual(thieu, [], `migrate() sẽ XOÁ các kind này khi nạp lại: ${thieu.join(", ")}`);
 });

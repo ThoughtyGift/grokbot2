@@ -7,6 +7,7 @@ import { napWorkflows } from "../workflows.js";
 import { doObsTrenBox } from "../box-obs.js";
 import { loadState, scheduleSave, type PersistedState } from "../store.js";
 import { ensureSeq } from "../conversation/seq.js";
+import { incompleteToolCallStart } from "../tool-calls.js";
 import { publish } from "../events.js";
 import { restoreHandoff, handoffEntries, type BoxHandoff } from "../forever-box.js";
 import { ME, AUTH_ID } from "../identity/index.js";
@@ -30,6 +31,7 @@ export const ownsAgent = (id: string): boolean => {
   const a = agents.get(id);
   return !!a && ((a.agentOwnerAuthId ?? AUTH_ID) === currentOwner());
 };
+export { migrate as _migrateForTest };
 export const parked = new Map<string, Parked>();
 export const parkKey = (kind: Parked["kind"], key: string) => `${kind}:${key}`;
 
@@ -134,6 +136,11 @@ export { introduceRef };
 
 export const persist = () => scheduleSave(() => ({ ...snapshot(), hostSettings: hostSettingsRef() }));
 
+/** Dấu đóng vào entry của một lượt bị cắt. Là hằng vì `migrate` vừa GHI nó vừa NHẬN RA nó. */
+const DAU_NGAT = `
+
+⏹ (bị ngắt giữa chừng)`;
+
 function migrate(e: any, agentName: string): Entry | null {
   if (!e || typeof e !== "object") return null;
   const id = e.id ?? e.entryId ?? `e${entrySeq++}`;
@@ -142,10 +149,34 @@ function migrate(e: any, agentName: string): Entry | null {
   if (e.kind === "agent-message") return { id, kind: "send-message", author: { id: e.agentId ?? "agent", name: e.authorName ?? agentName }, message: { type: "text", content: e.text ?? "" }, timestampMs: ts };
   if (e.kind === "send-message" && e.streaming) {
     e.streaming = false;
+    // Lượt bị cắt giữa một dòng `TOOL_CALL` để lại khối JSON chưa đóng ngoặc: bộ bóc không khớp nó
+    // nên nó không bao giờ chạy, và nó nằm lại thành CHỮ trước mặt người dùng. Đo 08/09 trên
+    // `e18296`: nguyên một cục `app_token` + ID bảng + đường dẫn repo bày ra giữa hội thoại, trông
+    // y như bot hỏng. Dấu ⏹ ngay dưới đã nói đủ "lượt chưa xong"; khối dư không thêm gì cho người
+    // đọc. Bằng chứng vẫn nằm trong SQLite của lượt trước — đây là đường HIỂN THỊ.
+    if (e.message?.type === "text") {
+      const cat = incompleteToolCallStart(String(e.message.content ?? ""));
+      if (cat >= 0) e.message.content = String(e.message.content).slice(0, cat).trimEnd();
+    }
     const empty = e.message?.type === "text" && !String(e.message.content ?? "").trim();
     if (empty) return null;
-    if (e.message?.type === "text") e.message.content += "\n\n⏹ (bị ngắt giữa chừng)";
+    if (e.message?.type === "text") e.message.content += DAU_NGAT;
   }
+  /*
+   * Entry đã bị đóng dấu ở một lần nạp TRƯỚC bản sửa 08/09 thì `streaming` đã là false trên đĩa,
+   * nên nhánh trên không còn chạm tới nó và phần dư sẽ nằm đó mãi — đo được đúng thế trên `e18296`.
+   * Dấu ⏹ chính là bằng chứng "lượt này bị cắt", nên lấy nó làm điều kiện: chỉ dọn entry đã mang
+   * dấu, không dọn văn xuôi bình thường. (Một bot nhắc `TOOL_CALL` trong lời giải thích thì không
+   * có dấu ấy, nên không bị cắt oan.)
+   */
+  if (e.kind === "send-message" && e.message?.type === "text") {
+    const noi = String(e.message.content ?? "");
+    if (noi.includes(DAU_NGAT)) {
+      const cat = incompleteToolCallStart(noi);
+      if (cat >= 0) e.message.content = noi.slice(0, cat).trimEnd() + DAU_NGAT;
+    }
+  }
+
   /*
    * MỌI kind của `Entry` phải có mặt ở đây — thiếu một cái là XOÁ nó khỏi bản ghi.
    *

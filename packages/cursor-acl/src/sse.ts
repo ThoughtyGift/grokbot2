@@ -183,7 +183,10 @@ export function createSseHub(ports: AclPorts): SseHub {
   //
   // Neo: client nhận sự kiện epoch lạ → tự tải đuôi rồi `ingestSnapshot({epoch, throughSequence})` theo
   // sự kiện cuối đã thấy; sau đó chỉ nhận `sequence === accepted + 1`. Vì đuôi và sự kiện cùng đọc một
-  // bản ghi trong bộ nhớ nên chuỗi luôn khớp; backend khởi động lại = epoch mới = neo lại, không đứng.
+  // bản ghi trong bộ nhớ nên chuỗi luôn khớp. Vế "backend khởi động lại = epoch mới = neo lại,
+  // không đứng" từng viết ở đây là SAI, đo 08/09/2026: pane đứng ở `e18231` giữ nguyên epoch cũ
+  // suốt hai giờ qua nhiều lần backend lên lại — neo lại chỉ kích khi client NHẬN được một khung,
+  // mà bot đang đứng thì không có khung nào tới. Đọc §5 mục 19 bảng theo dõi trước khi tin đoạn này.
   // Tắt khẩn: `GROKBOT2_TRANSCRIPT_ORDERED=0` → khung tiếng gõ như trước.
   const announced = new Map<string, number>();
   const dungOrdered = process.env.GROKBOT2_TRANSCRIPT_ORDERED !== "0" && typeof ports.conversation.nextTranscriptOrdered === "function";
