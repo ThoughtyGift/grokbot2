@@ -14,7 +14,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { accessVerdict, recordUsage, setPlan, getPlan } from "./billing.js";
+import { accessVerdict, recordUsage, setPlan, getPlan, upgradeUrl } from "./billing.js";
 
 /*
  * Hậu tố ngẫu nhiên THEO LẦN CHẠY, không chỉ theo tên ca.
@@ -85,4 +85,37 @@ test("enforce: pro HẾT HẠN → payment_required, còn hạn → granted", as
     setPlan(u.authId, "pro", Date.now() + 86_400_000);
     assert.equal(accessVerdict(u), "granted");
   });
+});
+
+/*
+ * `upgradeUrl()` — knob CHẾT tới 09/09, và bài đo này ghim đúng chỗ nó chết.
+ *
+ * `seedPlans()` ghi hàng `pro` bằng `INSERT OR IGNORE`, nên hàng đã tạo hồi biến còn vắng mang
+ * `checkout_url = NULL` vĩnh viễn — đo được trên cả kho dev lẫn kho VPS. Đặt biến rồi khởi động lại
+ * KHÔNG sửa được. Nay env đọc trước, và ba bài dưới đây là ba câu hỏi khác nhau về nó.
+ */
+const doiEnv = <T>(v: string | undefined, f: () => T): T => {
+  const cu = process.env.GROKBOT2_CHECKOUT_URL;
+  if (v === undefined) delete process.env.GROKBOT2_CHECKOUT_URL;
+  else process.env.GROKBOT2_CHECKOUT_URL = v;
+  try {
+    return f();
+  } finally {
+    if (cu === undefined) delete process.env.GROKBOT2_CHECKOUT_URL;
+    else process.env.GROKBOT2_CHECKOUT_URL = cu;
+  }
+};
+
+test("upgradeUrl: env thắng hàng DB đã nướng NULL — đây là cái đã chết", () => {
+  assert.equal(getPlan("pro")?.checkoutUrl ?? null, null, "hàng pro trong kho tạm cũng NULL, đúng như kho thật");
+  assert.equal(doiEnv("https://cinai.app/vi/subscription", upgradeUrl), "https://cinai.app/vi/subscription");
+});
+
+test("upgradeUrl: env vắng → vẫn null, không bịa địa chỉ", () => {
+  assert.equal(doiEnv(undefined, upgradeUrl), null);
+});
+
+test("upgradeUrl: chỉ nhận http(s) — javascript: là chạy mã trong app người dùng", () => {
+  assert.equal(doiEnv("javascript:alert(1)", upgradeUrl), null);
+  assert.equal(doiEnv("  ", upgradeUrl), null, "chuỗi trắng không phải một URL");
 });

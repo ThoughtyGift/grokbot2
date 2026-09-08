@@ -105,8 +105,14 @@ function envGates(): Record<string, boolean> {
  * `user` cũng nằm trong chuỗi này chứ không phải tham số riêng: tiến trình chính đọc lại chính nó
  * (`JSON.parse(config).user ?? {}`) để dựng StatsigUser.
  */
-export function statsigBootstrapConfig(userId: string, nowMs = Date.now()): string {
-  const gates = { ...DEFAULT_GATES, ...envGates() };
+export function statsigBootstrapConfig(
+  userId: string,
+  nowMs = Date.now(),
+  extra: Readonly<Record<string, boolean>> = {},
+): string {
+  // Thứ tự đè: mặc định → cổng phụ thuộc CẤU HÌNH (`extra`) → `GROKBOT2_FEATURE_GATES`. Env đứng
+  // cuối vì nó là cửa thoát của người vận hành, phải thắng cả hai.
+  const gates = { ...DEFAULT_GATES, ...extra, ...envGates() };
   const featureGates: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(gates)) {
     featureGates[name] = { name, value, rule_id: "grokbot2", secondary_exposures: [] };
@@ -126,7 +132,13 @@ export function statsigBootstrapConfig(userId: string, nowMs = Date.now()): stri
   });
 }
 
-/** Thân câu trả lời của `BootstrapStatsig`: một khoá `config` mang chuỗi ở trên. */
-export function bootstrapStatsigJson(userId: string): string {
-  return JSON.stringify({ config: statsigBootstrapConfig(userId) });
+/**
+ * Thân câu trả lời của `BootstrapStatsig`: một khoá `config` mang chuỗi ở trên.
+ *
+ * `extra` là các cổng chỉ bật khi CẤU HÌNH có thật — đúng luật của `DEFAULT_GATES` ở trên ("bật một
+ * cổng cho tính năng chưa có phía máy chủ là vẽ ra một nút bấm vào thì hỏng"), nhưng cho những cổng
+ * mà "có thật hay không" phụ thuộc biến môi trường chứ không phụ thuộc bản dựng.
+ */
+export function bootstrapStatsigJson(userId: string, extra: Readonly<Record<string, boolean>> = {}): string {
+  return JSON.stringify({ config: statsigBootstrapConfig(userId, Date.now(), extra) });
 }

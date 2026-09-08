@@ -99,6 +99,14 @@ export interface RpcCtx {
    * Absent khi billing tắt — builder khi đó trả đúng stub lịch sử, không thêm field nào.
    */
   plan?: string;
+  /**
+   * Trang gói/thanh toán CỦA MÌNH, cho khối On-Demand của trang Usage & Billing (field 13).
+   *
+   * Vắng ⇒ **không phát field 13 và không bật cổng `sand_on_demand_settings`** — hai thứ đi cùng
+   * nhau có chủ ý, xem chú thích của `GetSandUsageStatus`. Backend đưa xuống (`GROKBOT2_CHECKOUT_URL`);
+   * gói này thuần protobuf, không đọc env.
+   */
+  dashboardUrl?: string;
   /** The raw (unframed) request body, for the one RPC whose argument matters: InstallUserPlugin. */
   body?: Buffer;
   /**
@@ -254,6 +262,33 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
    * `{visible:true, eligible:true, enabled:false, dashboard_url:<trang của mình>}` là khối
    * On-Demand hiện, đúng cách hãng làm.
    *
+   * NỐI 09/09, sau khi ĐỌC người tiêu thụ ở renderer 0.43 thay vì suy từ tên trường
+   * (`chunk-usage-pane-Ddtsn1Jl.js`, hàm `js`):
+   *
+   *     const r = Me("sand_on_demand_settings");
+   *     if (!r || t === null || !t.visible || !t.eligible) return null;
+   *     const f = ze(authId);                    // → https://cursor.com/dashboard/spending
+   *     const h = () => { a(t.dashboardUrl ?? f) };
+   *
+   * Bốn dữ kiện, mỗi cái đổi thiết kế một chút:
+   *  1. Có **cổng tính năng** `sand_on_demand_settings` đứng trước. Phát field 13 mà không bật cổng
+   *     là phát vào hư không — nên hai thứ buộc đi cùng nhau (`bootstrapStatsigJson` nhận `extra`).
+   *  2. `visible` VÀ `eligible` phải cùng `true`. Bỏ trống `eligible` cho "thành thật" là thẻ biến
+   *     mất — đúng họ bẫy *"validator của client có điều kiện KHÔNG ghi trong schema"*.
+   *  3. `dashboardUrl` mà vắng thì nút rơi về `ze()` = **trang của HÃNG**. Nên phát `visible+eligible`
+   *     khi chưa có URL của mình là đặt một nút mở `cursor.com` vào app của người dùng mình. Vì thế
+   *     cả khối chỉ phát khi `ctx.dashboardUrl` có mặt, không có nhánh nào phát thiếu.
+   *  4. `enabled` chỉ chọn CÂU MÔ TẢ, không mở/khoá gì. Ta không có cơ chế on-demand nào ⇒ `false`.
+   *
+   * Còn một điều bảng byte không nói được và phải quyết ở tầng sản phẩm: **chữ trên thẻ là của hãng,
+   * nướng trong renderer** — nút ghi *"Open Cursor Dashboard"*, mô tả ghi *"Enable on-demand spend in
+   * the Cursor dashboard."* Backend không đổi được chúng; muốn thẻ nói tiếng của mình thì phải vá
+   * renderer rồi PHÁT HÀNH. Nên mặc định ở đây là TẮT (không đặt `GROKBOT2_CHECKOUT_URL` thì không
+   * có gì đổi), và bật là một quyết định đi kèm một lần phát hành.
+   *
+   * Ctx hoàn toàn rỗng vẫn cho ra đúng stub lịch sử: không `dashboardUrl` ⇒ không field 13 ⇒ byte
+   * không đổi. Lời hứa "inert" ở dưới còn nguyên.
+   *
    * Ba nhánh, phân biệt bằng ctx:
    *   billing tắt  (không plan, không usage) → đúng stub lịch sử, byte không đổi — inert.
    *   plan không trần (pro: usage absent)    → không thanh %, chỉ nhãn plan; 8=false vì
@@ -263,11 +298,16 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
   GetSandUsageStatus: (ctx) => {
     // google.protobuf.Timestamp: {1 seconds (varint)} — bỏ nanos, độ phân giải giây là thừa đủ.
     const moc = (ms: number) => message(pbVar(1, Math.max(0, Math.floor(ms / 1000))));
+    // field 13 SandOnDemandSettings {1 visible, 2 eligible, 3 enabled, 4 dashboard_url} — cả bốn
+    // hoặc không cái nào (lý do ở chú thích trên: thiếu 4 thì nút mở trang của hãng).
+    const onDemand = ctx.dashboardUrl
+      ? pbMsg(13, message(pbBool(1, true), pbBool(2, true), pbBool(3, false), pbStr(4, ctx.dashboardUrl)))
+      : null;
     const u = ctx.usage;
     if (!u) {
       return ctx.plan == null
-        ? message(pbBool(4, false), pbBool(7, true), pbBool(8, true), pbBool(11, false))
-        : message(pbBool(4, false), pbBool(7, true), pbBool(8, false), pbBool(11, false), pbStr(15, ctx.plan));
+        ? message(pbBool(4, false), pbBool(7, true), pbBool(8, true), pbBool(11, false), onDemand)
+        : message(pbBool(4, false), pbBool(7, true), pbBool(8, false), pbBool(11, false), onDemand, pbStr(15, ctx.plan));
     }
     const pct = u.limit > 0 ? Math.max(0, (u.used / u.limit) * 100) : 0;
     return message(
@@ -278,6 +318,7 @@ export const bootstrapResponses: Record<string, (ctx: RpcCtx) => Buffer | Promis
       pbBool(7, u.used < u.limit),
       pbBool(8, u.limit > 0),
       pbBool(11, false),
+      onDemand,
       ...(ctx.plan == null ? [] : [pbStr(15, ctx.plan)]),
     );
   },
@@ -621,7 +662,12 @@ export const bootstrapJsonResponses: Record<string, (ctx: RpcCtx) => string> = {
    * của backend đa người dùng. Không có `ctx.user` (gọi trước khi đăng nhập) thì dùng một tên
    * chung; cổng của ta không phân biệt theo người nên giá trị vẫn đúng.
    */
-  BootstrapStatsig: (ctx) => bootstrapStatsigJson(ctx.user?.authId ?? "grokbot2-local"),
+  // Cổng `sand_on_demand_settings` bật ĐÚNG KHI `GetSandUsageStatus` phát được field 13 — cùng một
+  // điều kiện, viết ở hai chỗ thì sẽ lệch (§7 "một danh sách sống ở HAI nơi").
+  BootstrapStatsig: (ctx) =>
+    bootstrapStatsigJson(ctx.user?.authId ?? "grokbot2-local", {
+      sand_on_demand_settings: Boolean(ctx.dashboardUrl),
+    }),
 };
 
 /**

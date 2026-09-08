@@ -14,7 +14,7 @@ enableWriting();
 import { handleAuth, verifyJwt, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
 import { handleLoginPage, handleAuthPoll, handleAuthApprove } from "./login-page.js";
 import { handleWebApp } from "./web-app.js";
-import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser } from "./billing.js";
+import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser, upgradeUrl } from "./billing.js";
 
 // Bảng giá phải có TRƯỚC lượt chat đầu tiên, không phải lúc ai đó tình cờ hỏi gói.
 // `off` thì không đụng vào sổ: một cài đặt không dùng billing không nên tự mọc thêm bảng.
@@ -515,6 +515,17 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     // Nhãn plan cho trang Usage & Billing (GetSandUsageStatus). Chỉ khi billing đang đo: lúc `off`
     // để absent, builder khi đó trả đúng stub lịch sử — byte không đổi.
     plan: billingMode() === "off" ? undefined : getUser(rpcUser.authId)?.plan,
+    /*
+     * Khối On-Demand + cổng `sand_on_demand_settings` của trang Usage & Billing.
+     *
+     * Dùng CHÍNH `upgradeUrl()` chứ không đọc lại env ở đây: nó đã có phép kiểm `^https?://` (một
+     * `javascript:` lọt vào đây là link chạy mã trong app người dùng), và một URL thì chỉ nên có một
+     * nguồn. Vắng ⇒ ctx không có trường này ⇒ không field 13, cổng tắt, byte không đổi.
+     *
+     * KHÔNG phụ thuộc `billingMode()`: khối này là đường tới trang gói, không phải phán quyết hạn
+     * mức — ở `warn` (VPS hôm nay) người dùng vẫn cần biết mua ở đâu.
+     */
+    dashboardUrl: upgradeUrl() ?? undefined,
     body,
     plugins: pluginsPortFor(ownerFromAuth(req.headers.authorization)),
     // Marketplace bot: `blob_get_url` phải là địa chỉ máy chủ NHƯ CLIENT THẤY — sau reverse proxy thì

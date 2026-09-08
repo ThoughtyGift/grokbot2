@@ -135,9 +135,23 @@ export function getPlan(name: string): PlanRow | null {
  *
  * `null` khi chưa đặt `GROKBOT2_CHECKOUT_URL` — khi đó lời chặn không kèm link, chứ không bịa một
  * địa chỉ.
+ *
+ * SỬA 09/09 — ENV ĐỌC TRƯỚC, và đây là một knob CHẾT chứ không phải một lựa chọn phong cách.
+ * `DEFAULT_PLANS` nướng `process.env.GROKBOT2_CHECKOUT_URL` vào hàng `pro`, nhưng `seedPlans()` ghi
+ * bằng `INSERT OR IGNORE`: hàng ấy đã được tạo từ lâu, hồi biến còn vắng, nên nó mang `NULL` và
+ * **không lần khởi động nào sửa lại được**. Đo 09/09 trên cả hai kho thật:
+ *
+ *     dev  plans: {"name":"pro","monthly_token_cap":null,"checkout_url":null}
+ *     VPS  plans: {"name":"pro","monthly_token_cap":null,"checkout_url":null}
+ *
+ * Tức đặt biến rồi khởi động lại vẫn ra `null` — chức năng "lối thoát" chưa từng bật được bằng cách
+ * tài liệu nói. Đọc env trước cũng là cách hai chỗ ĐỌC KHÁC trong repo vẫn làm (`native.ts` cho
+ * `/v1/me`, và `infra/patches/get-ultra-redirect.mjs` lúc `--apply`), nên hàng DB là thứ lạc loài.
+ * Hàng DB vẫn được tôn trọng khi env vắng — chủ ý của `INSERT OR IGNORE` ("operator đã sửa tay thì
+ * đừng đè") còn nguyên, chỉ đảo thứ tự ưu tiên.
  */
 export function upgradeUrl(): string | null {
-  const url = getPlan("pro")?.checkoutUrl ?? null;
+  const url = process.env.GROKBOT2_CHECKOUT_URL?.trim() || getPlan("pro")?.checkoutUrl || null;
   // Chỉ nhận http(s): một `javascript:` lọt vào đây là link chạy mã trong app của người dùng.
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
