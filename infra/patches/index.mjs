@@ -14,7 +14,8 @@ import attachUploadObservable from "./attach-upload-observable.mjs";
 import getUltraRedirect from "./get-ultra-redirect.mjs";
 import computerTab from "./computer-tab.mjs";
 import updateFeed from "./update-feed.mjs";
+import onDemandChu from "./on-demand-chu-cua-minh.mjs";
 
 // `computerTab` và `getUltraRedirect` là MẢNG — mỗi phần một file (renderer / main). Xem chú thích
 // đầu `computer-tab.mjs`: gộp chúng vào một id thì bộ vá `break` sau file đầu và bỏ im file sau.
-export const PATCHES = [winDrivePath, attachUploadObservable, ...getUltraRedirect, ...computerTab, updateFeed];
+export const PATCHES = [winDrivePath, attachUploadObservable, ...getUltraRedirect, ...computerTab, ...onDemandChu, updateFeed];
