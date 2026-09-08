@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { PATCHES } from "../patches/index.mjs";
+import { thanHienHanh } from "../patches/than-hien-hanh.mjs";
 import { clientPaths } from "../patches/client-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -250,7 +251,11 @@ if (mode === "--verify") {
       const markers = [...new Set((p.variants ?? [p]).map((v) => v.marker).filter(Boolean))];
       const marks = markers.reduce((n, m) => n + (src.split(m).length - 1), 0);
       const stale = pickVariant(p, src);
-      if (marks > 0 && !stale) ok(`${p.id}: applied (${marks}x marker, 0 unpatched) trong ${file}`);
+      if (marks > 0 && !stale) {
+        thanHienHanh(p, src)
+          ? ok(`${p.id}: applied (${marks}x marker, 0 unpatched) trong ${file}`)
+          : fail(`${p.id}: marker con NHUNG than la ban CU trong ${file} — ban va da doi noi dung ke tu lan ap; --apply khong va de len duoc (neo da bi than cu nuot), phai dung lai bundle tu asar goc`);
+      }
       else if (stale) fail(`${p.id}: con ${stale.expected} cho CHUA va trong ${file} — chay lai --apply`);
       else continue;
       seen = true;
@@ -382,6 +387,7 @@ function pickVariant(p, src) {
   }
   return null;
 }
+
 
 /**
  * "Đã thừa" có BẰNG CHỨNG: bản vá khai `obsoleteIf:{file, find, expected, why}` — đúng câu sửa của
