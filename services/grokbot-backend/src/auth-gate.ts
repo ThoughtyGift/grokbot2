@@ -109,6 +109,23 @@ export interface AuthVerdict {
   saw: "matching-bearer" | "user-ticket" | "user-jwt" | "stale-literal" | "unknown-token" | "other-scheme" | "no-header";
 }
 
+/**
+ * Giấy tờ ở cửa `/internal/ops/` có đủ để CHẠY LỆNH trên máy cá nhân không.
+ *
+ * Tách ra khỏi `index.ts` để ghim được bằng bài đo: đây là một phép quyết định thuần, và nó là
+ * hàng rào duy nhất trước `runOnUserComputer`. Ba loại giấy THẬT — vé dùng chung của người vận
+ * hành, vé của một người, JWT. Bốn loại còn lại (`no-header`, `other-scheme`, `stale-literal`,
+ * `unknown-token`) đều là "không có giấy".
+ *
+ * Hai tính chất phải giữ, và cả hai đều đã trả giá ngày 08/09 (bảng theo dõi §7):
+ *   1. KHÔNG hỏi `authMode`. Cửa này không phải cửa đọc dữ liệu; `warn` cho tiện lúc phát triển
+ *      không phải lý do mở nó cho cả Internet.
+ *   2. Danh sách viết theo hướng CHO PHÉP, không theo hướng chặn. Thêm một `saw` mới vào enum thì
+ *      mặc định của nó là bị từ chối, chứ không phải lọt qua vì chưa ai nhớ thêm nó vào danh sách.
+ */
+export const giayDuChoOps = (saw: AuthVerdict["saw"]): boolean =>
+  saw === "matching-bearer" || saw === "user-ticket" || saw === "user-jwt";
+
 /** Shape (never value) of the last unrecognised token, to tell a wrong guess from a stale cache. */
 let lastUnknownShape: string | null = null;
 

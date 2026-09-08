@@ -41,7 +41,7 @@ import { reportMcpConfig, closeMcp } from "./mcp.js";
 import { boxHealth } from "./box-exec.js";
 import { logSafe } from "./redact.js";
 import { recordUnknown, notFoundBody, saveCoverageNow } from "./observe.js";
-import { ensureGatewayToken } from "./auth-gate.js";
+import { ensureGatewayToken, checkAuth, giayDuChoOps } from "./auth-gate.js";
 import { authMode } from "./auth-mode.js";
 import { handleAdmin } from "./admin.js";
 import { handleSite } from "./site.js";
@@ -283,12 +283,38 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
   // ops thì sai chỗ: :8791 là cửa công khai cho webhook.
   if (await handleAdmin(url, req, res)) return;
 
-  // ── ops internal (loopback — this server binds 127.0.0.1, not via /gw) ──
+  /*
+   * ── ops internal ─────────────────────────────────────────────────────────────────────────────
+   *
+   * Dòng chú thích ở đây từng viết *"loopback — this server binds 127.0.0.1, not via /gw"*, và cả
+   * hai vế đều đúng chữ nhưng KHÔNG cộng lại thành "chỉ máy này gọi được". Đo 08/09:
+   *
+   *   curl -X POST https://cinai.app/agent/internal/ops/local-exec  → tới đúng handler này
+   *
+   * vì nginx trên VPS có `location /agent/ { proxy_pass http://127.0.0.1:8788/; }` — nginx chạy
+   * TRÊN CÙNG MÁY, nên `bindHost 127.0.0.1` không phải là một biên giới, nó chỉ là địa chỉ. Và cửa
+   * này không hỏi giấy tờ: một request trần, không header nào, đi thẳng vào `runOnUserComputer`.
+   * Tức bất kỳ ai trên Internet chạy được lệnh shell, ghi tệp, chép tệp trên máy Windows của người
+   * dùng ngay khi máy ấy nối vào. Câu lỗi còn khai tên máy đang nối cho người hỏi.
+   *
+   * Nên cửa này đòi giấy tờ **không phụ thuộc `GROKBOT2_AUTH`**: khác `/gw`, nó không phải cửa đọc
+   * dữ liệu mà là cửa CHẠY LỆNH trên máy cá nhân. Một cài đặt để `warn` cho tiện lúc phát triển
+   * không phải là lý do để mở cửa ấy cho cả thế giới.
+   *
+   * `saw` phải là giấy tờ THẬT — vé dùng chung, vé của một người, hay JWT. `no-header`,
+   * `other-scheme`, `stale-literal`, `unknown-token` đều là không có giấy.
+   */
   if (url.startsWith("/internal/ops/")) {
     const json = (value: unknown, code = 200) => {
       res.writeHead(code, { "content-type": "application/json" });
       res.end(JSON.stringify(value));
     };
+    if (!giayDuChoOps(checkAuth(url, req.headers as Record<string, unknown>).saw)) {
+      // Không nói ra có máy nào đang nối, cũng không nói thiếu đúng loại giấy nào: câu lỗi chi tiết
+      // ở cửa này là bản đồ cho người đang dò.
+      json({ ok: false, error: "cần Authorization" }, 401);
+      return;
+    }
     try {
       const bodyJ = body.length ? JSON.parse(body.toString("utf8")) as Record<string, unknown> : {};
       const nowOf = () => {

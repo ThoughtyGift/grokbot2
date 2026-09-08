@@ -19,13 +19,23 @@ import { randomBytes, createHash } from "node:crypto";
 
 const GW = process.env.GW ?? "http://127.0.0.1:8788/gw/api";
 const BASE = GW.replace(/\/gw\/api$/, "");
-const TOKEN = process.env.GW_TOKEN_FILE ? readFileSync(process.env.GW_TOKEN_FILE, "utf8").trim() : (process.env.GW_TOKEN ?? "");
+/*
+ * Vé cổng. Từ 08/09 CẢ `/internal/ops/*` cũng đòi nó: cửa ấy chạy lệnh trên máy người dùng và
+ * trước đó không hỏi giấy tờ gì (bảng theo dõi §7). Đọc mặc định từ `.data` để chạy ở máy dev
+ * không phải gõ env; trên VPS vẫn truyền `GW_TOKEN_FILE`.
+ */
+const docVe = () => {
+  if (process.env.GW_TOKEN_FILE) return readFileSync(process.env.GW_TOKEN_FILE, "utf8").trim();
+  if (process.env.GW_TOKEN) return process.env.GW_TOKEN;
+  try { return readFileSync(new URL("../.data/gateway-token.txt", import.meta.url), "utf8").trim(); } catch { return ""; }
+};
+const TOKEN = docVe();
 const gw = async (m, body = {}) => {
   const r = await fetch(`${GW}/${m}`, { method: "POST", headers: { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(body) });
   const t = await r.text();
   try { return JSON.parse(t); } catch { return t; }
 };
-const ops = async (body) => fetch(`${BASE}/internal/ops/local-exec`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => null);
+const ops = async (body) => fetch(`${BASE}/internal/ops/local-exec`, { method: "POST", headers: { "content-type": "application/json", ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => null);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tail = async (id) => { const t = await gw("getAgentTranscriptTail", { id, limit: 300 }); return Array.isArray(t?.entries) ? t.entries : []; };
 const dangChay = async (id) => ((await gw("listAgents", {})) ?? []).find((a) => a.id === id)?.isRunning === true;

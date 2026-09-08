@@ -180,6 +180,23 @@ function tokenFromCookie(cookieHeader?: string | string[]): string | undefined {
 export function ownerFromRequest(headers: { authorization?: string | string[]; cookie?: string | string[] }): string {
   const byHeader = verifyJwt(headers.authorization);
   if (byHeader) return byHeader.authId;
+  /*
+   * Vé cổng cũng là danh tính — cùng lý do đã chép trong `ownerFromAuth`, và bỏ sót ở ĐÂY là một
+   * lỗ đo được ngày 08/09.
+   *
+   * `/internal/ops/local-exec` lấy chủ bằng hàm này. Không đọc vé ⇒ mọi vé rơi về danh tính mặc
+   * định ⇒ người B trình vé của mình, chỉ đích danh `DESKTOP-7D2FJG8` của người A, và lệnh CHẠY
+   * trên máy A: `hostname` trả về `DESKTOP-7D2FJG8`, exit 0. Cụm cô lập máy (§6 mục 39) đã bịt
+   * đúng đường tool của model và đường `/gw`, nhưng cửa ops đi bằng hàm khác — cùng họ với "hai
+   * mặt SSE": bịt một mặt thì mặt kia vẫn rò.
+   *
+   * Hai hàm suy chủ mà đọc hai tập giấy tờ khác nhau là một nguồn sự thật thứ hai. Chúng khác nhau
+   * đúng ở chỗ đáng khác: hàm này còn xét cookie phiên trình duyệt.
+   */
+  const raw = Array.isArray(headers.authorization) ? headers.authorization[0] : headers.authorization;
+  const presented = String(raw ?? "").replace(/^Bearer\s+/i, "").trim();
+  const chuVe = presented ? ownerOfTicket(presented) : null;
+  if (chuVe) return chuVe;
   return cinapiCookieUser(headers)?.authId ?? DEFAULT_USER.authId;
 }
 
