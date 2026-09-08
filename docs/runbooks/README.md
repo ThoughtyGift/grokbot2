@@ -14,6 +14,8 @@ trọng nhất: ba trong năm sự cố dưới đây **trông giống mất d�
 | App boot nhưng bản patch như không có tác dụng | [patch-half-applied.md](patch-half-applied.md) |
 | `pnpm phase:gate` đỏ ở `verify-client-patch` | [gate-red-unapplied-patch.md](gate-red-unapplied-patch.md) |
 
+**Không phải sự cố — quy trình:** [trien-khai.md](trien-khai.md) (deploy + lùi) · [kich-ban-e2e.md](kich-ban-e2e.md) (E2E trước deploy) · [len-ban-client-moi.md](len-ban-client-moi.md) · [may-thu-hai.md](may-thu-hai.md) (bốn thứ chỉ máy Windows thứ hai trả lời được — T2 · T3 · T5).
+
 ## Luật vàng
 
 **Đọc chỗ lưu trước khi kết luận mất dữ liệu.** Dữ liệu thật nằm trong SQLite:

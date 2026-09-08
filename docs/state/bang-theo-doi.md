@@ -156,7 +156,7 @@ Nhật ký chi tiết các vòng đo 01–02/09 nằm trong lịch sử git củ
 | # | việc | chặn bởi | kiểm bằng |
 |---|---|---|---|
 | 1 | Dùng máy Windows vào việc thật | cần nêu một việc cụ thể | cửa đã thông hai chiều |
-| 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai | mở app máy 2 → chat một lượt |
+| 2 | Máy thứ hai trỏ vào VPS (`T2` · `4.8`) | cần máy thật thứ hai — **quy trình đo đã viết sẵn 08/09**: [runbooks/may-thu-hai.md](../runbooks/may-thu-hai.md), 4 mục A–D với mốc xanh cụ thể | mở app máy 2 → chat một lượt |
 | 3 | Box qua hầm từ máy khác (`T3`) | như trên | — |
 | 4 | Hai máy một box (`T5`) | **bắt buộc** hai máy thật | — |
 | ~~20~~ | ~~Bảng Computer đi bằng vé CỦA NGƯỜI DÙNG~~ **XONG 08/09 ở bộ vá, CHƯA tới máy người dùng** — `computer-tab-ve` cất vé lúc `buildConnection` đúc ra nó, ba chỗ đọc ưu tiên vé; đo trên giao diện với môi trường không có vé dùng chung: `getSandMachines` → `saw:"user-ticket"`, bảng hiện đúng một máy `isCurrent:true` (§6 mục 41) | **hết chặn 08/09**: đã phát hành `0.43.20260907`, máy cũ nhận 200 ở lần hỏi feed kế (§6 mục 42) | `/gw/__coverage` → `/gw/api/getSandMachines` mang `saw:"user-ticket"` |
