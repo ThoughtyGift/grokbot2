@@ -1278,6 +1278,7 @@ export function sendPrompt(args: SendArgs) {
   const richText = typeof args.richText === "string" && args.richText.length > 0 ? args.richText : undefined;
   const userEntry: Entry = { id: nextEntryId(), kind: "message", role: "user", content: text, timestampMs: Date.now(), ...(args.clientNonce ? { clientNonce: args.clientNonce } : {}), ...(richText ? { richText } : {}), ...(args.fromAgent ? { fromAgent: args.fromAgent } : {}), ...(replyTo ? { replyTo } : {}) };
   // `silent`: lời nhắc tới model nhưng bản ghi KHÔNG mọc thêm một câu đứng tên người dùng.
+  const truocKhiDay = t.length;
   if (!args.silent) t.push(userEntry);
 
   // Show what the user attached, instead of only the text they typed alongside it.
@@ -1321,6 +1322,25 @@ export function sendPrompt(args: SendArgs) {
       timestampMs: Date.now(),
     } as Entry);
   }
+
+  /*
+   * Phát khung cho chính tin NGƯỜI DÙNG — thiếu dòng này là bong bóng của họ treo "Failed to send".
+   *
+   * Mọi chỗ đăng entry khác trong file này đều gọi `onUpdate` ngay sau khi push; riêng entry của
+   * người dùng thì không, và suốt thời gian khung SSE `transcript` KHÔNG mang `ordered` thì không
+   * ai thấy: client coi mỗi khung là tiếng gõ cửa rồi tự đi tải lại cả đuôi bản ghi, nên nó
+   * gặp entry của chính mình ở lượt tải kế và ghép được `clientNonce`. Từ 06/09/2026 khung mang
+   * `ordered` (§6 mục 29) ⇒ client áp `entry` thẳng và THÔI tải đuôi ⇒ đường ghép duy nhất ấy mất.
+   *
+   * Đo 08/09/2026 trên bot thử: `sendPrompt` trả `200 {accepted:true, entryId:"e18262"}`, bản ghi
+   * có đủ hai entry, mà SSE chỉ phát khung cho entry của BOT (`e18263`, seq 3) — không khung nào
+   * cho `e18262`. Trên máy chủ dự án hậu quả là ba hàng `nonce:<uuid>` treo trong pane, bot trả
+   * lời đủ mà màn hình đứng từ 11:31, và tải lại renderer lẫn bấm sang bot khác đều không cứu.
+   *
+   * `acceptance` ngay dưới KHÔNG phải đường thay thế: nó chờ composer hỏi lại, mà client 0.43
+   * không gọi lệnh nào để hỏi (coverage: lệnh duy nhất mang chữ "prompt" là `sendPrompt`).
+   */
+  if (!args.silent && t.length > truocKhiDay) onUpdate(agentId);
 
   // Record acceptance so the composer's poll confirms the bubble and refreshes the transcript.
   if (args.clientNonce) {
