@@ -9,6 +9,7 @@ import { imageSize, readAttachmentImage } from "../attachments.js";
 import { availableTools, toolProtocol as boxToolProtocol, isAutoApproved, unquote, toolArgs } from "../tools.js";
 import { runOnUserComputer, connectedMachine, connectedMachines, findMachine, tepDauRaNen } from "../local-exec.js";
 import { chepLenBox, chepVeMay } from "../chep-tep.js";
+import { chiDuongKhiNgoaiGoc } from "./chi-duong-ngoai-goc.js";
 import { lamTrenTrinhDuyet } from "../local-browser.js";
 import { soatHanhDong } from "./auto-review.js";
 import { postAutoReview } from "../conversation/cards.js";
@@ -1094,10 +1095,11 @@ TOOLS.local_read = async (arg, ctx) => {
   }
   if (!may) return "Máy tính của bạn đang không kết nối. Mở app Grok Bot trên máy đó rồi thử lại.";
   const r = await runOnUserComputer({ kind: "read", path }, { machineId: may.computerId, owner: chu, timeoutMs: 20_000 });
-  if (!r.ok) return `Không đọc được trên ${may.label}: ${r.error}`;
+  // Ngoài `localRoot` thì cửa FILE-OP đóng mà cửa shell vẫn mở — chỉ đường thay vì để model tưởng hết đường.
+  if (!r.ok) return `Không đọc được trên ${may.label}: ${chiDuongKhiNgoaiGoc(String(r.error ?? ""))}`;
   const d = (r.data ?? {}) as { readResult?: { success?: { content?: string }; invalidFile?: { reason?: string } } };
   const rr = d.readResult;
-  if (rr?.invalidFile) return `Không đọc được ${path}: ${rr.invalidFile.reason ?? "tệp không hợp lệ"}`;
+  if (rr?.invalidFile) return `Không đọc được ${path}: ${chiDuongKhiNgoaiGoc(String(rr.invalidFile.reason ?? "tệp không hợp lệ"))}`;
   const noi = rr?.success?.content;
   if (typeof noi !== "string") return `Không rõ kết quả: ${JSON.stringify(r.data).slice(0, 300)}`;
   return catBot(`[${may.label}] ${path}\n${noi}`);
