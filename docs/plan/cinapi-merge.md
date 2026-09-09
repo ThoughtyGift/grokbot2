@@ -219,7 +219,7 @@ lại kế hoạch. Bốn phép đo, ba từ Internet:
 | `cinai.app/loginDeepControl?uuid&challenge&mode=login&redirectTarget=sand` — URL app TỰ mở | **302 → `cinai.app/agent/app/?login_uuid=…`**, tức giao diện web của grokbot2, KHÔNG phải `/vi/login` |
 | trang đích ấy có Google không | HTML chỉ **402 byte** (SPA Vite) nên phải grep **bundle** 78.361 byte: `google` **0** · `oauth` **0** · `Continue with` **0**; có `/v1/login` ×1 · `password` ×3 · `mật khẩu` ×1 ⇒ **email + mật khẩu**, không có Google |
 | `cinai.app/vi/login` | `google` **6** · `Continue with` **1** ⇒ đúng nút trong ảnh chủ dự án gửi |
-| hai bí mật JWT (chỉ so **băm**, không bao giờ in giá trị) | **KHÁC NHAU** ⇒ cookie `cinapi_at` bị `verifyJwt` từ chối. §1 nói đúng, nay có phép đo làm bằng. Cách đo: `sha256sum` giá trị `jwt-secret.txt` so với `docker exec cinapi-backend printenv JWT_SECRET | sha256sum` — **so rồi bỏ, không chép băm vào đây**: băm của một KHOÁ KÝ là một máy xác minh phỏng đoán, và tài liệu là chỗ ai cũng đọc được |
+| hai bí mật JWT (chỉ so **băm**, không bao giờ in giá trị) | **KHÁC NHAU** ⇒ cookie `cinapi_at` bị `verifyJwt` từ chối. §1 nói đúng, nay có phép đo làm bằng. Cách đo: `sha256sum` giá trị `jwt-secret.txt` so với `docker exec cinapi-backend printenv JWT_SECRET \| sha256sum` — **so rồi bỏ, không chép băm vào đây**: băm của một KHOÁ KÝ là một máy xác minh phỏng đoán, và tài liệu là chỗ ai cũng đọc được |
 
 **Trả lời: CHƯA.** Hai đường login riêng, hai kho tài khoản riêng; đăng nhập Google trên
 `cinai.app` trong trình duyệt thì app local **không thừa hưởng** phiên đó.
@@ -318,6 +318,121 @@ Trạng thái thật trong grokbot2: ổ cắm nào cũng **đã có**. `GetSand
 usage có ba nhánh (billing tắt · plan không trần · plan có trần); `dashboard_url` **biết chỗ đặt mà
 chưa đặt** — chú thích ghi *"chưa có trang thanh toán để trỏ tới"*. Giờ có rồi. Việc còn lại là nối
 dây: số lấy từ `/me/usage`, hai URL trỏ về `cinai.app/vi/subscription`.
+
+---
+
+### 5d · Bước 3 đã VIẾT XONG (09/09) — kèm một lỗ chiếm tài khoản tự gây và tự bắt
+
+Mã: `services/grokbot-backend/src/cinapi-danh-tinh.ts` (module THUẦN, hỏi `GET /api/v1/me`) +
+khối cinAPI trong `login-page.ts` + hai dòng dây trong `index.ts`. Commit `3fa91ad`.
+
+**Vẫn TẮT theo mặc định.** Vắng `GROKBOT2_CINAPI_BASE` thì mọi nhánh mới bị bỏ qua và hành vi giống
+HỆT bản trước — có unit ghim. Đo trên sản xuất: biến ấy **VẮNG** trong `shared/.env` (51 dòng), nên
+deploy mã này là một việc trơ.
+
+**Giá của Bước 3 rẻ hơn kế hoạch cũ tưởng, và đây là lý do đo được:** `/gw/__coverage` trên VPS đếm
+429 lượt `matching-bearer` và 3 lượt `user-jwt` (ba lượt kia là lệnh thử của tôi) ⇒ app desktop
+**chỉ trình vé, không bao giờ gửi JWT**. Nên danh tính chỉ phải đổi ở ĐÚNG một thời điểm — lúc đúc
+vé lúc đăng nhập. Không có lời gọi cinapi nào trên đường request, không thêm độ trễ, và gateway
+không phụ thuộc cinapi còn sống.
+
+#### Lỗ tôi tự viết ra rồi tự bắt — chép nguyên văn vì nó là một LỚP bẫy
+
+Bản đầu của tôi có một "tiện lợi": trang `/loginDeepControl` thấy sẵn cookie cinai thì **duyệt luôn**,
+người dùng không phải bấm gì. Ghép với một dữ kiện ở chỗ khác thì nó thành đường chiếm tài khoản:
+
+1. `claimLogin(uuid, verifier)` trao token cho **ai giữ `verifier`** — tức bên **KHỞI TẠO** luồng
+   (app desktop), không phải trình duyệt vừa duyệt. Hai bên ấy không buộc phải là một người.
+2. Kẻ tấn công tự bấm đăng nhập trên app của mình, đọc `uuid`+`challenge` từ thanh địa chỉ, giữ
+   `verifier`, rồi gửi nạn nhân link `…/loginDeepControl?uuid=U&challenge=C`.
+3. Nạn nhân đang đăng nhập cinai.app bấm vào ⇒ cửa tự duyệt bằng danh tính **CỦA NẠN NHÂN** ⇒ app
+   của kẻ tấn công hỏi vòng `/auth/poll` và nhận token của nạn nhân.
+
+Và cookie `gb2_login` — thứ tôi viết ra để chống chính họ tấn công này — **không chặn được**: chính
+cái request mang `uuid` của kẻ tấn công cũng là request **ĐÚC RA** cookie buộc `uuid` ấy vào trình
+duyệt nạn nhân. Một cái khoá mà kẻ gửi chìa cũng là kẻ đúc ổ thì không khoá ai. Gỡ riêng nhánh GET
+cũng chưa đủ: script trang chờ tự hỏi vòng, lượt hỏi ấy **cùng gốc** nên cookie đi kèm bất kể
+`SameSite`.
+
+**Tiền đề của bước 3 trong kịch bản đã được ĐO, không suy:** cookie của cinapi đặt
+`SameSite=Lax` (`handler/auth.go`, hàm `writeCookie`) ⇒ một điều hướng GET **chéo site** *có* mang
+`cinapi_at` theo. Tức đây là lỗ đi tới được thật.
+
+**Gốc thật, và nó không phải một dòng sai:** luồng email/mật khẩu lấy **việc gõ mật khẩu** làm bằng
+chứng chủ ý; SSO thì người dùng đã đăng nhập sẵn nên **không còn hành vi nào tỏ chủ ý** — phải thu
+nó một cách tường minh. Nên hình dạng cuối:
+
+| cửa | làm gì | vì sao đủ |
+|---|---|---|
+| `GET /loginDeepControl` | đặt cookie + vẽ trang. **Không duyệt gì** | một lượt GET không đổi được trạng thái đăng nhập của ai, mang cookie gì cũng vậy |
+| `GET /auth/cinai` | chỉ **BÁO** đang là ai (`{cinai, email}`) | điều hướng chéo site tới được cũng vô hại, và `SameSite=Strict` thì nó không mang `gb2_login` nên 403 |
+| `POST /auth/cinai` | **DUYỆT**, đòi `gb2_login` khớp `uuid` | điều hướng không tạo ra được POST; `connect-src 'self'` thì chỉ script trang ta gọi được; và trang chỉ gọi **sau một cú bấm** |
+
+Phần dư còn lại là phần dư của mọi trang consent: người dùng bấm xác nhận trên một trang họ không mở.
+Chữa bằng CHỮ — trang nêu đúng tài khoản sẽ bị nối và dặn đóng trang nếu không phải họ vừa bấm.
+
+#### Nghiệm thu, và thứ tự là chủ ý
+
+- **22 bài `cinapi-danh-tinh.test`** chạy **TRƯỚC khi nối dây** (module thuần), rồi tiêm **6 lỗi
+  thật** vào bản chép — đỏ **6/6**, đúng bài khai. Lượt đầu một bài đỏ vì tiến trình TREO chứ không
+  vì assert nào; đã viết lại để đếm `process.getActiveResourcesInfo()`.
+- **12 bài `cinai-login-cua.test`** dựng cinAPI giả bằng **máy chủ HTTP thật** trên loopback — đi qua
+  cả biến môi trường lẫn đường mạng, đúng hai chỗ mà một bài tiêm hàm sẽ đi vòng qua. Tiêm 6 lỗi,
+  trong đó **lỗi số 1 là chính lỗ chiếm tài khoản** — đỏ **6/6** đúng bài, rồi trả lại byte y nguyên.
+- **Đo SỐNG trên HTTP thật: 13/13 mốc**, backend riêng ở `:8799` với kho cách ly để không chạm bản
+  dev dùng chung. Khúc này bài unit **không với tới được** — nó là chỗ `req.method` vừa được nối
+  trong dispatcher. Sau lượt GET mang sẵn cookie cinai, `/auth/poll` vẫn **404**; chỉ sau POST đủ
+  giấy thì app nhận token, và token mang chủ `cinapi|<id>`.
+- backend **876/876**, `tsc` sạch.
+- Một bẫy của chính bài đo, ghi lại: `spawn(..., {shell:true})` rồi `kill()` chỉ hạ cái **VỎ** cmd —
+  con `tsx` sống tiếp, giữ `:8799` và giữ `g.sqlite` (đo được: mồ côi một pid sau lượt chạy đầu).
+  Cùng họ với bẫy *"subshell ôm ống"*. Phải hạ cả CÂY.
+
+#### Còn lại của Bước 3, và thứ tự KHÔNG đảo được
+
+Cổng cuối của kế hoạch — *"đo bằng cookie do cinapi phát"* — chưa chạy, vì nó cần một lần đăng nhập
+thật. Và có một **hazard thứ tự** cùng họ với `GROKBOT2_CHECKOUT_URL`: bật `GROKBOT2_CINAPI_BASE` là
+mọi lượt đăng nhập desktop đổi sang `cinapi|<id>`, nên dữ liệu đang mang chủ cũ **mất chủ**.
+
+Kiểm kê chỗ mang chuỗi chủ `auth0\|grokbot2-user` trên SẢN XUẤT, đo 09/09 trên **bản chép**
+`mode=ro` (email che, không chép giá trị nào ra đây):
+
+| chỗ | số hàng mang chủ cũ |
+|---|---|
+| `agents.owner_id` | 42 (cả bảng, `hidden=0` cả 42) |
+| `entries.owner_id` | 1038 |
+| `acceptance.owner_id` | 95 |
+| `attachments_meta.owner_id` | 64 |
+| `parked.owner_id` · `compaction.owner_id` | 2 · 2 |
+| `automations.owner_id` | 1 |
+| `users.auth_id` · `usage.auth_id` | 1 hàng · 3 hàng |
+| `host_settings.body` (khoá `byOwner` trong blob 1.526 ký tự) | 1 lần |
+| `shared/data/marketplace.json` | 10 lần |
+| `shared/data/bot-templates/auth0_grokbot2-user.json` | 10 lần **+ chính TÊN TỆP** |
+
+Và bản đồ sang cinai, đo bằng một `SELECT` trên `cinapi-postgres` (271 người; không chép id lẫn email
+vào tài liệu — cách lấy lại là một câu SQL theo email):
+
+- **5/6** tài khoản `local|<email>` của grokbot2 **đã có** tài khoản cinai.
+- **1/6 CHƯA có** ⇒ bật biến toàn cục là người ấy **không đăng nhập được**. `POST /api/v1/auth/register`
+  của cinapi đang mở nên họ tự đăng ký được, nhưng đó là một việc phải nói trước, không phải một
+  chuyện để họ tự phát hiện lúc mở app.
+- Cả 6 tài khoản ấy sở hữu **0 bot**, nên chuyển chủ không phải chuyện của họ. Cái họ mất khi bật
+  biến là **hàng `usage`** và hàng `plan` dưới chủ cũ — vô hại lúc billing còn `warn`, và với 5 người
+  đang vượt trần thì nó còn là một lần đặt lại.
+- Sổ máy (`may-da-biet.json`, 2 hàng) mang chủ của một người dùng thật; nó **tự lành** (thiết kế bỏ
+  hàng không chủ lúc nạp, daemon đăng ký lại) — §5 mục 20.
+
+**Thứ tự đúng, và vì sao ngược lại là hỏng:**
+
+1. Deploy mã (trơ, vì biến vắng).
+2. Bật `GROKBOT2_CINAPI_BASE`.
+3. Chủ dự án đăng nhập **một lần** qua trang mới ⇒ app cầm vé mang `cinapi|<id>`.
+4. **Rồi mới** đổi chủ 12 chỗ ở bảng trên sang đúng id ấy.
+
+Làm bước 4 trước bước 3 để lại một cửa sổ **không ai sở hữu 42 bot**. Và phép đổi chủ phải chạy lúc
+backend **dừng**: nó là cửa ghi duy nhất của kho, ghi từ ngoài trong lúc nó chạy là tự đẻ ra một
+nguồn sự thật thứ hai. Cần **một bản lưu trước khi đổi**.
 
 ---
 
