@@ -15,6 +15,8 @@ import { handleAuth, verifyJwt, ownerFromAuth, ownerFromRequest, DEFAULT_USER } 
 import { handleLoginPage, handleAuthPoll, handleAuthApprove, handleAuthCinai } from "./login-page.js";
 import { handleWebApp } from "./web-app.js";
 import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser, upgradeUrl } from "./billing.js";
+import { oCamTuThueBao } from "./cinapi-thue-bao.js";
+import { khoThueBao } from "./thue-bao-kho.js";
 
 // Bảng giá phải có TRƯỚC lượt chat đầu tiên, không phải lúc ai đó tình cờ hỏi gói.
 // `off` thì không đụng vào sổ: một cài đặt không dùng billing không nên tự mọc thêm bảng.
@@ -525,6 +527,30 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
    * mở.
    */
   const rpcUser = verifyJwt(req.headers.authorization) ?? DEFAULT_USER;
+
+  /*
+   * Bước 4 — gói cinai vẽ vào ba trong bốn ổ cắm dưới đây.
+   *
+   * `khoThueBao.doc` đọc ĐỒNG BỘ từ kho và hẹn lượt làm mới chạy nền, nên đường bootstrap không
+   * phải chờ một vòng mạng; lượt đầu của một người trả `null` và app không vẽ thanh nào — đúng
+   * hành vi cũ. Trần cục bộ của grokbot2 được đưa vào như MỘT CỬA NỮA, vì mã của ta gọi thẳng
+   * pool chứ không đi qua cinapi (đo 10/09), nên đồng hồ cinapi chưa đếm lượt Grok Bot; vẽ mỗi
+   * số cinapi là vẽ một thanh không nhúc nhích khi người dùng dùng chính app này.
+   */
+  const dungCucBo = currentPeriodUsage(rpcUser);
+  const oCinai = oCamTuThueBao(khoThueBao.doc(rpcUser.authId), {
+    cucBo: dungCucBo
+      ? {
+          // Tên đi thẳng vào `display_message`, nên nó phải nói đúng ĐƠN VỊ của con số:
+          // cửa cinapi tính bằng tín dụng, cửa này bằng token ước lượng.
+          ten: "token ước lượng",
+          dung: dungCucBo.used,
+          tran: dungCucBo.limit,
+          batDauMs: dungCucBo.cycleStartMs,
+          ketThucMs: dungCucBo.cycleEndMs,
+        }
+      : null,
+  });
   const rpc = await runWithOwner(ownerFromAuth(req.headers.authorization), () => handleBootstrapRpc(url, ct, {
     user: rpcUser,
     /*
@@ -536,11 +562,18 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
      * ở đây là chỗ duy nhất sửa được, vì app chỉ trả lại đúng thứ ta đưa nó.
      */
     gatewayTicket: mintTicket(rpcUser.authId),
-    access: accessVerdict(rpcUser),
-    usage: currentPeriodUsage(rpcUser) ?? undefined,
+    // Số của cinai chỉ được CHẶN ở `enforce`; `warn`/`off` giữ nguyên nghĩa "đếm, không chặn".
+    access:
+      billingMode() === "enforce" && oCinai.access === "payment_required"
+        ? "payment_required"
+        : accessVerdict(rpcUser),
+    // Thanh đo là THÔNG TIN, không phải phán quyết — nên nó không phụ thuộc `billingMode()`,
+    // cùng lý lẽ đã ghi cho `dashboardUrl` bên dưới. Không có gói cinai thì đây đúng bằng
+    // `currentPeriodUsage(rpcUser)` như trước, chỉ thêm một nhãn nói rõ đang vẽ cửa nào.
+    usage: oCinai.usage ?? undefined,
     // Nhãn plan cho trang Usage & Billing (GetSandUsageStatus). Chỉ khi billing đang đo: lúc `off`
     // để absent, builder khi đó trả đúng stub lịch sử — byte không đổi.
-    plan: billingMode() === "off" ? undefined : getUser(rpcUser.authId)?.plan,
+    plan: oCinai.plan ?? (billingMode() === "off" ? undefined : getUser(rpcUser.authId)?.plan),
     /*
      * Khối On-Demand + cổng `sand_on_demand_settings` của trang Usage & Billing.
      *

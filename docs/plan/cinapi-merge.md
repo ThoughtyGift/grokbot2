@@ -547,6 +547,96 @@ bỏ phép buộc cookie — không phải nhờ `gb2_login` mà nhờ `SameSite
 chéo site không mang `cinapi_at`, nên `danhTinhTuCookie` trả `null` và không có ai để duyệt. Hai hàng
 rào khác nhau che cùng một đường; đừng gộp công của chúng.
 
+### 5g · Bước 4 (billing) — viết xong 10/09, và cửa bên cinapi ĐÃ LÊN
+
+**Chặn cứng là có thật, và lý do khác thứ tôi ghi.** `/me/subscription` cookie-only thì đã biết; cái
+chưa đo là **app desktop không bao giờ có cookie ấy**: `waitForBrowserLogin` gọi
+`this.openExternal(loginUrl)` → `shell.openExternal` (đọc từ bundle 0.43), tức link đăng nhập mở
+bằng **trình duyệt hệ thống**, nên phiên Electron của app không giữ `cinapi_at`. Lượt RPC tới
+backend mang JWT. Không có đường nào để grokbot2 hỏi cinapi *bằng giấy của người dùng*.
+
+**Chọn (chủ dự án quyết): thêm MỘT route mới bên cinapi** — đúng luật đã ghi ở §8 (*"phía cinAPI chỉ
+thêm trang/route mới"*). Đã lên sản xuất 10/09, commit `7295edd`:
+
+| | |
+|---|---|
+| `backend/internal/middleware/service.go` | **tệp mới**. `ServiceAsUser` đọc `X-Service-Token` + `X-Service-User-Id`, nạp người dùng qua `auth.Service.GetUser`, rồi đặt vào ngữ cảnh bằng **chính `withUser`** mà `RequireAuth`/`RequireAPIKey` dùng |
+| `backend/internal/server/router.go` | **một dòng**: `api.With(mw.ServiceAsUser(d.Auth)).Get("/internal/me/subscription", subH.Me)` |
+| `backend/internal/middleware/service_test.go` | **tệp mới**, 6 bài — gói `middleware` trước đó không có tệp test nào |
+
+**`subscription.go` không bị sửa một dòng nào**, và đó là điểm của thiết kế: `Me` đọc người dùng qua
+`mw.UserFromContext`, nên đặt đúng người vào ngữ cảnh là **cùng handler, cùng DTO** phục vụ cả hai
+cửa — 0 dòng trùng lặp, và ngày DTO đổi thì hai cửa đổi cùng lúc. Không chạm CRITICAL ZONE.
+
+Ba tính chất giữ bằng hình dạng hàm: **tắt theo mặc định** (vắng `CINAPI_SERVICE_TOKEN` ⇒ 404, nên
+đưa mã lên là việc trơ); **khoá ngắn hơn 24 ký tự không bật được** (cửa này phơi ra Internet qua
+nginx như mọi route khác); **sai khoá trả 404 chứ không 401** (401 xác nhận *"đường này có thật"*
+cho người đang dò).
+
+#### Bước 0 hoá ra nhỏ hơn nhiều — và có một rủi ro ĐANG SỐNG không ai biết
+
+Đo trước khi đụng: working tree của `/opt/cinapi` **sạch** (0 tệp sửa dở), 7 commit kẹt đều là UI,
+và `origin/main` là **tổ tiên** của HEAD ⇒ đẩy lên là **fast-forward thuần, không mất gì**. CI
+(`.github/workflows/deploy.yml`) chạy **chính `deploy.sh`** chứ không chép lệnh riêng, nên "hai
+đường deploy" thật ra dùng chung một nguồn sự thật.
+
+**Nhưng CI làm `git reset --hard origin/main`, và chốt an toàn của nó chỉ kiểm *thay đổi chưa
+commit*, không kiểm *commit chưa đẩy*.** Tức bất kỳ ai đẩy bất kỳ thứ gì lên `main` là 7 commit chỉ
+sống trên VPS bị xoá sạch. Đẩy chúng lên là việc phải làm dù có Bước 4 hay không. Đã đẩy cùng lượt:
+`133e1fd..7295edd`, 8 commit.
+
+#### Cổng đo TRƯỚC và SAU trên cùng máy đích
+
+| phép dò (loopback trên VPS) | trước deploy | sau deploy |
+|---|---|---|
+| không giấy | 404 | **404** |
+| giấy bịa | 404 | **404** |
+| giấy đúng, thiếu `X-Service-User-Id` | 404 | **400** ← mốc phân biệt |
+| giấy đúng, id không có thật | 404 | **404** |
+| giấy đúng, id THẬT | 404 | **200** |
+| đối chứng `/api/v1/me` (không đổi) | 401 | 401 |
+
+`404` trước deploy nghĩa là *"không có route"*, không phải *"máy chủ chết"* — đối chứng `/me` trả
+401 chứng minh phép dò tới được một máy chủ đang sống. cinai.app health 200 sau khi container tạo lại.
+
+#### Thân THẬT phản chứng bộ đọc của tôi — và nó hỏng theo kiểu IM LẶNG
+
+Thân trả về lồng **sâu hơn một tầng** so với `/me` (`data.user`):
+
+```
+{code, msg, data: {subscription: {plan_key, status, period_*, window_*, week_*, plan:{…}}}}
+```
+
+Bản đầu của `docThueBao` — viết theo trí nhớ về `mySubscriptionDTO` — tìm `plan_key` ngay dưới
+`data`, nên với thân thật nó **trả `null`**: không thanh đo, không lỗi, không dòng log nào nói vì
+sao. 18 bài đo xanh trọn vì tất cả đều chạy trên thân **tôi tự dựng**. Nay bộ đọc thử ba tầng
+(`data.subscription` → `data` → gốc) và lấy tầng nào CÓ `plan_key`; và có 3 bài mới chạy trên đúng
+thân đo được. Ba dự đoán khác thì ĐÚNG: `period_*` là chuỗi RFC3339, `*_cycle_end` là `null` ở gói
+free, `status` viết HOA (`"ACTIVE"`, `"EXPIRED"`).
+
+#### Phía grokbot2
+
+`src/cinapi-thue-bao.ts` là khối **quyết định**, thuần (21 bài): đọc DTO → dựng danh sách **cửa** →
+chọn **cửa chặn trước** → bốn ổ cắm. `src/thue-bao-kho.ts` là cầu giữa một lượt mạng và bốn ổ cắm
+**đồng bộ** (10 bài): đọc trả ngay từ kho, làm mới chạy nền, một lượt bay mỗi người, và **một lượt
+hỏng không xoá số cũ** — thà vẽ số hơi cũ còn hơn thanh đo nhấp nháy theo mạng.
+
+Ba quyết định đáng chép:
+
+1. **So các cửa bằng PHẦN ĐÃ DÙNG, không bằng số còn lại.** Cửa cinapi tính bằng *tín dụng*, trần
+   cục bộ của grokbot2 tính bằng *token ước lượng* — hai con số khác đơn vị thì không so được, một
+   tỉ lệ thì so được. Và client vốn chỉ vẽ **phần trăm** (`GetSandUsageStatus.usage_percent`), nên
+   tỉ lệ đúng là thứ nó cần.
+2. **Trần cục bộ CŨNG là một cửa.** Đo 10/09: `config.poolUrl` trỏ thẳng `admin.halcion.vn/v1/claude`,
+   **không đi qua cinapi**, nên đồng hồ cinapi hôm nay không đếm lượt Grok Bot. Vẽ mỗi số cinapi là
+   vẽ một thanh không nhúc nhích khi người dùng dùng chính app này. Ngày lệnh đi qua cinapi thì cửa
+   cục bộ tự thua trong phép so, không phải sửa gì.
+3. **Thanh đo không phụ thuộc `billingMode()`, phán quyết thì có.** Thanh đo là THÔNG TIN (cùng lý
+   lẽ đã ghi cho `dashboardUrl`); còn số của cinai chỉ được CHẶN ở `enforce`, nên `warn` trên sản
+   xuất giữ nguyên nghĩa *"đếm, không chặn"*.
+
+backend **907/907**, tsc sạch.
+
 ## 6. Còn của chủ dự án quyết
 
 1. **Bước 0** — thôi sửa `/opt/cinapi` tại chỗ, push 7 commit, tắt CI cinapi. Chưa duyệt; bản viết
