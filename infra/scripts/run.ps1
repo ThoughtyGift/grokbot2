@@ -135,6 +135,25 @@ if (Test-HttpOk "http://127.0.0.1:$cdp/json/version") {
   exit 0
 }
 
+# Cong CDP co the bi mot socket MO COI giu: pid so huu DA CHET ma LISTEN con do. Do 09/09 tren :9225 —
+# pid 39616 (mot lan mo truoc do) khong con ton tai, cong khong nha, va van con do sau nhieu gio.
+# Hau qua: Chromium khong bind duoc cong go loi, app van mo binh thuong, CDP im lang. Khong co loi nao.
+#
+# Phai kiem TRUOC khi mo, vi cau bao o cuoi file ("Unset ELECTRON_RUN_AS_NODE") dung cho mot ca KHAC va
+# no da chi sai duong ca mot vong chan doan. Test-HttpOk o tren khong thay duoc: socket mo coi khong tra
+# loi HTTP, nen no giong het "chua co app nao".
+$cdpMoCoi = $false
+try {
+  foreach ($h in (Get-NetTCPConnection -LocalPort $cdp -State Listen -ErrorAction Stop)) {
+    if (-not (Get-Process -Id $h.OwningProcess -ErrorAction SilentlyContinue)) { $cdpMoCoi = $true }
+  }
+} catch { }
+if ($cdpMoCoi) {
+  Write-Host "CDP :$cdp dang bi mot socket MO COI giu (pid so huu da chet, LISTEN con do)." -ForegroundColor Yellow
+  Write-Host "  App se mo binh thuong, nhung CDP :$cdp im lang cho toi khi khoi dong lai may." -ForegroundColor Yellow
+  Write-Host "  Can do bang CDP ngay: dat GROKBOT2_CDP_PORT=<cong khac> roi chay lai." -ForegroundColor Yellow
+}
+
 # Giet theo DUONG DAN, khong theo ten — may nay co HAI ban cai.
 #
 # Ban truoc loc `ProcessName -like 'Grok Bot*'`, nen no giet ca ban cua HANG o
@@ -216,7 +235,13 @@ for ($i = 0; $i -lt 20; $i++) {
   if (Test-HttpOk "http://127.0.0.1:$cdp/json/version") { $cdpUp = $true; break }
 }
 if (-not $cdpUp) {
-  Write-Host "Grok Bot pid $($app.Id) started but CDP :$cdp did not answer. Unset ELECTRON_RUN_AS_NODE and retry." -ForegroundColor Red
+  if ($cdpMoCoi) {
+    # Nguyen nhan da doc duoc o tren — dung moi lai ELECTRON_RUN_AS_NODE, no khong lien quan ca nay.
+    Write-Host "Grok Bot pid $($app.Id) DA MO, nhung CDP :$cdp im lang vi socket MO COI giu cong (xem dong vang o tren)." -ForegroundColor Red
+    Write-Host "  Dat GROKBOT2_CDP_PORT=<cong khac> roi chay lai, hoac khoi dong lai may de nha cong." -ForegroundColor Red
+  } else {
+    Write-Host "Grok Bot pid $($app.Id) started but CDP :$cdp did not answer. Unset ELECTRON_RUN_AS_NODE and retry." -ForegroundColor Red
+  }
   exit 1
 }
 Write-Host "Grok Bot pid $($app.Id) - CDP :$cdp up. Chat in the app window." -ForegroundColor Green
