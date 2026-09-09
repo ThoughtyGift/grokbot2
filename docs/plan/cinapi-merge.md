@@ -203,10 +203,98 @@ toán, không có Stripe** — chỉ bốn "ổ cắm" server điền, mọi th�
 
 | bước của app gốc | Cursor | cinai.app |
 |---|---|---|
-| app sinh `verifier`/`challenge`/`uuid`, mở `{website}/loginDeepControl?challenge&uuid&mode=login&redirectTarget=sand` | website = cursor.com | website = `cinai.app` → nginx → grokbot2 → **chuyển tới trang đăng nhập cinapi** |
+| app sinh `verifier`/`challenge`/`uuid`, mở `{website}/loginDeepControl?challenge&uuid&mode=login&redirectTarget=sand` | website = cursor.com | website = `cinai.app` → nginx → grokbot2 → **HÔM NAY: `/agent/app/` (login riêng của grokbot2)**; Bước 3 đổi thành trang đăng nhập cinapi — xem §5b |
 | người dùng đăng nhập trên web | tài khoản Cursor | tài khoản cinapi (email/Google/2FA — của họ, không chép) |
 | web **duyệt** phiên | server Cursor | `POST /auth/approve {uuid}` + cookie → grokbot2 hỏi `/api/v1/me` → `approveLogin(uuid, {sub,email})` |
 | app hỏi vòng `GET /auth/poll?uuid&verifier` | token Cursor | token grokbot2 (ticket cổng như hiện nay), `owner = sub` cinapi |
+
+### 5b · Login — ĐO LẠI 09/09 trên hệ thống đang chạy, và nó đổi hình dạng Bước 3
+
+Bảng ngay trên là **thiết kế**, không phải hiện trạng; chủ dự án hỏi thẳng *"login đã liên kết cùng
+1 đường với login trên cinai.app/vi chưa, login bằng Google cùng 1 account"* nên phải đo, không đọc
+lại kế hoạch. Bốn phép đo, ba từ Internet:
+
+| đo | kết quả |
+|---|---|
+| `cinai.app/loginDeepControl?uuid&challenge&mode=login&redirectTarget=sand` — URL app TỰ mở | **302 → `cinai.app/agent/app/?login_uuid=…`**, tức giao diện web của grokbot2, KHÔNG phải `/vi/login` |
+| trang đích ấy có Google không | HTML chỉ **402 byte** (SPA Vite) nên phải grep **bundle** 78.361 byte: `google` **0** · `oauth` **0** · `Continue with` **0**; có `/v1/login` ×1 · `password` ×3 · `mật khẩu` ×1 ⇒ **email + mật khẩu**, không có Google |
+| `cinai.app/vi/login` | `google` **6** · `Continue with` **1** ⇒ đúng nút trong ảnh chủ dự án gửi |
+| hai bí mật JWT (chỉ so **băm**, không bao giờ in giá trị) | **KHÁC NHAU** ⇒ cookie `cinapi_at` bị `verifyJwt` từ chối. §1 nói đúng, nay có phép đo làm bằng. Cách đo: `sha256sum` giá trị `jwt-secret.txt` so với `docker exec cinapi-backend printenv JWT_SECRET | sha256sum` — **so rồi bỏ, không chép băm vào đây**: băm của một KHOÁ KÝ là một máy xác minh phỏng đoán, và tài liệu là chỗ ai cũng đọc được |
+
+**Trả lời: CHƯA.** Hai đường login riêng, hai kho tài khoản riêng; đăng nhập Google trên
+`cinai.app` trong trình duyệt thì app local **không thừa hưởng** phiên đó.
+
+Kèm một số đo không ai hỏi mà quan trọng hơn: trên sản xuất **cả 42 hàng `agents` đều mang một chủ
+`auth0|grokbot2-user`** (`hidden=0` cả 42), còn **6 tài khoản thật `local|<email>` sở hữu 0 bot**.
+Tức "mỗi người một tài khoản" chưa đúng ngay trong lòng grokbot2 — vé cũ phân giải về danh tính mặc
+định (§6 mục 39 đã tả cơ chế; đây là hệ quả của nó trong DỮ LIỆU). Sổ máy thì đã đúng: 2 hàng, chủ
+là một người thật. Phép đo chạy trên **bản chép** `grokbot.sqlite` + `-wal`/`-shm` với
+`mode=ro`, không mở cửa ghi duy nhất của backend đang chạy; email che.
+
+**Ba dữ kiện làm Bước 3 rẻ hơn kế hoạch tưởng — đọc từ mã cinapi trên VPS:**
+
+1. **Cookie đã tự tới `/agent/*` rồi.** `writeCookie` (`handler/auth.go:244-255`) đặt
+   `Path: "/"` + `Domain: h.cookieDomain`, `HttpOnly`, `SameSite=Lax`. Cùng một tên miền
+   `cinai.app` ⇒ mọi request tới `/agent/…` **mang theo `cinapi_at`** mà không ai phải làm gì.
+   Đây chính là điều kiện làm cách **(C)** khả thi mà §4 chưa nêu ra: grokbot2 không cầm secret, và
+   cũng không cần ai chuyển cookie cho nó.
+2. **Đường email/mật khẩu: 0 dòng sửa phía cinapi.** `components/auth/AuthForm.tsx:34-37` đã đọc
+   `?next=` từ query, đòi nó bắt đầu bằng `/` (chặn chuyển hướng ra ngoài), rồi
+   `window.location.href = next`. Nên `/loginDeepControl` chỉ cần 302 sang
+   `/vi/login?next=/agent/<cửa duyệt>?uuid=…` là xong vòng.
+3. **Đường GOOGLE thì MẤT `next` — và đó đúng là nút chủ dự án hỏi.**
+   `handler/google_oauth.go:143` ghim cứng đích: `http.Redirect(w, r, h.frontendURL+"/vi/studio/chat", 302)`,
+   và `state` chỉ là nonce CSRF (`randomOAuthState()`, cookie `g_oauth_state` `Path=/api/v1/auth/google`)
+   — nó **không chở `next`**. Người đăng nhập bằng Google sẽ hạ cánh ở `/vi/studio/chat`, không
+   quay lại grokbot2, nên `GET /auth/poll?uuid&verifier` của app **không bao giờ được duyệt**.
+
+**Hệ quả cho thiết kế Bước 3: đừng dựa vào chuyển hướng.** Chỗ duyệt không nên là một trang mà
+cinapi phải đưa người dùng TỚI; nó nên là một cửa mà **trang của grokbot2 tự hỏi vòng**: trang ở
+`/agent/…` mở login cinapi ở tab khác (cú bấm của người dùng nên không bị chặn popup), rồi hỏi
+vòng một cửa của chính grokbot2; cửa ấy đọc `cinapi_at` (có sẵn, dữ kiện 1) → hỏi
+`GET /api/v1/me` → `approveLogin(uuid, {sub, email})`. Cách này đúng cho **cả Google lẫn email**
+và giữ được luật *"phía cinAPI chỉ thêm, không sửa"* ở mức mạnh nhất: **không thêm gì cả**. Đường
+302 + `?next=` vẫn giữ làm lối phụ cho email/mật khẩu.
+
+**Giá của Bước 3, đo được chứ không phỏng đoán.** Đổi `owner` sang `sub` của cinapi là đổi KHOÁ
+sở hữu: 42 bot đang dưới `auth0|grokbot2-user` và 2 hàng sổ máy dưới một `local|<email>` thôi
+khớp chủ. Sổ máy **tự lành** (thiết kế bỏ hàng không có chủ lúc nạp, daemon đăng ký lại ở lần nối
+kế); **bot thì không tự lành** — cần một phép chuyển chủ tường minh, hoặc một quyết định "bỏ".
+Đó là việc của chủ dự án, không phải của một bản vá.
+
+### 5c · Billing — hai cửa cinapi cần cho việc "hiện gói trong app local" ĐÃ CÓ
+
+Đo 09/09, và phép đo tự loại được nghi vấn *"401 là middleware quét cả nhánh"*:
+
+| đường | mã | nghĩa |
+|---|---|---|
+| `/api/v1/me` | **401** | có route (`router.go:121`, `RequireAuthOrAPIKey`) |
+| `/api/v1/me/usage` | **401** | có route (`router.go:134`) |
+| `/api/v1/me/subscription` | **401** | có route (`router.go:166`) |
+| `/api/v1/me/khong-ton-tai-abcxyz` | **404** | ⇒ 401 ở ba dòng trên là **cửa có thật đòi giấy**, không phải middleware chặn mù |
+
+**Nhưng hai cửa số liệu là COOKIE-ONLY:** cả `/me/usage` và `/me/subscription` nằm trong nhóm
+`priv` với `priv.Use(mw.RequireAuth(d.Auth))` — **không** `RequireAuthOrAPIKey` như `/me`.
+Nên không có đường tắt nào vòng qua danh tính người dùng: **việc 4 (ví) bị chặn bởi việc 3 (danh
+tính) một cách cứng**, đúng thứ tự chủ dự án nêu (*"sau login đến billing"*).
+
+`GET /me/subscription` trả đúng những số trang `cinai.app/vi/subscription` đang vẽ
+(`handler/subscription.go`, `mySubscriptionDTO`) — và đây là bảng nối sang bốn ổ cắm:
+
+| ổ cắm phía app | trường cinapi |
+|---|---|
+| `GetSandAccessStatus.state` | `status` + `credits_remaining` / `window_remaining` / `week_remaining` > 0 |
+| thanh % `GetCurrentPeriodUsage` | `cycle_credits_spent` / `plan.monthly_credits`; `period_start` · `period_end` |
+| nhãn gói | `plan_key` / `plan.name` |
+| khối On-Demand + nút nâng gói | `dashboard_url` = `https://cinai.app/vi/subscription` (biến `GROKBOT2_CHECKOUT_URL`) |
+| khối *"Giá trị API thực tế"* | `cycle_requests` · `cycle_tokens` · `cycle_credits_spent` · `cycle_usd` |
+
+Phía grokbot2, bốn ổ cắm ấy **đã có và được lắp ở ĐÚNG MỘT chỗ** — `services/grokbot-backend/src/index.ts`
+(`access` · `usage` · `plan` · `dashboardUrl` truyền vào `handleBootstrapRpc`). Nên nối dây là
+sửa bốn dòng ở một điểm, không phải dựng hệ con mới. Việc còn lại đúng như §5 đã ghi: *"số lấy từ
+`/me/usage`, hai URL trỏ về `cinai.app/vi/subscription`"* — cộng một điều §5 chưa biết: **số gói
+thì lấy từ `/me/subscription`, không phải `/me/usage`** (`/me/usage` là thống kê 7 ngày theo
+`from`/`to`, không mang trần gói).
 
 ### Billing — bốn ổ cắm
 
