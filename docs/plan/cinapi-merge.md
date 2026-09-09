@@ -224,8 +224,10 @@ lại kế hoạch. Bốn phép đo, ba từ Internet:
 **Trả lời: CHƯA.** Hai đường login riêng, hai kho tài khoản riêng; đăng nhập Google trên
 `cinai.app` trong trình duyệt thì app local **không thừa hưởng** phiên đó.
 
-Kèm một số đo không ai hỏi mà quan trọng hơn: trên sản xuất **cả 42 hàng `agents` đều mang một chủ
-`auth0|grokbot2-user`** (`hidden=0` cả 42), còn **6 tài khoản thật `local|<email>` sở hữu 0 bot**.
+Kèm một số đo không ai hỏi mà quan trọng hơn — **và nó SAI, sửa 09/09 tối; xem §5e**: tôi đếm theo **cột**
+`owner_id` và ra *"cả 42 hàng `agents` đều mang một chủ `auth0|grokbot2-user`, 6 tài khoản thật sở hữu 0 bot"*.
+Cột ấy TRƠ. Đếm ở chỗ `ownsAgent` thật sự đọc (`agentOwnerAuthId` trong thân) thì 42 bot thuộc **9 chủ**:
+mặc định 12, tám tài khoản `local|<email>` thật giữ 30.
 Tức "mỗi người một tài khoản" chưa đúng ngay trong lòng grokbot2 — vé cũ phân giải về danh tính mặc
 định (§6 mục 39 đã tả cơ chế; đây là hệ quả của nó trong DỮ LIỆU). Sổ máy thì đã đúng: 2 hàng, chủ
 là một người thật. Phép đo chạy trên **bản chép** `grokbot.sqlite` + `-wal`/`-shm` với
@@ -399,7 +401,7 @@ Kiểm kê chỗ mang chuỗi chủ `auth0\|grokbot2-user` trên SẢN XUẤT, �
 
 | chỗ | số hàng mang chủ cũ |
 |---|---|
-| `agents.owner_id` | 42 (cả bảng, `hidden=0` cả 42) |
+| `agents.owner_id` | 42 (cả bảng) — **nhưng cột này TRƠ, xem §5e**: chủ thật nằm trong thân |
 | `entries.owner_id` | 1038 |
 | `acceptance.owner_id` | 95 |
 | `attachments_meta.owner_id` | 64 |
@@ -433,6 +435,69 @@ vào tài liệu — cách lấy lại là một câu SQL theo email):
 Làm bước 4 trước bước 3 để lại một cửa sổ **không ai sở hữu 42 bot**. Và phép đổi chủ phải chạy lúc
 backend **dừng**: nó là cửa ghi duy nhất của kho, ghi từ ngoài trong lúc nó chạy là tự đẻ ra một
 nguồn sự thật thứ hai. Cần **một bản lưu trước khi đổi**.
+
+---
+
+### 5e · Chuyển chủ XONG 09/09 ~22:33 — và một câu tôi đã commit thì SAI
+
+**Việc đã làm**, bằng `infra/vps/chuyen-chu.py` (ngắt backend **2 giây**, bản lưu
+`shared/data/chuyen-chu-bak-20260909-223303`):
+
+- **12** bot của danh tính mặc định `auth0|grokbot2-user` đổi sang `cinapi|<id của chủ dự án>` **trong THÂN**
+  (`agentOwnerAuthId` — chỗ `ownsAgent` đọc), kèm cột `owner_id` đặt khớp.
+- **30** bot của **tám** tài khoản `local|<email>` THẬT **giữ nguyên chủ** — không chạm.
+- Cột `owner_id` được đặt khớp thân cho cả 42 bot; **876** hàng bảng-theo-bot
+  (`entries` · `automations` · `compaction` · `parked`) lấy chủ từ bot của chúng; **159** hàng
+  `acceptance`/`attachments_meta` — hai bảng **không có đường về bot** — trả về chuỗi giữ chỗ, vì bịa một
+  quy thuộc vào một cột trơ là đúng thứ vừa trả giá.
+- `users`/`usage`/`host_settings.byOwner`/`marketplace.json`/`bot-templates/<chủ>.json` của danh tính mặc
+  định đi theo; tệp kho mẫu đổi tên theo `safe()` của `bot-templates.ts`. `integrity_check ok`.
+
+**Nghiệm thu trên bản ĐANG CHẠY, bằng CHÍNH phép đo đã phản chứng lượt trước**: `listAgents` với vé của
+`cinapi|<id>` đi **0 → 12 bot**, vé của danh tính mặc định **12 → 0**, một chủ THẬT vẫn **13 bot không
+đổi**, một danh tính bịa **0**; `kiem-reply-0-43` **29 lệnh · 0 sai** với bot thật `agent-11`.
+
+#### Câu SAI, và vì sao nó là một LỚP bẫy chứ không phải một dòng lỗi
+
+§5b (và §5 mục 21 của bảng theo dõi) khai *"cả 42 hàng `agents` mang một chủ `auth0|grokbot2-user`, 6 tài
+khoản thật sở hữu 0 bot"*. Nó đến từ một phép kiểm kê **theo CỘT**: `pragma table_info` mọi bảng, tìm
+`owner_id`/`auth_id`, `group by`. Phép ấy đọc đúng những gì có trong lược đồ — và trả lời **sai câu hỏi**.
+
+Chỗ quyết định quyền chủ lúc chạy là `ownsAgent` (`chat/state.ts:31`):
+
+```ts
+export const ownsAgent = (id: string): boolean => {
+  const a = agents.get(id);
+  return !!a && ((a.agentOwnerAuthId ?? AUTH_ID) === currentOwner());
+};
+```
+
+Nó đọc **`agentOwnerAuthId` trong THÂN JSON** của bot. Còn cột `owner_id` thì chính `store.ts` khai là
+**TRƠ** — *"INERT: nothing filters on `owner_id` yet — that is Phase 2"* — và nó được
+`ALTER TABLE … ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'auth0|grokbot2-user'` lấp một lượt rồi **không
+ai duy trì**. Nên "mọi hàng cùng một chủ" không phải một dữ kiện về sở hữu; nó là **hình dạng của lược
+đồ** đọc lên như một dữ kiện.
+
+**Bản đầu của script chạy theo phép đếm ấy và `UPDATE` cả 42 hàng.** Thứ bắt được nó không phải một bài
+đo tôi viết ra để bắt nó, mà là **cổng nghiệm thu trên bản đang chạy**: sau khi ghi, chủ mới thấy **0
+bot** và chủ cũ vẫn thấy **12**. Vì cột là trơ nên lượt ghi sai **không đổi hành vi của ai** — nhưng nó
+làm cột nói dối *nặng hơn*: trước là một chỗ giữ chỗ đồng loạt, sau là một danh tính THẬT, tức nó đọc lên
+như một dữ kiện có thẩm quyền. Phép sửa (bản hai của script) đặt cột khớp thân cho MỌI bot, nên lần đầu
+tiên cột ấy nói thật.
+
+**Ba điều rút ra.** (1) **Kiểm kê theo chỗ ĐỌC, không theo chỗ LƯU** — đếm cột là đếm lược đồ, đếm chỗ
+đọc là đếm hành vi; cùng họ §7 *"trường có trong hợp đồng ≠ trường có người ĐỌC"*. (2) Một phép di trú
+phải có **cổng nghiệm thu đọc lại từ chỗ quyết định**, không phải đọc lại chỗ nó vừa ghi — bản đầu in
+*"XONG — 0 hàng còn mang chủ cũ"* và câu ấy đúng từng chữ về việc nó đã ghi gì. (3) Con số **12 so với
+42** đứng ngay trong đầu ra của phép đo đầu tiên (`listAgents` trả 12 trong khi bảng có 42 hàng) và tôi
+đã đọc qua nó — một phép đếm lệch giữa hai nguồn là lời mời đọc kỹ, không phải một chi tiết.
+
+#### Hệ quả vận hành phải nhớ
+
+Vé **dùng chung** (`gateway-token.txt`) phân giải ra danh tính mặc định, mà danh tính ấy nay sở hữu **0
+bot**. Nên mọi bài E2E chạy trên sản xuất phải **đúc vé cho `cinapi|<id>`** bằng chính `mintTicket`
+(và đặt `GROKBOT2_GATEWAY_TOKEN` **TRƯỚC** khi nạp module — §7). Một lượt `kiem-reply-0-43` ra *"0 bot"*
+với vé dùng chung từ nay là **ĐÚNG**, không phải hỏng.
 
 ---
 
