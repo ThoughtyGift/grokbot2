@@ -501,6 +501,52 @@ với vé dùng chung từ nay là **ĐÚNG**, không phải hỏng.
 
 ---
 
+### 5f · E2E cửa đăng nhập bằng TRÌNH DUYỆT THẬT (10/09) — 18/18, và nó tái hiện được lỗ cũ
+
+`scripts/e2e-login-cinai.mjs`. Vì sao phải có một bài nữa khi đã có 22+12 unit, 6+6 phép tiêm lỗi và
+13 mốc đo sống trên HTTP: **cả ba đều không có trình duyệt**, mà tiền đề của lỗ là một luật của trình
+duyệt — cookie `cinapi_at` là `SameSite=Lax`, nên một điều hướng GET **chéo site** vẫn mang nó đi.
+`curl` không có khái niệm `SameSite`, nên nó không chứng minh được cả tiền đề lẫn hàng rào.
+
+**Hình dạng bài đo** — mô phỏng đúng topology sản xuất chứ không đơn giản hoá:
+
+| thứ | ở đâu | vì sao phải thế |
+|---|---|---|
+| `cinai.test` | một máy chủ đóng vai **nginx + cinAPI**: tự trả `/api/v1/me` và `/vi/login`, chuyển tiếp mọi đường khác sang backend | trên sản xuất `cinai.app` phát cả hai; chính chuyện **cùng một site** là điều kiện làm cách (C) chạy được (cookie `Path=/` tự tới `/agent/*`) |
+| `ke-la.test` | site của kẻ tấn công, chỉ một cái link | phải là site KHÁC thật thì phép tính same-site của Chrome mới là phép tính thật |
+| hai tên miền | `--host-resolver-rules=MAP … 127.0.0.1:<cổng>` | hai cổng trên `127.0.0.1` là **CÙNG site** — SameSite tính theo tên miền đăng ký được, không theo cổng |
+| backend | kho cách ly + `GROKBOT2_AUTH=enforce` | `warn`/`off` cấp token vô điều kiện ở `/auth/poll`; đo ở đó là đo một cửa đang mở |
+| cú bấm | `Input.dispatchMouseEvent` qua Playwright | `el.click()` tổng hợp không đi qua (§7) |
+
+**18 mốc, 0 lượt model, không chạm `.data` thật.** Mốc đáng giá nhất là cặp 5/5b: nạn nhân đang đăng
+nhập cinai bấm link chéo site của kẻ tấn công → trang **NHẬN RA đúng tài khoản của họ** (tiền đề
+`SameSite=Lax` đúng, đo được: backend hỏi `/api/v1/me` thêm một lượt) → mà `/auth/poll` của kẻ tấn
+công **vẫn 404** sau nhiều nhịp hỏi vòng. Rồi mốc 9: một cú bấm THẬT vào *"Nối tài khoản này"* →
+`/auth/poll` trả token mang `authId = cinapi|<id>`. Tức **cú bấm là hàng rào**, đúng như thiết kế nói.
+
+**Và bài đo được thử bằng cách tiêm 3 lỗi thật** vào một bản CHÉP của `src` (mã thật không bị chạm một
+byte — `git status` sạch), mỗi lỗi có **chữ ký đỏ riêng**, sau khi bản chép chưa sửa đã chạy xanh 18/18
+làm đối chứng:
+
+| tiêm | đỏ ở | nghĩa |
+|---|---|---|
+| A · `/loginDeepControl` tự duyệt khi thấy cookie (dựng lại đúng lỗ cũ) | 4c · **5b** | app của kẻ tấn công NHẬN được token của nạn nhân — bài đo tái hiện được vụ chiếm tài khoản |
+| B · `GET /auth/cinai` cũng duyệt (bỏ phép tách phương thức) | 4c · 5b | vòng hỏi của chính trang trở thành cửa duyệt |
+| C · bỏ phép buộc cookie `gb2_login` ↔ `uuid` | 8 · 8c | một trang khác dụ được trình duyệt duyệt `uuid` lạ |
+
+**Một điều lộ ra mà không ai thiết kế, và nó đi ĐÚNG chiều an toàn**: `gb2_login` là **một cookie cho
+cả site** (cùng tên, cùng path). Nên khi nạn nhân bấm link của kẻ tấn công, cookie buộc phiên của
+*chính họ* bị **ghi đè** bằng `uuid` của kẻ kia — đo được ở mốc 6. Hậu quả: cú bấm xác nhận trên tab
+của chính người dùng sau đó bị **403** (mốc 8), và họ phải bấm đăng nhập lại trong app. Phiền một
+nhịp, nhưng nó không mở thêm cửa cho ai; và phần dư còn lại vẫn là phần dư của mọi trang consent —
+người dùng bấm xác nhận trên một trang họ không mở — thứ chỉ chữa được bằng CHỮ, và trang đã có đoạn
+cảnh báo ấy.
+
+**Một hàng rào thứ hai, độc lập, đo được nhờ phép tiêm C**: mốc 7 (POST chéo site) vẫn XANH cả khi đã
+bỏ phép buộc cookie — không phải nhờ `gb2_login` mà nhờ `SameSite=Lax` của **cinapi**: một `fetch`
+chéo site không mang `cinapi_at`, nên `danhTinhTuCookie` trả `null` và không có ai để duyệt. Hai hàng
+rào khác nhau che cùng một đường; đừng gộp công của chúng.
+
 ## 6. Còn của chủ dự án quyết
 
 1. **Bước 0** — thôi sửa `/opt/cinapi` tại chỗ, push 7 commit, tắt CI cinapi. Chưa duyệt; bản viết

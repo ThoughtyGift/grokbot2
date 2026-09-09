@@ -25,6 +25,7 @@ Thứ tự: rẻ trước (0 lượt model), đắt sau; bài bấm thật trên
 
 | # | bài | lệnh (từ gốc repo) | đo gì | lượt model | để lại |
 |---|---|---|---|---|---|
+| 0 | **cửa đăng nhập cinai, TRÌNH DUYỆT THẬT** | `node services/grokbot-backend/scripts/e2e-login-cinai.mjs` | Chrome thật + hai SITE thật (`cinai.test` ↔ `ke-la.test` qua `--host-resolver-rules`) + một máy chủ đóng vai nginx+cinAPI + backend kho cách ly: 18 mốc, trong đó **tái hiện đúng kịch bản chiếm tài khoản** — nạn nhân đang đăng nhập cinai bấm link chéo site của kẻ khác, cookie `SameSite=Lax` VẪN đi theo (tiền đề), mà `/auth/poll` của kẻ tấn công vẫn không nhận được token (hàng rào). **Tự chứa**: không cần backend dev, client, hay box | 0 | — (tự dọn kho tạm + hạ cả cây tiến trình) |
 | 1 | schema 0.43 | `node services/grokbot-backend/scripts/kiem-reply-0-43.mjs` | 29 lệnh đọc qua validator của coordinator 0.43 — **đỏ ở đây là banner "mất kết nối" trên client dù HTTP 200** | 0 | — |
 | 2 | mẫu bot | `node services/grokbot-backend/scripts/e2e-mau-bot.mjs` | share → publish → import → `getPublicBotTemplate`, 20 mốc | 0 | — |
 | 3 | marketplace | `node services/grokbot-backend/scripts/e2e-marketplace.mjs` | listing · RPC proto phân trang · blob recipe · import, 26 mốc | 0 | — (kho listing về rỗng ⇒ tab Bots hiện *No Bots available* — bình thường) |
