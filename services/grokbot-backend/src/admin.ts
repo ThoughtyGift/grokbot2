@@ -13,6 +13,8 @@ import { checkAuth, noteAuth, expectedToken } from "./auth-gate.js";
 import { boxSnapshot, COST_PER_BOT_MB, PROFILE_MB, type BoxSnapshot } from "./box-resources.js";
 import { desktopHeldBy } from "./desktop.js";
 import { desktopRecordingState } from "./desktop-record.js";
+import { docManifest } from "./update-feed.js";
+import { docSo, soDoiMayPath, tinhDoiMay, type TinhDoiMay } from "./so-doi-may.js";
 
 const esc = (s: unknown): string => String(s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -29,15 +31,24 @@ const mb = (n: number): string => (n >= 1024 ? `${(n / 1024).toFixed(1)} GB` : `
 export interface AdminPayload extends BoxSnapshot {
   desktop: { heldBy: string | null; recording: string | null };
   cost: { perBotMb: number; profileMb: number };
+  doiMay: TinhDoiMay & { tu: number; banDangPhat: string };
 }
 
 async function payload(): Promise<AdminPayload> {
   const snap = await boxSnapshot();
   const rec = desktopRecordingState();
+  /*
+   * Bản đang phát đọc từ ĐÚNG kênh mà launcher hỏi (`traLoiLauncher` dùng cùng biểu thức này) —
+   * một nguồn sự thật. Tính ra một con số khác cho cùng ý nghĩa là bẫy §7 *"hai nguồn cho MỘT số
+   * phiên bản"*, đã trả giá ngày 06/09 bằng 106 MB tải lại mỗi 24 h.
+   */
+  const so = docSo(soDoiMayPath());
+  const banDangPhat = docManifest()[process.env.GROKBOT2_LAUNCHER_KENH ?? "stable"]?.version ?? "";
   return {
     ...snap,
     desktop: { heldBy: desktopHeldBy(), recording: rec.state === "recording" ? rec.agentId : null },
     cost: { perBotMb: COST_PER_BOT_MB, profileMb: PROFILE_MB },
+    doiMay: { ...tinhDoiMay(so, banDangPhat), tu: so.tu, banDangPhat },
   };
 }
 
@@ -140,6 +151,7 @@ function cards(p: AdminPayload): string {
     <div class="sub">${p.desktop.recording ? `đang ghi bài dạy cho ${esc(p.desktop.recording)}` : "không ai đang ghi"}</div>
   </div>
   ${poolCard(p)}
+  ${doiMayCard(p)}
 </div>
 `;
 }
@@ -163,6 +175,51 @@ function poolCard(p: AdminPayload): string {
     ${bar(pct, q.free <= 2 ? "var(--hot)" : pct > 70 ? "var(--warn)" : "var(--ok)")}
     <div class="sub">đã cấp ${q.used} · ${q.owners} người trong sổ${q.perUser ? "" : " · tách người dùng đang TẮT"}</div>
   </div>`;
+}
+
+/**
+ * Thẻ "đội máy": bao nhiêu máy NGOÀI KIA đã lên bản đang phát.
+ *
+ * Nó ở trang này vì nó là **cổng** cho mọi tính năng phụ thuộc client — 09/09 câu *"bao giờ đặt
+ * `GROKBOT2_CHECKOUT_URL`"* chỉ trả lời được bằng con số này, và lúc ấy backend không biết nó, nên
+ * tôi phải dựng lại đội máy bằng tay từ log nginx (log xoay, và lẫn phép dò của chính tôi).
+ *
+ * Sổ trắng thì thẻ nói **thẳng là chưa có gì**, không vẽ `0/0` như một kết luận: sổ mới bật thì
+ * "0 máy" và "chưa ai hỏi feed từ khi bật sổ" là hai chuyện khác nhau, và số `khongPhaiLauncher`
+ * là thứ phân biệt được chúng — có hàng phép dò mà 0 hàng launcher thì bộ ghi đang chạy đúng.
+ */
+function doiMayCard(p: AdminPayload): string {
+  const d = p.doiMay;
+  const tu = new Date(d.tu).toISOString().slice(0, 10);
+  if (!d.tong) return `<div class="card">
+    <h2>Đội máy</h2>
+    <div class="num">—</div>
+    <div class="sub">chưa launcher nào hỏi feed từ ${tu}${d.khongPhaiLauncher ? ` · ${d.khongPhaiLauncher} hàng không phải launcher (phép dò, trình duyệt) ⇒ sổ đang ghi` : " · sổ còn trắng hẳn"}</div>
+  </div>`;
+  const pct = (d.daToi / d.tong) * 100;
+  return `<div class="card">
+    <h2>Đội máy</h2>
+    <div class="num">${d.daToi}<span class="sub"> / ${d.tong} máy ở bản đang phát</span></div>
+    ${bar(pct, d.daToi === 0 ? "var(--hot)" : pct < 100 ? "var(--warn)" : "var(--ok)")}
+    <div class="sub">${d.banDangPhat ? `<code>${esc(d.banDangPhat)}</code>` : "manifest chưa có bản nào"} · sổ từ ${tu}${d.khongPhaiLauncher ? ` · ${d.khongPhaiLauncher} hàng phép dò (không tính)` : ""}</div>
+  </div>`;
+}
+
+/** Từng máy một — vì "0/4" mà không kể tên thì không quyết được việc gì. */
+function doiMayRows(p: AdminPayload): string {
+  const { may, banDangPhat } = p.doiMay;
+  return may
+    .map((m) => {
+      const toi = banDangPhat !== "" && m.ver === banDangPhat;
+      return `<tr>
+      <td>${esc(m.ua)}</td>
+      <td><code>${esc(m.ver)}</code></td>
+      <td>${new Date(m.cuoi).toISOString().replace("T", " ").slice(0, 16)}</td>
+      <td class="n">${m.ma}</td>
+      <td>${toi ? '<span style="color:var(--ok)">đã tới</span>' : '<span style="color:var(--warn)">chưa</span>'}</td>
+    </tr>`;
+    })
+    .join("\n");
 }
 
 /**
@@ -222,6 +279,14 @@ ${cards(p)}
     <caption>Hồ sơ Chrome, nặng nhất trước</caption>
     <tr><th class="n">RAM</th><th class="n">tiến trình</th><th>display</th><th>hồ sơ</th></tr>
     ${profs || '<tr><td colspan="4" class="s">không thấy Chrome nào</td></tr>'}
+  </table>
+</section>
+
+<section>
+  <table>
+    <caption>Đội máy — bản mỗi máy khai ở lượt hỏi feed GẦN NHẤT</caption>
+    <tr><th>dấu vết máy</th><th>bản khai</th><th>hỏi lần cuối (UTC)</th><th class="n">mã</th><th>bản đang phát</th></tr>
+    ${doiMayRows(p) || `<tr><td colspan="5" class="s">chưa launcher nào hỏi feed từ khi sổ bật${p.doiMay.khongPhaiLauncher ? ` — nhưng sổ CÓ ${p.doiMay.khongPhaiLauncher} hàng không phải launcher, nên bộ ghi đang chạy` : ""}</td></tr>`}
   </table>
 </section>
 

@@ -46,6 +46,7 @@ import { authMode } from "./auth-mode.js";
 import { handleAdmin } from "./admin.js";
 import { handleSite } from "./site.js";
 import { traLoi, traLoiLauncher } from "./update-feed.js";
+import { ghiLuot, soDoiMayPath } from "./so-doi-may.js";
 import { reportModelToolSupport } from "./model-probe.js";
 import { handleNative } from "./native.js";
 import { transcribe, isSttAvailable, closeStt } from "./stt.js";
@@ -260,6 +261,28 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
     const kq = traLoiLauncher((q.get("ver") ?? "").trim(), (q.get("nen") ?? "windows").trim(), (q.get("k") ?? "").trim());
     // KHÔNG log token: một dòng log là một chỗ rò. Chỉ log "có trình token hay không".
     console.log(`[grokbot2] launcher-update: ver=${q.get("ver") ?? "?"} k=${q.get("k") ? "co" : "khong"} → ${kq.status}${kq.body ? ` v${kq.body.version} ${kq.body.ten ?? ""}` : ""}`);
+    /*
+     * Ghi một hàng vào **sổ kiểm kê đội máy** — thứ trả lời được *"bản vá đã tới máy ai chưa"*.
+     *
+     * Vì sao ở đây mà không ở `update-feed.ts`: dòng log ngay trên là tất cả những gì backend từng
+     * biết về đội máy, và nó **mục theo log nginx** — 09/09 tôi phải dựng lại đội máy bằng tay từ
+     * `access.log`, mà log xoay (`access.log.14.gz` đã là 26/08) và lẫn cả phép dò của chính tôi.
+     * Sổ này sống trong `dataDir()` cạnh manifest nên nó không xoay, và nó dán nhãn `laLauncher`
+     * nên phép dò không bao giờ đội lốt máy thật.
+     *
+     * Ba thứ KHÔNG được truyền vào, và cách bảo đảm là hình dạng lời gọi chứ không phải lời dặn:
+     * `k` (token), `url`, và địa chỉ của người gọi. `Luot` không có trường nào cho chúng.
+     *
+     * `ghiLuot` không bao giờ ném (fail-open) — một cái sổ không được là lý do launcher của người
+     * dùng không nhận được câu trả lời. Nên nó đứng SAU khi `kq` đã tính xong, và không có `await`.
+     */
+    ghiLuot(soDoiMayPath(), {
+      ua: String(req.headers["user-agent"] ?? ""),
+      ver: (q.get("ver") ?? "").trim(),
+      nen: (q.get("nen") ?? "windows").trim(),
+      ma: kq.status,
+      khi: Date.now(),
+    });
     if (kq.status === 204) { res.writeHead(204); return res.end(); }
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     return res.end(JSON.stringify(kq.body));
