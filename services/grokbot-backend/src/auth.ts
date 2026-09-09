@@ -158,18 +158,29 @@ const CINAPI_COOKIE = "cinapi_at";
  * header `Authorization` (ADR-005 của họ: không để JWT trong localStorage). grokbot2 trước đây chỉ
  * đọc header, nên một phiên cinAPI hợp lệ vẫn bị coi là vô danh.
  */
-function tokenFromCookie(cookieHeader?: string | string[]): string | undefined {
+/**
+ * Đọc MỘT cookie theo tên. Xuất ra vì `login-page.ts` cũng cần đọc cookie (`cinapi_at` của cinAPI
+ * và `gb2_login` của chính ta) — và viết bộ đọc cookie thứ hai ở đó là đúng bẫy §7 *"một danh sách
+ * sống ở HAI nơi thì cái mình đọc luôn là cái cũ"* ở dạng nhỏ nhất của nó: hai bộ tách chuỗi sẽ
+ * lệch nhau ở đúng ca lạ (khoảng trắng, `=` trong giá trị, cookie trùng tên).
+ */
+export function cookieValue(cookieHeader: string | string[] | undefined, name: string): string | undefined {
   const raw = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader;
   if (!raw) return undefined;
   for (const part of raw.split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
-    if (part.slice(0, eq).trim() !== CINAPI_COOKIE) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    // Chỉ cắt ở dấu `=` ĐẦU: giá trị base64url của JWT không có `=` ở giữa, nhưng một cookie khác
+    // thì có, và cắt theo `split("=")` là làm hỏng nó trong im lặng.
     const v = part.slice(eq + 1).trim();
     return v || undefined;
   }
   return undefined;
 }
+
+const tokenFromCookie = (cookieHeader?: string | string[]): string | undefined =>
+  cookieValue(cookieHeader, CINAPI_COOKIE);
 
 /**
  * Danh tính của một request, xét CẢ header và cookie — điểm vào duy nhất cho `/v1`.

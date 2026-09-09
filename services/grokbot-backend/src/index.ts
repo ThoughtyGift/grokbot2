@@ -12,7 +12,7 @@ import { config } from "./config.js";
 import { enableWriting } from "./store.js";
 enableWriting();
 import { handleAuth, verifyJwt, ownerFromAuth, ownerFromRequest, DEFAULT_USER } from "./auth.js";
-import { handleLoginPage, handleAuthPoll, handleAuthApprove } from "./login-page.js";
+import { handleLoginPage, handleAuthPoll, handleAuthApprove, handleAuthCinai } from "./login-page.js";
 import { handleWebApp } from "./web-app.js";
 import { accessVerdict, currentPeriodUsage, billingMode, seedPlans, getUser, upgradeUrl } from "./billing.js";
 
@@ -176,7 +176,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
    */
   // Giao diện web ở `/app/` — nơi `/loginDeepControl` đưa người dùng tới để đăng nhập.
   if (handleWebApp(url, res)) return;
-  if (url.startsWith("/loginDeepControl")) return handleLoginPage(url, res);
+  if (url.startsWith("/loginDeepControl")) return handleLoginPage(url, res, req.headers as Record<string, unknown>);
+  // Cửa trang chờ hỏi vòng — phải đứng TRƯỚC cửa chung bắt `url.includes("/auth/")` bên dưới.
+  if (url.startsWith("/auth/cinai"))
+    return handleAuthCinai(url, req.method ?? "GET", req.headers as Record<string, unknown>, res);
   if (url.startsWith("/auth/poll")) return handleAuthPoll(url, res);
   if (url.startsWith("/auth/approve")) return handleAuthApprove(body, req.headers as Record<string, unknown>, res);
   if (url.startsWith("/oauth/token") || url.includes("/auth/") || url.endsWith("/token")) {
