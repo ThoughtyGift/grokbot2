@@ -637,6 +637,61 @@ Ba quyết định đáng chép:
 
 backend **907/907**, tsc sạch.
 
+### 5h · Nghiệm thu trên SẢN XUẤT (10/09) — dây grokbot2 → cinapi chạy thật
+
+`7dd08b0` lên VPS, bản `20260909-231356`. Số đo đầy đủ ở [bảng theo dõi §1 dòng VPS](../state/bang-theo-doi.md);
+ở đây chỉ giữ phần thuộc về kế hoạch này.
+
+**Cổng của Bước 4 — không đọc mã, gọi thẳng khối sản phẩm trên bản đang chạy.** Một đoạn `tsx` rời
+(kho cách ly, `GROKBOT2_STATE_FILE`/`DATA_DIR`/`WORKFLOWS_FILE`/`SQLITE_FILE` trỏ `/tmp` — §7 bảng
+theo dõi) gọi `khoThueBao.lamMoi("cinapi|<id>")` rồi `oCamTuThueBao`:
+
+```
+hoi cinapi : 1 luot
+goi        : Free / ACTIVE / vi con 52
+cac cua    : gói tháng 48/100
+access     : granted        plan: Free
+thanh do   : 48 / 100 · gói tháng · đặt lại 05:28 07/10
+danh tinh auth0|… : null
+```
+
+Bốn điều được chứng minh trong đúng một lượt: base + khoá dịch vụ có mặt và đúng (**1** lượt, không
+phải 0); route mới bên cinapi trả lời (không 404, tức `CINAPI_SERVICE_TOKEN` khớp hai đầu); bản đọc
+xử được **thân thật** (`data.subscription`, thứ đã phản chứng bản đọc đầu); và khối **không chạm ai
+ngoài người mang `cinapi|`** — một `authId` khác trả `null` mà không mở socket nào.
+
+**Cổng của Bước 3.** Từ Internet: `/agent/` 200 · `/agent/app/` 200 · cửa ops **401 / 401 / 401** ·
+`/auth/cinai` **403** ở cả `GET` lẫn `POST` khi không giấy. Trên máy: `kiem-reply-0-43` **29 lệnh ·
+0 sai** với bot thật `agent-11`, bằng vé đúc cho `cinapi|<id>` — vé ấy thấy **12 bot**, đúng con số
+phép chuyển chủ §5e đã ghi.
+
+**Một bẫy của chính phép đo, đáng chép vì nó suýt thành số liệu.** Lượt đầu tôi lấy người dùng cinai
+bằng `select id from users order by created_at limit 1` và in ra một thanh đo hoàn toàn hợp lệ —
+`Free`, ví 100, `gói tháng 0/100`. Mọi khoá đúng, dây chạy thật, chỉ là gói của **người khác**. Thứ
+tố cáo nó là một cổng KHÁC trong cùng lượt: vé đúc cho id ấy thấy **0 bot**, trong khi §5e đã ghi
+12. Tra lại **theo email** thì vé thấy đúng 12 và gói thật là `48/100`. Luật: **danh tính phải tra
+bằng khoá định danh con người**, và một bài đo phụ thuộc danh tính phải hỏi kèm một câu đã biết đáp
+án bằng CÙNG danh tính ấy. (Ghi nguyên văn ở bảng theo dõi §7.)
+
+**Và cửa đăng nhập ĐÃ ĐỔI HÌNH trên sản xuất — đo, vì bản trước nó còn trơ.** Deploy `d9719f5`
+(09/09) chở mã Bước 3 nhưng `GROKBOT2_CINAPI_BASE` vắng trong `shared/.env`, nên `/loginDeepControl`
+vẫn **302 sang `/agent/app/`** như bản cũ. Nay biến đã có mặt, và cùng một URL từ Internet trả:
+
+```
+HTTP/1.1 200 OK
+Set-Cookie: gb2_login=…; Path=/agent; HttpOnly; SameSite=Strict; Max-Age=900; Secure
+thân 3.234 byte · "auth/cinai" ×1 · "cinai" ×6 · "app/" ×0
+```
+
+Tức đúng hình cuối của §5d: `GET /loginDeepControl` **chỉ** đặt cookie buộc phiên rồi vẽ trang, và
+trang ấy trỏ sang `/auth/cinai` chứ không chuyển hướng đi đâu. Ba thuộc tính cookie là hàng rào chứ
+không phải trang trí — `SameSite=Strict` là thứ làm một điều hướng chéo site không mang được nó,
+`Path=/agent` giữ nó khỏi mọi đường khác của `cinai.app`, `Max-Age=900` đóng cửa sổ sau 15 phút.
+
+**Còn đúng một cổng, và nó không đo thay được**: một lượt đăng nhập THẬT của chủ dự án qua cửa ấy.
+Cho tới lúc đó chưa ai mang danh tính `cinapi|` đi qua đường đăng nhập trên sản xuất, nên với người
+dùng ngoài đó **chưa có gì đổi** — họ vẫn đang cầm danh tính cũ cho tới lượt đăng nhập kế tiếp.
+
 ## 6. Còn của chủ dự án quyết
 
 1. **Bước 0** — thôi sửa `/opt/cinapi` tại chỗ, push 7 commit, tắt CI cinapi. Chưa duyệt; bản viết
