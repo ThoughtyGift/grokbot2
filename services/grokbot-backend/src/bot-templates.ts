@@ -63,6 +63,7 @@ import { currentOwner } from "./request-context.js";
 import { agents, introduceRef } from "./chat/state.js";
 import { createAgent, createGroup } from "./directory/index.js";
 import { avatarCuaBot } from "./avatar-mac-dinh.js";
+import { ownerDisplayNameOf } from "./ten-nguoi-tao.js";
 
 /**
  * Nơi kho này ghi.
@@ -481,11 +482,12 @@ export function deleteBotTemplate(shareId: string, owner: string = currentOwner(
 
 // ── Đường CÔNG KHAI (Marketplace → Import Bot) ──────────────────────────────────────────────────
 
-/** Tên hiển thị suy từ authId: `local|nguoi-a@vi-du.vn` → `nguoi-a`. Chưa có hồ sơ người tạo riêng. */
-export function ownerDisplayNameOf(authId: string): string {
-  const sauTienTo = authId.includes("|") ? authId.slice(authId.indexOf("|") + 1) : authId;
-  return sauTienTo.split("@")[0] || sauTienTo || "ẩn danh";
-}
+/**
+ * Tên hiển thị suy từ authId — nay ở `ten-nguoi-tao.ts`, giữ tên xuất ra vì `marketplace.ts` nhập
+ * từ đây. Thân cũ (`split("@")[0]`) trả về nguyên id với tài khoản không mang `@`, và sau phép đổi
+ * chủ 09/09 nó phát id cinai THÔ ra 10 trang `/bot/<shareId>` công khai — xem module ấy.
+ */
+export { ownerDisplayNameOf };
 
 const laCongKhai = (t: BotTemplate): boolean => t.published && t.visibility === "public";
 

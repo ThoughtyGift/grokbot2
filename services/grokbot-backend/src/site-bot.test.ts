@@ -32,6 +32,7 @@ const { createAgent } = await import("./directory/index.js");
 const T = await import("./bot-templates.js");
 const { handleSite } = await import("./site.js");
 const { botLandingHtml, deepLinkOf, handleBotSite } = await import("./site-bot.js");
+const { TEN_AN_DANH } = await import("./ten-nguoi-tao.js");
 
 T.bindTemplateSources({
   skills: () => [{ name: "Đặt hàng", description: "Lên đơn Shopee", content: "1. mở app" }, { name: "Đối soát", description: "So công nợ", content: "..." }],
@@ -139,4 +140,49 @@ test("og:url đi theo GROKBOT2_PUBLIC_SITE — cùng nguồn với link mà Copy
   } finally {
     if (cu === undefined) delete process.env.GROKBOT2_PUBLIC_SITE; else process.env.GROKBOT2_PUBLIC_SITE = cu;
   }
+});
+
+/*
+ * Hồi quy 10/09 — id cinai THÔ ra trang công khai.
+ *
+ * Sau phép đổi chủ 09/09, mẫu của chủ dự án mang `cinapi|<24 ký tự>`, và `ownerDisplayNameOf` bản cũ
+ * (`split("@")[0]`) trả về nguyên id vì tài khoản ấy không có `@`. Đo trên SẢN XUẤT: id thô xuất
+ * hiện **4 lần mỗi trang** trên cả 10 trang `/bot/<shareId>`.
+ *
+ * Bài này ghim ở **biên RENDER**, không ở hàm — cố ý. Tôi truy được BA chỗ vẽ tên (`<title>`,
+ * `og:title`, `<p class="by">`) nhưng đo được BỐN, nên một bài đo chỉ gọi `ownerDisplayNameOf` sẽ
+ * xanh mà chỗ thứ tư vẫn rò. Đòi "id không có mặt trong CẢ TRANG" thì không cần biết có mấy chỗ.
+ */
+const CHU_CINAPI = "cinapi|7c4de1a90b3f28e6d5a1c093";
+const ID_THO = CHU_CINAPI.slice("cinapi|".length);
+
+test("chủ mang id cinai: KHÔNG một khúc id nào trong CẢ trang công khai, mà trang vẫn vẽ", async () => {
+  const bot = as(CHU_CINAPI, () => createAgent(
+    { name: "Bot của cinai", description: "Giữ tồn kho.", avatarShape: "hex", avatarColor: "green" } as Parameters<typeof createAgent>[0],
+  ));
+  const nhap = (await as(CHU_CINAPI, () => T.stageTemplateForAgent(bot.id, { description: "Giữ tồn kho." }, CHU_CINAPI)))!;
+  await as(CHU_CINAPI, () => T.publishBotTemplate(nhap.shareId, nhap.staged?.version ?? 1));
+
+  const { code, html } = botLandingHtml(nhap.shareId, "n");
+  assert.equal(code, 200, "che tên không được làm hỏng trang");
+
+  assert.equal(html.split(ID_THO).length - 1, 0, "id cinai THÔ có mặt trong trang công khai");
+  // Chặt hơn phép so cả chuỗi: không một khúc 8 ký tự nào của id được lọt ra dưới dạng nào.
+  for (let i = 0; i + 8 <= ID_THO.length; i++) {
+    const khuc = ID_THO.slice(i, i + 8);
+    assert.equal(html.split(khuc).length - 1, 0, `khúc "${khuc}" của id lọt ra trang`);
+  }
+
+  // Và vẽ đúng thứ thay vào: cả ba chỗ tên đều là hằng số, không phải chuỗi rỗng.
+  assert.match(html, new RegExp(`<title>Bot của cinai by ${TEN_AN_DANH}</title>`));
+  assert.match(html, new RegExp(`property="og:title" content="Bot của cinai by ${TEN_AN_DANH}"`));
+  assert.match(html, new RegExp(`by <b>${TEN_AN_DANH}</b>`));
+});
+
+test("ĐỐI CHỨNG: chủ mang địa chỉ thư vẫn ra tên người — phép che không được quét cả đường lành", async () => {
+  const nhap = await mauNhap("Bot thư");
+  await as(A, () => T.publishBotTemplate(nhap.shareId, nhap.staged?.version ?? 1));
+  const { html } = botLandingHtml(nhap.shareId, "n");
+  assert.match(html, /<title>Bot thư by nguoi-a<\/title>/);
+  assert.doesNotMatch(html, new RegExp(TEN_AN_DANH));
 });
