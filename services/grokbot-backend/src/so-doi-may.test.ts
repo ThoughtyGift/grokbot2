@@ -330,12 +330,26 @@ const { winStart } = await import("../scripts/setup-templates.mjs");
 
 const KHOI = (s: string) => s.slice(s.indexOf("powershell -NoProfile"));
 
+/**
+ * `bi-chan` là từ DUY NHẤT không do PowerShell ghi, và đó là toàn bộ lý do nó tồn tại: ca nó mô tả
+ * là *"tiến trình PowerShell ấy đã bị giết"*, nên một chỗ ghi nằm bên trong nó sẽ câm đúng lúc cần
+ * nói. Đo 11/09: Defender chấm điểm cả dòng lệnh của pha 1 và giết `powershell` ngay ở
+ * `CreateProcess` — cmd in *"Access is denied."*, `errorlevel` 5, và cả tám cửa `exit 0` của mục 52
+ * im cùng lúc. Nên nó được ghim RIÊNG, ở đúng hình cmd, và ghim cả chiều PHỦ ĐỊNH.
+ */
+const CMD_GHI: readonly string[] = ["bi-chan"];
+
 test("mọi từ trong từ điển đều có chỗ GHI trong launcher — không cửa nào còn câm", () => {
   const hai = { "chở-app": KHOI(startBundled() as string), "cấu-hình": KHOI(winStart as string) };
   for (const [ten, s] of Object.entries(hai)) {
     // `thieu-giay` chỉ có ở bản chở-app: bản cấu hình không có cửa token nào để mà thiếu.
     const can = KET_QUA.filter((t) => (ten === "cấu-hình" ? t !== "thieu-giay" : true));
     for (const t of can) {
+      if (CMD_GHI.includes(t)) {
+        assert.ok(s.includes(`kq=${t} ma=%GB2MA%`), `[${ten}] từ "${t}" phải do CMD ghi — PowerShell lúc ấy không còn ở đó`);
+        assert.ok(!s.includes(`'${t}'`), `[${ten}] "${t}" không được ghi từ TRONG PowerShell: chỗ đó chính là chỗ bị giết`);
+        continue;
+      }
       assert.ok(s.includes(`'${t}'`), `[${ten}] từ "${t}" không có chỗ nào ghi ra — một cửa câm nữa`);
     }
   }

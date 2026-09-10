@@ -25,6 +25,12 @@ import { startBundled, coVaUpdateFeed, ISS_FULL } from "../scripts/setup-exe.mjs
 
 const s: string = startBundled();
 
+// Doc DONG LENH, khong doc chu: tu 11/09 khoi REM co ke ve `'Hidden'` va ve Defender, va mot bai do
+// grep tren ca file se bat vao chinh loi giai thich cua no (§7 *"grep -c dem trung cau van noi ve
+// thu minh dang tim"*).
+const chiLenh = (x: string) => x.split(/\r?\n/).filter((l) => !l.trimStart().startsWith("REM")).join("\n");
+
+
 test("updater gốc TẮT mặc định, mở lại được bằng GROKBOT2_NATIVE_UPDATES=1", () => {
   assert.match(s, /if not "%GROKBOT2_NATIVE_UPDATES%"=="1" set "SAND_DISABLE_UPDATES=1"/,
     "updater gốc không cài được bản của mình — mở nó chỉ dựng một nút Install luôn thất bại");
@@ -56,11 +62,25 @@ test("HAI PHA: pha 1 chỉ ghi script ra %TEMP% rồi thoát; pha 2 chạy tách
   // Bộ cài ghi đè chính start-bot.cmd. cmd đọc batch theo từng dòng từ đĩa, nên cài ĐỒNG BỘ từ trong
   // launcher là đọc dòng kế từ file mới ở offset cũ. Pha 2 phải chạy sau khi cmd đã thoát.
   assert.match(s, /bot-noi-bo-cap-nhat\.ps1/, "pha 2 là một script riêng trong %TEMP%");
-  assert.match(s, /Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',\$pha2/, "pha 2 phải được khởi chạy TÁCH RỜI");
+  const lenh = chiLenh(s);
+  assert.match(lenh, /Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Minimized','-File',\$pha2/, "pha 2 phải được khởi chạy TÁCH RỜI");
+  // Do 11/09: `Hidden` dung chung mot dong lenh voi phan tai tep cua muc 7 lam Defender cham diem
+  // CA KHOI la Trojan:Win32/PowhidSubExec.B va giet `powershell` ngay o CreateProcess — pha 1 khong
+  // chay MOT DONG nao, launcher roi thang xuong mo app, khong dau vet. Do ba doi launcher trong cung
+  // mot thu muc: ban 06/09 qua, ban dang phat qua, ban co curl CHAN. Nen ghim ca chieu PHU DINH.
+  assert.doesNotMatch(lenh, /'Hidden'/, "pha 2 khong duoc mo cua so AN — do la nua chu ky Defender bat");
+  assert.doesNotMatch(lenh, /'-WindowStyle',\$/, "khong duoc giau -WindowStyle sau mot bien: no lach duoc chu ky, va do dung la thu thuat cua ma doc that");
   assert.match(s, /'Start-Sleep -Seconds 2'/, "pha 2 chờ cmd thoát trước khi cài");
   assert.match(s, /\/VERYSILENT.*\/SUPPRESSMSGBOXES.*\/NORESTART.*\/DIR=/, "cài im lặng, đúng vào thư mục đang cài");
   assert.match(s, /'Start-Process -FilePath \(Join-Path \$d ''start-bot\.cmd''\)/, "cài xong pha 2 phải mở lại app — [Run] của Inno có skipifsilent");
-  assert.match(s, /if errorlevel 7 exit \/b 0/, "mã 7 ⇒ cmd thoát ngay, không mở app lần hai");
+  // Hang rao cmd, va no la thu DUY NHAT con noi duoc khi chinh khoi tren bi giet tu ngoai: moi cho
+  // ghi khac cua muc 52 nam BEN TRONG tien trinh ay. Ghim ca ba ve — bat ma, thoat o 7, va ghi
+  // `bi-chan` cho moi ma khac 0 — vi bo bat ky ve nao cung du de ca ay cam tro lai.
+  assert.match(lenh, /set "GB2MA=%errorlevel%"/, "phai BAT errorlevel truoc khi lam gi khac");
+  assert.match(lenh, /if "%GB2MA%"=="7" exit \/b 0/, "mã 7 ⇒ cmd thoát ngay, không mở app lần hai");
+  assert.match(lenh, /if not "%GB2MA%"=="0" >"%~dp0\.cap-nhat-cuoi\.txt" echo [^\n]*kq=bi-chan ma=%GB2MA%/,
+    "ma khac 0/7 = pha 1 khong chay xong; cmd phai ghi lai vi PowerShell khong con o do ma ghi");
+  assert.doesNotMatch(lenh, /if not "%GB2MA%"=="0" exit/, "hang rao phai FAIL-OPEN: ghi lai roi van mo app");
   assert.doesNotMatch(s, /& cmd \/c \$tmp/, "không còn nhánh cài ĐỒNG BỘ trong launcher");
 });
 
@@ -125,7 +145,9 @@ test("coVaUpdateFeed vẫn đo được dấu vá — giữ làm chẩn đoán, 
  */
 test("tai co thu lai 3 luot, va tong thoi gian cho KHONG tang so voi tran cu", () => {
   const soLan = Number(/\$lan -lt (\d+)/.exec(s)?.[1]);
-  const moiLan = Number(/-TimeoutSec (\d+) -Uri \$b\.url/.exec(s)?.[1]);
+  // Tu 11/09 khuc tai di qua ham `T`, nen tran KHONG con o cho goi Invoke-WebRequest — no la doi so
+  // thu ba cua `T`. Doc o CHO GOI chu khong o than `T`: than chi co bien `$giay`.
+  const moiLan = Number(/T \$b\.url \$tmp (\d+)/.exec(s)?.[1]);
   assert.ok(soLan >= 2, `phai co it nhat 2 luot, thay ${soLan}`);
   assert.ok(Number.isFinite(moiLan), "khong doc duoc -TimeoutSec cua luot tai");
   assert.ok(soLan * moiLan <= 900,

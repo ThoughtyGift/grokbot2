@@ -210,6 +210,43 @@ REM      offset CU — hanh vi khong doan duoc. Ban dau cua khoi nay lam dung th
 REM      chi kiem + tai + ghi mot script ra %TEMP% roi THOAT; pha 2 chay tach roi sau khi cmd da thoat.
 REM
 REM Tat han: dat GROKBOT2_NO_SELF_UPDATE=1.
+REM
+REM   7. DI BANG curl.exe CUA WINDOWS, GIU Invoke-WebRequest LAM DUONG LUI. Do 10/09 tren mot may
+REM      THAT trong so doi may (19041.6456): ca hai dia chi IPv6 cua may chu la HO DEN 21 s moi
+REM      cai, DNS xep AAAA len TRUOC (dung luat — may co dia chi IPv6 toan cuc that), va
+REM      ServicePoint cua .NET thu LAN LUOT ⇒ Invoke-WebRequest ve sau 42,7 s. Voi tran 8 s o duoi
+REM      thi luot hoi feed KHONG CO CACH NAO thanh cong, va catch thi exit 0 — cham thu BA cua
+REM      duong giao hang, cam hoan toan. curl dua song song v4/v6 (Happy Eyeballs) nen cung URL
+REM      cung may di 0,83 s; no co san trong System32 tu Windows 10 build 17063.
+REM      MOT ham T, MOT ngan sach: doi tran o day la doi cho ca hai duong, khong co danh sach thu hai.
+REM      $ua TU KHAI va van mang 'PowerShell/<so>' — vi so kiem ke doi may khoa hang theo ua va
+REM      chuanUa() nhan launcher bang dung chuoi do. Doi sang curl ma khong dat -A la moi hang
+REM      launcher THAT bong thanh 'curl/8.x' ⇒ laLauncher:false ⇒ bang Doi may ve 0/0.
+REM      URL di qua TEP CAU HINH (-K), khong qua dong lenh: URL mang ?k=<token> va mot dong
+REM      lenh doc duoc bang tasklist. Gia tri trong tep KHONG dat trong nhay kep — trong tep cau
+REM      hinh cua curl, mot gia tri co nhay thi backslash la dau escape (backslash-t thanh TAB).
+REM      Ma trang thai doc tu -D <tep dau muc> chu khong tu --write-out: khoi nay nam trong mot
+REM      tep .cmd, noi % la mo dau mot bien.
+REM      KHONG dung -C - (tai tiep): do 10/09 tren chinh cua tai cua minh — no tra 200 khong kem
+REM      Accept-Ranges (route la createReadStream().pipe(res)), va curl gap the thi thoat 33
+REM      "Cannot resume" ma KHONG ghi gi ⇒ them no vao la bien mot luot thu-lai cuu duoc thanh mot
+REM      luot hong cung. Tai tiep can Range o MAY CHU truoc; thu tu khong dao duoc.
+REM
+REM   8. PHA 2 MO CUA SO MINIMIZED, KHONG HIDDEN — va cmd tu ghi lai khi pha 1 khong chay.
+REM      Do 11/09 tren may nay: ngay khi khoi pha 1 mang them phan curl o muc 7, Windows Defender
+REM      cham diem CA DONG LENH powershell va giet no o CreateProcess. Nhat ky Defender goi ten
+REM      Trojan:Win32/PowhidSubExec.B (Severe, Action: Remove); cmd in "Access is denied." va
+REM      errorlevel 5, con PowerShell thi KHONG chay mot dong nao — ke ca dong dau tien.
+REM      Do BA doi launcher trong CUNG mot thu muc: ban 06/09 (31 dong) qua, ban dang phat
+REM      0.43.20260910 (52 dong) qua, ban co curl (70 dong) CHAN. Dong Start-Process nay giong
+REM      HET o ca ba, nen thu bi cham diem khong phai mot dong ma la ca dong lenh: tai tep bang
+REM      mot cong cu ngoai roi chay mot PowerShell AN la dung hinh mot con dropper.
+REM      Bo 'Hidden' la het — do ca ba cach (bo han, doi sang 'Minimized', tach pha 1 ra mot tep
+REM      .ps1), ca ba deu qua. Chon 'Minimized' vi no doi it nhat va van THAT: co mot cua so.
+REM      KHONG giau 'Hidden' sau mot bien du no cung qua — do la dung thu thuat cua ma doc that.
+REM      Nhung mot phep do tren MOT may voi MOT ban dinh nghia khong bao dam duoc ngay mai, nen
+REM      nua thu hai moi la nua ben vung: ba dong duoi cung doc errorlevel va ghi kq=bi-chan.
+REM      Moi cho ghi khac cua muc 52 nam BEN TRONG tien trinh bi giet, nen chi CMD khai duoc ca nay.
 if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
@@ -217,6 +254,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$bc='';" ^
   "$giaiDoan='feed-loi';" ^
   "function G($w,$l){ try{ if($bc){ $m=(Get-Date -Format o)+' ver='+$ver+' kq='+$w; if($l){ $m=$m+' lan='+$l }; Set-Content -Path $bc -Encoding utf8 -Value $m } }catch{} };" ^
+  "$ua='grokbot2-launcher/1 PowerShell/'+$PSVersionTable.PSVersion;" ^
+  "$curl=Join-Path $env:SystemRoot 'System32\\curl.exe'; if(-not (Test-Path $curl)){ $curl='' };" ^
+  "function T($u,$ra,$giay){" ^
+  "  if($curl){" ^
+  "    $cf=[IO.Path]::GetTempFileName(); $hd=[IO.Path]::GetTempFileName();" ^
+  "    try{" ^
+  "      [IO.File]::WriteAllText($cf,('url = '+$u),(New-Object Text.UTF8Encoding $false));" ^
+  "      & $curl -sS -L --max-time $giay -A $ua -D $hd -o $ra -K $cf | Out-Null;" ^
+  "      if($LASTEXITCODE -ne 0){ throw ('curl thoat '+$LASTEXITCODE) }" ^
+  "      $dong=@(Get-Content $hd | Where-Object { $_.StartsWith('HTTP') })[-1];" ^
+  "      return [int](([string]$dong).Split(' ')[1])" ^
+  "    } finally { Remove-Item $cf,$hd -Force -ErrorAction SilentlyContinue }" ^
+  "  }" ^
+  "  $r=Invoke-WebRequest -UseBasicParsing -UserAgent $ua -TimeoutSec $giay -Uri $u -OutFile $ra -PassThru;" ^
+  "  return [int]$r.StatusCode" ^
+  "};" ^
   "try{" ^
   "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
   "  $bc=Join-Path $dir '.cap-nhat-cuoi.txt';" ^
@@ -226,11 +279,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $pkg=Join-Path '%APPDIR%' 'resources\\app\\package.json';" ^
   "  $ver=if(Test-Path $pkg){ (Get-Content $pkg -Raw | ConvertFrom-Json).version } else { '' };" ^
   "  $kqCu=''; if(Test-Path $bc){ $mm=[regex]::Match((Get-Content $bc -Raw),'kq=([a-z0-9-]+)'); if($mm.Success){ $kqCu=$mm.Groups[1].Value } };" ^
-  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&kq='+[uri]::EscapeDataString($kqCu));" ^
+  "  $tf=Join-Path $env:TEMP ('gb2-feed-'+[guid]::NewGuid().ToString('N').Substring(0,8)+'.json');" ^
+  "  $ma=T ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&kq='+[uri]::EscapeDataString($kqCu)) $tf 8;" ^
   "  Set-Content -Path $moc -Value (Get-Date -Format o) -Encoding utf8;" ^
-  "  if($r.StatusCode -eq 204){ G 'khong-co-ban-moi'; exit 0 }" ^
-  "  if($r.StatusCode -ne 200){ G 'feed-loi'; exit 0 }" ^
-  "  $b=$r.Content | ConvertFrom-Json;" ^
+  "  $b=$null; if($ma -eq 200){ $b=(Get-Content $tf -Raw) | ConvertFrom-Json };" ^
+  "  Remove-Item $tf -Force -ErrorAction SilentlyContinue;" ^
+  "  if($ma -eq 204){ G 'khong-co-ban-moi'; exit 0 }" ^
+  "  if($ma -ne 200){ G 'feed-loi'; exit 0 }" ^
   "  if(-not $b.url){ G 'manifest-thieu'; exit 0 }" ^
   "  $ten=if($b.ten){ $b.ten } else { 'bot-noi-bo-'+$b.version+'.cmd' };" ^
   "  $tmp=Join-Path $env:TEMP $ten;" ^
@@ -238,7 +293,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  while($lan -lt 3 -and -not $xong){" ^
   "    $lan=$lan+1;" ^
   "    try{" ^
-  "      Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 -Uri $b.url -OutFile $tmp;" ^
+  "      $mt=T $b.url $tmp 60; if($mt -ne 200){ throw ('HTTP '+$mt) }" ^
   "      if($b.sha256hash){" ^
   "        $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
   "        if($h -eq $b.sha256hash.ToLower()){ $xong=$true } else { $giaiDoan='bam-lech'; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }" ^
@@ -261,13 +316,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "    'try{ Set-Content -Path (Join-Path $d ''.cap-nhat-cuoi.txt'') -Encoding utf8 -Value ((Get-Date -Format o)+'' ver=''+$v+'' kq=''+$kq+'' ma=''+$ma) }catch{}'," ^
   "    'Remove-Item $f -Force -ErrorAction SilentlyContinue'" ^
   "  );" ^
-  "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$pha2;" ^
+  "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Minimized','-File',$pha2;" ^
   "  G 'da-giao-pha2';" ^
   "  exit 7" ^
   "}catch{ G $giaiDoan; exit 0 }"
 REM Ma 7 = pha 2 da duoc giao viec. Bo cai .cmd tu mo lai app o buoc cuoi, nen o day KHONG mo lan hai;
 REM va cmd nay phai THOAT NGAY de file start-bot.cmd khong con bi doc trong luc bo cai ghi de no.
-if errorlevel 7 exit /b 0
+set "GB2MA=%errorlevel%"
+if "%GB2MA%"=="7" exit /b 0
+REM Pha 1 chi thoat 0 hoac 7. Ma khac = no KHONG chay xong, va cho ghi cua muc 52 nam BEN TRONG
+REM tien trinh ay nen no khong the tu khai. Do 11/09: Defender cham diem CA DONG LENH powershell va
+REM giet no ngay o CreateProcess (Trojan:Win32/PowhidSubExec.B, "Access is denied.", errorlevel 5) —
+REM launcher roi thang xuong mo app, khong mot dau vet. Nen vet nay phai do CMD ghi, o ngoai.
+if not "%GB2MA%"=="0" >"%~dp0.cap-nhat-cuoi.txt" echo %DATE% %TIME% kq=bi-chan ma=%GB2MA%
 :sau_cap_nhat
 
 REM ── Updater GOC: tat, va tat CO CHU DICH ────────────────────────────────────

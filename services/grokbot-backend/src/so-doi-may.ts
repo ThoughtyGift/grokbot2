@@ -62,6 +62,10 @@ export const KET_QUA = [
   "da-giao-pha2",     // pha 1 xong, pha 2 chưa kịp báo lại (máy tắt giữa chừng cũng ra dấu này)
   "cai-xong",         // bộ cài trả 0
   "cai-hong",         // bộ cài trả khác 0 — quyền, Defender, hay file đang bị app giữ
+  "bi-chan",          // pha 1 KHÔNG chạy: `powershell` bị giết ở CreateProcess (đo 11/09: Defender
+                      // chấm cả dòng lệnh là `Trojan:Win32/PowhidSubExec.B`, cmd ra `exit 5` +
+                      // "Access is denied."). Từ này là từ DUY NHẤT trong bảng do CMD ghi, không do
+                      // PowerShell ghi — vì chỗ ghi của mọi từ khác nằm BÊN TRONG tiến trình bị giết.
 ] as const;
 
 export type KetQua = (typeof KET_QUA)[number];

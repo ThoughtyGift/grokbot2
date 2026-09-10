@@ -17,6 +17,12 @@ import assert from "node:assert/strict";
 // @ts-expect-error — script .mjs thuần, không có khai báo kiểu.
 import { winStart, macStart } from "../scripts/setup-templates.mjs";
 
+// Doc DONG LENH, khong doc chu: tu 11/09 khoi REM co ke ve `'Hidden'` va ve Defender, va mot bai do
+// grep tren ca file se bat vao chinh loi giai thich cua no (§7 *"grep -c dem trung cau van noi ve
+// thu minh dang tim"*).
+const chiLenh = (x: string) => x.split(/\r?\n/).filter((l) => !l.trimStart().startsWith("REM")).join("\n");
+
+
 const KHOA_CUNG_WIN = /^set "SAND_DISABLE_UPDATES=1"$/m;
 const KHOA_CUNG_MAC = /^export SAND_DISABLE_UPDATES=1$/m;
 
@@ -55,10 +61,24 @@ test("HAI PHA: bộ cài KHÔNG chạy đồng bộ từ trong launcher đang ch
    */
   const s = winStart as string;
   assert.match(s, /bot-noi-bo-cap-nhat\.ps1/, "pha 2 là script riêng trong %TEMP%");
-  assert.match(s, /Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',\$pha2/, "pha 2 chạy TÁCH RỜI");
+  const lenh = chiLenh(s);
+  assert.match(lenh, /Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Minimized','-File',\$pha2/, "pha 2 chạy TÁCH RỜI");
+  // Do 11/09: `Hidden` dung chung mot dong lenh voi phan tai tep cua muc 7 lam Defender cham diem
+  // CA KHOI la Trojan:Win32/PowhidSubExec.B va giet `powershell` ngay o CreateProcess — pha 1 khong
+  // chay MOT DONG nao, launcher roi thang xuong mo app, khong dau vet. Do ba doi launcher trong cung
+  // mot thu muc: ban 06/09 qua, ban dang phat qua, ban co curl CHAN. Nen ghim ca chieu PHU DINH.
+  assert.doesNotMatch(lenh, /'Hidden'/, "pha 2 khong duoc mo cua so AN — do la nua chu ky Defender bat");
+  assert.doesNotMatch(lenh, /'-WindowStyle',\$/, "khong duoc giau -WindowStyle sau mot bien: no lach duoc chu ky, va do dung la thu thuat cua ma doc that");
   assert.match(s, /'Start-Sleep -Seconds 2'/, "pha 2 chờ cmd thoát rồi mới cài");
   assert.match(s, /GROKBOT2_SETUP_UNATTENDED=''1''/, "bộ cài chạy không người trực — không được treo ở set /p");
-  assert.match(s, /if errorlevel 7 exit \/b 0/, "mã 7 ⇒ thoát ngay, không mở app lần hai (bộ cài .cmd tự mở)");
+  // Hang rao cmd, va no la thu DUY NHAT con noi duoc khi chinh khoi tren bi giet tu ngoai: moi cho
+  // ghi khac cua muc 52 nam BEN TRONG tien trinh ay. Ghim ca ba ve — bat ma, thoat o 7, va ghi
+  // `bi-chan` cho moi ma khac 0 — vi bo bat ky ve nao cung du de ca ay cam tro lai.
+  assert.match(lenh, /set "GB2MA=%errorlevel%"/, "phai BAT errorlevel truoc khi lam gi khac");
+  assert.match(lenh, /if "%GB2MA%"=="7" exit \/b 0/, "mã 7 ⇒ thoát ngay, không mở app lần hai (bộ cài .cmd tự mở)");
+  assert.match(lenh, /if not "%GB2MA%"=="0" >"%~dp0\.cap-nhat-cuoi\.txt" echo [^\n]*kq=bi-chan ma=%GB2MA%/,
+    "ma khac 0/7 = pha 1 khong chay xong; cmd phai ghi lai vi PowerShell khong con o do ma ghi");
+  assert.doesNotMatch(lenh, /if not "%GB2MA%"=="0" exit/, "hang rao phai FAIL-OPEN: ghi lai roi van mo app");
   assert.doesNotMatch(s, /& cmd \/c \$tmp/, "nhánh cài ĐỒNG BỘ phải biến mất");
 });
 
@@ -84,7 +104,9 @@ test("bốn biến hợp đồng với client còn đủ trong cả hai launcher
 test("tai co thu lai 3 luot, va tong thoi gian cho KHONG tang so voi tran cu", () => {
   const s = winStart as string;
   const soLan = Number(/\$lan -lt (\d+)/.exec(s)?.[1]);
-  const moiLan = Number(/-TimeoutSec (\d+) -Uri \$b\.url/.exec(s)?.[1]);
+  // Tu 11/09 khuc tai di qua ham `T`, nen tran KHONG con o cho goi Invoke-WebRequest — no la doi so
+  // thu ba cua `T`. Doc o CHO GOI chu khong o than `T`: than chi co bien `$giay`.
+  const moiLan = Number(/T \$b\.url \$tmp (\d+)/.exec(s)?.[1]);
   assert.ok(soLan >= 2, `phai co it nhat 2 luot, thay ${soLan}`);
   assert.ok(Number.isFinite(moiLan), "khong doc duoc -TimeoutSec cua luot tai");
   assert.ok(soLan * moiLan <= 180,
