@@ -429,12 +429,56 @@ try {
   else { Write-Output '  khong co su kien nao nhac ten goi' }
 } catch { Write-Output ('  doc Application log hong: ' + $_.Exception.Message) }
 
+Muc 'DEFENDER DA CHAN GI (quet TRON log, khong chi 7 ngay)'
+# Ba quyet dinh, ca ba tu so do 11/09 tren may dev:
+#  (1) TRON log, khong 7 ngay — lan Defender CACH LY bo cai da phat hanh xay ra 03/09, tam ngay
+#      truoc, nen mot cua so 7 ngay bo lo dung thu can tim.
+#  (2) doc NAME/PATH/ACTION chu khong in 200 ky tu dau: cau tra loi nam o ba truong ay.
+#  (3) GOM NHOM chu khong cat ngon — mot may vua bi chan mot lan se co hang chuc dong cua CUNG mot
+#      chu ky trong mot phut, va chung day cai CU (cai dang can) ra khoi tam nhin.
+# Hai loai chan KHAC HAN nhau nen phai tach: mot TEP bi cach ly = goi tai ve bien mat truoc khi pha
+# 2 kip cai; mot DONG LENH bi giet = pha 1 khong chay mot dong nao. Truoc ban 11/09 ca hai deu cam.
 try {
-  $dh = Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Windows Defender/Operational'; StartTime = (Get-Date).AddDays(-7) } -MaxEvents 200 -ErrorAction SilentlyContinue |
-    Where-Object { $_.Id -in 1006, 1007, 1008, 1116, 1117 }
-  if ($dh) { $dh | Select-Object -First 8 | ForEach-Object { Write-Output ('  DEFENDER ' + (Gio $_.TimeCreated) + '  id=' + $_.Id + '  ' + (Che ($_.Message -replace '\s+', ' ').Substring(0, [Math]::Min(200, $_.Message.Length)))) } }
-  else { Write-Output '  Defender: khong co lan chan nao trong 7 ngay' }
-} catch { Write-Output '  Defender: khong doc duoc log (khong sao)' }
+  $dh = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Windows Defender/Operational'; Id = 1006, 1007, 1008, 1116, 1117 } -MaxEvents 800 -ErrorAction Stop)
+  $hang = @()
+  foreach ($e in $dh) {
+    $ten = ''; $duong = ''; $act = ''
+    foreach ($l in ($e.Message -split "`r?`n")) {
+      if ($ten -eq ''   -and $l -match '^\s*Name:\s*(.+)$')   { $ten   = $Matches[1].Trim() }
+      if ($duong -eq '' -and $l -match '^\s*Path:\s*(.+)$')   { $duong = $Matches[1].Trim() }
+      if ($act -eq ''   -and $l -match '^\s*Action:\s*(.+)$') { $act   = $Matches[1].Trim() }
+    }
+    $loai = 'TEP'
+    if ($duong -match '^CmdLine:') { $loai = 'DONG LENH' }
+    # "Cua ta" = ten goi, thu muc cai, vet banh mi, script pha 2, hoac dong lenh cua chinh pha 1.
+    $cuaTa = ($duong -match 'Bot.?Noi.?Bo|grokbot2|cap-nhat-cuoi|bot-noi-bo-cap-nhat|updates/ban-moi')
+    $hang += [pscustomobject]@{ Gio = $e.TimeCreated; Ten = $ten; Duong = $duong; Act = $act; Loai = $loai; CuaTa = $cuaTa }
+  }
+  $ta = @($hang | Where-Object { $_.CuaTa })
+  Dong 'tong lan chan' $hang.Count
+  Dong 'som nhat trong log' (Gio $hang[$hang.Count - 1].Gio)
+  Dong 'dung vao goi CUA TA' $ta.Count
+  if ($ta.Count -eq 0) { Write-Output '  khong lan nao dung vao goi hay launcher cua ta' }
+  foreach ($g in @($ta | Group-Object { $_.Ten + '|' + $_.Loai } | Sort-Object { $_.Group[0].Gio })) {
+    $n = @($g.Group)
+    $acts = @($n | ForEach-Object { $_.Act } | Where-Object { $_ } | Sort-Object -Unique) -join ','
+    if (-not $acts) { $acts = '(chi phat hien)' }
+    Write-Output ('  >> ' + $n[0].Ten + '  [' + $n[0].Loai + ']  x' + $n.Count)
+    Write-Output ('       tu ' + (Gio $n[$n.Count - 1].Gio) + ' den ' + (Gio $n[0].Gio) + '   action: ' + $acts)
+    $d = Che $n[$n.Count - 1].Duong
+    Write-Output ('       ' + $d.Substring(0, [Math]::Min(140, $d.Length)))
+  }
+  if ($ta.Count -gt 0) {
+    Write-Output ''
+    Write-Output '  ==> DEFENDER DA CHAN GOI HAY LAUNCHER CUA TA TREN MAY NAY. Doc dong [TEP] va'
+    Write-Output '      [DONG LENH] o tren: TEP bi cach ly thi pha 2 khong con file de cai; DONG'
+    Write-Output '      LENH bi giet thi pha 1 khong chay mot dong nao. Truoc ban 11/09 ca hai ca'
+    Write-Output '      deu KHONG de lai dau vet nao tren may.'
+  }
+} catch {
+  if ($_.Exception.Message -match 'No events were found') { Write-Output '  khong co lan chan nao trong log' }
+  else { Write-Output ('  Defender: khong doc duoc log (' + $_.Exception.Message + ')') }
+}
 
 # --- Dung lai luot tai (tuy chon) -----------------------------------------------------------
 if ($ThuTai -and $mongDoi) {
