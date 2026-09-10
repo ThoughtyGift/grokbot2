@@ -415,13 +415,17 @@ Kiểm kê chỗ mang chuỗi chủ `auth0\|grokbot2-user` trên SẢN XUẤT, �
 Và bản đồ sang cinai, đo bằng một `SELECT` trên `cinapi-postgres` (271 người; không chép id lẫn email
 vào tài liệu — cách lấy lại là một câu SQL theo email):
 
-- **5/6** tài khoản `local|<email>` của grokbot2 **đã có** tài khoản cinai.
-- **1/6 CHƯA có** ⇒ bật biến toàn cục là người ấy **không đăng nhập được**. `POST /api/v1/auth/register`
-  của cinapi đang mở nên họ tự đăng ký được, nhưng đó là một việc phải nói trước, không phải một
-  chuyện để họ tự phát hiện lúc mở app.
-- Cả 6 tài khoản ấy sở hữu **0 bot**, nên chuyển chủ không phải chuyện của họ. Cái họ mất khi bật
-  biến là **hàng `usage`** và hàng `plan` dưới chủ cũ — vô hại lúc billing còn `warn`, và với 5 người
-  đang vượt trần thì nó còn là một lần đặt lại.
+> **Cả khối bullet dưới đây đã CHẾT — giữ để đọc được đường đi, đừng dùng làm số. Hai lần sửa:**
+> §5e phản chứng vế *"sở hữu 0 bot"* (đếm sai chỗ), rồi **§5i xoá sạch toàn bộ danh tính cũ**, nên
+> không còn ai để chuyển chủ và không còn ai phải báo trước.
+
+- ~~**5/6** tài khoản `local|<email>` của grokbot2 **đã có** tài khoản cinai.~~ Đếm trên bảng `users`;
+  đếm trên tập có nghĩa (**chủ bot**) thì là **5/8 có · 3/8 chưa**.
+- ~~**1/6 CHƯA có** ⇒ bật biến toàn cục là người ấy **không đăng nhập được**~~ — `POST /api/v1/auth/register`
+  của cinapi vẫn đang mở nên ai chưa có tài khoản tự đăng ký được; **việc "phải nói trước" nay không
+  còn**, vì không ai còn dữ liệu cũ để mất (§5i).
+- ~~Cả 6 tài khoản ấy sở hữu **0 bot**~~ — **SAI**, tám người thật giữ **30 bot** (13 · 9 · 3 · 1 · 1 ·
+  1 · 1 · 1); xem §5e cho vì sao phép đếm cũ trượt.
 - Sổ máy (`may-da-biet.json`, 2 hàng) mang chủ của một người dùng thật; nó **tự lành** (thiết kế bỏ
   hàng không chủ lúc nạp, daemon đăng ký lại) — §5 mục 20.
 
@@ -691,6 +695,70 @@ không phải trang trí — `SameSite=Strict` là thứ làm một điều hư�
 **Còn đúng một cổng, và nó không đo thay được**: một lượt đăng nhập THẬT của chủ dự án qua cửa ấy.
 Cho tới lúc đó chưa ai mang danh tính `cinapi|` đi qua đường đăng nhập trên sản xuất, nên với người
 dùng ngoài đó **chưa có gì đổi** — họ vẫn đang cầm danh tính cũ cho tới lượt đăng nhập kế tiếp.
+
+### 5i · Xoá sạch danh tính cũ (10/09 ~06:56) — quyết định của chủ dự án, lấy SAU khi cái giá được đo
+
+Đường đi đáng chép trước cả kết quả. Tôi đề xuất **chuyển chủ** cho tám người còn lại (rẻ hơn, 0 bot
+mất, bản đồ tra được sẵn bằng email). Chủ dự án đổi hướng: *"để cho sạch, xoá toàn bộ user cũ đi, làm
+lại sang user theo con đường mới"*. Đó là một phép ghi phá huỷ vào dữ liệu sản xuất **của người
+khác**, nên tôi không gõ `DELETE` mà **đo cái giá rồi đưa lên bàn** với ba lựa chọn có số kèm; chủ dự
+án chọn **"xoá sạch hẳn — làm lại từ trắng"**. Ghi lại cả nhịp ấy vì nó là hình dạng đúng cho mọi
+việc phá huỷ về sau: *người quyết là chủ dự án, việc của tôi là làm cho cái giá nhìn thấy được trước
+khi họ quyết.*
+
+**Cái giá, đo trước khi bấm** (bản chép `mode=ro`, đếm ở chỗ ĐỌC — thân JSON, không phải cột `owner_id`):
+
+```
+8 danh tính local|<email>  ·  30 bot (13 · 9 · 3 · 1 · 1 · 1 · 1 · 1)  ·  872 entry
+parked 2 · compaction 2 · automations 0 · todos 0 · handoffs 0
+users 6 hàng · usage 9 hàng · host_settings.byOwner 6 khoá
+đính kèm 64 tệp · bot-templates 1 tệp · sổ máy 2 hàng · marketplace 0
+```
+
+**Công cụ, không phải một câu lệnh**: `infra/vps/xoa-danh-tinh-cu.py`, cố ý cùng hình dạng với
+`chuyen-chu.py` — mặc định **chạy khô**, **từ chối chạy khi `grokbot2-be` còn sống** (kho SQLite có
+đúng một cửa ghi và đó là tiến trình ấy), có **bản lưu**, **chạy lại được**, và **tự nghiệm thu ở chỗ
+ĐỌC**. Ba chỗ một câu `DELETE` gõ tay sẽ bỏ sót — và cả ba im lặng — ghi nguyên văn ở
+[bảng theo dõi §7](../state/bang-theo-doi.md): `attachments_meta`/`acceptance` không có đường về bot
+(cột `owner_id` của chúng TRƠ ⇒ đường quy thuộc đáng tin duy nhất là đọc đường dẫn đính kèm **trong
+thân entry của chính bot sắp xoá**, 64 entry có nhắc); `host_settings.body.byOwner` là object trong
+cột JSON (đọc–sửa–ghi); `may-da-biet.json` ngoài SQLite và cơ chế tự lành chỉ bỏ hàng KHÔNG chủ. Cố ý
+**không** đụng `coverage.json` dù nó còn nhắc id của 9 bot vừa xoá: đó là sổ đo đường đi.
+
+**Thử ở nơi đã biết đáp án TRƯỚC.** Chạy trọn trên một bản chép 13 MB của kho sản xuất: số chạy khô
+khớp từng dòng với bản kiểm kê độc lập, lượt xoá thật để lại **0 hàng mồ côi** ở cả sáu bảng
+theo-bot, `integrity_check ok`, lượt thứ ba nói *"không có gì để làm"*. Lượt tổng dượt ấy còn bắt được
+một thứ **không nằm trong danh sách kiểm**: hàm che danh tính xử `local|` cẩn thận rồi để `cinapi|`
+đi qua nguyên văn — sửa trước khi chạm sản xuất (§7 bảng theo dõi).
+
+**Trên sản xuất**: cổng `isBusy=false` → `systemctl stop grokbot2-be` → xoá → khởi động lại.
+
+```
+bản lưu: /opt/grokbot2/shared/data/xoa-cu-bak-20260910-065600
+XOÁ : 8 danh tính · agents 30 · entries 872 · parked 2 · compaction 2 · users/usage 6/9
+      byOwner 6 khoá · đính kèm 64 · bot-templates 1 · sổ máy 2
+SAU : cinapi|***  12 bot · bot còn mang danh tính cũ 0 · hàng mồ côi 0/0/0/0/0/0
+      users/usage 0/0 · byOwner 0 · bot-templates 0 / tệp đính 0 · sổ máy 0
+      integrity_check ok  →  XONG (mã lệnh 0)
+health 200 sau 2 s · pid 110265 → 186555 · epoch giữ 1788887227576
+```
+
+**Nghiệm thu ở chỗ ĐỌC, không đọc lại chỗ vừa ghi** — đúng luật §5e đã trả giá: vé của chủ dự án thấy
+**12 bot** (`agent-11` … `agent-56`), vé một danh tính `local|` thấy **0**, vé dùng chung thấy **0**,
+và `kiem-reply-0-43` **29 lệnh · 0 sai** với bot thật `agent-11`.
+
+**Lùi**: dừng backend, chép ngược từ `xoa-cu-bak-20260910-065600`.
+
+**Hệ quả cho kế hoạch này**, và đây là phần phải nhớ:
+
+- Danh tính DUY NHẤT sở hữu gì đó trên sản xuất nay là `cinapi|<id>` của chủ dự án. **Hazard thứ tự**
+  của §5d (*"bật biến trước khi chuyển chủ thì người ta thấy sidebar trống"*) **đã tiêu biến** — không
+  còn dữ liệu cũ nào để mất chủ.
+- *"3 người chưa có tài khoản cinai, phải nói TRƯỚC"* **không còn là việc**: mọi người bắt đầu từ một
+  tài khoản trống qua cửa cinai, ai chưa có thì `POST /api/v1/auth/register` đang mở.
+- **Sidebar trống ở một tài khoản mới là ĐÚNG**, là trạng thái chủ ý — đừng đọc nó thành triệu chứng.
+- Cổng cuối của Bước 3 vẫn y nguyên và vẫn chưa ai đo thay được: **một lượt đăng nhập THẬT** của chủ
+  dự án qua cửa mới.
 
 ## 6. Còn của chủ dự án quyết
 
