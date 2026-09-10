@@ -213,34 +213,51 @@ REM Tat han: dat GROKBOT2_NO_SELF_UPDATE=1.
 if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
+  "$ver='';" ^
+  "$bc='';" ^
+  "$giaiDoan='feed-loi';" ^
+  "function G($w){ try{ if($bc){ Set-Content -Path $bc -Encoding utf8 -Value ((Get-Date -Format o)+' ver='+$ver+' kq='+$w) } }catch{} };" ^
   "try{" ^
-  "  $moc=Join-Path '%~dp0' '.lan-hoi-cuoi';" ^
+  "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
+  "  $bc=Join-Path $dir '.cap-nhat-cuoi.txt';" ^
+  "  $moc=Join-Path $dir '.lan-hoi-cuoi';" ^
   "  $gioTietChe=6;" ^
   "  if(Test-Path $moc){ if(((Get-Date)-(Get-Item $moc).LastWriteTime).TotalHours -lt $gioTietChe){ exit 0 } }" ^
   "  $pkg=Join-Path '%APPDIR%' 'resources\\app\\package.json';" ^
   "  $ver=if(Test-Path $pkg){ (Get-Content $pkg -Raw | ConvertFrom-Json).version } else { '' };" ^
-  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver);" ^
+  "  $kqCu=''; if(Test-Path $bc){ $mm=[regex]::Match((Get-Content $bc -Raw),'kq=([a-z0-9-]+)'); if($mm.Success){ $kqCu=$mm.Groups[1].Value } };" ^
+  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&kq='+[uri]::EscapeDataString($kqCu));" ^
   "  Set-Content -Path $moc -Value (Get-Date -Format o) -Encoding utf8;" ^
-  "  if($r.StatusCode -ne 200){ exit 0 }" ^
+  "  if($r.StatusCode -eq 204){ G 'khong-co-ban-moi'; exit 0 }" ^
+  "  if($r.StatusCode -ne 200){ G 'feed-loi'; exit 0 }" ^
   "  $b=$r.Content | ConvertFrom-Json;" ^
+  "  if(-not $b.url){ G 'manifest-thieu'; exit 0 }" ^
   "  $ten=if($b.ten){ $b.ten } else { 'bot-noi-bo-'+$b.version+'.cmd' };" ^
   "  $tmp=Join-Path $env:TEMP $ten;" ^
+  "  $giaiDoan='tai-hong';" ^
   "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 180 -Uri $b.url -OutFile $tmp;" ^
   "  if($b.sha256hash){" ^
   "    $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
-  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; exit 0 }" ^
+  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; G 'bam-lech'; exit 0 }" ^
   "  }" ^
+  "  $giaiDoan='giao-pha2-hong';" ^
   "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
   "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^
   "    'Start-Sleep -Seconds 2'," ^
+  "    ('$d=''' + $dir + ''''),"  ^
   "    ('$f=''' + $tmp + ''''),"  ^
+  "    ('$v=''' + $ver + ''''),"  ^
   "    '$env:GROKBOT2_SETUP_UNATTENDED=''1''',"  ^
-  "    'Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c'',([char]34+$f+[char]34) -Wait'," ^
+  "    '$p=Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c'',([char]34+$f+[char]34) -Wait -PassThru'," ^
+  "    '$ma=-1; if($p){ $ma=$p.ExitCode }'," ^
+  "    '$kq=''cai-hong''; if($ma -eq 0){ $kq=''cai-xong'' }'," ^
+  "    'try{ Set-Content -Path (Join-Path $d ''.cap-nhat-cuoi.txt'') -Encoding utf8 -Value ((Get-Date -Format o)+'' ver=''+$v+'' kq=''+$kq+'' ma=''+$ma) }catch{}'," ^
   "    'Remove-Item $f -Force -ErrorAction SilentlyContinue'" ^
   "  );" ^
   "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$pha2;" ^
+  "  G 'da-giao-pha2';" ^
   "  exit 7" ^
-  "}catch{ exit 0 }"
+  "}catch{ G $giaiDoan; exit 0 }"
 REM Ma 7 = pha 2 da duoc giao viec. Bo cai .cmd tu mo lai app o buoc cuoi, nen o day KHONG mo lan hai;
 REM va cmd nay phai THOAT NGAY de file start-bot.cmd khong con bi doc trong luc bo cai ghi de no.
 if errorlevel 7 exit /b 0

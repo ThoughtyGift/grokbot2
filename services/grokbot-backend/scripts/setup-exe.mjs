@@ -444,38 +444,63 @@ REM qua ?k=); khong co thi 204 la dung — cai ban 50 KB len may nay la sai goi.
 REM
 REM Ba luat nhu launcher cong khai: HONG THI MO APP · kiem sha256 truoc khi CHAY · tiet che (24h, vi
 REM goi nang ~105 MB). Tat han: GROKBOT2_NO_SELF_UPDATE=1.
+REM
+REM   5. HONG THI PHAI NOI RA. Do 10/09: khoi nay co TAM cua "exit 0" va khong cua nao phan biet
+REM      duoc voi "khong co gi moi". May 26100.9168 di qua duoc sau cua dau — nhan 200, tai tron
+REM      106 MB, HAI LAN cach nhau 46 gio — roi van khai 0.29.20260903 o ca hai luot hoi sau do.
+REM      Khong noi nao ghi lai chuyen do: khong tren may, khong tren may chu.
+REM      Nay moi cua ghi mot dong vao .cap-nhat-cuoi.txt canh launcher (gio · ver · kq · ma cua bo
+REM      cai), va luot hoi feed KE TIEP mang tu khoa ay len bang &kq= de so kiem ke doi may ghi lai.
+REM      Bien $giaiDoan bat moi cai nem: catch cuoi ghi dung chang dang di do.
+REM      Nhanh TIET CHE co y KHONG ghi gi — ghi la boi mat chan doan cua luot truoc.
+REM      KHONG co "vien thuoc doc": mot ban tung that bai van duoc thu lai (moi 24h), vi that bai
+REM      co the la nhat thoi (AV, quyen, file dang bi giu) va mot may tu loai minh thi khong ai cuu.
 if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
+  "$ver='';" ^
+  "$bc='';" ^
+  "$giaiDoan='feed-loi';" ^
+  "function G($w){ try{ if($bc){ Set-Content -Path $bc -Encoding utf8 -Value ((Get-Date -Format o)+' ver='+$ver+' kq='+$w) } }catch{} };" ^
   "try{" ^
   "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
+  "  $bc=Join-Path $dir '.cap-nhat-cuoi.txt';" ^
   "  $moc=Join-Path $dir '.lan-hoi-cuoi';" ^
   "  if(Test-Path $moc){ if(((Get-Date)-(Get-Item $moc).LastWriteTime).TotalHours -lt 24){ exit 0 } }" ^
-  "  $tk=Join-Path $dir 'token.txt'; if(-not (Test-Path $tk)){ exit 0 }" ^
-  "  $k=(Get-Content $tk -Raw).Trim(); if(-not $k){ exit 0 }" ^
   "  $pkg=Join-Path $dir 'resources\\app\\package.json';" ^
   "  $ver=if(Test-Path $pkg){ (Get-Content $pkg -Raw | ConvertFrom-Json).version } else { '' };" ^
-  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&k='+[uri]::EscapeDataString($k));" ^
+  "  $kqCu=''; if(Test-Path $bc){ $mm=[regex]::Match((Get-Content $bc -Raw),'kq=([a-z0-9-]+)'); if($mm.Success){ $kqCu=$mm.Groups[1].Value } };" ^
+  "  $tk=Join-Path $dir 'token.txt'; if(-not (Test-Path $tk)){ G 'thieu-giay'; exit 0 }" ^
+  "  $k=(Get-Content $tk -Raw).Trim(); if(-not $k){ G 'thieu-giay'; exit 0 }" ^
+  "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ('%BE%'.TrimEnd('/')+'/updates/ban-moi?nen=windows&ver='+$ver+'&kq='+[uri]::EscapeDataString($kqCu)+'&k='+[uri]::EscapeDataString($k));" ^
   "  Set-Content -Path $moc -Value (Get-Date -Format o) -Encoding utf8;" ^
-  "  if($r.StatusCode -ne 200){ exit 0 }" ^
+  "  if($r.StatusCode -eq 204){ G 'khong-co-ban-moi'; exit 0 }" ^
+  "  if($r.StatusCode -ne 200){ G 'feed-loi'; exit 0 }" ^
   "  $b=$r.Content | ConvertFrom-Json;" ^
-  "  if(-not $b.ten -or -not $b.sha256hash){ exit 0 }" ^
+  "  if(-not $b.ten -or -not $b.sha256hash){ G 'manifest-thieu'; exit 0 }" ^
   "  $tmp=Join-Path $env:TEMP $b.ten;" ^
+  "  $giaiDoan='tai-hong';" ^
   "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 -Uri $b.url -OutFile $tmp;" ^
   "  $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
-  "  if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; exit 0 }" ^
+  "  if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; G 'bam-lech'; exit 0 }" ^
+  "  $giaiDoan='giao-pha2-hong';" ^
   "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
   "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^
   "    'Start-Sleep -Seconds 2'," ^
   "    ('$d=''' + $dir + ''''),"  ^
   "    ('$f=''' + $tmp + ''''),"  ^
-  "    'Start-Process -FilePath $f -ArgumentList ''/VERYSILENT'',''/SUPPRESSMSGBOXES'',''/NORESTART'',(''/DIR=''+[char]34+$d+[char]34) -Wait'," ^
+  "    ('$v=''' + $ver + ''''),"  ^
+  "    '$p=Start-Process -FilePath $f -ArgumentList ''/VERYSILENT'',''/SUPPRESSMSGBOXES'',''/NORESTART'',(''/DIR=''+[char]34+$d+[char]34) -Wait -PassThru'," ^
+  "    '$ma=-1; if($p){ $ma=$p.ExitCode }'," ^
+  "    '$kq=''cai-hong''; if($ma -eq 0){ $kq=''cai-xong'' }'," ^
+  "    'try{ Set-Content -Path (Join-Path $d ''.cap-nhat-cuoi.txt'') -Encoding utf8 -Value ((Get-Date -Format o)+'' ver=''+$v+'' kq=''+$kq+'' ma=''+$ma) }catch{}'," ^
   "    'Remove-Item $f -Force -ErrorAction SilentlyContinue'," ^
   "    'Start-Process -FilePath (Join-Path $d ''start-bot.cmd'') -WorkingDirectory $d'" ^
   "  );" ^
   "  Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$pha2;" ^
+  "  G 'da-giao-pha2';" ^
   "  exit 7" ^
-  "}catch{ exit 0 }"
+  "}catch{ G $giaiDoan; exit 0 }"
 REM Ma 7 = pha 2 da duoc giao viec: no se cai roi tu mo app. Cmd nay phai THOAT NGAY de file khong bi giu.
 if errorlevel 7 exit /b 0
 :sau_cap_nhat

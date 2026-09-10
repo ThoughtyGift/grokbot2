@@ -202,7 +202,25 @@ function doiMayCard(p: AdminPayload): string {
     <div class="num">${d.daToi}<span class="sub"> / ${d.tong} máy ở bản đang phát</span></div>
     ${bar(pct, d.daToi === 0 ? "var(--hot)" : pct < 100 ? "var(--warn)" : "var(--ok)")}
     <div class="sub">${d.banDangPhat ? `<code>${esc(d.banDangPhat)}</code>` : "manifest chưa có bản nào"} · sổ từ ${tu}${d.khongPhaiLauncher ? ` · ${d.khongPhaiLauncher} hàng phép dò (không tính)` : ""}</div>
+    ${lyDoDong(d)}
   </div>`;
+}
+
+/**
+ * Vì sao con số `0 / 4` cần một dòng nữa mới quyết được việc gì.
+ *
+ * Đo 10/09: bốn máy đứng ngoài bản đang phát vì HAI lý do khác hẳn nhau — một máy tải 106 MB hai
+ * lần rồi trượt ở bộ cài, ba máy chưa bao giờ thử vì app không đóng nên launcher không chạy. Một
+ * con số gộp cả hai lại thành "chưa tới" và mời người đọc chờ thêm; chỉ có lý do mới nói được rằng
+ * chờ không bao giờ đủ cho ba máy kia. `(chưa khai)` cũng là một câu trả lời, không phải chỗ trống.
+ */
+function lyDoDong(d: AdminPayload["doiMay"]): string {
+  const ke = Object.entries(d.lyDoChuaToi).sort((a, b) => b[1] - a[1]);
+  if (!ke.length) return "";
+  const hong = new Set(["cai-hong", "bam-lech", "tai-hong", "giao-pha2-hong", "feed-loi", "manifest-thieu"]);
+  return `<div class="sub">chưa tới vì: ${ke
+    .map(([k, n]) => `<b style="color:${hong.has(k) ? "var(--hot)" : "var(--warn)"}">${esc(k)}</b> ${n}`)
+    .join(" · ")}</div>`;
 }
 
 /** Từng máy một — vì "0/4" mà không kể tên thì không quyết được việc gì. */
@@ -216,6 +234,7 @@ function doiMayRows(p: AdminPayload): string {
       <td><code>${esc(m.ver)}</code></td>
       <td>${new Date(m.cuoi).toISOString().replace("T", " ").slice(0, 16)}</td>
       <td class="n">${m.ma}</td>
+      <td>${m.kq ? `<code>${esc(m.kq)}</code>` : '<span class="s">(chưa khai)</span>'}</td>
       <td>${toi ? '<span style="color:var(--ok)">đã tới</span>' : '<span style="color:var(--warn)">chưa</span>'}</td>
     </tr>`;
     })
@@ -285,8 +304,8 @@ ${cards(p)}
 <section>
   <table>
     <caption>Đội máy — bản mỗi máy khai ở lượt hỏi feed GẦN NHẤT</caption>
-    <tr><th>dấu vết máy</th><th>bản khai</th><th>hỏi lần cuối (UTC)</th><th class="n">mã</th><th>bản đang phát</th></tr>
-    ${doiMayRows(p) || `<tr><td colspan="5" class="s">chưa launcher nào hỏi feed từ khi sổ bật${p.doiMay.khongPhaiLauncher ? ` — nhưng sổ CÓ ${p.doiMay.khongPhaiLauncher} hàng không phải launcher, nên bộ ghi đang chạy` : ""}</td></tr>`}
+    <tr><th>dấu vết máy</th><th>bản khai</th><th>hỏi lần cuối (UTC)</th><th class="n">mã</th><th>lượt cập nhật cuối</th><th>bản đang phát</th></tr>
+    ${doiMayRows(p) || `<tr><td colspan="6" class="s">chưa launcher nào hỏi feed từ khi sổ bật${p.doiMay.khongPhaiLauncher ? ` — nhưng sổ CÓ ${p.doiMay.khongPhaiLauncher} hàng không phải launcher, nên bộ ghi đang chạy` : ""}</td></tr>`}
   </table>
 </section>
 

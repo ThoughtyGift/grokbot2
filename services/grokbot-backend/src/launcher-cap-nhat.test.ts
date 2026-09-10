@@ -35,11 +35,15 @@ test("tự cập nhật: hỏi đúng cửa, kèm token, kiểm hash, tiết ch�
   assert.match(s, /updates\/ban-moi\?nen=windows&ver=/, "phải hỏi cửa launcher của backend mình");
   assert.match(s, /token\.txt/, "phải đọc token — không có thì bản 50 KB sẽ được cài lên máy này, sai gói");
   assert.match(s, /'&k='\+\[uri\]::EscapeDataString\(\$k\)/, "token đi trong query, đã escape");
-  assert.match(s, /if\(-not \(Test-Path \$tk\)\)\{ exit 0 \}/, "không có token thì im lặng mở app, không thử gói khác");
+  assert.match(s, /if\(-not \(Test-Path \$tk\)\)\{ G 'thieu-giay'; exit 0 \}/, "không có token thì mở app, không thử gói khác — nhưng phải GHI LẠI lý do");
   assert.match(s, /Get-FileHash/, "phải kiểm sha256 trước khi CHẠY file tải về");
-  assert.match(s, /if\(\$h -ne \$b\.sha256hash\.ToLower\(\)\)\{ Remove-Item \$tmp -Force; exit 0 \}/, "hash lệch ⇒ xoá file, mở app như thường");
+  assert.match(s, /if\(\$h -ne \$b\.sha256hash\.ToLower\(\)\)\{ Remove-Item \$tmp -Force; G 'bam-lech'; exit 0 \}/, "hash lệch ⇒ xoá file, ghi lý do, mở app như thường");
   assert.match(s, /TotalHours -lt 24/, "gói ~105 MB: hỏi một lần mỗi ngày là đủ");
-  assert.match(s, /catch\{ exit 0 \}/, "hỏng thì MỞ APP — lớp cập nhật tự chặn đường vào sản phẩm là lớp sẽ bị gỡ");
+  // Fail-open GIU NGUYEN qua ban 10/09: `catch` nay nay GHI lai giai doan roi van `exit 0`.
+  // Ghim ca hai ve — chi ghim `exit 0` thi mot ban bo mat phep ghi van xanh, con chi ghim phep
+  // ghi thi mot ban doi sang `exit 1` cung xanh, va `exit 1` la app khong bao gio mo len nua.
+  assert.match(s, /\}catch\{ G \$giaiDoan; exit 0 \}/, "hỏng thì MỞ APP — lớp cập nhật tự chặn đường vào sản phẩm là lớp sẽ bị gỡ");
+  assert.doesNotMatch(s, /catch\{[^}]*exit [1-9]/, "catch không bao giờ được thoát khác 0 — đó là app không mở lên nữa");
   assert.match(s, /GROKBOT2_NO_SELF_UPDATE/, "phải tắt được");
 });
 

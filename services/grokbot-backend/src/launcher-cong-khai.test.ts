@@ -30,7 +30,11 @@ test("Windows: tự cập nhật đủ ba luật, và updater gốc tắt mặc 
   assert.match(s, /updates\/ban-moi/, "launcher phải tự hỏi backend — updater gốc không cài được bản của mình");
   assert.match(s, /Get-FileHash/, "phải kiểm sha256 trước khi CHẠY file tải về");
   assert.match(s, /lan-hoi-cuoi/, "phải có tiết chế, không hỏi mỗi lần mở app");
-  assert.match(s, /catch\{ exit 0 \}/, "hỏng thì MỞ APP — một lớp cập nhật tự chặn đường vào sản phẩm là lớp sẽ bị gỡ");
+  // Fail-open GIU NGUYEN qua ban 10/09: `catch` nay nay GHI lai giai doan roi van `exit 0`.
+  // Ghim ca hai ve — chi ghim `exit 0` thi mot ban bo mat phep ghi van xanh, con chi ghim phep
+  // ghi thi mot ban doi sang `exit 1` cung xanh, va `exit 1` la app khong bao gio mo len nua.
+  assert.match(s, /\}catch\{ G \$giaiDoan; exit 0 \}/, "hỏng thì MỞ APP — một lớp cập nhật tự chặn đường vào sản phẩm là lớp sẽ bị gỡ");
+  assert.doesNotMatch(s, /catch\{[^}]*exit [1-9]/, "catch không bao giờ được thoát khác 0 — đó là app không mở lên nữa");
   assert.match(s, /GROKBOT2_NATIVE_UPDATES/, "updater gốc phải tắt mặc định, có cửa mở lại cho ngày có chứng chỉ");
   // Suy ra từ %APP%: hai đường dẫn viết tay ở hai dòng là hai đường dẫn sẽ lệch nhau.
   assert.match(s, /for %%I in \("%APP%"\) do set "APPDIR=/);

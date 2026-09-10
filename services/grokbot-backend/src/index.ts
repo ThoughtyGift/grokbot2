@@ -287,6 +287,9 @@ h1{font-size:1.35rem;margin:0 0 .5rem}p{color:#555;margin:.35rem 0}</style>
       nen: (q.get("nen") ?? "windows").trim(),
       ma: kq.status,
       khi: Date.now(),
+      // `kq` = kết quả lượt tự cập nhật TRƯỚC đó, launcher tự khai. Truyền thô: `gop` chỉ nhận từ
+      // trong từ điển đóng và bỏ im lặng mọi thứ khác, nên chỗ này không cần biết bảng từ ấy.
+      kq: (q.get("kq") ?? "").trim(),
     });
     if (kq.status === 204) { res.writeHead(204); return res.end(); }
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
