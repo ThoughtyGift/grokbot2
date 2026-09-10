@@ -21,7 +21,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error — script .mjs thuần, không có khai báo kiểu; đây là chỗ duy nhất TS chạm vào nó.
-import { startBundled, coVaUpdateFeed } from "../scripts/setup-exe.mjs";
+import { startBundled, coVaUpdateFeed, ISS_FULL } from "../scripts/setup-exe.mjs";
 
 const s: string = startBundled();
 
@@ -68,6 +68,37 @@ test("bốn biến hợp đồng với client còn đủ", () => {
   for (const bien of ["CURSOR_API_BASE_URL", "SAND_BACKEND_URL", "CURSOR_WEBSITE_URL", "SAND_DISABLE_UPDATES"]) {
     assert.match(s, new RegExp(`set "${bien}=`), bien);
   }
+});
+
+/**
+ * Goi cho-app KHONG duoc cho ban luu cua cay app.
+ *
+ * Do 10/09 tren goi `0.43.20260910` VUA PHAT: no cho `resources\app.bak-20260910` — 474 tep /
+ * 35,3 MB, ban luu tao ra truoc khi chay `patch-client --apply`. Goi phinh 111 -> 118 MB, tren
+ * dung cai duong tai dang DUT o 23/106 MB tren mot may that. Khong loi nao noi len.
+ *
+ * Bai nay ghim HANH VI cua bo LOC, khong ghim chuoi `Excludes` duoc viet ra sao: mot ban sau doi
+ * cach viet ma van loai dung nhung ten ay thi phai XANH. Cung luat §7 "truy duoc BA cho ve, do
+ * duoc BON — nen ghim o BIEN chu khong o HAM".
+ */
+test("goi cho-app loai ban luu theo HINH DANG, khong theo mot cai ten", () => {
+  const iss: string = ISS_FULL({
+    version: "2026.09.10", iconPath: "C:\\x\\icon.ico", outDir: "C:\\out",
+    outName: "Bot-Noi-Bo-Setup-thu", appSrc: "C:\\cai043",
+  });
+  const mau = /Excludes:\s*"([^"]+)"/.exec(iss)?.[1];
+  assert.ok(mau, "khong doc duoc danh sach Excludes trong ISS da RENDER");
+
+  // Luat khop cua Inno cho mot mau KHONG chua backslash: so voi TEN, `*` la khoảng bất kỳ.
+  const khop = (ten: string) => mau!.split(",").map((m) => m.trim()).some((m) =>
+    new RegExp("^" + m.split("*").map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(ten));
+
+  // Bang HÌNH DẠNG, không phải bảng tên: thêm một kiểu đặt tên bản lưu mới thì thêm một hàng ở đây.
+  for (const ten of ["app.bak-20260910", "app.bak-20260908", "resources.bak", "app.asar.bak", "app.asar.disabled-by-grokbot2"])
+    assert.equal(khop(ten), true, `phải LOẠI "${ten}" — nó là bản lưu, không phải thứ người dùng cần`);
+  // Và không được loại nhầm thứ của hãng: `app` là chỗ Electron boot từ đó.
+  for (const ten of ["app", "app.asar", "app.asar.unpacked", "main.cjs", "package.json", "Grok Bot.exe", "backup-tool.js"])
+    assert.equal(khop(ten), false, `KHÔNG được loại "${ten}" — loại nhầm là gói không chạy được`);
 });
 
 test("coVaUpdateFeed vẫn đo được dấu vá — giữ làm chẩn đoán, không còn quyết định gì", () => {

@@ -273,7 +273,7 @@ exit 1
  * thư mục cài, nhóm Start menu, tên shortcut và kho hồ sơ đều mang hậu tố. Không có hậu tố = gói phát hành,
  * y như trước. Inno dùng AppId để nhận "đã cài" và tái dùng thư mục cũ, nên cùng AppId là KHÔNG song song được.
  */
-const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc, bienThe = null }) => {
+export const ISS_FULL = ({ version, iconPath, outDir, outName, appSrc, bienThe = null }) => {
   const ten = bienThe ? `Bot Noi Bo ${bienThe}` : "Bot Noi Bo";
   const appId = bienThe ? `{{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBO${bienThe}}` : "{{9F2C7A31-6B1E-4E52-9E44-BOT2NOIBOFULL}";
   // Trong String.raw, "\${x}" giữ backslash VÀ tắt nội suy — ISCC nhận nguyên chữ "${ten}" (đo 05/09: "Unknown
@@ -303,8 +303,20 @@ Name: "vi"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 ; Ca cay app da va. Bo ban goc de ben: 46 MB do chi de --undo, ban cho san khong can.
+;
+; Va bo moi BAN LUU nam trong cay app. Do 10/09 tren goi 0.43.20260910 vua phat: no cho ca
+; "resources\app.bak-20260910" — 474 tep / 35,3 MB, ban luu tao ra truoc khi chay patch-client
+; --apply, di ke vi Source la ca cay app nguyen khoi. Goi phinh 111 -> 118 MB, tren dung cai
+; duong tai dang DUT o 23/106 MB tren mot may that. Khong loi nao noi len: Inno chep dung thu
+; duoc bao chep.
+;
+; Dong Excludes cu chi chan MOT CAI TEN ("app.asar.disabled-by-grokbot2"), nen ban luu thu hai
+; mang ten khac lot y nhu the. Nay chan HINH DANG (*.bak, *.bak-*) — cung luat §7 "mot luat viet
+; o cho no vua duoc hoc khong tu lan sang file ke tiep; muon no lan thi CAM cai hinh dang".
+; Do truoc khi doi: trong ca cay bundle chi dung thu muc ban luu cua minh khop hai mau nay, 0
+; tep nao cua hang.
 Source: "${appSrc}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Excludes: "app.asar.disabled-by-grokbot2"
+  Excludes: "app.asar.disabled-by-grokbot2,*.bak,*.bak-*"
 Source: "{#SourceDir}\start-bot.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\*.ico";         DestDir: "{app}"; Flags: ignoreversion
 ${process.env.GROKBOT2_FULL_DOWNLOAD_TOKEN
