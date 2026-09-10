@@ -455,13 +455,20 @@ REM      Bien $giaiDoan bat moi cai nem: catch cuoi ghi dung chang dang di do.
 REM      Nhanh TIET CHE co y KHONG ghi gi — ghi la boi mat chan doan cua luot truoc.
 REM      KHONG co "vien thuoc doc": mot ban tung that bai van duoc thu lai (moi 24h), vi that bai
 REM      co the la nhat thoi (AV, quyen, file dang bi giu) va mot may tu loai minh thi khong ai cuu.
+REM
+REM   6. TAI CO THU LAI, VA TONG THOI GIAN CHO GIU NGUYEN. Do 10/09: may 19041.5607 hoi feed luc
+REM      09:00:41, nhan 200, roi tai duoc 23.019.520 byte tren 111 MB thi DUT. Ban truoc tai DUNG
+REM      MOT lan, nen mot lan dut la cho tron 24h (moc tiet che da dong dau TRUOC khi tai).
+REM      Nay 3 luot, va -TimeoutSec di 900 -> 300: pha 1 chay TRUOC khi app mo, nguoi dung dang
+REM      cho no, nen tran thoi gian toi te nhat phai GIU NGUYEN — chia lai chu khong cong them.
+REM      Bam sha la cua kiem dung dan cho ca ba luot, nen mot luot tai dut khong bao gio duoc cai.
 if "%GROKBOT2_NO_SELF_UPDATE%"=="1" goto sau_cap_nhat
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "$ver='';" ^
   "$bc='';" ^
   "$giaiDoan='feed-loi';" ^
-  "function G($w){ try{ if($bc){ Set-Content -Path $bc -Encoding utf8 -Value ((Get-Date -Format o)+' ver='+$ver+' kq='+$w) } }catch{} };" ^
+  "function G($w,$l){ try{ if($bc){ $m=(Get-Date -Format o)+' ver='+$ver+' kq='+$w; if($l){ $m=$m+' lan='+$l }; Set-Content -Path $bc -Encoding utf8 -Value $m } }catch{} };" ^
   "try{" ^
   "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
   "  $bc=Join-Path $dir '.cap-nhat-cuoi.txt';" ^
@@ -479,10 +486,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $b=$r.Content | ConvertFrom-Json;" ^
   "  if(-not $b.ten -or -not $b.sha256hash){ G 'manifest-thieu'; exit 0 }" ^
   "  $tmp=Join-Path $env:TEMP $b.ten;" ^
-  "  $giaiDoan='tai-hong';" ^
-  "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 -Uri $b.url -OutFile $tmp;" ^
-  "  $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
-  "  if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; G 'bam-lech'; exit 0 }" ^
+  "  $giaiDoan='tai-hong'; $lan=0; $xong=$false;" ^
+  "  while($lan -lt 3 -and -not $xong){" ^
+  "    $lan=$lan+1;" ^
+  "    try{" ^
+  "      Invoke-WebRequest -UseBasicParsing -TimeoutSec 300 -Uri $b.url -OutFile $tmp;" ^
+  "      $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
+  "      if($h -eq $b.sha256hash.ToLower()){ $xong=$true } else { $giaiDoan='bam-lech'; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }" ^
+  "    }catch{ $giaiDoan='tai-hong'; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }" ^
+  "    if(-not $xong -and $lan -lt 3){ Start-Sleep -Seconds 3 }" ^
+  "  }" ^
+  "  if(-not $xong){ G $giaiDoan $lan; exit 0 }" ^
   "  $giaiDoan='giao-pha2-hong';" ^
   "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
   "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^

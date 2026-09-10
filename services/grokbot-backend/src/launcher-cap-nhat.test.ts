@@ -37,7 +37,12 @@ test("tự cập nhật: hỏi đúng cửa, kèm token, kiểm hash, tiết ch�
   assert.match(s, /'&k='\+\[uri\]::EscapeDataString\(\$k\)/, "token đi trong query, đã escape");
   assert.match(s, /if\(-not \(Test-Path \$tk\)\)\{ G 'thieu-giay'; exit 0 \}/, "không có token thì mở app, không thử gói khác — nhưng phải GHI LẠI lý do");
   assert.match(s, /Get-FileHash/, "phải kiểm sha256 trước khi CHẠY file tải về");
-  assert.match(s, /if\(\$h -ne \$b\.sha256hash\.ToLower\(\)\)\{ Remove-Item \$tmp -Force; G 'bam-lech'; exit 0 \}/, "hash lệch ⇒ xoá file, ghi lý do, mở app như thường");
+  // Ghim TÍNH CHẤT, không ghim văn bản: 10/09 dòng này bị cấu trúc lại thành vòng thử-lại và bài
+  // đo cũ (khớp nguyên văn) đỏ trong khi tính chất còn nguyên. Điều phải đúng là: bằng thì đi tiếp,
+  // KHÁC thì xoá file và ghi `bam-lech` — chứ không phải nó được viết bằng đúng mấy chữ nào.
+  assert.match(s, /\$h -eq \$b\.sha256hash\.ToLower\(\)/, "phải SO băm tải về với băm trong manifest");
+  assert.match(s, /\$giaiDoan='bam-lech'; Remove-Item \$tmp -Force/, "băm lệch ⇒ xoá file rồi ghi đúng lý do");
+  assert.doesNotMatch(s, /-ne \$b\.sha256hash[\s\S]*\$xong=\$true/, "không có đường nào coi băm LỆCH là thành công");
   assert.match(s, /TotalHours -lt 24/, "gói ~105 MB: hỏi một lần mỗi ngày là đủ");
   // Fail-open GIU NGUYEN qua ban 10/09: `catch` nay nay GHI lai giai doan roi van `exit 0`.
   // Ghim ca hai ve — chi ghim `exit 0` thi mot ban bo mat phep ghi van xanh, con chi ghim phep
@@ -74,4 +79,29 @@ test("coVaUpdateFeed vẫn đo được dấu vá — giữ làm chẩn đoán, 
     assert.equal(coVaUpdateFeed(root), true);
     assert.equal(coVaUpdateFeed(join(tmpdir(), "khong-ton-tai-gb2")), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+/**
+ * Tai co THU LAI, va tong thoi gian cho GIU NGUYEN.
+ *
+ * Do 10/09: may 19041.5607 hoi feed luc 09:00:41, nhan 200, roi tai duoc 23.019.520 byte tren
+ * 111 MB thi DUT. Ban truoc tai dung MOT lan, nen mot lan dut la cho tron 24h (moc tiet che da
+ * dong dau TRUOC khi tai). Nay 3 luot.
+ *
+ * Nhung tinh chat dang ghim khong phai "co 3 luot" — no la NGAN SACH: pha 1 chay TRUOC khi app mo
+ * va nguoi dung dang cho no, nen `so luot x timeout` khong duoc VUOT tran cu. Chia lai, khong cong
+ * them. Mot ban sau doi 3 luot x 900 s se lam bai nay do, va do la dung.
+ */
+test("tai co thu lai 3 luot, va tong thoi gian cho KHONG tang so voi tran cu", () => {
+  const soLan = Number(/\$lan -lt (\d+)/.exec(s)?.[1]);
+  const moiLan = Number(/-TimeoutSec (\d+) -Uri \$b\.url/.exec(s)?.[1]);
+  assert.ok(soLan >= 2, `phai co it nhat 2 luot, thay ${soLan}`);
+  assert.ok(Number.isFinite(moiLan), "khong doc duoc -TimeoutSec cua luot tai");
+  assert.ok(soLan * moiLan <= 900,
+    `ngan sach cho vuot tran: ${soLan} x ${moiLan} = ${soLan * moiLan} > ${900} s`);
+  // Bam phai duoc kiem TRONG vong lap: ngoai vong thi mot luot tai dut van di tiep sang pha 2.
+  const vong = s.slice(s.indexOf("$lan -lt"), s.indexOf("giao-pha2-hong"));
+  assert.match(vong, /Get-FileHash/, "phep kiem bam phai nam TRONG vong thu lai");
+  assert.match(vong, /Remove-Item \$tmp -Force -ErrorAction SilentlyContinue/, "luot hong phai xoa file truoc khi thu lai");
+  assert.match(s, /G \$giaiDoan \$lan/, "het luot thi ghi ca ly do LAN so may");
 });

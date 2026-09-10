@@ -216,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ver='';" ^
   "$bc='';" ^
   "$giaiDoan='feed-loi';" ^
-  "function G($w){ try{ if($bc){ Set-Content -Path $bc -Encoding utf8 -Value ((Get-Date -Format o)+' ver='+$ver+' kq='+$w) } }catch{} };" ^
+  "function G($w,$l){ try{ if($bc){ $m=(Get-Date -Format o)+' ver='+$ver+' kq='+$w; if($l){ $m=$m+' lan='+$l }; Set-Content -Path $bc -Encoding utf8 -Value $m } }catch{} };" ^
   "try{" ^
   "  $dir=(Resolve-Path '%~dp0').Path.TrimEnd('\\');" ^
   "  $bc=Join-Path $dir '.cap-nhat-cuoi.txt';" ^
@@ -234,12 +234,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  if(-not $b.url){ G 'manifest-thieu'; exit 0 }" ^
   "  $ten=if($b.ten){ $b.ten } else { 'bot-noi-bo-'+$b.version+'.cmd' };" ^
   "  $tmp=Join-Path $env:TEMP $ten;" ^
-  "  $giaiDoan='tai-hong';" ^
-  "  Invoke-WebRequest -UseBasicParsing -TimeoutSec 180 -Uri $b.url -OutFile $tmp;" ^
-  "  if($b.sha256hash){" ^
-  "    $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
-  "    if($h -ne $b.sha256hash.ToLower()){ Remove-Item $tmp -Force; G 'bam-lech'; exit 0 }" ^
+  "  $giaiDoan='tai-hong'; $lan=0; $xong=$false;" ^
+  "  while($lan -lt 3 -and -not $xong){" ^
+  "    $lan=$lan+1;" ^
+  "    try{" ^
+  "      Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 -Uri $b.url -OutFile $tmp;" ^
+  "      if($b.sha256hash){" ^
+  "        $h=(Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower();" ^
+  "        if($h -eq $b.sha256hash.ToLower()){ $xong=$true } else { $giaiDoan='bam-lech'; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }" ^
+  "      } else { $xong=$true }" ^
+  "    }catch{ $giaiDoan='tai-hong'; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }" ^
+  "    if(-not $xong -and $lan -lt 3){ Start-Sleep -Seconds 3 }" ^
   "  }" ^
+  "  if(-not $xong){ G $giaiDoan $lan; exit 0 }" ^
   "  $giaiDoan='giao-pha2-hong';" ^
   "  $pha2=Join-Path $env:TEMP 'bot-noi-bo-cap-nhat.ps1';" ^
   "  Set-Content -Path $pha2 -Encoding utf8 -Value @(" ^
