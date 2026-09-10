@@ -12,7 +12,7 @@
  */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -33,6 +33,7 @@ const T = await import("./bot-templates.js");
 const { handleSite } = await import("./site.js");
 const { botLandingHtml, deepLinkOf, handleBotSite } = await import("./site-bot.js");
 const { TEN_AN_DANH } = await import("./ten-nguoi-tao.js");
+const { setCreatorProfile } = await import("./marketplace.js");
 
 T.bindTemplateSources({
   skills: () => [{ name: "Đặt hàng", description: "Lên đơn Shopee", content: "1. mở app" }, { name: "Đối soát", description: "So công nợ", content: "..." }],
@@ -185,4 +186,68 @@ test("ĐỐI CHỨNG: chủ mang địa chỉ thư vẫn ra tên người — ph
   const { html } = botLandingHtml(nhap.shareId, "n");
   assert.match(html, /<title>Bot thư by nguoi-a<\/title>/);
   assert.doesNotMatch(html, new RegExp(TEN_AN_DANH));
+});
+
+/*
+ * 10/09 — trang chia sẻ nay hỏi HỒ SƠ người tạo, không chỉ suy tên từ tài khoản.
+ *
+ * Đo được trong lúc sửa lỗ id cinai: `toWireView().creatorName` không đọc `creatorProfileOf`, nên thẻ
+ * Marketplace hiện tên đã đặt trong khi trang này gọi CÙNG người ấy là "ẩn danh" — một người, hai mặt,
+ * hai nguồn (§7 *"một danh sách sống ở HAI nơi"*). Bài đo đi qua CHÍNH `setCreatorProfile` — cửa ghi của
+ * sản phẩm — chứ không viết `marketplace.json` tay, để nó đo cả đường ghi lẫn đường đọc.
+ */
+const CHU_CO_HO_SO = "cinapi|1f2e3d4c5b6a798877665544";
+const ID_CO_HO_SO = CHU_CO_HO_SO.slice("cinapi|".length);
+
+/** Bot + mẫu đã publish dưới một chủ bất kỳ — mỗi bài một chủ riêng để không bài nào dựa vào bài trước. */
+async function mauDaPhat(chu: string, ten: string): Promise<string> {
+  const bot = as(chu, () => createAgent(
+    { name: ten, description: "Giữ tồn kho.", avatarShape: "hex", avatarColor: "green" } as Parameters<typeof createAgent>[0],
+  ));
+  const nhap = (await as(chu, () => T.stageTemplateForAgent(bot.id, { description: "Giữ tồn kho." }, chu)))!;
+  await as(chu, () => T.publishBotTemplate(nhap.shareId, nhap.staged?.version ?? 1));
+  return nhap.shareId;
+}
+
+test("hồ sơ người tạo có tên: trang vẽ ĐÚNG tên ấy — và đặt tên không mở lại đường rò id", async () => {
+  const shareId = await mauDaPhat(CHU_CO_HO_SO, "Bot có hồ sơ");
+  const TEN = "Xưởng cinAI";
+
+  // TRƯỚC: cùng trang, cùng mẫu, chưa có hồ sơ ⇒ ẩn danh. Không có mốc này thì bài sau xanh vu vơ.
+  assert.match(botLandingHtml(shareId, "n").html, new RegExp(`by <b>${TEN_AN_DANH}</b>`), "chưa đặt hồ sơ phải là ẩn danh");
+
+  setCreatorProfile(CHU_CO_HO_SO, { name: TEN });
+
+  const { code, html } = botLandingHtml(shareId, "n");
+  assert.equal(code, 200);
+  assert.match(html, new RegExp(`<title>Bot có hồ sơ by ${TEN}</title>`));
+  assert.match(html, new RegExp(`property="og:title" content="Bot có hồ sơ by ${TEN}"`));
+  assert.match(html, new RegExp(`by <b>${TEN}</b>`));
+  assert.doesNotMatch(html, new RegExp(TEN_AN_DANH), "đặt tên rồi thì không chỗ nào còn gọi là ẩn danh");
+  for (let i = 0; i + 8 <= ID_CO_HO_SO.length; i++) {
+    const khuc = ID_CO_HO_SO.slice(i, i + 8);
+    assert.equal(html.split(khuc).length - 1, 0, `khúc "${khuc}" của id lọt ra trang`);
+  }
+});
+
+test("hồ sơ có `name` KHÔNG phải chuỗi: vẫn ra trang 200 và rơi về ẩn danh, không rơi về id", async () => {
+  const chu = "cinapi|aabbccddeeff001122334455";
+  const shareId = await mauDaPhat(chu, "Bot hồ sơ hỏng");
+  setCreatorProfile(chu, { name: "Sẽ bị đập" });
+
+  /*
+   * Sửa THẲNG tệp là chủ ý: không cửa ghi nào của sản phẩm đẻ ra được `name` kiểu số (`setCreatorProfile`
+   * chỉ nhận chuỗi), nhưng đường ĐỌC vẫn phải chịu được một `marketplace.json` do tay khác viết — và từ
+   * 10/09 đường đọc ấy vẽ một trang CÔNG KHAI, nên một lần ném ở đó là một trang 500 cho người lạ.
+   * Đúng khuôn lỗi mà bài đo cho `ownerDisplayNameOf` đã bắt được ngay lượt chạy đầu.
+   */
+  const tep = join(String(process.env.GROKBOT2_DATA_DIR), "marketplace.json");
+  const kho = JSON.parse(readFileSync(tep, "utf8")) as { creators: Record<string, { name: unknown }> };
+  kho.creators[chu].name = 123;
+  writeFileSync(tep, JSON.stringify(kho));
+
+  const { code, html } = botLandingHtml(shareId, "n");
+  assert.equal(code, 200, "một `name` kiểu số trong kho không được thành trang 500");
+  assert.match(html, new RegExp(`by <b>${TEN_AN_DANH}</b>`), "hồ sơ hỏng thì rơi về ẩn danh");
+  assert.equal(html.split("aabbccddeeff").length - 1, 0, "id không được lọt ra khi hồ sơ hỏng");
 });

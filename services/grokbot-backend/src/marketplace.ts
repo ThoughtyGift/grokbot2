@@ -87,7 +87,10 @@ export function slugOf(name: string, shareId: string): string {
 export function creatorProfileOf(authId: string): CreatorProfile {
   const c = doc().creators[authId];
   return {
-    name: (c?.name ?? "").trim() || ownerDisplayNameOf(authId),
+    // `typeof` chứ không `?? ""`: `doc()` là JSON đọc từ đĩa nên `name` là `any` đội lốt `string`, và từ
+    // 10/09 hàm này nằm trên đường vẽ trang CÔNG KHAI `/bot/<shareId>` — `(123).trim()` ở đây là một trang
+    // 500 cho người chưa đăng nhập. Hai trường dưới đã canh đúng cách này từ đầu; `name` là chỗ sót.
+    name: (typeof c?.name === "string" ? c.name.trim() : "") || ownerDisplayNameOf(authId),
     profilePhotoUrl: typeof c?.profilePhotoUrl === "string" ? c.profilePhotoUrl : "",
     handles: c?.handles && typeof c.handles === "object" ? { ...c.handles } : {},
   };

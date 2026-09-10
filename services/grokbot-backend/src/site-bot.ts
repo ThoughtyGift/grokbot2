@@ -22,6 +22,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "node:crypto";
 import { getPublicBotTemplate, SHARE_ID_RE, shareUrlOf, toWireView } from "./bot-templates.js";
+/*
+ * Tên người tạo: hỏi HỒ SƠ, không hỏi tài khoản.
+ *
+ * `toWireView().creatorName` suy tên từ `authId` (`ten-nguoi-tao.ts`) và KHÔNG đọc hồ sơ người tạo —
+ * đo 10/09 khi đi sửa lỗ id cinai: chỉ thẻ Marketplace mới đi qua `creatorProfileOf` (`marketplace.ts`),
+ * còn trang chia sẻ này thì không, nên một người đã đặt tên hiển thị vẫn bị trang gọi là "ẩn danh".
+ * Hai mặt vẽ cùng một người bằng hai nguồn khác nhau, đúng họ bẫy §7 *"một danh sách sống ở HAI nơi"*.
+ *
+ * `creatorProfileOf` tự rơi về `ownerDisplayNameOf` khi hồ sơ trống, nên đây vẫn là MỘT nguồn chứ
+ * không phải hai nhánh phải nhớ đồng bộ: hồ sơ có tên → tên ấy; không có → tên suy ra; không suy được
+ * → hằng số ẩn danh. `site-bot` là lá (chỉ `site.ts` nhập nó) nên nhập `marketplace.js` không tạo vòng.
+ */
+import { creatorProfileOf } from "./marketplace.js";
 
 /** `Si.path` + `Si.authority` của main-core 0.43 — scheme thứ nhất trong `Si.schemes`. */
 export const deepLinkOf = (shareId: string): string => `grokbot://app/v1/bot-template?id=${encodeURIComponent(shareId)}`;
@@ -154,7 +167,7 @@ export function botLandingHtml(shareId: string, nonce = randomBytes(12).toString
   return {
     code: 200,
     html: trangMau({
-      shareId: v.shareId, name: v.name, creatorName: v.creatorName, description: v.description,
+      shareId: v.shareId, name: v.name, creatorName: creatorProfileOf(pub.template.ownerAuthId).name, description: v.description,
       avatarShape: v.avatarShape, avatarColor: v.avatarColor,
       skills: v.skills.length, routines: v.routines.length, plugins: v.plugins.length, memory: v.memory.length,
     }, nonce),
